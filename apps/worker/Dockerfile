@@ -43,10 +43,17 @@ COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 
 # Downloads are cached here. Railway mounts a volume on it — without one, a
 # container restart in hour three of a Receita run starts the download from zero.
+#
+# We run as ROOT on purpose. Railway mounts the volume at runtime OVER this
+# directory, owned by root:root — so a build-time `chown node:node` is shadowed
+# by the mount and a non-root process gets EACCES the moment it tries to mkdir a
+# month folder inside the volume. Dropping to `node` while writing to a
+# root-owned volume is the two things not agreeing. This is an internal worker
+# with no untrusted input reaching the filesystem (it downloads RFB zips and
+# reads them), so running as root is an acceptable, standard Railway tradeoff.
 ENV DOWNLOAD_DIR=/data/receita
-RUN mkdir -p /data/receita && chown -R node:node /data
+RUN mkdir -p /data/receita
 
-USER node
 EXPOSE 8080
 
 # Node runs the emitted JS. The relative import of packages/core resolves inside
