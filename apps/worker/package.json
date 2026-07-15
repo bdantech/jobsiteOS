@@ -1,0 +1,40 @@
+{
+  "name": "@jobsiteos/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "//": "Every script runs the EMITTED js. Node's --experimental-strip-types cannot resolve the .js specifiers that TypeScript requires (packages/core is written the same way), so 'run the .ts directly' is not on the table here.",
+    "dev": "tsc -p tsconfig.json && node --watch --env-file=.env dist/apps/worker/src/index.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/apps/worker/src/index.js",
+    "sample": "tsc -p tsconfig.json && node --env-file=.env dist/apps/worker/src/sample/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "//env": "dev/sample carregam apps/worker/.env via --env-file do próprio Node. start NAO carrega: no Railway as variaveis vem da plataforma."
+  },
+  "dependencies": {
+    "@jobsiteos/core": "workspace:*",
+    "@supabase/supabase-js": "^2.47.10",
+    "csv-parse": "^5.6.0",
+    "expo-server-sdk": "^3.12.0",
+    "express": "^4.21.2",
+    "iconv-lite": "^0.6.3",
+    "pg": "^8.13.1",
+    "pg-copy-streams": "^6.0.6",
+    "pino": "^9.6.0",
+    "undici": "^7.2.0",
+    "unzipper": "^0.12.3",
+    "web-push": "^3.6.7",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/pg-copy-streams": "^1.2.5",
+    "@types/unzipper": "^0.10.10",
+    "@types/web-push": "^3.6.4",
+    "pino-pretty": "^13.0.0",
+    "typescript": "^5.7.2"
+  }
+}

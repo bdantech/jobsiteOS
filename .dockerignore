@@ -1,0 +1,17 @@
+# The worker's image is built with the REPO ROOT as context (it needs the
+# workspace manifests and packages/core), so this is the .dockerignore that
+# actually applies. apps/worker/.dockerignore is kept for a build run with
+# apps/worker as context.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.expo
+.git
+.github
+**/*.log
+**/.env
+**/.env.local
+**/.env.*.local
+supabase/.branches
+supabase/.temp

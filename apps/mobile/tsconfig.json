@@ -1,0 +1,53 @@
+{
+  "extends": ["../../tsconfig.base.json", "expo/tsconfig.base"],
+  "compilerOptions": {
+    "jsx": "react-native",
+    // expo/tsconfig.base still ships moduleResolution "node" (node10). Under it,
+    // zod resolves to a types entry whose generics blow the instantiation depth
+    // limit inside @jobsiteos/core (TS2589). Bundler resolution is what Metro
+    // actually does, and what packages/core is written against.
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "lib": ["ES2022", "DOM"],
+    "types": ["react", "nativewind/types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+
+      // ─── Duplicate React types. Read metro.config.js before touching this. ───
+      // This workspace contains two Reacts on purpose: mobile is React 18 (RN
+      // 0.76), web is React 19 (Next 15). pnpm keeps ONE shared fallback copy of
+      // @types/react in node_modules/.pnpm/node_modules, and the winner is 19.
+      // expo-router, lucide-react-native, react-native-safe-area-context and
+      // @react-navigation/* declare no @types/react peer, so pnpm nests none for
+      // them and their .d.ts files walk up to that shared copy and bind to React
+      // 19 — while this app binds to its own React 18. Two incompatible
+      // ReactNode types (19 added `bigint`) => TS2786 "cannot be used as a JSX
+      // component" on every library component in the app.
+      //
+      // No global lever fixes this: web's own `next` relies on that same
+      // fallback BEING 19, so hoisting rules / root deps / pnpm.overrides fix one
+      // app by breaking the other. It has to be scoped to this compilation, which
+      // is what `paths` does — it governs `react` even inside node_modules .d.ts.
+      //
+      // ⚠️ Expo also feeds these `paths` to Metro, which would then resolve the
+      // RUNTIME `react` import to this types-only package and fail to bundle
+      // ("main module field could not be resolved"). metro.config.js intercepts
+      // `react` / `react/*` and resolves them to the real package; that
+      // interception is what makes this line safe. Do not remove one without the
+      // other. If mobile ever moves to React 19, delete both.
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "nativewind-env.d.ts",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".expo", "dist"]
+}

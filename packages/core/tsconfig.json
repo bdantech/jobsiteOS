@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    // The *.test.ts files run under `node --experimental-strip-types`, which
+    // requires the real './filters.ts' specifier. Safe here because we never emit.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts"]
+}

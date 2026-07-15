@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // NodeNext, not Bundler: this is the only workspace whose output is executed
+    // by Node itself, so the emitted specifiers have to be ones Node can resolve
+    // (explicit .js extensions, ESM semantics).
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "outDir": "dist",
+    // `@jobsiteos/core` ships TypeScript SOURCE (its package.json main is
+    // ./src/index.ts and it has no build step), so a plain `tsc` of the worker
+    // cannot leave the import as a bare `@jobsiteos/core` specifier — at runtime
+    // Node would load a .ts file and die. Instead the worker imports core through
+    // relative paths, and `rootDir` is set to the repo root so those files are
+    // compiled INTO dist alongside the worker's own, preserving the relative
+    // layout (dist/apps/worker/src/… + dist/packages/core/src/…). Same reasoning
+    // — and the same deep-relative import — as apps/web/src/lib/notificacoes.server.ts.
+    "rootDir": "../..",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

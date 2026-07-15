@@ -1,0 +1,30 @@
+{
+  "name": "jobsiteos",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@jobsiteos/web",
+    "dev:mobile": "turbo run dev --filter=@jobsiteos/mobile",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > packages/core/src/types/database.ts",
+    "db:push": "supabase db push",
+    "seed": "pnpm --filter @jobsiteos/web seed",
+    "rls:probe": "set -a && . ./apps/web/.env.local && set +a && node supabase/tests/rls-probe.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@supabase/supabase-js": "2.47.10"
+    }
+  }
+}

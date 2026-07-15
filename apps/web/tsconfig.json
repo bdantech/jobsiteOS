@@ -1,0 +1,56 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    // NOTE: `incremental: true` (below) is re-added by `next lint` if you remove
+    // it. Side effect worth knowing: tsconfig.tsbuildinfo can survive an edit to
+    // `paths`/`compilerOptions` and keep reporting type errors that no longer
+    // exist. If typecheck output looks impossible, `rm apps/web/tsconfig.tsbuildinfo`.
+    "jsx": "preserve",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      // apps/mobile pins @types/react@18 (Expo/React Native), and pnpm hoists a
+      // copy of it to .pnpm/node_modules. Packages that don't declare
+      // @types/react themselves — next-themes is one — resolve THAT copy instead
+      // of web's @types/react@19, and React 18's ReactNode is incompatible with
+      // React 19's. Pinning both here forces every resolution in this project,
+      // including the ones inside third-party .d.ts files, onto the React 19
+      // types. Type-only: Next's bundler resolution is unaffected.
+      "react": [
+        "./node_modules/@types/react"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom"
+      ]
+    },
+    "incremental": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * ONE OS tokens. Neutral = zinc. Marca = navy #1e293f (hsl 220 35% 18%).
+ * Values are bare HSL triples so tailwind can wrap them in hsl(var(--x)).
+ * Keep in sync with src/lib/theme.ts, which exposes the same colours as hex for
+ * the places RN needs a raw value (icons, StatusBar, react-navigation themes,
+ * SVG fills).
+ *
+ * ── A primária NÃO é a mesma nos dois temas, e isso é deliberado ────────────
+ * O navy é escuríssimo (L = 18%). Contra o fundo do dark mode (#09090b) ele dá
+ * 1,37:1 — o piso do WCAG para elemento de interface é 3:1. Como `--primary` no
+ * escuro, o botão primário, o badge e o ÍCONE ATIVO DA TAB BAR sumiriam. Então o
+ * matiz (220°) é o mesmo nos dois temas — a identidade se mantém — mas no escuro
+ * a luminosidade sobe para 66% (7,05:1 contra o fundo).
+ *
+ * E porque a primária clareia, `--primary-foreground` ESCURECE junto: branco
+ * sobre a primária clara dá 2,82:1, abaixo dos 4,5:1 de texto. O par tem que
+ * inverter junto, senão só trocamos um bug de contraste por outro.
+ *
+ * ── O mobile não tem sidebar ────────────────────────────────────────────────
+ * A navegação é a tab bar, que é uma superfície `background` com o item ativo em
+ * `--primary`. Não há `--sidebar-*` aqui: não existe superfície de marca
+ * persistente para pintar de navy.
+ *
+ * ── `--accent` NÃO é a cor da marca ─────────────────────────────────────────
+ * É a superfície neutra de hover/press atrás de item de lista e botão ghost.
+ * Pintá-la de navy tornaria todo press-state um bloco ilegível. Fica zinc.
+ *
+ * ── Os `--chart-*` são uma rampa ORDINAL, não categórica ────────────────────
+ * universo → tam → sam → som têm ORDEM: é uma pirâmide. Um matiz só (220°)
+ * variando em luminosidade, e o leitor vê a ordem na própria cor. No escuro a
+ * âncora INVERTE (universo escuro → SOM claro), porque uma rampa sequencial não
+ * se lê espelhando o tema claro. `universo` fica abaixo de 3:1 contra a
+ * superfície de propósito — é a camada menos importante — e por isso a pirâmide
+ * SEMPRE traz o total e o percentual ao lado de cada banda. Cor nunca é o único
+ * canal de significado aqui.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    /* ONE OS navy #1e293f, exato */
+    --primary: 220 35% 18%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    /* superfície neutra de press — veja a nota acima, não é a cor da marca */
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 72.2% 50.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 220 35% 18%;
+
+    /* superfícies de marca: sempre o navy exato, em qualquer tema */
+    --brand: 220 35% 18%;
+    --brand-foreground: 0 0% 100%;
+
+    /* rampa ordinal da pirâmide: claro → escuro */
+    --chart-1: 218 31% 74%; /* universo */
+    --chart-2: 216 32% 59%; /* tam      */
+    --chart-3: 217 34% 42%; /* sam      */
+    --chart-4: 220 35% 18%; /* som      */
+    --chart-5: 217 20% 55%; /* neutro, para séries fora da pirâmide */
+  }
+
+  .dark:root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+
+    /* mesmo matiz (220°), luminosidade invertida: 18% seria invisível aqui */
+    --primary: 220 50% 66%;
+    --primary-foreground: 220 40% 12%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 220 50% 66%;
+
+    /* o navy puro segue sendo a marca, mesmo no escuro: é SUPERFÍCIE, não
+       elemento sobre superfície, então o contraste não o afeta */
+    --brand: 220 35% 18%;
+    --brand-foreground: 0 0% 100%;
+
+    /* âncora invertida: escuro → claro */
+    --chart-1: 219 24% 31%; /* universo */
+    --chart-2: 220 25% 48%; /* tam      */
+    --chart-3: 217 36% 67%; /* sam      */
+    --chart-4: 217 61% 87%; /* som      */
+    --chart-5: 217 15% 60%; /* neutro   */
+  }
+}

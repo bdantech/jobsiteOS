@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Paleta base: zinc. Marca: ONE OS navy #1e293f = hsl(220, 35%, 18%).
+ *
+ * ── A cor primária NÃO é a mesma nos dois temas, e isso é deliberado ────────
+ * O navy da marca é escuríssimo (L = 18%). Contra o fundo do dark mode (#09090b)
+ * ele tem contraste de 1,37:1 — o mínimo do WCAG para um elemento de interface é
+ * 3:1. Usado como `--primary` no escuro, todo botão primário e anel de foco
+ * praticamente desapareceria, e quem navega por teclado perderia o foco de vista.
+ *
+ * Então: o matiz (220°) é o mesmo nos dois temas — a identidade se mantém —, mas
+ * no escuro a luminosidade sobe para 66%. É a convenção do próprio shadcn e de
+ * qualquer design system sério: a primária inverte de brilho, não de cor.
+ *
+ * ── A SIDEBAR é navy nos dois temas ─────────────────────────────────────────
+ * É onde uma cor escura assim funciona: como SUPERFÍCIE, não como elemento sobre
+ * superfície. O problema de contraste desaparece porque o navy vira o fundo.
+ *
+ * ── `--accent` NÃO é a cor da marca ─────────────────────────────────────────
+ * No vocabulário do shadcn, `accent` é a superfície neutra de hover/active atrás
+ * de item de dropdown, opção de select e botão ghost. Pintá-la de navy tornaria
+ * todo hover de menu um bloco ilegível. A marca vive em `--primary` (botões, anéis
+ * de foco, nav ativa) e em `--brand` para superfícies de marca pontuais.
+ *
+ * ── Os `--chart-*` são uma rampa ORDINAL, não categórica ────────────────────
+ * universo → TAM → SAM → SOM têm ORDEM: é uma pirâmide. Trocar a ordem mudaria o
+ * significado. Então é um matiz só (220°) variando em luminosidade, e o leitor vê
+ * a ordem na própria cor. No escuro a âncora INVERTE (universo escuro → SOM claro),
+ * porque uma rampa sequencial não se lê espelhando o tema claro.
+ * `universo` fica abaixo de 3:1 contra a superfície de propósito — é a camada
+ * menos importante —, e por isso os gráficos SEMPRE trazem rótulo numérico e
+ * botão "Ver tabela". Cor nunca é o único canal de significado aqui.
+ */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    /*
+     * A TELA da página — o cinza sobre o qual os cards ficam.
+     *
+     * Precisa ser um token próprio, e não `--background`: aquele veste Input, Select,
+     * Textarea, Dialog e Sheet. Tingir `--background` deixaria todo campo do app cinza,
+     * quando o que se quer é o contrário — campo branco sobre card branco, card branco
+     * sobre página cinza.
+     *
+     * No claro é o mesmo cinza da sidebar, de propósito: sidebar e tela de conteúdo são
+     * a mesma superfície de fundo, e o que se levanta dela são os cards. No escuro a
+     * ordem inverte (a página é o passo mais escuro e o card sobe), porque no escuro
+     * quem está mais perto do observador é mais claro, não mais escuro.
+     */
+    --surface: 240 5% 96%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    /* ONE OS navy #1e293f, exato */
+    --primary: 220 35% 18%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    /* superfície neutra de hover — veja a nota acima, não é a cor da marca */
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 220 35% 18%;
+
+    /* superfícies de marca: sempre o navy exato, em qualquer tema */
+    --brand: 220 35% 18%;
+    --brand-foreground: 0 0% 100%;
+
+    /*
+     * Sidebar: NEUTRA, seguindo o tema. Cinza claro no light, cinza escuro no dark.
+     * Ela é uma superfície de suporte — não deve competir com o conteúdo. O navy da
+     * marca aparece onde tem FUNÇÃO: o item ativo, o botão, o anel de foco.
+     * Contra a página branca ela contrasta só 1,1:1, e isso está certo: o trabalho
+     * dela é se DISTINGUIR (com a borda), não gritar.
+     */
+    --sidebar-background: 240 5% 96%;
+    --sidebar-foreground: 240 6% 10%;
+    --sidebar-primary: 220 35% 18%; /* item ativo = navy */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 5% 90%; /* hover */
+    --sidebar-accent-foreground: 240 6% 10%;
+    --sidebar-border: 240 6% 88%;
+    --sidebar-ring: 220 35% 18%;
+
+    /* rampa ordinal da pirâmide: claro → escuro */
+    --chart-1: 218 31% 74%; /* universo */
+    --chart-2: 216 32% 59%; /* TAM      */
+    --chart-3: 217 34% 42%; /* SAM      */
+    --chart-4: 220 35% 18%; /* SOM      */
+    --chart-5: 217 20% 55%; /* neutro, para séries fora da pirâmide */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    /* A página é o passo mais ESCURO; o card sobe sobre ela. Mesmo par de superfícies
+       que a sidebar já usa no escuro (10% sobre 3.9%), e pela mesma razão: um card
+       idêntico ao fundo — que é o que havia aqui — não é um card, é uma borda. */
+    --surface: 240 10% 3.9%;
+
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    /* mesmo matiz (220°), luminosidade invertida: 18% seria invisível aqui */
+    --primary: 220 50% 66%;
+    --primary-foreground: 220 40% 12%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 220 50% 66%;
+
+    --brand: 220 35% 18%;
+    --brand-foreground: 0 0% 100%;
+
+    /*
+     * Cinza escuro, MAIS CLARO que o fundo da página (10% contra 3,9%). A ordem
+     * importa: se a sidebar fosse mais escura que a página, ela viraria um buraco
+     * na tela em vez de uma superfície elevada — e no escuro não há sombra que
+     * conserte isso.
+     * O item ativo usa o navy CLAREADO (220 50% 66%), o mesmo da primária: o navy
+     * puro aqui teria 1,4:1 contra a sidebar e sumiria.
+     */
+    --sidebar-background: 240 6% 10%;
+    --sidebar-foreground: 240 5% 90%;
+    --sidebar-primary: 220 50% 66%;
+    --sidebar-primary-foreground: 220 40% 12%;
+    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 4% 18%;
+    --sidebar-ring: 220 50% 66%;
+
+    /* âncora invertida: escuro → claro */
+    --chart-1: 219 24% 31%; /* universo */
+    --chart-2: 220 25% 48%; /* TAM      */
+    --chart-3: 217 36% 67%; /* SAM      */
+    --chart-4: 217 61% 87%; /* SOM      */
+    --chart-5: 217 15% 60%; /* neutro   */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+  }
+}

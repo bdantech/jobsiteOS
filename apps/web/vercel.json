@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/heartbeat",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/mercado-receita",
+      "schedule": "0 6 10 * *"
+    },
+    {
+      "path": "/api/cron/mercado-cno",
+      "schedule": "0 6 12 * *"
+    }
+  ]
+}
