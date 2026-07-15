@@ -21,10 +21,22 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
 
+  /**
+   * A Receita migrou os dados abertos para um SHARE PÚBLICO do Nextcloud. Os arquivos
+   * baixam de {BASE}/{mes}/{arquivo} via WebDAV, autenticados com o token do share como
+   * usuário do Basic-auth (senha vazia). O caminho antigo (/dados/cnpj/dados_abertos_cnpj)
+   * responde 404 hoje.
+   */
   RECEITA_BASE_URL: z
     .string()
     .url()
-    .default('https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj'),
+    .default('https://arquivos.receitafederal.gov.br/public.php/webdav'),
+  /**
+   * O token do share público do Nextcloud, usado como usuário do Basic-auth. Vazio =
+   * nenhum header de auth (para um espelho que sirva caminhos simples). Só é enviado a
+   * URLs de /public.php/webdav, nunca ao fallback.
+   */
+  RECEITA_SHARE_TOKEN: z.string().default('YggdBLfdninEJX9'),
   /** Mirror. NEVER used automatically — only when a job is triggered with { fallback: true }. */
   RECEITA_FALLBACK_URL: z.string().url().default('https://dados-abertos-rf-cnpj.casadosdados.com.br'),
   /** Month folder, YYYY-MM. Defaults to the current month. */

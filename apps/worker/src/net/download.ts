@@ -93,6 +93,13 @@ export async function baixarComRetentativa(
       const headers: Record<string, string> = { 'user-agent': 'JobsiteOS-Worker/1.0' }
       if (jaBaixado > 0) headers.range = `bytes=${jaBaixado}-`
 
+      // Share público do Nextcloud da Receita: o token é o usuário do Basic-auth, senha
+      // vazia. Restrito ao endpoint WebDAV — o fallback é outro host, sem auth, e mandar
+      // a credencial da Receita para ele seria vazá-la sem motivo.
+      if (env.RECEITA_SHARE_TOKEN && url.includes('/public.php/webdav')) {
+        headers.authorization = `Basic ${Buffer.from(`${env.RECEITA_SHARE_TOKEN}:`).toString('base64')}`
+      }
+
       // undici's fetch (not http.get): it follows redirects — the RFB server
       // bounces /dados/... through a CDN — and gives a streaming body, so a 700 MB
       // part never lands in memory.
