@@ -59,6 +59,16 @@ export async function sessaoDedicada(): Promise<pg.Client> {
     statement_timeout: 6 * 60 * 60 * 1000,
   })
   await client.connect()
+
+  // O `statement_timeout` acima vai como PARÂMETRO DE STARTUP do node-pg, e o proxy
+  // do Supabase na 5432 (Supavisor em modo sessão) descarta esses parâmetros — a sessão
+  // caía no default curto do servidor e o COPY do maior arquivo (Estabelecimentos)
+  // estourava com "canceling statement due to statement timeout". Um SET explícito é
+  // uma query normal, que o proxy não toca. 0 = sem limite: esta é uma sessão de lote
+  // de uso único (COPY + upsert de ~2M linhas + índices + derivadas), e matar qualquer
+  // um desses no meio corrompe a corrida. A trava contra query travada é operacional
+  // (healthcheck/restart), não um timeout que aborta trabalho legítimo.
+  await client.query('set statement_timeout = 0')
   return client
 }
 
