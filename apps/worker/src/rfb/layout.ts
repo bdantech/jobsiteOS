@@ -215,6 +215,16 @@ export function divisoesCnae(principal: string | undefined, secundarios: string 
 /** O recorte da construção: 41 (edifícios), 42 (infraestrutura), 43 (especializados). */
 export const DIVISOES_CONSTRUCAO = new Set(['41', '42', '43'])
 
-export function noRecorteConstrucao(principal: string | undefined, secundarios: string | undefined): boolean {
-  return divisoesCnae(principal, secundarios).some((d) => DIVISOES_CONSTRUCAO.has(d))
+/**
+ * O recorte é pelo CNAE PRINCIPAL, não pelos secundários.
+ *
+ * Incluir secundários trazia 6,4 milhões de estabelecimentos — 3x mais — porque milhões
+ * de empresas listam alguma atividade de construção como secundária sem serem do setor
+ * (imobiliárias, holdings, comércio que também faz obra). Para mapear quem vender ERP,
+ * quem interessa é quem TEM a construção como atividade principal (~1,5-2 mi). Os
+ * secundários continuam armazenados na coluna, só não definem mais quem entra.
+ */
+export function noRecorteConstrucao(principal: string | undefined): boolean {
+  const [c] = listaCnaes(principal)
+  return c !== undefined && DIVISOES_CONSTRUCAO.has(c.slice(0, 2))
 }

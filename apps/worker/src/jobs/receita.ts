@@ -180,7 +180,7 @@ async function criarStaging(client: pg.Client): Promise<void> {
 
 /**
  * Pass 1 — Estabelecimentos, filtered to the construction cut: CNAE division
- * 41, 42 or 43 as principal OR secundário. Row-level, as the spec defines it.
+ * 41, 42 or 43 as PRINCIPAL (not secondary — see noRecorteConstrucao for why).
  * Collects the raízes it kept, which is what every later pass filters on.
  */
 async function passarEstabelecimentos(
@@ -468,8 +468,7 @@ export async function ingerirReceita(
     client,
     arquivos.estabelecimentos,
     municipios,
-    (_raiz, l) =>
-      L.noRecorteConstrucao(l[L.ESTABELECIMENTOS.cnae_principal], l[L.ESTABELECIMENTOS.cnaes_secundarios]),
+    (_raiz, l) => L.noRecorteConstrucao(l[L.ESTABELECIMENTOS.cnae_principal]),
     raizes,
   )
   logger.info(
