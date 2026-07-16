@@ -228,3 +228,14 @@ export function noRecorteConstrucao(principal: string | undefined): boolean {
   const [c] = listaCnaes(principal)
   return c !== undefined && DIVISOES_CONSTRUCAO.has(c.slice(0, 2))
 }
+
+/**
+ * Situação cadastral ATIVA — código '02' na Receita.
+ *
+ * O recorte só entra com empresa ativa: um CNPJ baixado, inapto ou suspenso não é
+ * cliente de ERP, e incluí-los inflava o staging (dos 4,28 mi por CNAE principal, boa
+ * parte é CNPJ morto). Filtrar aqui, na passada 1, reduz o pico de disco na origem.
+ */
+export function situacaoAtiva(codigo: string | undefined): boolean {
+  return texto(codigo) === '02'
+}

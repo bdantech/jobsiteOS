@@ -468,7 +468,9 @@ export async function ingerirReceita(
     client,
     arquivos.estabelecimentos,
     municipios,
-    (_raiz, l) => L.noRecorteConstrucao(l[L.ESTABELECIMENTOS.cnae_principal]),
+    (_raiz, l) =>
+      L.noRecorteConstrucao(l[L.ESTABELECIMENTOS.cnae_principal]) &&
+      L.situacaoAtiva(l[L.ESTABELECIMENTOS.situacao_cadastral]),
     raizes,
   )
   logger.info(
@@ -523,6 +525,18 @@ export async function ingerirReceita(
   const empresas = await passarEmpresas(client, arquivos.empresas, naturezas, noRecorte)
   const simples = await passarSimples(client, arquivos.simples, noRecorte)
   logger.info({ empresas, simples }, 'Cadastro e Simples carregados.')
+
+  // Exclui MEI. Um pedreiro/eletricista MEI individual não é cliente de ERP, e são
+  // milhões deles no recorte da construção. Removemos do staging AQUI — depois que o
+  // Simples (que traz opcao_mei, por raiz) carregou e antes dos upserts — e não no
+  // upsert do universo: se ficasse só lá, os sócios desses MEIs ainda seriam inseridos
+  // e quebrariam a FK mercado_socios → mercado_universo. Deletando de stg_estab, universo
+  // e sócios ficam consistentes, porque os dois leem daqui.
+  const mei = await client.query(
+    `delete from stg_estab e using stg_simples s
+     where s.cnpj_raiz = e.cnpj_raiz and s.opcao_mei is true`,
+  )
+  logger.info({ removidos: mei.rowCount }, 'MEIs removidos do recorte.')
 
   await client.query('create index on stg_estab (cnpj_raiz)')
   await client.query('create index on stg_empresa (cnpj_raiz)')
