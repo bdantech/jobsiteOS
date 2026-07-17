@@ -984,6 +984,10 @@ export type Database = {
         Args: { p_uf?: string | null; p_tipo?: string | null; p_limite?: number }
         Returns: Json
       }
+      mercado_piramide: {
+        Args: Record<string, never>
+        Returns: Json
+      }
       app_ativar_camada_regra: {
         Args: { p: Json }
         Returns: {

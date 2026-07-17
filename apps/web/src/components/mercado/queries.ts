@@ -113,7 +113,11 @@ export function temFiltroMapa(filtros: FiltrosMapa): boolean {
  * the right fix is a `security invoker` RPC (`app_mercado_mapa(filtro jsonb)`) that
  * does the aggregation in Postgres and returns one row per layer.
  */
-export const LIMITE_AMOSTRA = 5000
+// 1000, não 5000: a amostra vai por mercado_mapa (p_limite) e 5000 × 4 camadas somava
+// ~9s de build de JSON — acima do statement_timeout de 8s. Com 1000, a RPC toda fica em
+// ~1s, e 1000 linhas por camada ainda são amostra de sobra para as médias/distribuições
+// (que já são declaradas como estimativa na tela).
+export const LIMITE_AMOSTRA = 1000
 
 const COLUNAS_AMOSTRA =
   'uf, porte_rfb, tipo, capital_social, data_inicio_atividade, erp_atual, tem_contato, grafo_sefaz, grupo_id, grupo_spes_total, obras_ativas, m2_em_execucao' as const

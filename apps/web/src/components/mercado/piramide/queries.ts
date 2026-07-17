@@ -39,35 +39,23 @@ export interface ContagensPiramide {
 export async function contarCamadas(): Promise<ContagensPiramide> {
   const supabase = createClient()
 
-  const [contagens, totalGeral] = await Promise.all([
-    Promise.all(
-      CAMADAS.map(async (camada) => {
-        const { count, error } = await supabase
-          .from(VISAO)
-          .select('*', { count: 'exact', head: true })
-          .eq('camada', camada)
-        if (error) throw new Error(error.message)
-        return [camada, count ?? 0] as const
-      }),
-    ),
-    (async () => {
-      const { count, error } = await supabase
-        .from(VISAO)
-        .select('*', { count: 'exact', head: true })
-      if (error) throw new Error(error.message)
-      return count ?? 0
-    })(),
-  ])
+  // Uma RPC, não 5 count:'exact' sobre a view. Com 876k linhas cada count varria a view
+  // inteira (~11s) e estourava o statement_timeout de 8s do authenticated — a aba não
+  // carregava. mercado_piramide conta o universo por camada com index-only scan (~1s),
+  // como security definer (sem o overhead de RLS por linha).
+  const { data, error } = await supabase.rpc('mercado_piramide')
+  if (error) throw new Error(error.message)
 
-  const porCamada = Object.fromEntries(contagens) as Record<Camada, number>
-  const somaDasCamadas = contagens.reduce((soma, [, total]) => soma + total, 0)
+  const d = data as { por_camada: Partial<Record<Camada, number>>; total: number; sem_camada: number }
 
-  return {
-    porCamada,
-    total: totalGeral,
-    // Never negative, even if a row is reclassified between the two queries.
-    semCamada: Math.max(0, totalGeral - somaDasCamadas),
-  }
+  const porCamada = {
+    universo: d.por_camada.universo ?? 0,
+    tam: d.por_camada.tam ?? 0,
+    sam: d.por_camada.sam ?? 0,
+    som: d.por_camada.som ?? 0,
+  } satisfies Record<Camada, number>
+
+  return { porCamada, total: d.total, semCamada: Math.max(0, d.sem_camada) }
 }
 
 // ─── Versões da regra ───────────────────────────────────────────────────────
