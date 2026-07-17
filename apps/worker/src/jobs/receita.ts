@@ -357,10 +357,10 @@ async function upsertUniverso(client: pg.Client): Promise<{ novas: number; atual
          e.cnae_principal,
          nullif(string_to_array(nullif(e.cnaes_secundarios, ''), ','), '{}') as cnaes_secundarios,
          e.data_inicio_atividade, emp.capital_social, emp.porte_rfb,
-         -- Não estar no arquivo do Simples (left join sem match) NÃO é "desconhecido":
-         -- é uma empresa que nunca optou, ou seja NÃO optante. Guardar como false (e
-         -- não null) faz `opcao_simples = false` nas regras e no Explorador pegar essas
-         -- empresas, em vez de descartá-las como incerteza — que era o que as barrava.
+         -- Nao estar no arquivo do Simples (left join sem match) NAO e desconhecido:
+         -- e uma empresa que nunca optou, ou seja NAO optante. Guardar como false (e
+         -- nao null) faz o filtro "optante = false" nas regras e no Explorador pegar
+         -- essas empresas, em vez de descarta-las como incerteza — que era o que barrava.
          coalesce(s.opcao_simples, false) as opcao_simples,
          s.data_opcao_simples, s.data_exclusao_simples, s.opcao_mei,
          e.uf, e.municipio, e.cep, e.logradouro, e.numero, e.bairro,
