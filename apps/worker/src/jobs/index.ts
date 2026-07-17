@@ -43,6 +43,24 @@ function reservar(tipo: TipoJob, id: string): void {
   emExecucao.set(tipo, id)
 }
 
+/**
+ * A reclassification + promotion rewrites `camada` and `empresa_id` across a large
+ * slice of mercado_universo, and every updated row dirties the visibility map. The
+ * pyramid (mercado_piramide) depends on it: its `group by camada` is an INDEX-ONLY
+ * scan that stays ~300ms only while pages are all-visible. Left dirty it degrades
+ * to a full 587MB heap scan (~10s+) and blows past the 8s statement_timeout, so the
+ * Camadas tab stops loading until autovacuum eventually catches up.
+ *
+ * This MUST run at the END of the job, AFTER promotion — promotion's empresa_id
+ * UPDATE re-dirties whatever an earlier VACUUM cleaned, which is why vacuuming
+ * inside reclassificar() (before promotion) was not enough. Runs outside a
+ * transaction, as VACUUM requires (the dedicated session is autocommit), and the
+ * session's statement_timeout is 0 so it is never cut off.
+ */
+async function vacuumUniverso(client: pg.Client): Promise<void> {
+  await client.query('vacuum (analyze) mercado_universo')
+}
+
 // ─── Derivadas (§3.2), na ordem em que dependem umas das outras ─────────────
 
 export interface ResultadoDerivadas {
@@ -74,6 +92,8 @@ export async function rodarDerivadas(client: pg.Client): Promise<ResultadoDeriva
   // only exist for promoted companies. A second, cheap pass keeps the metrics
   // consistent with what the Explorador will show a minute from now.
   await atualizarMetricas(client)
+
+  await vacuumUniverso(client)
 
   return { spes_alteradas: spes, grupos, metricas, reclassificacao, promocao }
 }
@@ -214,6 +234,7 @@ export function dispararReclassificacao(camada?: string): string {
     await atualizarMetricas(client)
     const reclassificacao = await reclassificar(client)
     const promocao = await promoverElegiveis(client)
+    await vacuumUniverso(client)
     return { camada_solicitada: camada ?? null, reclassificacao, promocao }
   })
 }

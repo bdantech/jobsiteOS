@@ -103,16 +103,6 @@ export async function reclassificar(client: pg.Client): Promise<ResultadoReclass
     [],
   )
 
-  // The mass UPDATE of `camada` above dirties the visibility map, which is exactly
-  // what the pyramid (mercado_piramide) relies on: its `group by camada` is an
-  // INDEX-ONLY scan that only stays ~1s while pages are all-visible. Without this
-  // VACUUM it degrades to a full 587MB heap scan (~9s) and blows past the 8s
-  // statement_timeout — the Camadas tab stops loading until autovacuum eventually
-  // catches up. Restoring all-visible here keeps the tab fast right after a save.
-  // Runs outside a transaction (the dedicated session is autocommit), as VACUUM
-  // requires, and the session's statement_timeout is 0 so it is never cut off.
-  await client.query('vacuum (analyze) mercado_universo')
-
   const resultado: ResultadoReclassificacao = {
     avaliadas,
     movidas: universo.rowCount ?? 0,
