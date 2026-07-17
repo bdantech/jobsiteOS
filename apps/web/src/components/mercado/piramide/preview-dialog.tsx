@@ -18,7 +18,27 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { STATUS_TEXTO } from '@/components/ui/badge'
 import { formatInteiro, plural } from './constants'
-import { buscarRegrasAtivas, piramideKeys, preverRegra, type Previsao } from './queries'
+import { piramideKeys, type Previsao } from './queries'
+
+/**
+ * The dry-run runs on the worker (POST /api/mercado/previa): a count over the
+ * whole universe under RLS times out at 8s in the browser, so the worker — with a
+ * direct pg connection and compileToSql, the same compiler the apply runs — scans
+ * it and returns the impact. A non-2xx carries a pt-BR `error`, which becomes the
+ * message under "Não foi possível calcular a prévia".
+ */
+async function buscarPrevia(camada: CamadaComRegra, arvore: Grupo): Promise<Previsao> {
+  const resposta = await fetch('/api/mercado/previa', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ camada, definicao: arvore }),
+  })
+  if (!resposta.ok) {
+    const corpo = (await resposta.json().catch(() => null)) as { error?: string } | null
+    throw new Error(corpo?.error ?? 'Não foi possível calcular a prévia.')
+  }
+  return (await resposta.json()) as Previsao
+}
 
 /**
  * PREVIEW BEFORE SAVE — the load-bearing feature of §5.1.
@@ -111,12 +131,6 @@ export function PreviewDialog({
   const [salvando, setSalvando] = React.useState(false)
   const queryClient = useQueryClient()
 
-  const { data: ativas, isPending: carregandoAtivas } = useQuery({
-    queryKey: ['mercado', 'piramide', 'regras-ativas'],
-    queryFn: buscarRegrasAtivas,
-    enabled: aberto,
-  })
-
   const {
     data: previsao,
     isPending: calculando,
@@ -126,14 +140,14 @@ export function PreviewDialog({
   } = useQuery({
     // The tree is part of the key: edit a condition, get a different dry-run.
     queryKey: ['mercado', 'piramide', 'previsao', camada, modo.arvore],
-    queryFn: () => preverRegra(camada, modo.arvore, ativas ?? {}),
-    enabled: aberto && ativas !== undefined,
-    // A count over 2M rows is expensive and the tree has not changed in between.
+    queryFn: () => buscarPrevia(camada, modo.arvore),
+    enabled: aberto,
+    // A count over the whole universe is expensive and the tree hasn't changed.
     staleTime: 60_000,
     retry: false,
   })
 
-  const carregando = carregandoAtivas || calculando
+  const carregando = calculando
 
   async function confirmar(ativar: boolean) {
     setSalvando(true)

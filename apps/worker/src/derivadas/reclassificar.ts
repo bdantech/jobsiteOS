@@ -1,6 +1,10 @@
 import type pg from 'pg'
 import type { Consultavel } from '../db.js'
-import type { CamadaComRegra } from '../../../../packages/core/src/mercado/schemas.js'
+import type {
+  CamadaComRegra,
+  PreviaDestino,
+  PreviaRegra,
+} from '../../../../packages/core/src/mercado/schemas.js'
 import { logger } from '../logger.js'
 import { expressaoCamada, regrasAtivas, type RegraAtiva } from './regras.js'
 
@@ -116,26 +120,19 @@ export async function reclassificar(client: pg.Client): Promise<ResultadoReclass
 
 // ─── Dry-run (§5.1) ─────────────────────────────────────────────────────────
 
-export interface PreviaRegra {
-  camada: string
-  versao_proposta: number
-  total_atual: number
-  total_novo: number
-  movidas: number
-  sobem: number
-  descem: number
-  resumo: string
-}
-
-const ORDEM = ['universo', 'tam', 'sam', 'som']
-
 /**
- * "Esta regra move 12.400 empresas: 9.100 sobem para SAM, 3.300 descem para TAM."
+ * "Esta regra move 12.400 empresas: 9.100 sobem para SAM, 3.300 descem (para TAM)."
  *
  * Counts what WOULD happen if `definicao` replaced the active rule for `camada`,
  * leaving the other layers on their current active rules — which is what the user
- * is actually about to do when they click "Salvar como nova versão". It writes
- * nothing.
+ * is about to do when they confirm. It writes nothing.
+ *
+ * ONE sequential scan of `mercado_explorador`, and every number is the TRUTH the
+ * apply will produce, not an estimate: `nova` is the very CASE the reclassification
+ * runs (`expressaoCamada`, highest matching layer wins), so a company that also
+ * matches an active rule ABOVE this layer gets `nova` = that higher layer and is
+ * correctly not counted as climbing INTO it. The `destinos` breakdown is just that
+ * same `nova`, grouped — no second pass, no subtraction gymnastics.
  */
 export async function previewRegra(
   db: Consultavel,
@@ -150,44 +147,47 @@ export async function previewRegra(
     { camada, versao: versaoAtual + 1, definicao },
   ]
 
-  // $1 is the layer-order array, so the compiled rules start at $2.
-  const { sql, values } = expressaoCamada(propostas, 1)
+  // Rules compile to $1..$n; the previewed layer is the last placeholder.
+  const { sql, values } = expressaoCamada(propostas)
+  const pCamada = `$${values.length + 1}`
 
   const { rows } = await db.query<{
-    total_atual: number
-    total_novo: number
-    movidas: number
-    sobem: number
-    descem: number
+    subindo: number
+    descendo: number
+    permanecem: number
+    destinos: PreviaDestino[]
   }>(
     `with simulado as (
-       select camada as atual, (${sql})::text as nova
+       select coalesce(camada, 'universo') as atual, (${sql})::text as nova
        from mercado_explorador
        where cnpj is not null
      )
      select
-       count(*) filter (where atual = $${values.length + 2})::int as total_atual,
-       count(*) filter (where nova  = $${values.length + 2})::int as total_novo,
-       count(*) filter (where atual is distinct from nova)::int as movidas,
-       count(*) filter (
-         where array_position($1::text[], nova) > array_position($1::text[], coalesce(atual, 'universo'))
-       )::int as sobem,
-       count(*) filter (
-         where array_position($1::text[], nova) < array_position($1::text[], coalesce(atual, 'universo'))
-       )::int as descem
+       count(*) filter (where atual <> ${pCamada} and nova = ${pCamada})::int as subindo,
+       count(*) filter (where atual = ${pCamada} and nova <> ${pCamada})::int as descendo,
+       count(*) filter (where atual = ${pCamada} and nova = ${pCamada})::int as permanecem,
+       coalesce(
+         (select jsonb_agg(jsonb_build_object('camada', nova, 'total', c) order by c desc)
+          from (
+            select nova, count(*)::int as c
+            from simulado
+            where atual = ${pCamada} and nova <> ${pCamada}
+            group by nova
+          ) d),
+         '[]'::jsonb
+       ) as destinos
      from simulado`,
-    [ORDEM, ...values, camada],
+    [...values, camada],
   )
 
-  const r = rows[0] ?? { total_atual: 0, total_novo: 0, movidas: 0, sobem: 0, descem: 0 }
-  const n = (v: number): string => v.toLocaleString('pt-BR')
+  const r = rows[0] ?? { subindo: 0, descendo: 0, permanecem: 0, destinos: [] }
 
   return {
     camada,
-    versao_proposta: versaoAtual + 1,
-    ...r,
-    resumo:
-      `Esta regra move ${n(r.movidas)} empresas: ${n(r.sobem)} sobem e ${n(r.descem)} descem. ` +
-      `A camada ${camada.toUpperCase()} passa de ${n(r.total_atual)} para ${n(r.total_novo)} empresas.`,
+    subindo: r.subindo,
+    descendo: r.descendo,
+    permanecem: r.permanecem,
+    destinos: r.destinos,
+    totalMovidas: r.subindo + r.descendo,
   }
 }

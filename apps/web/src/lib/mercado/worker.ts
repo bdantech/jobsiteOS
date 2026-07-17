@@ -1,4 +1,5 @@
 import 'server-only'
+import type { CamadaComRegra, PreviaRegra } from '@jobsiteos/core'
 
 /**
  * The ONE place in the web app that talks to `apps/worker` (Railway).
@@ -198,4 +199,95 @@ export async function dispararReclassificacao(
     },
     'reclassificar',
   )
+}
+
+// ─── Prévia da regra (§5.1) ─────────────────────────────────────────────────
+
+export type PreverRegraResultado =
+  | { ok: true; previsao: PreviaRegra }
+  | { ok: false; message: string }
+
+/**
+ * A count over the whole universe under RLS times out at 8s in the browser, so the
+ * dry-run lives on the worker: it holds a direct pg connection with no statement
+ * timeout AND uses compileToSql — the exact compiler the reclassification runs, so
+ * the numbers shown here cannot disagree with what applying the rule will do.
+ *
+ * Unlike dispararJob (which only ENQUEUES and returns in ms), this WAITS for the
+ * scan (~a few seconds). The ceiling is generous but still bounds a hung container.
+ */
+const PREVIEW_TIMEOUT_MS = 30_000
+
+function ehPreviaRegra(x: unknown): x is PreviaRegra {
+  if (typeof x !== 'object' || x === null) return false
+  const o = x as Record<string, unknown>
+  return (
+    typeof o.camada === 'string' &&
+    typeof o.subindo === 'number' &&
+    typeof o.descendo === 'number' &&
+    typeof o.permanecem === 'number' &&
+    typeof o.totalMovidas === 'number' &&
+    Array.isArray(o.destinos)
+  )
+}
+
+export async function preverRegraNoWorker(
+  camada: CamadaComRegra,
+  definicao: unknown,
+): Promise<PreverRegraResultado> {
+  const baseUrl = process.env.WORKER_URL
+  const secret = process.env.WORKER_SECRET
+  if (!baseUrl || !secret) {
+    return { ok: false, message: 'O worker do Mercado não está configurado (WORKER_URL / WORKER_SECRET).' }
+  }
+
+  let url: string
+  try {
+    url = new URL('/jobs/preview-regra', baseUrl).toString()
+  } catch {
+    return { ok: false, message: 'WORKER_URL inválida.' }
+  }
+
+  let resposta: Response
+  try {
+    resposta = await fetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ camada, definicao }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+    })
+  } catch (error) {
+    console.error('[mercado] falha de rede na prévia da regra', {
+      erro: error instanceof Error ? error.name : 'desconhecido',
+    })
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.name === 'TimeoutError'
+          ? 'A prévia demorou demais para responder. Tente novamente em instantes.'
+          : 'Não foi possível falar com o worker. Verifique se o serviço está no ar.',
+    }
+  }
+
+  if (!resposta.ok) {
+    const corpo = trecho(await resposta.text().catch(() => ''))
+    console.error('[mercado] worker recusou a prévia', { status: resposta.status })
+    return {
+      ok: false,
+      message:
+        resposta.status === 401 || resposta.status === 403
+          ? 'O worker recusou a autenticação. Confira o WORKER_SECRET nos dois lados.'
+          : `O worker respondeu ${resposta.status} ao calcular a prévia${corpo ? `: ${corpo}` : '.'}`,
+    }
+  }
+
+  const corpo: unknown = await resposta.json().catch(() => null)
+  if (!ehPreviaRegra(corpo)) {
+    return { ok: false, message: 'O worker devolveu uma prévia em formato inesperado.' }
+  }
+  return { ok: true, previsao: corpo }
 }

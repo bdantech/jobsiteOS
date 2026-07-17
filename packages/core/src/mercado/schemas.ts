@@ -31,6 +31,30 @@ export const CAMADAS_COM_REGRA = ['tam', 'sam', 'som'] as const
 export const camadaComRegraSchema = z.enum(CAMADAS_COM_REGRA)
 export type CamadaComRegra = z.infer<typeof camadaComRegraSchema>
 
+// ─── Prévia da regra (§5.1) ─────────────────────────────────────────────────
+// The dry-run's shape, shared by the worker (which computes it against live data
+// with compileToSql) and the web (which renders it). Keeping it here is what lets
+// the worker's answer type-check straight into the confirmation card.
+
+/** Where the companies leaving a layer land, as their FINAL assigned layer. */
+export interface PreviaDestino {
+  camada: Camada
+  total: number
+}
+
+export interface PreviaRegra {
+  camada: CamadaComRegra
+  /** Companies NOT in this layer today that the proposed rule set pulls IN. */
+  subindo: number
+  /** Companies in this layer today that the proposed rule set moves OUT. */
+  descendo: number
+  /** Companies in this layer today that stay. */
+  permanecem: number
+  /** Breakdown of `descendo` by where each company ends up. */
+  destinos: PreviaDestino[]
+  totalMovidas: number
+}
+
 export const SITUACOES_CADASTRAIS = ['ativa', 'suspensa', 'inapta', 'baixada', 'nula'] as const
 
 export const FONTES_INGESTAO = ['receita_cnpj', 'cno', 'lista'] as const
