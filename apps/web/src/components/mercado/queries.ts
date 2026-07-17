@@ -312,23 +312,22 @@ function fatia(balde: Balde, label: string): FatiaDistribuicao {
 export async function buscarMapa(filtros: FiltrosMapa): Promise<Mapa> {
   const supabase = createClient()
 
-  const resultados = await Promise.all(
-    CAMADAS.map(async (camada) => {
-      let query = supabase
-        .from('mercado_explorador')
-        .select(COLUNAS_AMOSTRA, { count: 'exact' })
-        .eq('camada', camada)
-        .limit(LIMITE_AMOSTRA)
+  // Uma RPC (mercado_mapa), não 4 queries com count:'exact' sobre a view. Com 876k
+  // linhas reais, contar via a view custava ~11s por camada e a amostra forçava um hash
+  // de 878k métricas (~4s) — ambos estouravam o statement_timeout de 8s do authenticated.
+  // A função conta com index-only scan e LIMITA o universo antes de juntar as métricas,
+  // devolvendo os 4 totais + amostras em ~1s. Era o "RPC app_mercado_mapa" prometido na
+  // nota de LIMITE_AMOSTRA.
+  const { data, error } = await supabase.rpc('mercado_mapa', {
+    p_uf: filtros.uf,
+    p_tipo: filtros.tipo,
+    p_limite: LIMITE_AMOSTRA,
+  })
+  if (error) throw new Error(error.message)
 
-      if (filtros.uf) query = query.eq('uf', filtros.uf)
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-
-      const { data, count, error } = await query
-      if (error) throw new Error(error.message)
-
-      return { camada, total: count ?? 0, linhas: (data ?? []) as LinhaAmostra[] }
-    }),
-  )
+  const resultados = (
+    (data ?? []) as Array<{ camada: Camada; total: number; linhas: LinhaAmostra[] }>
+  ).map((r) => ({ camada: r.camada, total: r.total, linhas: r.linhas ?? [] }))
 
   const amostras = new Map(
     resultados.map((r) => [r.camada, { total: r.total, linhas: r.linhas }] as const),

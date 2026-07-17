@@ -980,6 +980,10 @@ export type Database = {
       }
     }
     Functions: {
+      mercado_mapa: {
+        Args: { p_uf?: string | null; p_tipo?: string | null; p_limite?: number }
+        Returns: Json
+      }
       app_ativar_camada_regra: {
         Args: { p: Json }
         Returns: {
