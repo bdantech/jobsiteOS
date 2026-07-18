@@ -168,6 +168,16 @@ export async function dispararJob(input: DispararJobInput): Promise<DispararJobR
   )
 }
 
+/**
+ * Fire the on-demand promotion (§3.2.5): turn every SAM+SOM company not yet in
+ * `empresas` into a CRM row. Enqueue-only, like the other jobs — the worker runs
+ * it in batches (minutes) and this returns as soon as it accepts the job. Idempotent
+ * and resumable, so re-firing simply continues from where it stopped.
+ */
+export async function dispararPromocao(): Promise<DispararJobResultado> {
+  return postar('/jobs/promover', {}, 'promover')
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string

@@ -24,7 +24,7 @@ import { ingerirCno, type OpcoesCno } from './cno.js'
  * route returns 202 with an id and the caller watches `mercado_ingestoes`.
  */
 
-export type TipoJob = 'receita' | 'cno' | 'reclassificar' | 'metricas'
+export type TipoJob = 'receita' | 'cno' | 'reclassificar' | 'metricas' | 'promover'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -68,7 +68,6 @@ export interface ResultadoDerivadas {
   grupos: { arestas: number; grupos: number; membros: number }
   metricas: number
   reclassificacao: Awaited<ReturnType<typeof reclassificar>>
-  promocao: Awaited<ReturnType<typeof promoverElegiveis>>
 }
 
 /**
@@ -77,25 +76,25 @@ export interface ResultadoDerivadas {
  *   grupo → grupo_id is what the group metrics aggregate over.
  *   métricas → qtd_filiais / grupo_spes_* / obras_ativas are READ BY the rules.
  *   reclassificação → camada.
- *   promoção → reads the camada that reclassification just wrote.
  * Running metrics after reclassification would classify the whole universe against
  * last month's numbers, every month, forever.
+ *
+ * PROMOTION IS NOT HERE ANYMORE. Turning market rows into `empresas` (§3.2.5) is a
+ * heavy write (tens of thousands of inserts + index-amplified empresa_id updates)
+ * that has nothing to do with keeping the universe fresh — it is a deliberate,
+ * on-demand act (dispararPromocao / the "Promover" button). Folding it into every
+ * ingestion and every rule change is what turned routine jobs into 30-minute IO
+ * storms. The universe stays current here; the CRM base is populated when asked.
  */
 export async function rodarDerivadas(client: pg.Client): Promise<ResultadoDerivadas> {
   const spes = await detectarSpes(client)
   const grupos = await montarGrupos(client)
   const metricas = await atualizarMetricas(client)
   const reclassificacao = await reclassificar(client)
-  const promocao = await promoverElegiveis(client)
-
-  // Promotion creates `empresas` rows, and `tem_contato`/erp columns on the view
-  // only exist for promoted companies. A second, cheap pass keeps the metrics
-  // consistent with what the Explorador will show a minute from now.
-  await atualizarMetricas(client)
 
   await vacuumUniverso(client)
 
-  return { spes_alteradas: spes, grupos, metricas, reclassificacao, promocao }
+  return { spes_alteradas: spes, grupos, metricas, reclassificacao }
 }
 
 // ─── Os jobs ────────────────────────────────────────────────────────────────
@@ -231,11 +230,13 @@ function dispararAvulso(tipo: TipoJob, trabalho: (client: pg.Client) => Promise<
 export function dispararReclassificacao(camada?: string): string {
   return dispararAvulso('reclassificar', async (client) => {
     logger.info({ camada_solicitada: camada ?? 'todas' }, 'Reclassificação sob demanda.')
-    await atualizarMetricas(client)
+    // Only camadas here — no metrics recompute, no promotion. Metrics change on
+    // INGESTION, not when a rule changes, so re-running them on every rule edit was
+    // pure churn (it is what bloated mercado_metricas to 63% dead). And promotion is
+    // now its own on-demand job. This makes a rule change a light, fast operation.
     const reclassificacao = await reclassificar(client)
-    const promocao = await promoverElegiveis(client)
     await vacuumUniverso(client)
-    return { camada_solicitada: camada ?? null, reclassificacao, promocao }
+    return { camada_solicitada: camada ?? null, reclassificacao }
   })
 }
 
@@ -245,5 +246,22 @@ export function dispararMetricas(): string {
     const grupos = await montarGrupos(client)
     const metricas = await atualizarMetricas(client)
     return { spes_alteradas: spes, grupos, metricas }
+  })
+}
+
+/**
+ * Promotion (§3.2.5) as its OWN on-demand job — the "Promover SAM+SOM" button.
+ * Deliberately separate from reclassification: it is a heavy write (creates
+ * `empresas` rows for the whole eligible set) and belongs to a human decision, not
+ * to every ingestion/rule change. Batched and resumable inside promoverElegiveis,
+ * so a click always makes durable progress and a re-click finishes what's left.
+ * VACUUMs at the end because the empresa_id backfill dirties the universe's map.
+ */
+export function dispararPromocao(): string {
+  return dispararAvulso('promover', async (client) => {
+    logger.info('Promoção sob demanda.')
+    const promocao = await promoverElegiveis(client)
+    await vacuumUniverso(client)
+    return { promocao }
   })
 }

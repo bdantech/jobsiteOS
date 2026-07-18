@@ -57,7 +57,12 @@ async function camadaMinima(client: pg.ClientBase): Promise<string> {
  * The RPC is not reused: it promotes ONE cnpj per call under SECURITY INVOKER,
  * and the worker has no auth.uid() and may have 40.000 companies to promote.
  */
-export async function promoverElegiveis(client: pg.ClientBase): Promise<ResultadoPromocao> {
+const LOTE_PADRAO = 2000
+
+export async function promoverElegiveis(
+  client: pg.ClientBase,
+  opcoes: { lote?: number } = {},
+): Promise<ResultadoPromocao> {
   const minima = await camadaMinima(client)
 
   if (minima === 'manual') {
@@ -65,6 +70,7 @@ export async function promoverElegiveis(client: pg.ClientBase): Promise<Resultad
     return { camada_minima: 'manual', adotadas: 0, promovidas: 0 }
   }
 
+  const lote = Math.max(1, opcoes.lote ?? LOTE_PADRAO)
   const elegiveis = ORDEM.slice(ORDEM.indexOf(minima as (typeof ORDEM)[number])) as readonly string[]
 
   // 1. Adopt: the company already exists in `empresas` (a list import, which skips
@@ -72,6 +78,10 @@ export async function promoverElegiveis(client: pg.ClientBase): Promise<Resultad
   //    as app_promover_empresa after migration 0015 — carry the market
   //    classification across, but never overwrite what the import established:
   //    coalesce keeps origem = 'lista' and leaves a hand-set camada alone.
+  //    Bounded by `empresas` (small), so it stays a single statement — and it must
+  //    run BEFORE the loop: it clears every cnpj that WOULD collide on insert, so
+  //    the loop below only ever sees genuinely-new cnpjs and can never spin on a
+  //    row that `on conflict do nothing` refuses to link.
   const adotadas = await client.query(
     `update mercado_universo u
      set empresa_id = e.id
@@ -92,66 +102,79 @@ export async function promoverElegiveis(client: pg.ClientBase): Promise<Resultad
             or (u.is_spe and not e.is_spe) or (u.grafo_sefaz and not e.grafo_sefaz))`,
   )
 
-  // 2. Promote the rest, and backfill empresa_id + the event in the same statement.
+  // 2. Promote the rest, IN BATCHES. The old single-statement version promoted the
+  //    whole SAM+SOM set in one transaction — tens of thousands of inserts + events
+  //    + empresa_id updates (which amplify across every index on mercado_universo).
+  //    On a small instance that ran for 30+ minutes, held one lock the whole time,
+  //    and lost everything if cancelled. Chunking it makes each step commit (durable
+  //    progress), keeps locks short, and — because every promoted row gets its
+  //    empresa_id set — makes the job RESUMABLE: re-running simply continues from
+  //    where the `empresa_id is null` filter left off.
   //
-  // MATRIZ ONLY. A filial is not a company you sell to — it is the same customer
-  // with a different suffix, and `qtd_filiais` already carries that fact. Promoting
-  // every establishment would put "ALFA CONSTRUTORA" in the base four times, each
-  // with its own timeline, and no amount of UI can undo that. A human can still
-  // promote a specific filial by hand through app_promover_empresa, which
-  // deliberately takes any CNPJ — this restriction is on the AUTOMATIC path only.
-  const { rows } = await client.query<{ promovidas: number }>(
-    `with elegiveis as (
-       select u.*
-       from mercado_universo u
-       where u.empresa_id is null
-         and u.camada = any($1::text[])
-         and coalesce(u.matriz_filial, 'matriz') <> 'filial'
-     ),
-     novas as (
-       insert into empresas (
-         cnpj, razao_social, nome_fantasia, tipo, estagio,
-         uf, municipio, cnae_principal, porte,
-         camada, grupo_id, is_spe, grafo_sefaz, origem
+  //    MATRIZ ONLY. A filial is not a company you sell to — it is the same customer
+  //    with a different suffix, and `qtd_filiais` already carries that fact. A human
+  //    can still promote a specific filial by hand through app_promover_empresa.
+  let promovidas = 0
+  for (;;) {
+    const { rows } = await client.query<{ promovidas: number }>(
+      `with elegiveis as (
+         select u.*
+         from mercado_universo u
+         where u.empresa_id is null
+           and u.camada = any($1::text[])
+           and coalesce(u.matriz_filial, 'matriz') <> 'filial'
+         limit $2
+       ),
+       novas as (
+         insert into empresas (
+           cnpj, razao_social, nome_fantasia, tipo, estagio,
+           uf, municipio, cnae_principal, porte,
+           camada, grupo_id, is_spe, grafo_sefaz, origem
+         )
+         select
+           e.cnpj, e.razao_social, e.nome_fantasia, 'construtora', 'mercado',
+           e.uf, e.municipio, e.cnae_principal, e.porte_rfb,
+           e.camada, e.grupo_id, e.is_spe, e.grafo_sefaz, 'mercado'
+         from elegiveis e
+         on conflict (cnpj) do nothing
+         returning id, cnpj, razao_social, camada
+       ),
+       vinculadas as (
+         update mercado_universo u
+         set empresa_id = n.id
+         from novas n
+         where n.cnpj = u.cnpj
+         returning u.cnpj
+       ),
+       eventos as (
+         insert into empresa_eventos (empresa_id, tipo, payload, ator_usuario_id)
+         select
+           n.id,
+           'empresa.promovida',
+           jsonb_build_object(
+             'resumo', coalesce(n.razao_social, n.cnpj)
+                       || ' foi promovida do universo (camada ' || coalesce(n.camada, '—') || ').',
+             'camada', n.camada,
+             'origem', 'mercado'
+           ),
+           null
+         from novas n
+         returning 1
        )
-       select
-         e.cnpj, e.razao_social, e.nome_fantasia, 'construtora', 'mercado',
-         e.uf, e.municipio, e.cnae_principal, e.porte_rfb,
-         e.camada, e.grupo_id, e.is_spe, e.grafo_sefaz, 'mercado'
-       from elegiveis e
-       on conflict (cnpj) do nothing
-       returning id, cnpj, razao_social, camada
-     ),
-     vinculadas as (
-       update mercado_universo u
-       set empresa_id = n.id
-       from novas n
-       where n.cnpj = u.cnpj
-       returning u.cnpj
-     ),
-     eventos as (
-       insert into empresa_eventos (empresa_id, tipo, payload, ator_usuario_id)
-       select
-         n.id,
-         'empresa.promovida',
-         jsonb_build_object(
-           'resumo', coalesce(n.razao_social, n.cnpj)
-                     || ' foi promovida do universo (camada ' || coalesce(n.camada, '—') || ').',
-           'camada', n.camada,
-           'origem', 'mercado'
-         ),
-         null
-       from novas n
-       returning 1
-     )
-     select (select count(*) from vinculadas)::int as promovidas`,
-    [elegiveis],
-  )
+       select (select count(*) from vinculadas)::int as promovidas`,
+      [elegiveis, lote],
+    )
+
+    const noLote = rows[0]?.promovidas ?? 0
+    promovidas += noLote
+    if (noLote === 0) break
+    logger.info({ promovidas }, 'Promoção em andamento.')
+  }
 
   const resultado: ResultadoPromocao = {
     camada_minima: minima,
     adotadas: adotadas.rowCount ?? 0,
-    promovidas: rows[0]?.promovidas ?? 0,
+    promovidas,
   }
 
   logger.info(resultado, 'Promoção concluída.')

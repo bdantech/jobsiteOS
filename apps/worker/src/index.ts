@@ -10,6 +10,7 @@ import { previewRegra } from './derivadas/reclassificar.js'
 import {
   dispararCno,
   dispararMetricas,
+  dispararPromocao,
   dispararReceita,
   dispararReclassificacao,
   statusJob,
@@ -92,6 +93,15 @@ app.post('/jobs/reclassificar', (req: Request, res: Response, next: NextFunction
 app.post('/jobs/metricas', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const id = dispararMetricas()
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/promover', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = dispararPromocao()
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)
