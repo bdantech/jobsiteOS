@@ -988,6 +988,21 @@ export type Database = {
         Args: Record<string, never>
         Returns: Json
       }
+      mercado_explorar: {
+        Args: {
+          p_termo?: string | null
+          p_arvore?: Json | null
+          p_ordem?: string
+          p_asc?: boolean
+          p_offset?: number
+          p_limite?: number
+        }
+        Returns: Json
+      }
+      mercado_contar_exato: {
+        Args: { p_termo?: string | null; p_arvore?: Json | null }
+        Returns: number
+      }
       app_ativar_camada_regra: {
         Args: { p: Json }
         Returns: {

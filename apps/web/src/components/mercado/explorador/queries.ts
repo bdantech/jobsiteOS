@@ -1,6 +1,7 @@
 import {
-  compileToPostgrest,
+  resolverParaJson,
   type Grupo,
+  type Json,
   type Tables,
   type Views,
 } from '@jobsiteos/core'
@@ -51,46 +52,26 @@ export const mercadoKeys = {
 }
 
 /**
- * Vírgula, parênteses e aspas são a SINTAXE do `or=` do PostgREST, e `%`/`*` são
- * curingas do ilike. Uma razão social como "SILVA, IRMÃOS (SP)" viraria condição
- * extra. Fora todos, antes de o termo chegar na query string.
+ * `%`/`_`/`\` são curingas do ilike; um `%` numa razão social buscada viraria
+ * "qualquer coisa". Fora, antes de o termo virar `%termo%` na RPC — busca literal.
+ * (Injeção não é o risco: o termo vai como parâmetro ligado, e a RPC usa format %L.)
  */
 function sanitizarTermo(termo: string): string {
-  return termo.replace(/[,()%*\\"]/g, ' ').trim()
-}
-
-function condicoesDeTermo(termo: string): string | null {
-  const limpo = sanitizarTermo(termo)
-  if (!limpo) return null
-
-  const condicoes = [`razao_social.ilike.%${limpo}%`, `nome_fantasia.ilike.%${limpo}%`]
-
-  // CNPJ é 14 dígitos crus no banco: "11.222" só casa se a pontuação sair.
-  const digitos = limpo.replace(/\D/g, '')
-  if (digitos.length >= 3) condicoes.push(`cnpj.ilike.%${digitos}%`)
-
-  return condicoes.join(',')
+  return termo.replace(/[%_\\]/g, ' ').trim()
 }
 
 /**
- * Os filtros `or=` a aplicar. Dois deles (termo e árvore) viram dois `.or()`
- * distintos, e o PostgREST combina múltiplos `or=` com AND — que é exatamente a
- * semântica desejada: casa o termo E satisfaz a árvore.
+ * A página do Explorador — via RPC (mercado_explorar), NÃO direto na view.
  *
- * A árvore vira filtro PostgREST, NUNCA SQL: nada que o usuário (ou uma URL
- * compartilhada por terceiros) montou chega a um planner como texto.
+ * A busca por nome/CNPJ é ILIKE, e sob a RLS da view (`app_tem_modulo`) o ILIKE não
+ * pode usar o índice de trigrama: o operador não é leakproof, então o planner é
+ * proibido de aplicá-lo antes da checagem de RLS e varre as 876k linhas inteiras —
+ * 8s, timeout. A RPC roda SECURITY DEFINER (sem RLS, com o mesmo portão feito UMA
+ * vez), e aí o trigrama volta a valer. Mesmo padrão do mercado_mapa/mercado_piramide.
+ *
+ * A RPC já pede uma linha a mais que a página (p_limite) para responder "tem próxima"
+ * sem contar nada, e devolve a estimativa do planner como total.
  */
-function filtrosOr(termo: string, arvore: Grupo | null): string[] {
-  const filtros: string[] = []
-
-  const termoFiltro = condicoesDeTermo(termo)
-  if (termoFiltro) filtros.push(termoFiltro)
-
-  if (arvore) filtros.push(compileToPostgrest(arvore))
-
-  return filtros
-}
-
 export async function buscarPagina(estado: EstadoExplorador): Promise<PaginaExplorador> {
   const supabase = createClient()
   const coluna = COLUNAS_POR_ID.get(estado.ordem)
@@ -100,48 +81,38 @@ export async function buscarPagina(estado: EstadoExplorador): Promise<PaginaExpl
   // velho = data menor. Ordenar "crescente" por idade é ordenar decrescente pela
   // data — a mesma inversão que o engine faz em `idade_anos`.
   const ascendente = coluna?.ordemInvertida ? estado.direcao === 'desc' : estado.direcao === 'asc'
+  const termo = sanitizarTermo(estado.termo)
 
-  const inicio = estado.pagina * estado.tamanho
-
-  let query = supabase
-    .from('mercado_explorador')
-    .select('*', { count: 'estimated' })
-    .order(ordenarPor, { ascending: ascendente, nullsFirst: false })
-    // Desempate estável: sem ele, duas páginas podem repetir ou pular uma linha
-    // quando o valor ordenado empata (metade do universo tem capital_social 0).
-    .order('cnpj', { ascending: true })
-    // Uma linha a mais do que a página: é assim que "tem próxima" é respondido
-    // sem contar 2M linhas.
-    .range(inicio, inicio + estado.tamanho)
-
-  for (const filtro of filtrosOr(estado.termo, estado.arvore)) query = query.or(filtro)
-
-  const { data, count, error } = await query
+  const { data, error } = await supabase.rpc('mercado_explorar', {
+    p_termo: termo || null,
+    p_arvore: estado.arvore ? (resolverParaJson(estado.arvore) as unknown as Json) : null,
+    p_ordem: ordenarPor,
+    p_asc: ascendente,
+    p_offset: estado.pagina * estado.tamanho,
+    p_limite: estado.tamanho,
+  })
   if (error) throw new Error(error.message)
 
-  const linhas = data ?? []
+  const resultado = data as { linhas: LinhaExplorador[]; total: number | null }
+  const linhas = resultado.linhas ?? []
   const temProxima = linhas.length > estado.tamanho
 
   return {
     linhas: temProxima ? linhas.slice(0, estado.tamanho) : linhas,
-    totalEstimado: count,
+    totalEstimado: resultado.total,
     temProxima,
   }
 }
 
-/** Contagem EXATA. Full scan da view: só sob pedido explícito do usuário. */
+/** Contagem EXATA (a pedido do usuário). Mesmo motivo da RPC: sob RLS o ILIKE não indexa. */
 export async function contarExato(termo: string, arvore: Grupo | null): Promise<number> {
   const supabase = createClient()
-
-  let query = supabase
-    .from('mercado_explorador')
-    .select('cnpj', { count: 'exact', head: true })
-
-  for (const filtro of filtrosOr(termo, arvore)) query = query.or(filtro)
-
-  const { count, error } = await query
+  const { data, error } = await supabase.rpc('mercado_contar_exato', {
+    p_termo: sanitizarTermo(termo) || null,
+    p_arvore: arvore ? (resolverParaJson(arvore) as unknown as Json) : null,
+  })
   if (error) throw new Error(error.message)
-  return count ?? 0
+  return (data as number | null) ?? 0
 }
 
 // ─── Ficha do universo ──────────────────────────────────────────────────────

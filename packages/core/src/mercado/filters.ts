@@ -661,6 +661,38 @@ export function compileToSql(arvore: unknown, hoje: Date = new Date()): SqlCompi
   return { text, values }
 }
 
+// ─── Compilador 3: árvore resolvida em JSON (RPC do Explorador) ──────────────
+
+/**
+ * A MESMA árvore normalizada, mas serializada em JSON compacto para viajar até uma
+ * função Postgres (mercado_explorar / mercado_contar_exato) que a compila lá dentro,
+ * sob SECURITY DEFINER. Por que não usar compileToPostgrest direto na view? Porque a
+ * view roda sob RLS, e o operador ILIKE da BUSCA não é leakproof — sob RLS o planner
+ * é proibido de usar o índice de trigrama e varre o universo inteiro (timeout). A RPC
+ * definer roda sem RLS (portão feito uma vez), então o trigrama volta a valer.
+ *
+ * Sai JÁ resolvido (coluna, não variável): a derivação de idade_anos → data e a
+ * checagem de catálogo acontecem AQUI, no TS que tem o catálogo; a função Postgres só
+ * precisa casar coluna (contra uma whitelist) e operador. Mesma normalização dos
+ * outros compiladores, então os três não podem divergir.
+ */
+export type NoResolvidoJson =
+  | { op: 'e' | 'ou'; c: NoResolvidoJson[] }
+  | { col: string; op: Operador; v?: unknown }
+
+function serializarResolvido(no: NoResolvido): NoResolvidoJson {
+  if (isGrupoResolvido(no)) {
+    return { op: no.operador, c: no.condicoes.map(serializarResolvido) }
+  }
+  return no.valor === undefined
+    ? { col: no.coluna, op: no.operador }
+    : { col: no.coluna, op: no.operador, v: no.valor }
+}
+
+export function resolverParaJson(arvore: unknown, hoje: Date = new Date()): NoResolvidoJson {
+  return serializarResolvido(normalizar(parseArvore(arvore), hoje))
+}
+
 // ─── Leitura humana (UI: "regra atual", card de confirmação da IA) ──────────
 
 export function descrever(no: No, nivel = 0): string {
