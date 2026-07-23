@@ -3,7 +3,7 @@ import { copiarLinhas } from '../pg/copy.js'
 import { logger } from '../logger.js'
 
 /**
- * Grupo econômico assembly (§3.2.2): connected components over sócio-PJ edges.
+ * Grupo econômico assembly (§3.2.2): controlled components over sócio-PJ edges.
  *
  * Done in Node, not in SQL. A recursive CTE would need one pass per level of the
  * ownership chain and re-scan the edge set every time; the edge list is ~1M rows
@@ -14,7 +14,23 @@ import { logger } from '../logger.js'
  * establishment is not a member of a group, its company is. Groups of one raiz are
  * not groups — a company that owns nothing and is owned by nobody gets grupo_id
  * null, and the Explorador is spared 1.5M "groups" of one.
+ *
+ * ── Why not a plain connected component ──────────────────────────────────────
+ * Unioning through EVERY sócio-PJ edge collapses the whole market into one blob.
+ * The bridge is the co-owned SPE: an incorporadora opens a building's SPE with a
+ * local partner (the landowner), that partner co-develops other buildings with
+ * OTHER incorporadoras, and a naive union welds them all together — MRV ended up
+ * "owning" 79k companies, 42k of them SPEs, most reachable only through these
+ * joint-venture leaves. So a child with two or more DISTINCT parent raízes is a
+ * partnership, not a subsidiary: it never unions its parents. Only wholly-owned
+ * children (a single parent raiz) build the components; co-owned SPEs are then
+ * ATTACHED to one parent's group as leaves, so they still show under a holding
+ * without gluing unrelated holdings into a megagroup.
  */
+
+/** A component past this size is almost certainly a blob artifact, not a real
+ *  holding — logged so it surfaces instead of silently shipping to the Explorador. */
+const LIMIAR_ALERTA = 5000
 
 interface Aresta {
   mae: string
@@ -76,24 +92,64 @@ export async function montarGrupos(client: pg.Client): Promise<ResultadoGrupos> 
 
   const uf = new UnionFind()
   const filhas = new Map<string, number>() // out-degree: how many companies it owns
-  const donos = new Map<string, number>() // in-degree: how many PJs own it
+  // Distinct parent raízes per child. size === 1 ⇒ wholly-owned subsidiary (a real
+  // group edge); size >= 2 ⇒ a co-owned SPE / JV that must NOT bridge its parents.
+  const paisDe = new Map<string, Set<string>>()
 
   for (const a of arestas) {
-    uf.unir(a.mae, a.filha)
     filhas.set(a.mae, (filhas.get(a.mae) ?? 0) + 1)
-    donos.set(a.filha, (donos.get(a.filha) ?? 0) + 1)
+    const pais = paisDe.get(a.filha)
+    if (pais) pais.add(a.mae)
+    else paisDe.set(a.filha, new Set([a.mae]))
+  }
+
+  // in-degree = number of distinct PJs that own it. Zero ⇒ head candidate.
+  const donos = new Map<string, number>()
+  for (const [filha, pais] of paisDe) donos.set(filha, pais.size)
+
+  // Skeleton: union ONLY through wholly-owned children. A co-owned child (>=2
+  // parents) is skipped here so it can never fuse two unrelated holdings.
+  for (const a of arestas) {
+    if ((paisDe.get(a.filha)?.size ?? 0) === 1) uf.unir(a.mae, a.filha)
   }
 
   // component root → members. A Set, not an array: `includes` on a component with
   // 400 SPEs, a million times over, is the difference between seconds and minutes.
   const componentes = new Map<string, Set<string>>()
+  const inserir = (raiz: string): void => {
+    const c = uf.achar(raiz)
+    const membros = componentes.get(c)
+    if (membros) membros.add(raiz)
+    else componentes.set(c, new Set([raiz]))
+  }
   for (const a of arestas) {
-    for (const raiz of [a.mae, a.filha]) {
-      const c = uf.achar(raiz)
-      const membros = componentes.get(c)
-      if (membros) membros.add(raiz)
-      else componentes.set(c, new Set([raiz]))
+    // Only wholly-owned edges seed membership; co-owned children join via attach.
+    if ((paisDe.get(a.filha)?.size ?? 0) === 1) {
+      inserir(a.mae)
+      inserir(a.filha)
+    } else {
+      inserir(a.mae) // the parent still belongs to its own (skeleton) component
     }
+  }
+
+  // Attach each co-owned SPE to ONE parent's group — the one whose component is
+  // biggest (deterministic tie-break), so the SPE shows under a holding without
+  // merging holdings. Skipped when the child is already grouped through its own
+  // ownership (it also wholly-owns something), which would double-count it.
+  for (const [filha, pais] of paisDe) {
+    if (pais.size < 2) continue
+    if ((componentes.get(uf.achar(filha))?.size ?? 0) >= 2) continue
+
+    let cabecaPai: string | undefined
+    let maiorComp = 1
+    for (const mae of pais) {
+      const tam = componentes.get(uf.achar(mae))?.size ?? 0
+      if (tam > maiorComp || (tam === maiorComp && (cabecaPai === undefined || mae < cabecaPai))) {
+        maiorComp = tam
+        cabecaPai = mae
+      }
+    }
+    if (cabecaPai !== undefined) componentes.get(uf.achar(cabecaPai))?.add(filha)
   }
 
   // Head = the top PJ: nobody in the cut owns it, and it owns the most. A cycle
@@ -105,6 +161,9 @@ export async function montarGrupos(client: pg.Client): Promise<ResultadoGrupos> 
   for (const conjunto of componentes.values()) {
     if (conjunto.size < 2) continue
     const membros = [...conjunto]
+    if (membros.length > LIMIAR_ALERTA) {
+      logger.warn({ tamanho: membros.length }, 'Grupo econômico anormalmente grande — verificar.')
+    }
 
     const candidatos = membros.filter((m) => (donos.get(m) ?? 0) === 0)
     const pool = candidatos.length > 0 ? candidatos : membros
