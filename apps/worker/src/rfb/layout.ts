@@ -167,6 +167,18 @@ export function numero(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/**
+ * "49.97" → 49.97. The CNO dump uses a DOT decimal, not the CNPJ dump's comma — so
+ * numero() (which strips dots as thousands) would turn 49.97 m² into 4997. No
+ * thousands separator here; a stray comma is tolerated as a decimal just in case.
+ */
+export function numeroPonto(v: string | undefined): number | null {
+  const s = (v ?? '').trim().replace(',', '.')
+  if (s.length === 0) return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
 /** "S" → true, "N" → false, "" → null. */
 export function sim(v: string | undefined): boolean | null {
   const s = (v ?? '').trim().toUpperCase()

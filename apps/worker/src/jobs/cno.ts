@@ -170,7 +170,7 @@ export async function ingerirCno(
         L.texto(campo(registro, 'destinacao')),
         L.texto(campo(registro, 'categoria')),
         L.texto(campo(registro, 'tipo_obra')),
-        L.numero(campo(registro, 'metragem_m2')),
+        L.numeroPonto(campo(registro, 'metragem_m2')),
         L.texto(campo(registro, 'cno_vinculado')),
         // The full source record. When a field we ignored today turns out to
         // matter, it is already here and nobody re-downloads 3 GB.
