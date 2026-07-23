@@ -112,6 +112,7 @@ export async function ingerirCno(
   const arquivo = opcoes.sample
     ? await arquivoCnoDeAmostra()
     : await baixarComRetentativa(url, 'cno/cno.zip', {
+        token: env.CNO_SHARE_TOKEN,
         onTentativa: async (tentativa) => {
           if (tentativa > 1) await atualizarIngestao(ingestaoId, { tentativa })
         },

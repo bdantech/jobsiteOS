@@ -47,7 +47,17 @@ const envSchema = z.object({
   /** How many zipped parts each of Empresas/Estabelecimentos/Socios is split into. */
   RECEITA_PARTES: z.coerce.number().int().min(1).max(20).default(10),
 
-  CNO_SOURCE_URL: z.string().url().default('https://arquivos.receitafederal.gov.br/dados/cno/cno.zip'),
+  /**
+   * O CNO também migrou para o Nextcloud, num SHARE PRÓPRIO (o do CNPJ é outro). O
+   * caminho direto antigo (/dados/cno/cno.zip) responde HTTP 500 hoje. Baixa do
+   * WebDAV com CNO_SHARE_TOKEN como usuário do Basic-auth, igual ao CNPJ.
+   */
+  CNO_SOURCE_URL: z
+    .string()
+    .url()
+    .default('https://arquivos.receitafederal.gov.br/public.php/webdav/Dados/Cadastros/CNO/cno.zip'),
+  /** Token do share público do CNO (≠ do CNPJ). Só é enviado a URLs /public.php/webdav. */
+  CNO_SHARE_TOKEN: z.string().default('gn672Ad4CF8N6TK'),
 
   /** Where downloads are cached. A resumed run reuses whatever is already here. */
   DOWNLOAD_DIR: z.string().default('/tmp/jobsiteos-worker'),

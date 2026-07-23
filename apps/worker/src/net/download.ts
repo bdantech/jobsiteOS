@@ -35,6 +35,12 @@ export class DownloadError extends Error {
 export interface ProgressoDownload {
   /** Called once per attempt, BEFORE it runs. `tentativa` is 1-based. */
   onTentativa?: (tentativa: number, url: string) => Promise<void> | void
+  /**
+   * Nextcloud public-share token used as the Basic-auth user (empty password) for
+   * /public.php/webdav URLs. Each dataset is a DIFFERENT share (CNPJ ≠ CNO), so the
+   * caller passes the right one. Defaults to the CNPJ share token.
+   */
+  token?: string
 }
 
 const dormir = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -96,8 +102,9 @@ export async function baixarComRetentativa(
       // Share público do Nextcloud da Receita: o token é o usuário do Basic-auth, senha
       // vazia. Restrito ao endpoint WebDAV — o fallback é outro host, sem auth, e mandar
       // a credencial da Receita para ele seria vazá-la sem motivo.
-      if (env.RECEITA_SHARE_TOKEN && url.includes('/public.php/webdav')) {
-        headers.authorization = `Basic ${Buffer.from(`${env.RECEITA_SHARE_TOKEN}:`).toString('base64')}`
+      const token = progresso.token ?? env.RECEITA_SHARE_TOKEN
+      if (token && url.includes('/public.php/webdav')) {
+        headers.authorization = `Basic ${Buffer.from(`${token}:`).toString('base64')}`
       }
 
       // undici's fetch (not http.get): it follows redirects — the RFB server
