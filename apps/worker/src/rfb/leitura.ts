@@ -6,17 +6,19 @@ import unzipper from 'unzipper'
 /**
  * Reading a Receita file, honestly.
  *
- * The CSVs are latin-1 (ISO-8859-1), semicolon-separated, quote-delimited, and
- * have NO header row. Decoding them as UTF-8 — Node's default — turns every
- * "CONSTRUÇÃO" into "CONSTRU��O" and every "SÃO PAULO" into garbage, and the
- * damage is silent: the rows load fine and the razão social is wrong forever.
+ * Two formats, and they differ in EVERYTHING but the quote char:
+ *   CNPJ dump — latin-1 (ISO-8859-1), semicolon-separated, NO header row.
+ *   CNO dump  — UTF-8, COMMA-separated, WITH a header row (new Nextcloud share).
+ * Decoding CNPJ as UTF-8 turns "CONSTRUÇÃO" into "CONSTRU��O"; decoding CNO as
+ * latin-1 turns "NI do responsável" into a header that matches no alias (which is
+ * exactly why the first real CNO run loaded 0 obras). So delimiter + encoding are
+ * per-source, passed in — never global.
  *
- * Nothing is buffered: zip entry → latin-1 decode → CSV parse → caller, one row
- * at a time. An Estabelecimentos part is ~1 GB uncompressed.
+ * Nothing is buffered: zip entry → decode → CSV parse → caller, one row at a time.
+ * An Estabelecimentos part is ~1 GB uncompressed.
  */
 
 const OPCOES_CSV = {
-  delimiter: ';',
   quote: '"',
   escape: '"',
   // The RFB dump contains rows with stray quotes inside unquoted fields. Strict
@@ -27,15 +29,22 @@ const OPCOES_CSV = {
   trim: false,
 } as const
 
-function fluxoCsv(entrada: NodeJS.ReadableStream, cabecalho: boolean): NodeJS.ReadableStream {
+/** Defaults are the CNPJ format (latin-1, ';'); lerRegistros overrides for CNO. */
+function fluxoCsv(
+  entrada: NodeJS.ReadableStream,
+  cabecalho: boolean,
+  delimitador = ';',
+  codificacao = 'latin1',
+): NodeJS.ReadableStream {
+  const opcoes = { ...OPCOES_CSV, delimiter: delimitador }
   const parser = cabecalho
     ? parse({
-        ...OPCOES_CSV,
+        ...opcoes,
         columns: (linha: string[]) => linha.map(normalizarCabecalho),
       })
-    : parse(OPCOES_CSV)
+    : parse(opcoes)
 
-  return entrada.pipe(iconv.decodeStream('latin1')).pipe(parser)
+  return entrada.pipe(iconv.decodeStream(codificacao)).pipe(parser)
 }
 
 /** "Nº Inscrição CNO" → "n_inscricao_cno". Header names in the CNO dump are not stable. */
@@ -73,7 +82,7 @@ export async function* lerLinhas(caminho: string): AsyncGenerator<string[]> {
 /** Same, for sources that DO carry a header row (CNO). Keys are normalized. */
 export async function* lerRegistros(caminho: string): AsyncGenerator<Record<string, string>> {
   if (!caminho.toLowerCase().endsWith('.zip')) {
-    yield* fluxoCsv(createReadStream(caminho), true) as AsyncIterable<Record<string, string>>
+    yield* fluxoCsv(createReadStream(caminho), true, ',', 'utf8') as AsyncIterable<Record<string, string>>
     return
   }
 
@@ -84,6 +93,6 @@ export async function* lerRegistros(caminho: string): AsyncGenerator<Record<stri
       entrada.autodrain()
       continue
     }
-    yield* fluxoCsv(entrada, true) as AsyncIterable<Record<string, string>>
+    yield* fluxoCsv(entrada, true, ',', 'utf8') as AsyncIterable<Record<string, string>>
   }
 }
