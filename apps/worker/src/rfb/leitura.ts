@@ -6,13 +6,14 @@ import unzipper from 'unzipper'
 /**
  * Reading a Receita file, honestly.
  *
- * Two formats, and they differ in EVERYTHING but the quote char:
- *   CNPJ dump — latin-1 (ISO-8859-1), semicolon-separated, NO header row.
- *   CNO dump  — UTF-8, COMMA-separated, WITH a header row (new Nextcloud share).
- * Decoding CNPJ as UTF-8 turns "CONSTRUÇÃO" into "CONSTRU��O"; decoding CNO as
- * latin-1 turns "NI do responsável" into a header that matches no alias (which is
- * exactly why the first real CNO run loaded 0 obras). So delimiter + encoding are
- * per-source, passed in — never global.
+ * Both are latin-1 (ISO-8859-1); they differ in delimiter and header:
+ *   CNPJ dump — semicolon-separated, NO header row.
+ *   CNO dump  — COMMA-separated, WITH a header row (new Nextcloud share).
+ * The delimiter is what has to be per-source: parsing the comma-separated CNO with
+ * ';' collapses every row into one column and loads 0 obras. Encoding stays latin-1
+ * for both — decoding the CNO as UTF-8 turns each accented byte (0xE1 = "á") into a
+ * replacement char, so "NI do responsável" normalizes to a key that matches no
+ * alias (which loaded 0 obras a different way). So delimiter is passed in.
  *
  * Nothing is buffered: zip entry → decode → CSV parse → caller, one row at a time.
  * An Estabelecimentos part is ~1 GB uncompressed.
@@ -88,7 +89,7 @@ export async function* lerRegistros(
   aceitarArquivo: (nome: string) => boolean = () => true,
 ): AsyncGenerator<Record<string, string>> {
   if (!caminho.toLowerCase().endsWith('.zip')) {
-    yield* fluxoCsv(createReadStream(caminho), true, ',', 'utf8') as AsyncIterable<Record<string, string>>
+    yield* fluxoCsv(createReadStream(caminho), true, ',', 'latin1') as AsyncIterable<Record<string, string>>
     return
   }
 
@@ -100,6 +101,6 @@ export async function* lerRegistros(
       entrada.autodrain()
       continue
     }
-    yield* fluxoCsv(entrada, true, ',', 'utf8') as AsyncIterable<Record<string, string>>
+    yield* fluxoCsv(entrada, true, ',', 'latin1') as AsyncIterable<Record<string, string>>
   }
 }
