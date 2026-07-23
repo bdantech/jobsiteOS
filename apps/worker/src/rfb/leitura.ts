@@ -80,7 +80,13 @@ export async function* lerLinhas(caminho: string): AsyncGenerator<string[]> {
 }
 
 /** Same, for sources that DO carry a header row (CNO). Keys are normalized. */
-export async function* lerRegistros(caminho: string): AsyncGenerator<Record<string, string>> {
+export async function* lerRegistros(
+  caminho: string,
+  // The CNO zip carries several CSVs (areas, vínculos, dicionário…); only cno.csv is
+  // the obras table. Reading the rest wastes time and — via the `on conflict (cno)`
+  // upsert — risks a supplementary row overwriting a good obra. Caller restricts.
+  aceitarArquivo: (nome: string) => boolean = () => true,
+): AsyncGenerator<Record<string, string>> {
   if (!caminho.toLowerCase().endsWith('.zip')) {
     yield* fluxoCsv(createReadStream(caminho), true, ',', 'utf8') as AsyncIterable<Record<string, string>>
     return
@@ -89,7 +95,8 @@ export async function* lerRegistros(caminho: string): AsyncGenerator<Record<stri
   const zip = createReadStream(caminho).pipe(unzipper.Parse({ forceStream: true }))
 
   for await (const entrada of zip as AsyncIterable<unzipper.Entry>) {
-    if (entrada.type === 'Directory' || !entrada.path.toLowerCase().endsWith('.csv')) {
+    const nome = (entrada.path.split('/').pop() ?? entrada.path).toLowerCase()
+    if (entrada.type === 'Directory' || !nome.endsWith('.csv') || !aceitarArquivo(nome)) {
       entrada.autodrain()
       continue
     }

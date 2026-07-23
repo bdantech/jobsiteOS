@@ -141,7 +141,7 @@ export async function ingerirCno(
   let fora = 0
 
   const linhas = (async function* (): AsyncGenerator<readonly ValorCopia[]> {
-    for await (const registro of lerRegistros(arquivo)) {
+    for await (const registro of lerRegistros(arquivo, (nome) => nome === 'cno.csv')) {
       lidas++
 
       const cno = (campo(registro, 'cno') ?? '').replace(/\D/g, '')
