@@ -99,6 +99,14 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
 
   const form = useForm<EmpresaFormValues>({ defaultValues: paraFormValues(empresa) })
 
+  // Canal / representante mora no jsonb erp_detalhes (escrito pela importação), não numa
+  // coluna própria — por isso fica fora do formulário e é exibido apenas para leitura.
+  const detalhes = empresa.erp_detalhes
+  const canalRepresentante =
+    detalhes && typeof detalhes === 'object' && !Array.isArray(detalhes)
+      ? String((detalhes as Record<string, unknown>).canal ?? '')
+      : ''
+
   // A refetch (or another user's edit landing in the cache) must not silently
   // overwrite what the user is typing — only re-sync a pristine form.
   const { reset, formState } = form
@@ -348,6 +356,23 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 </FormItem>
               )}
             />
+
+            {/* Canal / representante — vem da importação de listas (erp_detalhes.canal), um
+                campo distinto do "Canal de venda". Só leitura: quem escreve é o importador.
+                Não usa FormField/FormItem porque não faz parte do formulário (não é editável). */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium leading-none">Canal / representante</p>
+              <Input
+                value={canalRepresentante}
+                readOnly
+                disabled
+                autoComplete="off"
+                placeholder="Não informado"
+              />
+              <p className="text-[0.8rem] text-muted-foreground">
+                Da importação de listas. Editável só via reimportação.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
