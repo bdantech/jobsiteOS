@@ -45,13 +45,16 @@ export async function atualizarMetricas(client: pg.ClientBase): Promise<number> 
        group by grupo_id
      ),
      obras as (
+       -- mercado_obras.situacao guarda o CÓDIGO cru do CNO, não texto: '02' = ativa
+       -- (ex.: V2 CONSTRUCOES, obra recente de 13k m²), '15' = encerrada (ex.: ENCOL
+       -- FALIDO). "Em execução" p/ o SOM é só a ativa — paralisada/suspensa não contam.
        select
          ni_responsavel as cnpj,
-         count(*) filter (where lower(situacao) = 'ativa')::int as ativas,
+         count(*) filter (where situacao = '02')::int as ativas,
          count(*) filter (
            where data_inicio_obra >= (current_date - interval '24 months')
          )::int as iniciadas_24m,
-         coalesce(sum(metragem_m2) filter (where lower(situacao) = 'ativa'), 0) as m2
+         coalesce(sum(metragem_m2) filter (where situacao = '02'), 0) as m2
        from mercado_obras
        group by ni_responsavel
      ),

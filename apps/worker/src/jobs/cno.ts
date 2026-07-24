@@ -144,20 +144,6 @@ export async function ingerirCno(
     for await (const registro of lerRegistros(arquivo, (nome) => nome === 'cno.csv')) {
       lidas++
 
-      // Diagnóstico de 1 linha: mostra as chaves que o parser gerou e o cno/ni
-      // extraídos. Se as chaves forem os nomes das colunas → header ok; se forem
-      // valores de dado → sem header; se for uma chave gigante → separador errado.
-      if (lidas === 1) {
-        logger.info(
-          {
-            colunas: Object.keys(registro),
-            cno_bruto: campo(registro, 'cno') ?? null,
-            ni_bruto: campo(registro, 'ni_responsavel') ?? null,
-          },
-          'CNO diagnóstico: primeira linha lida',
-        )
-      }
-
       const cno = (campo(registro, 'cno') ?? '').replace(/\D/g, '')
       const ni = (campo(registro, 'ni_responsavel') ?? '').replace(/\D/g, '')
       if (!cno || !ni) continue
