@@ -13,6 +13,7 @@ import {
   dispararPromocao,
   dispararReceita,
   dispararReclassificacao,
+  dispararSincronizarOnepay,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -102,6 +103,17 @@ app.post('/jobs/metricas', (_req: Request, res: Response, next: NextFunction) =>
 app.post('/jobs/promover', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const id = dispararPromocao()
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Radar (Prompt 03) ───────────────────────────────────────────────────────
+
+app.post('/jobs/radar/onepay', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = dispararSincronizarOnepay()
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)

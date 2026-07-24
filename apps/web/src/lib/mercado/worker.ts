@@ -178,6 +178,15 @@ export async function dispararPromocao(): Promise<DispararJobResultado> {
   return postar('/jobs/promover', {}, 'promover')
 }
 
+/**
+ * Radar (§7): sync diário dos clientes Onepay. Enqueue-only como os demais — o
+ * worker puxa o temperature-report paginado e atualiza clientes_onepay em segundo
+ * plano. Sem corpo; a autorização (cron vs admin) fica no caller.
+ */
+export async function dispararSincronizarOnepay(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/onepay', {}, 'radar-onepay')
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string

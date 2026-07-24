@@ -79,6 +79,18 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
 
+  // ─── Radar (Prompt 03): integrações externas ──────────────────────────────
+  // Todas OPCIONAIS de propósito: sem o secret, o job falha limpo (registra
+  // erro/sem_dados) em vez de derrubar o boot do worker. Popular no Railway
+  // quando for usar. Nenhuma chamada paga roda sem aprovação de lote.
+  APOLLO_API_KEY: z.string().optional(),
+  APOLLO_WEBHOOK_SECRET: z.string().optional(),
+  DIRECTD_API_KEY: z.string().optional(),
+  ONEPAY_BI_URL: z.string().url().optional(),
+  ONEPAY_BI_TOKEN: z.string().optional(),
+  /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })
 

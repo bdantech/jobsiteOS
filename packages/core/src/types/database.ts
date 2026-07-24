@@ -1818,22 +1818,22 @@ export type Database = {
         Returns: Json
       }
       mercado_contar_exato: {
-        Args: { p_arvore?: Json; p_termo?: string }
+        Args: { p_arvore?: Json | null; p_termo?: string | null }
         Returns: number
       }
       mercado_explorar: {
         Args: {
-          p_arvore?: Json
+          p_arvore?: Json | null
           p_asc?: boolean
           p_limite?: number
           p_offset?: number
           p_ordem?: string
-          p_termo?: string
+          p_termo?: string | null
         }
         Returns: Json
       }
       mercado_mapa: {
-        Args: { p_limite?: number; p_tipo?: string; p_uf?: string }
+        Args: { p_limite?: number; p_tipo?: string | null; p_uf?: string | null }
         Returns: Json
       }
       mercado_piramide: { Args: never; Returns: Json }

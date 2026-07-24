@@ -16,6 +16,7 @@ import { reclassificar } from '../derivadas/reclassificar.js'
 import { promoverElegiveis } from '../derivadas/promover.js'
 import { ingerirReceita, type OpcoesReceita } from './receita.js'
 import { ingerirCno, type OpcoesCno } from './cno.js'
+import { sincronizarOnepay } from './radar/onepay.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -24,7 +25,7 @@ import { ingerirCno, type OpcoesCno } from './cno.js'
  * route returns 202 with an id and the caller watches `mercado_ingestoes`.
  */
 
-export type TipoJob = 'receita' | 'cno' | 'reclassificar' | 'metricas' | 'promover'
+export type TipoJob = 'receita' | 'cno' | 'reclassificar' | 'metricas' | 'promover' | 'onepay'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -263,5 +264,16 @@ export function dispararPromocao(): string {
     const promocao = await promoverElegiveis(client)
     await vacuumUniverso(client)
     return { promocao }
+  })
+}
+
+/**
+ * Sync diário dos clientes Onepay (§7). Job avulso: escreve em clientes_onepay via
+ * service role (PostgREST), não usa a sessão pg dedicada — o client é ignorado.
+ */
+export function dispararSincronizarOnepay(): string {
+  return dispararAvulso('onepay', async () => {
+    logger.info('Sync de clientes Onepay.')
+    return sincronizarOnepay()
   })
 }
