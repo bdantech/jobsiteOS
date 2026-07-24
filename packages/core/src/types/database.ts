@@ -1,5 +1,3 @@
-// Generated from the live schema via Supabase MCP. Do not edit by hand.
-// Regenerate after any migration:  pnpm db:types
 export type Json =
   | string
   | number
@@ -9,8 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '14.5'
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -38,11 +38,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'app_config_atualizado_por_fkey'
-            columns: ['atualizado_por']
+            foreignKeyName: "app_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -106,55 +106,165 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'camada_regras_criada_por_fkey'
-            columns: ['criada_por']
+            foreignKeyName: "camada_regras_criada_por_fkey"
+            columns: ["criada_por"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
+      clientes_onepay: {
+        Row: {
+          anticipations_last_2m: number | null
+          atualizado_em: string
+          available_limit: number | null
+          cnpj: string
+          consumed_limit: number | null
+          consumed_pct: number | null
+          consumed_pct_2m: number | null
+          credit_limit: number | null
+          days_without_anticipation: number | null
+          empresa_id: string | null
+          gross_value_last_2m: number | null
+          last_anticipation: string | null
+          nome: string | null
+          onepay_company_id: number
+          operation_status: string | null
+          primeira_vez_visto: string
+          status: string | null
+        }
+        Insert: {
+          anticipations_last_2m?: number | null
+          atualizado_em?: string
+          available_limit?: number | null
+          cnpj: string
+          consumed_limit?: number | null
+          consumed_pct?: number | null
+          consumed_pct_2m?: number | null
+          credit_limit?: number | null
+          days_without_anticipation?: number | null
+          empresa_id?: string | null
+          gross_value_last_2m?: number | null
+          last_anticipation?: string | null
+          nome?: string | null
+          onepay_company_id: number
+          operation_status?: string | null
+          primeira_vez_visto?: string
+          status?: string | null
+        }
+        Update: {
+          anticipations_last_2m?: number | null
+          atualizado_em?: string
+          available_limit?: number | null
+          cnpj?: string
+          consumed_limit?: number | null
+          consumed_pct?: number | null
+          consumed_pct_2m?: number | null
+          credit_limit?: number | null
+          days_without_anticipation?: number | null
+          empresa_id?: string | null
+          gross_value_last_2m?: number | null
+          last_anticipation?: string | null
+          nome?: string | null
+          onepay_company_id?: number
+          operation_status?: string | null
+          primeira_vez_visto?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clientes_onepay_snapshots: {
+        Row: {
+          capturado_em: string
+          cnpj: string
+          dados: Json
+          id: string
+        }
+        Insert: {
+          capturado_em: string
+          cnpj: string
+          dados: Json
+          id?: string
+        }
+        Update: {
+          capturado_em?: string
+          cnpj?: string
+          dados?: Json
+          id?: string
+        }
+        Relationships: []
+      }
       contatos: {
         Row: {
+          apollo_person_id: string | null
           cargo: string | null
           criado_em: string
+          departamento: string | null
           email: string | null
+          email_status: string | null
           empresa_id: string
+          enriquecido_em: string | null
           id: string
+          linkedin_url: string | null
           nome: string | null
           origem: string | null
+          senioridade: string | null
           telefone: string | null
+          telefone_status: string | null
           whatsapp: string | null
         }
         Insert: {
+          apollo_person_id?: string | null
           cargo?: string | null
           criado_em?: string
+          departamento?: string | null
           email?: string | null
+          email_status?: string | null
           empresa_id: string
+          enriquecido_em?: string | null
           id?: string
+          linkedin_url?: string | null
           nome?: string | null
           origem?: string | null
+          senioridade?: string | null
           telefone?: string | null
+          telefone_status?: string | null
           whatsapp?: string | null
         }
         Update: {
+          apollo_person_id?: string | null
           cargo?: string | null
           criado_em?: string
+          departamento?: string | null
           email?: string | null
+          email_status?: string | null
           empresa_id?: string
+          enriquecido_em?: string | null
           id?: string
+          linkedin_url?: string | null
           nome?: string | null
           origem?: string | null
+          senioridade?: string | null
           telefone?: string | null
+          telefone_status?: string | null
           whatsapp?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: 'contatos_empresa_id_fkey'
-            columns: ['empresa_id']
+            foreignKeyName: "contatos_empresa_id_fkey"
+            columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: 'empresas'
-            referencedColumns: ['id']
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -185,11 +295,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'empresa_eventos_empresa_id_fkey'
-            columns: ['empresa_id']
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: 'empresas'
-            referencedColumns: ['id']
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -217,11 +327,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'empresa_notas_empresa_id_fkey'
-            columns: ['empresa_id']
+            foreignKeyName: "empresa_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: 'empresas'
-            referencedColumns: ['id']
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -233,6 +343,12 @@ export type Database = {
           cnae_principal: string | null
           cnpj: string
           criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
           erp_atual: string | null
           erp_canal_venda: string | null
           erp_detalhes: Json
@@ -257,6 +373,12 @@ export type Database = {
           cnae_principal?: string | null
           cnpj: string
           criado_em?: string
+          dados_apollo?: Json | null
+          dominio?: string | null
+          dominio_confianca?: string | null
+          dominio_evidencia?: string | null
+          dominio_origem?: string | null
+          dominio_validado_em?: string | null
           erp_atual?: string | null
           erp_canal_venda?: string | null
           erp_detalhes?: Json
@@ -281,6 +403,12 @@ export type Database = {
           cnae_principal?: string | null
           cnpj?: string
           criado_em?: string
+          dados_apollo?: Json | null
+          dominio?: string | null
+          dominio_confianca?: string | null
+          dominio_evidencia?: string | null
+          dominio_origem?: string | null
+          dominio_validado_em?: string | null
           erp_atual?: string | null
           erp_canal_venda?: string | null
           erp_detalhes?: Json
@@ -300,11 +428,77 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'empresas_grupo_id_fkey'
-            columns: ['grupo_id']
+            foreignKeyName: "empresas_grupo_id_fkey"
+            columns: ["grupo_id"]
             isOneToOne: false
-            referencedRelation: 'grupos_economicos'
-            referencedColumns: ['id']
+            referencedRelation: "grupos_economicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enriquecimentos: {
+        Row: {
+          cnpj: string | null
+          custo_estimado: number | null
+          custo_real: number | null
+          dominio: string | null
+          empresa_id: string | null
+          erro: string | null
+          executado_em: string
+          fonte: string
+          id: string
+          lote_id: string | null
+          payload: Json | null
+          status: string
+          tipo: string
+          unidades_retornadas: number | null
+        }
+        Insert: {
+          cnpj?: string | null
+          custo_estimado?: number | null
+          custo_real?: number | null
+          dominio?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          executado_em?: string
+          fonte: string
+          id?: string
+          lote_id?: string | null
+          payload?: Json | null
+          status: string
+          tipo: string
+          unidades_retornadas?: number | null
+        }
+        Update: {
+          cnpj?: string | null
+          custo_estimado?: number | null
+          custo_real?: number | null
+          dominio?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          executado_em?: string
+          fonte?: string
+          id?: string
+          lote_id?: string | null
+          payload?: Json | null
+          status?: string
+          tipo?: string
+          unidades_retornadas?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enriquecimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enriquecimentos_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_enriquecimento"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -356,11 +550,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'importacoes_linhas_importacao_id_fkey'
-            columns: ['importacao_id']
+            foreignKeyName: "importacoes_linhas_importacao_id_fkey"
+            columns: ["importacao_id"]
             isOneToOne: false
-            referencedRelation: 'importacoes_listas'
-            referencedColumns: ['id']
+            referencedRelation: "importacoes_listas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -394,11 +588,137 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'importacoes_listas_criado_por_fkey'
-            columns: ['criado_por']
+            foreignKeyName: "importacoes_listas_criado_por_fkey"
+            columns: ["criado_por"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lote_itens: {
+        Row: {
+          atualizado_em: string
+          cnpj: string | null
+          custo_real: number | null
+          dominio: string | null
+          empresa_id: string | null
+          erro: string | null
+          id: string
+          lote_id: string
+          resultado: Json | null
+          status: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cnpj?: string | null
+          custo_real?: number | null
+          dominio?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          id?: string
+          lote_id: string
+          resultado?: Json | null
+          status?: string
+        }
+        Update: {
+          atualizado_em?: string
+          cnpj?: string | null
+          custo_real?: number | null
+          dominio?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          id?: string
+          lote_id?: string
+          resultado?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lote_itens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_itens_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_enriquecimento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lotes_enriquecimento: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          atualizado_em: string
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          custo_estimado_esperado: number | null
+          custo_estimado_min: number | null
+          custo_real: number
+          definicao_filtro: Json
+          id: string
+          nome: string | null
+          parametros: Json
+          status: string
+          tipo: string
+          total_itens: number | null
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          atualizado_em?: string
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          custo_estimado_esperado?: number | null
+          custo_estimado_min?: number | null
+          custo_real?: number
+          definicao_filtro: Json
+          id?: string
+          nome?: string | null
+          parametros?: Json
+          status?: string
+          tipo: string
+          total_itens?: number | null
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          atualizado_em?: string
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          custo_estimado_esperado?: number | null
+          custo_estimado_min?: number | null
+          custo_real?: number
+          definicao_filtro?: Json
+          id?: string
+          nome?: string | null
+          parametros?: Json
+          status?: string
+          tipo?: string
+          total_itens?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lotes_enriquecimento_aprovado_por_fkey"
+            columns: ["aprovado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lotes_enriquecimento_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -579,11 +899,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'mercado_socios_cnpj_fkey'
-            columns: ['cnpj']
+            foreignKeyName: "mercado_socios_cnpj_fkey"
+            columns: ["cnpj"]
             isOneToOne: false
-            referencedRelation: 'mercado_universo'
-            referencedColumns: ['cnpj']
+            referencedRelation: "mercado_explorador"
+            referencedColumns: ["cnpj"]
+          },
+          {
+            foreignKeyName: "mercado_socios_cnpj_fkey"
+            columns: ["cnpj"]
+            isOneToOne: false
+            referencedRelation: "mercado_universo"
+            referencedColumns: ["cnpj"]
           },
         ]
       }
@@ -605,6 +932,9 @@ export type Database = {
           data_exclusao_simples: string | null
           data_inicio_atividade: string | null
           data_opcao_simples: string | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_origem: string | null
           email_rfb: string | null
           empresa_id: string | null
           grafo_sefaz: boolean
@@ -644,6 +974,9 @@ export type Database = {
           data_exclusao_simples?: string | null
           data_inicio_atividade?: string | null
           data_opcao_simples?: string | null
+          dominio?: string | null
+          dominio_confianca?: string | null
+          dominio_origem?: string | null
           email_rfb?: string | null
           empresa_id?: string | null
           grafo_sefaz?: boolean
@@ -683,6 +1016,9 @@ export type Database = {
           data_exclusao_simples?: string | null
           data_inicio_atividade?: string | null
           data_opcao_simples?: string | null
+          dominio?: string | null
+          dominio_confianca?: string | null
+          dominio_origem?: string | null
           email_rfb?: string | null
           empresa_id?: string | null
           grafo_sefaz?: boolean
@@ -707,18 +1043,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'mercado_universo_empresa_id_fkey'
-            columns: ['empresa_id']
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: 'empresas'
-            referencedColumns: ['id']
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'mercado_universo_grupo_fk'
-            columns: ['grupo_id']
+            foreignKeyName: "mercado_universo_grupo_fk"
+            columns: ["grupo_id"]
             isOneToOne: false
-            referencedRelation: 'grupos_economicos'
-            referencedColumns: ['id']
+            referencedRelation: "grupos_economicos"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -749,18 +1085,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'notificacao_regras_perfil_id_fkey'
-            columns: ['perfil_id']
+            foreignKeyName: "notificacao_regras_perfil_id_fkey"
+            columns: ["perfil_id"]
             isOneToOne: false
-            referencedRelation: 'perfis'
-            referencedColumns: ['id']
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'notificacao_regras_usuario_id_fkey'
-            columns: ['usuario_id']
+            foreignKeyName: "notificacao_regras_usuario_id_fkey"
+            columns: ["usuario_id"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -794,11 +1130,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'notificacoes_usuario_id_fkey'
-            columns: ['usuario_id']
+            foreignKeyName: "notificacoes_usuario_id_fkey"
+            columns: ["usuario_id"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -817,11 +1153,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'perfil_modulos_perfil_id_fkey'
-            columns: ['perfil_id']
+            foreignKeyName: "perfil_modulos_perfil_id_fkey"
+            columns: ["perfil_id"]
             isOneToOne: false
-            referencedRelation: 'perfis'
-            referencedColumns: ['id']
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -845,6 +1181,85 @@ export type Database = {
           nome?: string
         }
         Relationships: []
+      }
+      protestos_consultas: {
+        Row: {
+          cartorios: Json | null
+          cnpj: string
+          consultado_em: string
+          custo: number | null
+          empresa_id: string | null
+          fonte: string
+          id: string
+          payload: Json | null
+          qtd_protestos: number | null
+          tem_protesto: boolean | null
+          valor_total: number | null
+        }
+        Insert: {
+          cartorios?: Json | null
+          cnpj: string
+          consultado_em?: string
+          custo?: number | null
+          empresa_id?: string | null
+          fonte: string
+          id?: string
+          payload?: Json | null
+          qtd_protestos?: number | null
+          tem_protesto?: boolean | null
+          valor_total?: number | null
+        }
+        Update: {
+          cartorios?: Json | null
+          cnpj?: string
+          consultado_em?: string
+          custo?: number | null
+          empresa_id?: string | null
+          fonte?: string
+          id?: string
+          payload?: Json | null
+          qtd_protestos?: number | null
+          tem_protesto?: boolean | null
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      radar_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "radar_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       segmentos: {
         Row: {
@@ -879,11 +1294,49 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'segmentos_criado_por_fkey'
-            columns: ['criado_por']
+            foreignKeyName: "segmentos_criado_por_fkey"
+            columns: ["criado_por"]
             isOneToOne: false
-            referencedRelation: 'usuarios'
-            referencedColumns: ['id']
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supressao: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          escopo: string
+          id: string
+          motivo: string
+          observacao: string | null
+          valor: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          escopo: string
+          id?: string
+          motivo: string
+          observacao?: string | null
+          valor: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          escopo?: string
+          id?: string
+          motivo?: string
+          observacao?: string | null
+          valor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supressao_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -926,11 +1379,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'usuarios_perfil_id_fkey'
-            columns: ['perfil_id']
+            foreignKeyName: "usuarios_perfil_id_fkey"
+            columns: ["perfil_id"]
             isOneToOne: false
-            referencedRelation: 'perfis'
-            referencedColumns: ['id']
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -976,32 +1429,75 @@ export type Database = {
           tipo: string | null
           uf: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_grupo_fk"
+            columns: ["grupo_id"]
+            isOneToOne: false
+            referencedRelation: "grupos_economicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      protestos_atual: {
+        Row: {
+          cartorios: Json | null
+          cnpj: string | null
+          consultado_em: string | null
+          custo: number | null
+          empresa_id: string | null
+          fonte: string | null
+          id: string | null
+          payload: Json | null
+          qtd_protestos: number | null
+          tem_protesto: boolean | null
+          valor_total: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
-      mercado_mapa: {
-        Args: { p_uf?: string | null; p_tipo?: string | null; p_limite?: number }
-        Returns: Json
-      }
-      mercado_piramide: {
-        Args: Record<string, never>
-        Returns: Json
-      }
-      mercado_explorar: {
-        Args: {
-          p_termo?: string | null
-          p_arvore?: Json | null
-          p_ordem?: string
-          p_asc?: boolean
-          p_offset?: number
-          p_limite?: number
+      app_aprovar_lote: {
+        Args: { p: Json }
+        Returns: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          atualizado_em: string
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          custo_estimado_esperado: number | null
+          custo_estimado_min: number | null
+          custo_real: number
+          definicao_filtro: Json
+          id: string
+          nome: string | null
+          parametros: Json
+          status: string
+          tipo: string
+          total_itens: number | null
         }
-        Returns: Json
-      }
-      mercado_contar_exato: {
-        Args: { p_termo?: string | null; p_arvore?: Json | null }
-        Returns: number
+        SetofOptions: {
+          from: "*"
+          to: "lotes_enriquecimento"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       app_ativar_camada_regra: {
         Args: { p: Json }
@@ -1015,8 +1511,8 @@ export type Database = {
           versao: number
         }
         SetofOptions: {
-          from: '*'
-          to: 'camada_regras'
+          from: "*"
+          to: "camada_regras"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1030,6 +1526,12 @@ export type Database = {
           cnae_principal: string | null
           cnpj: string
           criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
           erp_atual: string | null
           erp_canal_venda: string | null
           erp_detalhes: Json
@@ -1048,8 +1550,35 @@ export type Database = {
           uf: string | null
         }
         SetofOptions: {
-          from: '*'
-          to: 'empresas'
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cancelar_lote: {
+        Args: { p: Json }
+        Returns: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          atualizado_em: string
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          custo_estimado_esperado: number | null
+          custo_estimado_min: number | null
+          custo_real: number
+          definicao_filtro: Json
+          id: string
+          nome: string | null
+          parametros: Json
+          status: string
+          tipo: string
+          total_itens: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lotes_enriquecimento"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1063,6 +1592,12 @@ export type Database = {
           cnae_principal: string | null
           cnpj: string
           criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
           erp_atual: string | null
           erp_canal_venda: string | null
           erp_detalhes: Json
@@ -1081,8 +1616,35 @@ export type Database = {
           uf: string | null
         }
         SetofOptions: {
-          from: '*'
-          to: 'empresas'
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_criar_lote: {
+        Args: { p: Json }
+        Returns: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          atualizado_em: string
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          custo_estimado_esperado: number | null
+          custo_estimado_min: number | null
+          custo_real: number
+          definicao_filtro: Json
+          id: string
+          nome: string | null
+          parametros: Json
+          status: string
+          tipo: string
+          total_itens: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lotes_enriquecimento"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1097,8 +1659,8 @@ export type Database = {
           id: string
         }
         SetofOptions: {
-          from: '*'
-          to: 'empresa_notas'
+          from: "*"
+          to: "empresa_notas"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1116,8 +1678,8 @@ export type Database = {
           nome: string
         }
         SetofOptions: {
-          from: '*'
-          to: 'segmentos'
+          from: "*"
+          to: "segmentos"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1132,8 +1694,8 @@ export type Database = {
           valor: Json
         }
         SetofOptions: {
-          from: '*'
-          to: 'app_config'
+          from: "*"
+          to: "app_config"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1148,6 +1710,12 @@ export type Database = {
           cnae_principal: string | null
           cnpj: string
           criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
           erp_atual: string | null
           erp_canal_venda: string | null
           erp_detalhes: Json
@@ -1166,12 +1734,13 @@ export type Database = {
           uf: string | null
         }
         SetofOptions: {
-          from: '*'
-          to: 'empresas'
+          from: "*"
+          to: "empresas"
           isOneToOne: true
           isSetofReturn: false
         }
       }
+      app_remover_supressao: { Args: { p: Json }; Returns: undefined }
       app_salvar_camada_regra: {
         Args: { p: Json }
         Returns: {
@@ -1184,8 +1753,41 @@ export type Database = {
           versao: number
         }
         SetofOptions: {
-          from: '*'
-          to: 'camada_regras'
+          from: "*"
+          to: "camada_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_radar_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "radar_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_suprimir: {
+        Args: { p: Json }
+        Returns: {
+          criado_em: string
+          criado_por: string | null
+          escopo: string
+          id: string
+          motivo: string
+          observacao: string | null
+          valor: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "supressao"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1196,8 +1798,42 @@ export type Database = {
         Args: { p_principal: string; p_secundarios: string[] }
         Returns: string[]
       }
+      mercado_amostra_camada: {
+        Args: {
+          p_camada: string
+          p_limite: number
+          p_tipo: string
+          p_uf: string
+        }
+        Returns: Json
+      }
+      mercado_contar_exato: {
+        Args: { p_arvore?: Json; p_termo?: string }
+        Returns: number
+      }
+      mercado_explorar: {
+        Args: {
+          p_arvore?: Json
+          p_asc?: boolean
+          p_limite?: number
+          p_offset?: number
+          p_ordem?: string
+          p_termo?: string
+        }
+        Returns: Json
+      }
+      mercado_mapa: {
+        Args: { p_limite?: number; p_tipo?: string; p_uf?: string }
+        Returns: Json
+      }
+      mercado_piramide: { Args: never; Returns: Json }
+      mercado_pred: { Args: { no: Json }; Returns: string }
+      mercado_where: {
+        Args: { p_arvore: Json; p_termo: string }
+        Returns: string
+      }
       show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { '': string }; Returns: string[] }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
@@ -1208,18 +1844,152 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
-export type Tables<T extends keyof DefaultSchema['Tables']> =
-  DefaultSchema['Tables'][T]['Row']
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
 
-export type TablesInsert<T extends keyof DefaultSchema['Tables']> =
-  DefaultSchema['Tables'][T]['Insert']
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
 
-export type TablesUpdate<T extends keyof DefaultSchema['Tables']> =
-  DefaultSchema['Tables'][T]['Update']
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
 
-export type Views<T extends keyof DefaultSchema['Views']> =
-  DefaultSchema['Views'][T]['Row']
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
+
+// Compat: helper Views<> (o gerador novo dobra views em Tables<>, mas o código do
+// repo importa Views<'x'>). Restaurado para não quebrar os imports existentes.
+export type Views<
+  DefaultSchemaViewNameOrOptions extends
+    | keyof DefaultSchema["Views"]
+    | { schema: keyof DatabaseWithoutInternals },
+  ViewName extends DefaultSchemaViewNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaViewNameOrOptions["schema"]]["Views"]
+    : never = never,
+> = DefaultSchemaViewNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaViewNameOrOptions["schema"]]["Views"][ViewName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaViewNameOrOptions extends keyof DefaultSchema["Views"]
+    ? DefaultSchema["Views"][DefaultSchemaViewNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
