@@ -7,6 +7,7 @@ import { pingDb, pool } from './db.js'
 import { env } from './env.js'
 import { logger } from './logger.js'
 import { previewRegra } from './derivadas/reclassificar.js'
+import { processarWebhookApollo, segredoWebhookValido } from './radar/apollo-webhook.js'
 import {
   dispararCno,
   dispararMetricas,
@@ -38,6 +39,27 @@ app.use(express.json({ limit: '256kb' }))
 app.get('/health', async (_req: Request, res: Response) => {
   const db = await pingDb()
   res.status(db ? 200 : 503).json({ ok: db, db: db ? 'ok' : 'indisponível', versao: '0.1.0' })
+})
+
+// ─── Webhook do Apollo (público: o Apollo não manda o WORKER_SECRET) ─────────
+// Registrado ANTES do exigirSegredo; autenticado pelo APOLLO_WEBHOOK_SECRET no
+// header/query. Responde 200 sempre que autenticado (idempotente) para não provocar
+// tempestade de reenvio do Apollo.
+app.post('/webhooks/apollo', async (req: Request, res: Response) => {
+  const recebido =
+    (typeof req.query.secret === 'string' ? req.query.secret : undefined) ??
+    (typeof req.headers['x-webhook-secret'] === 'string' ? (req.headers['x-webhook-secret'] as string) : undefined)
+  if (!segredoWebhookValido(recebido)) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  try {
+    const r = await processarWebhookApollo(req.body)
+    res.status(200).json({ ok: true, ...r })
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Webhook Apollo falhou ao processar.')
+    res.status(200).json({ ok: false }) // 200 mesmo em erro: não queremos reenvio.
+  }
 })
 
 app.use(exigirSegredo)

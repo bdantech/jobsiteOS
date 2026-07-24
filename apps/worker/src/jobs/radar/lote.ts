@@ -17,10 +17,13 @@ import { atualizarItem, registrarEnriquecimento } from '../../radar/persist.js'
  * (inclusive sem_dados — cache negativo) e reconcilia o custo real no lote.
  */
 
+/** Status de enriquecimento gravável (o check de `enriquecimentos`). */
 export type ResultadoTipo = 'sucesso' | 'sem_dados' | 'erro' | 'aguardando_webhook'
 
 export interface ResultadoItem {
-  status: ResultadoTipo
+  // 'pulado' NÃO gera linha em enriquecimentos (nenhuma tentativa/custo) — ex.: item
+  // sem domínio, ou domínio já enriquecido (dedup por domínio no Apollo).
+  status: ResultadoTipo | 'pulado'
   fonte: string
   custo?: number
   resultado?: unknown
@@ -118,6 +121,13 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
         r = await processar(item)
       } catch (e) {
         r = { status: 'erro', fonte: lote.tipo, erro: String(e) }
+      }
+
+      // 'pulado': nenhuma tentativa/custo — só marca o item e segue (sem enriquecimento).
+      if (r.status === 'pulado') {
+        await atualizarItem(item.id, { status: 'pulado', erro: r.erro ?? null })
+        processados++
+        continue
       }
 
       await registrarEnriquecimento({

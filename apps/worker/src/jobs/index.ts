@@ -20,6 +20,7 @@ import { ingerirCno, type OpcoesCno } from './cno.js'
 import { sincronizarOnepay } from './radar/onepay.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
+import { criarProcessadorContatos } from './radar/contatos.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -291,6 +292,7 @@ export function dispararSincronizarOnepay(): string {
 /** O processador de item por tipo de lote. Domínio implementado; contatos/protestos vêm nas 3c/3d. */
 function escolherProcessador(lote: Tables<'lotes_enriquecimento'>) {
   if (lote.tipo === 'dominio') return criarProcessadorDominio(lote)
+  if (lote.tipo === 'contatos') return criarProcessadorContatos(lote)
   throw new Error(`Execução de lote do tipo "${lote.tipo}" ainda não implementada.`)
 }
 

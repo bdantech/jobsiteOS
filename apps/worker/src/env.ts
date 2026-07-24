@@ -85,6 +85,8 @@ const envSchema = z.object({
   // quando for usar. Nenhuma chamada paga roda sem aprovação de lote.
   APOLLO_API_KEY: z.string().optional(),
   APOLLO_WEBHOOK_SECRET: z.string().optional(),
+  /** URL pública (com o secret) que o Apollo chama de volta com os telefones. */
+  APOLLO_WEBHOOK_URL: z.string().url().optional(),
   DIRECTD_API_KEY: z.string().optional(),
   ONEPAY_BI_URL: z.string().url().optional(),
   ONEPAY_BI_TOKEN: z.string().optional(),
