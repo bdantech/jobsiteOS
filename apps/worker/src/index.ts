@@ -14,6 +14,7 @@ import {
   dispararReceita,
   dispararReclassificacao,
   dispararSincronizarOnepay,
+  dispararLoteRadar,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -114,6 +115,18 @@ app.post('/jobs/promover', (_req: Request, res: Response, next: NextFunction) =>
 app.post('/jobs/radar/onepay', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const id = dispararSincronizarOnepay()
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const loteRadarSchema = z.object({ lote_id: z.string().uuid() })
+
+app.post('/jobs/radar/lote', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { lote_id } = loteRadarSchema.parse(req.body ?? {})
+    const id = dispararLoteRadar(lote_id)
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)

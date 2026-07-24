@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type pg from 'pg'
-import { sessaoDedicada } from '../db.js'
+import type { Tables } from '../../../../packages/core/src/types/database.js'
+import { sessaoDedicada, supabaseAdmin } from '../db.js'
 import { logger } from '../logger.js'
 import {
   abrirIngestao,
@@ -17,6 +18,8 @@ import { promoverElegiveis } from '../derivadas/promover.js'
 import { ingerirReceita, type OpcoesReceita } from './receita.js'
 import { ingerirCno, type OpcoesCno } from './cno.js'
 import { sincronizarOnepay } from './radar/onepay.js'
+import { executarLote } from './radar/lote.js'
+import { criarProcessadorDominio } from './radar/dominios.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -25,7 +28,14 @@ import { sincronizarOnepay } from './radar/onepay.js'
  * route returns 202 with an id and the caller watches `mercado_ingestoes`.
  */
 
-export type TipoJob = 'receita' | 'cno' | 'reclassificar' | 'metricas' | 'promover' | 'onepay'
+export type TipoJob =
+  | 'receita'
+  | 'cno'
+  | 'reclassificar'
+  | 'metricas'
+  | 'promover'
+  | 'onepay'
+  | 'radar-lote'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -275,5 +285,32 @@ export function dispararSincronizarOnepay(): string {
   return dispararAvulso('onepay', async () => {
     logger.info('Sync de clientes Onepay.')
     return sincronizarOnepay()
+  })
+}
+
+/** O processador de item por tipo de lote. Domínio implementado; contatos/protestos vêm nas 3c/3d. */
+function escolherProcessador(lote: Tables<'lotes_enriquecimento'>) {
+  if (lote.tipo === 'dominio') return criarProcessadorDominio(lote)
+  throw new Error(`Execução de lote do tipo "${lote.tipo}" ainda não implementada.`)
+}
+
+/**
+ * Executa um lote de enriquecimento APROVADO (§6.3). Materializa os itens do filtro
+ * (excluindo por TTL), processa com o teto de orçamento, reconcilia o custo. Job
+ * avulso: usa pool + service role, não a sessão dedicada.
+ */
+export function dispararLoteRadar(loteId: string): string {
+  return dispararAvulso('radar-lote', async () => {
+    const { data: lote, error } = await supabaseAdmin
+      .from('lotes_enriquecimento')
+      .select('*')
+      .eq('id', loteId)
+      .single()
+    if (error || !lote) throw new Error(`Lote ${loteId} não encontrado.`)
+    if (lote.status !== 'aprovado' && lote.status !== 'executando') {
+      throw new Error(`Lote ${loteId} não está aprovado (status ${lote.status}).`)
+    }
+    logger.info({ loteId, tipo: lote.tipo }, 'Executando lote do Radar.')
+    return executarLote(loteId, escolherProcessador(lote))
   })
 }

@@ -187,6 +187,15 @@ export async function dispararSincronizarOnepay(): Promise<DispararJobResultado>
   return postar('/jobs/radar/onepay', {}, 'radar-onepay')
 }
 
+/**
+ * Radar (§6.3): executa um lote de enriquecimento APROVADO. Enqueue-only — o worker
+ * materializa os itens, processa com throttle e teto de orçamento, e reconcilia o
+ * custo em segundo plano. A aprovação (quem pode) fica no caller.
+ */
+export async function dispararLoteRadar(loteId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/lote', { lote_id: loteId }, 'radar-lote')
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string
