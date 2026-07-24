@@ -8,6 +8,7 @@ export * from './schemas/index.js'
 export * from './db/mutations.js'
 export * from './db/config.js'
 export * from './mercado/index.js'
+export * from './radar/index.js'
 export * from './constants.js'
 export type {
   Database,

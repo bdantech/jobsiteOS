@@ -3,6 +3,7 @@ import { adminModule } from './modules/admin.js'
 import { empresasModule } from './modules/empresas.js'
 import { mercadoModule } from './modules/mercado.js'
 import { notificacoesModule } from './modules/notificacoes.js'
+import { radarModule } from './modules/radar.js'
 import type { AppModule, ModuleTool } from './types.js'
 
 export * from './types.js'
@@ -16,6 +17,7 @@ export * from './types.js'
 // the funnel starts: you find a company in the market before you work it.
 export const MODULES: readonly AppModule[] = [
   mercadoModule,
+  radarModule,
   empresasModule,
   adminModule,
   notificacoesModule,

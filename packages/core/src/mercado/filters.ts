@@ -171,6 +171,15 @@ function derivarErpConhecido(cond: Condicao): CondicaoResolvida {
   }
 }
 
+/** `tem_dominio = true` ⇔ `dominio is not null`. Mesmo padrão de erp_conhecido. */
+function derivarTemDominio(cond: Condicao): CondicaoResolvida {
+  const querComDominio = cond.valor === true || cond.valor === 'true'
+  return {
+    coluna: 'dominio',
+    operador: querComDominio ? 'definido' : 'nao_definido',
+  }
+}
+
 // ─── Catálogo de variáveis ──────────────────────────────────────────────────
 // Every entry MUST name a real column on `mercado_explorador` (migration 0012)
 // or be `derivada`. The catalog is the whitelist: nothing else can reach SQL.
@@ -330,6 +339,72 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     tipo: 'enum',
     coluna: 'tipo',
     opcoes: ['construtora', 'fornecedor'],
+  },
+
+  // Radar (enriquecimento) — colunas em mercado_explorador via migration 0031
+  {
+    id: 'tem_dominio',
+    label: 'Tem domínio',
+    tipo: 'booleano',
+    descricao: 'Verdadeiro quando já resolvemos o domínio web da empresa.',
+    derivada: derivarTemDominio,
+  },
+  {
+    id: 'dominio_confianca',
+    label: 'Confiança do domínio',
+    tipo: 'enum',
+    coluna: 'dominio_confianca',
+    opcoes: ['alta', 'media', 'baixa'],
+  },
+  {
+    id: 'dominio_consultado_em',
+    label: 'Domínio consultado em',
+    tipo: 'data',
+    coluna: 'dominio_consultado_em',
+    descricao: 'Quando o domínio foi resolvido/validado. Usado para excluir por TTL.',
+  },
+  { id: 'qtd_contatos', label: 'Qtd. de contatos', tipo: 'numero', coluna: 'qtd_contatos' },
+  {
+    id: 'contatos_enriquecidos_em',
+    label: 'Contatos enriquecidos em',
+    tipo: 'data',
+    coluna: 'contatos_enriquecidos_em',
+    descricao: 'Data do enriquecimento de contatos mais recente. Usado para excluir por TTL.',
+  },
+  {
+    id: 'tem_protesto',
+    label: 'Tem protesto',
+    tipo: 'booleano',
+    coluna: 'tem_protesto',
+    descricao: 'Última consulta de protesto indicou protesto. Nulo = nunca consultado.',
+  },
+  {
+    id: 'protestos_consultados_em',
+    label: 'Protestos consultados em',
+    tipo: 'data',
+    coluna: 'protestos_consultados_em',
+    descricao: 'Data da última consulta de protesto. Usado para excluir por TTL.',
+  },
+  {
+    id: 'e_cliente_onepay',
+    label: 'É cliente Onepay',
+    tipo: 'booleano',
+    coluna: 'e_cliente_onepay',
+    descricao: 'Empresa presente na base de clientes Onepay (sync diário).',
+  },
+  {
+    id: 'dias_sem_antecipar',
+    label: 'Dias sem antecipar',
+    tipo: 'numero',
+    coluna: 'dias_sem_antecipar',
+    descricao: 'Dias desde a última antecipação (clientes Onepay).',
+  },
+  {
+    id: 'consumed_pct',
+    label: 'Limite consumido (%)',
+    tipo: 'numero',
+    coluna: 'consumed_pct',
+    descricao: 'Fração do limite de crédito consumida (0 a 1). Clientes Onepay.',
   },
 ]
 

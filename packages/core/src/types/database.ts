@@ -1399,8 +1399,15 @@ export type Database = {
           cnae_principal: string | null
           cnaes_todos: string[] | null
           cnpj: string | null
+          consumed_pct: number | null
+          contatos_enriquecidos_em: string | null
           data_exclusao_simples: string | null
           data_inicio_atividade: string | null
+          dias_sem_antecipar: number | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_consultado_em: string | null
+          e_cliente_onepay: boolean | null
           empresa_id: string | null
           erp_atual: string | null
           erp_detalhes: Json | null
@@ -1420,12 +1427,15 @@ export type Database = {
           obras_iniciadas_24m: number | null
           opcao_simples: boolean | null
           porte_rfb: string | null
+          protestos_consultados_em: string | null
+          qtd_contatos: number | null
           qtd_filiais: number | null
           qtd_usuarios_erp: number | null
           ratio_usuarios_ativos: number | null
           razao_social: string | null
           situacao_cadastral: string | null
           tem_contato: boolean | null
+          tem_protesto: boolean | null
           tipo: string | null
           uf: string | null
         }
@@ -1967,8 +1977,8 @@ export const Constants = {
   },
 } as const
 
-// Compat: helper Views<> (o gerador novo dobra views em Tables<>, mas o código do
-// repo importa Views<'x'>). Restaurado para não quebrar os imports existentes.
+
+// Compat: helper Views<> (o gerador novo dobra views em Tables<>, mas o repo importa Views<'x'>).
 export type Views<
   DefaultSchemaViewNameOrOptions extends
     | keyof DefaultSchema["Views"]

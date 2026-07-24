@@ -29,6 +29,21 @@ export const EVENTO_TIPOS = {
   MERCADO_INGESTAO_FALHOU: 'mercado.ingestao_falhou',
   IMPORTACAO_CONCLUIDA: 'importacao.concluida',
   IMPORTACAO_REVISAO_PENDENTE: 'importacao.revisao_pendente',
+
+  // Radar (enriquecimento)
+  DOMINIO_RESOLVIDO: 'dominio.resolvido',
+  CONTATOS_ENRIQUECIDOS: 'contatos.enriquecidos',
+  PROTESTO_DETECTADO: 'protesto.detectado',
+  PROTESTO_AGRAVADO: 'protesto.agravado',
+  LOTE_AGUARDANDO_APROVACAO: 'lote.aguardando_aprovacao',
+  LOTE_CONCLUIDO: 'lote.concluido',
+  ORCAMENTO_ALERTA: 'orcamento.alerta',
+  ORCAMENTO_ESTOURADO: 'orcamento.estourado',
+  CLIENTE_NOVO_DETECTADO: 'cliente.novo_detectado',
+  CLIENTE_DORMENTE: 'cliente.dormente',
+  CLIENTE_LIMITE_QUASE_ESGOTADO: 'cliente.limite_quase_esgotado',
+  CLIENTE_STATUS_OPERACIONAL_ALTERADO: 'cliente.status_operacional_alterado',
+  CLIENTE_REATIVADO: 'cliente.reativado',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -50,6 +65,19 @@ export const EVENTO_LABELS: Record<string, string> = {
   'mercado.ingestao_falhou': 'Ingestão falhou',
   'importacao.concluida': 'Importação concluída',
   'importacao.revisao_pendente': 'Importação aguardando revisão',
+  'dominio.resolvido': 'Domínio resolvido',
+  'contatos.enriquecidos': 'Contatos enriquecidos',
+  'protesto.detectado': 'Protesto detectado',
+  'protesto.agravado': 'Protesto agravado',
+  'lote.aguardando_aprovacao': 'Lote aguardando aprovação',
+  'lote.concluido': 'Lote concluído',
+  'orcamento.alerta': 'Orçamento em alerta',
+  'orcamento.estourado': 'Orçamento estourado',
+  'cliente.novo_detectado': 'Novo cliente detectado',
+  'cliente.dormente': 'Cliente dormente',
+  'cliente.limite_quase_esgotado': 'Limite quase esgotado',
+  'cliente.status_operacional_alterado': 'Status operacional alterado',
+  'cliente.reativado': 'Cliente reativado',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */
