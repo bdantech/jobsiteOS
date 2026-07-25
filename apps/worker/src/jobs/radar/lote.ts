@@ -102,6 +102,7 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
 
     let custo = 0
     let processados = 0
+    let alertou = false
 
     for (const item of itens ?? []) {
       // Teto de orçamento: bloqueia ANTES de gastar mais (§6.2).
@@ -113,6 +114,15 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
           url: `/radar/lotes/${loteId}`,
         })
         break
+      }
+      // Alerta (ex.: 80% do teto): uma vez por corrida.
+      if (orc.alerta && !alertou) {
+        alertou = true
+        await emitirEvento(null, EVENTO_TIPOS.ORCAMENTO_ALERTA, {
+          titulo: 'Orçamento em alerta',
+          resumo: `Gasto do mês em ${Math.round((orc.gasto / (orc.teto || 1)) * 100)}% do teto (R$ ${orc.teto}).`,
+          url: `/radar/lotes/${loteId}`,
+        })
       }
 
       await atualizarItem(item.id, { status: 'processando' })

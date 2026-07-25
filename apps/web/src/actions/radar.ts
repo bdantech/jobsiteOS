@@ -49,6 +49,19 @@ export async function criarLoteAction(input: unknown): Promise<ActionResult<Tabl
   if (erro) return erro
   try {
     const lote = await criarLote(supabase, input)
+    // Notifica os aprovadores (Admin) — best-effort: uma falha aqui não desfaz o lote.
+    if (lote.status === 'aguardando_aprovacao') {
+      await supabase.from('empresa_eventos').insert({
+        empresa_id: null,
+        tipo: 'lote.aguardando_aprovacao',
+        ator_usuario_id: null,
+        payload: {
+          titulo: 'Lote aguardando aprovação',
+          resumo: `Lote de ${lote.tipo} pronto para aprovação${lote.nome ? `: ${lote.nome}` : ''}.`,
+          url: `/radar/lotes/${lote.id}`,
+        } as never,
+      })
+    }
     revalidatePath('/radar/lotes')
     return { ok: true, data: lote }
   } catch (e) {
