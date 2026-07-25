@@ -15,7 +15,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararLoteRadar } from '@/lib/mercado/worker'
+import { dispararLoteRadar, dispararSincronizarOnepay } from '@/lib/mercado/worker'
 
 /**
  * Mutações do módulo Radar. Todas pelos write helpers de @jobsiteos/core (RPCs
@@ -94,6 +94,14 @@ export async function executarLoteAction(id: string): Promise<ActionResult<{ enf
   const disparo = await dispararLoteRadar(id)
   revalidatePath(`/radar/lotes/${id}`)
   return { ok: true, data: { enfileirado: disparo.ok, aviso: disparo.ok ? undefined : disparo.message } }
+}
+
+/** Dispara o sync dos clientes Onepay no worker (o mesmo do cron diário). */
+export async function sincronizarOnepayAction(): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararSincronizarOnepay()
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 
 export async function cancelarLoteAction(id: string): Promise<ActionResult<Tables<'lotes_enriquecimento'>>> {

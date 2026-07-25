@@ -1,8 +1,12 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { formatCnpj } from '@jobsiteos/core'
+import { sincronizarOnepayAction } from '@/actions/radar'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buscarClientesOnepay, radarKeys } from './queries'
@@ -23,13 +27,46 @@ function Sinal({ children, tom }: { children: React.ReactNode; tom: 'alerta' | '
 }
 
 export function ClientesOnepay() {
+  const qc = useQueryClient()
   const clientes = useQuery({ queryKey: radarKeys.clientes(), queryFn: buscarClientesOnepay })
+  const [sincronizando, setSincronizando] = React.useState(false)
+
+  async function sincronizar() {
+    setSincronizando(true)
+    const r = await sincronizarOnepayAction()
+    if (!r.ok) {
+      setSincronizando(false)
+      toast.error(r.message)
+      return
+    }
+    if (!r.data.enfileirado) {
+      setSincronizando(false)
+      toast.error(r.data.aviso ?? 'O worker não aceitou o sync.')
+      return
+    }
+    toast.success('Sync enfileirado. Os clientes aparecem em instantes — atualizando…')
+    // O sync roda em background no worker; recarrega algumas vezes enquanto chega.
+    let tentativas = 0
+    const timer = setInterval(() => {
+      tentativas++
+      void qc.invalidateQueries({ queryKey: radarKeys.clientes() })
+      if (tentativas >= 12) {
+        clearInterval(timer)
+        setSincronizando(false)
+      }
+    }, 5_000)
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Clientes Onepay</h1>
-        <p className="text-muted-foreground">Sync diário: limites, dias sem antecipar e sinais.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Clientes Onepay</h1>
+          <p className="text-muted-foreground">Sync diário: limites, dias sem antecipar e sinais.</p>
+        </div>
+        <Button onClick={sincronizar} disabled={sincronizando}>
+          {sincronizando ? 'Sincronizando…' : 'Sincronizar agora'}
+        </Button>
       </div>
 
       {clientes.isPending ? (
