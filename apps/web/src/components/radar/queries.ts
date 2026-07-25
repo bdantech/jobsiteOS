@@ -1,4 +1,4 @@
-import type { Camada, Tables } from '@jobsiteos/core'
+import { resolverParaJson, type Camada, type Grupo, type Json, type Tables } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 
 /**
@@ -111,6 +111,37 @@ export async function buscarSupressao(): Promise<Tables<'supressao'>[]> {
   const { data, error } = await supabase.from('supressao').select('*').order('criado_em', { ascending: false })
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+export interface CustosConfig {
+  dominio_claude: number
+  contato_apollo: number
+  protesto_sp: number
+  protesto_nacional: number
+}
+
+export async function buscarCustos(): Promise<CustosConfig> {
+  const supabase = createClient()
+  const { data } = await supabase.from('radar_config').select('valor').eq('chave', 'custos').maybeSingle()
+  return (
+    (data?.valor as CustosConfig | undefined) ?? {
+      dominio_claude: 0.1,
+      contato_apollo: 1.2,
+      protesto_sp: 0.36,
+      protesto_nacional: 3.5,
+    }
+  )
+}
+
+/** Estimativa de itens elegíveis: reusa a contagem exata do universo (mercado_contar_exato). */
+export async function estimarItens(arvore: Grupo): Promise<number> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('mercado_contar_exato', {
+    p_termo: null,
+    p_arvore: resolverParaJson(arvore) as unknown as Json,
+  })
+  if (error) throw new Error(error.message)
+  return (data as number | null) ?? 0
 }
 
 export async function buscarRadarConfig(): Promise<Tables<'radar_config'>[]> {
