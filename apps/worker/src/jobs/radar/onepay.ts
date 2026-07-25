@@ -64,9 +64,8 @@ export async function sincronizarOnepay(): Promise<ResultadoOnepay> {
   if (!env.ONEPAY_BI_URL) {
     throw new Error('ONEPAY_BI_URL não configurado — configure o secret no worker antes de rodar.')
   }
-  // Aceita tanto o host (…up.railway.app) quanto a URL completa
-  // (…/api/v1/temperature-report) — normaliza para o host e reanexa o caminho.
-  const base = env.ONEPAY_BI_URL.replace(/\/+$/, '').replace(/\/api\/v1\/temperature-report$/, '')
+  // ONEPAY_BI_URL é só o host — o caminho é reanexado aqui, reutilizando a base.
+  const base = env.ONEPAY_BI_URL.replace(/\/+$/, '')
   const limiar = await lerLimiarDormente()
   const hoje = new Date().toISOString().slice(0, 10)
 
