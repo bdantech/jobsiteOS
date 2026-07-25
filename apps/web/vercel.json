@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/radar-onepay",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/radar-protestos-clientes",
+      "schedule": "0 8 5 * *"
     }
   ]
 }

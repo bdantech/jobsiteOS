@@ -21,6 +21,7 @@ import { sincronizarOnepay } from './radar/onepay.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
 import { criarProcessadorContatos } from './radar/contatos.js'
+import { criarProcessadorProtestos, protestosClientesMensal } from './radar/protestos.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -37,6 +38,7 @@ export type TipoJob =
   | 'promover'
   | 'onepay'
   | 'radar-lote'
+  | 'protestos-mensal'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -293,7 +295,19 @@ export function dispararSincronizarOnepay(): string {
 function escolherProcessador(lote: Tables<'lotes_enriquecimento'>) {
   if (lote.tipo === 'dominio') return criarProcessadorDominio(lote)
   if (lote.tipo === 'contatos') return criarProcessadorContatos(lote)
+  if (lote.tipo === 'protestos') return criarProcessadorProtestos(lote)
   throw new Error(`Execução de lote do tipo "${lote.tipo}" ainda não implementada.`)
+}
+
+/**
+ * Rotina mensal de protestos dos clientes (§5). Job avulso: cria um lote automático
+ * (já aprovado) com a matriz + SPEs ativas de cada cliente e o executa (sempre nacional).
+ */
+export function dispararProtestosClientesMensal(): string {
+  return dispararAvulso('protestos-mensal', async () => {
+    logger.info('Rotina mensal de protestos de clientes.')
+    return protestosClientesMensal()
+  })
 }
 
 /**

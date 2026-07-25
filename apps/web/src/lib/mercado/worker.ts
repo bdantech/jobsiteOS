@@ -196,6 +196,11 @@ export async function dispararLoteRadar(loteId: string): Promise<DispararJobResu
   return postar('/jobs/radar/lote', { lote_id: loteId }, 'radar-lote')
 }
 
+/** Radar (§5): rotina mensal de protestos dos clientes (matriz + SPEs ativas, nacional). */
+export async function dispararProtestosClientesMensal(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/protestos-clientes', {}, 'radar-protestos-clientes')
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string

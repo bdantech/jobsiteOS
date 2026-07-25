@@ -16,6 +16,7 @@ import {
   dispararReclassificacao,
   dispararSincronizarOnepay,
   dispararLoteRadar,
+  dispararProtestosClientesMensal,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -149,6 +150,15 @@ app.post('/jobs/radar/lote', (req: Request, res: Response, next: NextFunction) =
   try {
     const { lote_id } = loteRadarSchema.parse(req.body ?? {})
     const id = dispararLoteRadar(lote_id)
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/radar/protestos-clientes', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = dispararProtestosClientesMensal()
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)
