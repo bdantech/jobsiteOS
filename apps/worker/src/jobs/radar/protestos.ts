@@ -6,7 +6,7 @@ import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { lerCustos } from '../../radar/config.js'
 import { provedoresDirectD } from '../../radar/directd.js'
-import { emitirEvento } from '../../radar/eventos.js'
+import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
 import { executarLote } from './lote.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
@@ -84,12 +84,10 @@ export function criarProcessadorProtestos(lote: Tables<'lotes_enriquecimento'>):
     const antesTinha = anterior?.tem_protesto ?? false
     const antesValor = Number(anterior?.valor_total ?? 0)
     if (r.tem_protesto && !antesTinha) {
-      await emitirEvento(empresaId, EVENTO_TIPOS.PROTESTO_DETECTADO, {
-        titulo: 'Protesto detectado',
-        resumo: `${cnpj}: ${r.qtd_protestos} protesto(s), R$ ${r.valor_total.toFixed(2)} (${prov.fonte}).`,
-        url: empresaId ? `/empresas/${empresaId}` : `/mercado/universo/${cnpj}`,
-        cnpj,
-      })
+      const url = empresaId ? `/empresas/${empresaId}` : `/mercado/universo/${cnpj}`
+      const resumo = `${cnpj}: ${r.qtd_protestos} protesto(s), R$ ${r.valor_total.toFixed(2)} (${prov.fonte}).`
+      await emitirEvento(empresaId, EVENTO_TIPOS.PROTESTO_DETECTADO, { titulo: 'Protesto detectado', resumo, url, cnpj })
+      await notificarPerfis(['Admin', 'Crédito'], { titulo: 'Protesto detectado', corpo: resumo, url })
     } else if (r.tem_protesto && antesTinha && antesValor > 0 && r.valor_total > antesValor * LIMIAR_AGRAVAMENTO) {
       await emitirEvento(empresaId, EVENTO_TIPOS.PROTESTO_AGRAVADO, {
         titulo: 'Protesto agravado',
