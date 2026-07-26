@@ -15,6 +15,8 @@ export const radarKeys = {
   lotes: () => ['radar', 'lotes'] as const,
   lote: (id: string) => ['radar', 'lote', id] as const,
   loteItens: (id: string) => ['radar', 'lote', id, 'itens'] as const,
+  loteItensPorStatus: (id: string, status: string) =>
+    ['radar', 'lote', id, 'itens', status] as const,
   clientes: () => ['radar', 'clientes'] as const,
   supressao: () => ['radar', 'supressao'] as const,
   config: () => ['radar', 'config'] as const,
@@ -93,6 +95,48 @@ export async function contarItensDoLote(id: string): Promise<ContagemItens> {
   const porStatus: Record<string, number> = {}
   for (const r of data ?? []) porStatus[r.status] = (porStatus[r.status] ?? 0) + 1
   return { total: (data ?? []).length, porStatus }
+}
+
+/** Uma empresa do lote num dado status — para a lista que abre ao clicar no status. */
+export interface LoteItemDetalhe {
+  id: string
+  cnpj: string | null
+  empresa_id: string | null
+  erro: string | null
+  atualizado_em: string
+  razao_social: string | null
+  nome_fantasia: string | null
+}
+
+export async function buscarItensPorStatus(loteId: string, status: string): Promise<LoteItemDetalhe[]> {
+  const supabase = createClient()
+  // Embed empresas(...) pela FK empresa_id → nome sem um segundo round-trip. A RLS de
+  // empresas decide se o nome vem (null para quem não tem o módulo Empresas — o CNPJ fica).
+  const { data, error } = await supabase
+    .from('lote_itens')
+    .select('id, cnpj, empresa_id, erro, atualizado_em, empresas(razao_social, nome_fantasia)')
+    .eq('lote_id', loteId)
+    .eq('status', status)
+    .order('atualizado_em', { ascending: false })
+    .limit(1000)
+  if (error) throw new Error(error.message)
+  type Raw = {
+    id: string
+    cnpj: string | null
+    empresa_id: string | null
+    erro: string | null
+    atualizado_em: string
+    empresas: { razao_social: string | null; nome_fantasia: string | null } | null
+  }
+  return ((data ?? []) as unknown as Raw[]).map((r) => ({
+    id: r.id,
+    cnpj: r.cnpj,
+    empresa_id: r.empresa_id,
+    erro: r.erro,
+    atualizado_em: r.atualizado_em,
+    razao_social: r.empresas?.razao_social ?? null,
+    nome_fantasia: r.empresas?.nome_fantasia ?? null,
+  }))
 }
 
 export async function buscarClientesOnepay(): Promise<Tables<'clientes_onepay'>[]> {

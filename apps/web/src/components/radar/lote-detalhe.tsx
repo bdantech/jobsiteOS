@@ -4,11 +4,19 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { formatCnpj } from '@jobsiteos/core'
 import { aprovarLoteAction, cancelarLoteAction, executarLoteAction } from '@/actions/radar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { buscarLote, contarItensDoLote, radarKeys } from './queries'
+import { buscarItensPorStatus, buscarLote, contarItensDoLote, radarKeys } from './queries'
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const STATUS: Record<string, string> = {
@@ -30,9 +38,72 @@ const ITEM_LABEL: Record<string, string> = {
   pulado: 'Pulado',
 }
 
+/** Lista as empresas do lote num status — abre ao clicar na barra do Progresso. */
+function ItensPorStatusDialog({
+  loteId,
+  status,
+  onOpenChange,
+}: {
+  loteId: string
+  status: string | null
+  onOpenChange: (aberto: boolean) => void
+}) {
+  const aberto = status !== null
+  const itens = useQuery({
+    queryKey: radarKeys.loteItensPorStatus(loteId, status ?? ''),
+    queryFn: () => buscarItensPorStatus(loteId, status as string),
+    enabled: aberto,
+  })
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{status ? (ITEM_LABEL[status] ?? status) : ''}</DialogTitle>
+          <DialogDescription>Empresas do lote neste status.</DialogDescription>
+        </DialogHeader>
+        {itens.isPending ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (itens.data ?? []).length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma empresa.</p>
+        ) : (
+          <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
+            {(itens.data ?? []).map((it) => {
+              const nome = it.razao_social ?? it.nome_fantasia ?? (it.cnpj ? formatCnpj(it.cnpj) : 'Empresa')
+              return (
+                <li key={it.id} className="rounded-md border border-border p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    {it.empresa_id ? (
+                      <Link
+                        href={`/empresas/${it.empresa_id}`}
+                        className="text-sm font-medium hover:underline"
+                      >
+                        {nome}
+                      </Link>
+                    ) : (
+                      <span className="text-sm font-medium">{nome}</span>
+                    )}
+                    {it.cnpj ? (
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {formatCnpj(it.cnpj)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {it.erro ? <p className="mt-1 text-xs text-destructive">{it.erro}</p> : null}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function LoteDetalhe({ id }: { id: string }) {
   const qc = useQueryClient()
   const [agindo, setAgindo] = React.useState(false)
+  const [statusAberto, setStatusAberto] = React.useState<string | null>(null)
 
   const ativo = (s?: string) => s === 'executando' || s === 'aprovado'
 
@@ -167,9 +238,15 @@ export function LoteDetalhe({ id }: { id: string }) {
                 : 'Sem itens ainda (materializados na execução).'}
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {Object.entries(c.porStatus).map(([status, qtd]) => (
-                <div key={status} className="flex items-center gap-3 text-sm">
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setStatusAberto(status)}
+                  className="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left text-sm transition-colors hover:bg-muted/60"
+                  title="Ver empresas neste status"
+                >
                   <span className="w-40 text-muted-foreground">{ITEM_LABEL[status] ?? status}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
@@ -178,12 +255,20 @@ export function LoteDetalhe({ id }: { id: string }) {
                     />
                   </div>
                   <span className="w-16 text-right tabular-nums">{qtd}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <ItensPorStatusDialog
+        loteId={id}
+        status={statusAberto}
+        onOpenChange={(aberto) => {
+          if (!aberto) setStatusAberto(null)
+        }}
+      />
     </div>
   )
 }

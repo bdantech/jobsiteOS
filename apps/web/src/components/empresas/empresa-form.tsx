@@ -44,6 +44,7 @@ interface EmpresaFormValues {
   municipio: string
   cnae_principal: string
   porte: string
+  dominio: string
   erp_atual: string
   erp_mrr: string
   erp_canal_venda: string
@@ -57,10 +58,22 @@ const CAMPOS = [
   'municipio',
   'cnae_principal',
   'porte',
+  'dominio',
   'erp_atual',
   'erp_mrr',
   'erp_canal_venda',
 ] as const
+
+// O "site" É empresas.dominio (Radar §3). A procedência conta de onde veio: editar à
+// mão vira 'manual' (write helper 0038), o resto é resolvido pela cascata do Radar.
+const ORIGEM_DOMINIO: Record<string, string> = {
+  rfb: 'Receita Federal',
+  contato: 'contato',
+  lista: 'lista importada',
+  heuristica: 'heurística',
+  claude_busca: 'busca web',
+  manual: 'manual',
+}
 
 function isTipoEmpresa(valor: string): valor is TipoEmpresa {
   return (TIPOS_EMPRESA as readonly string[]).includes(valor)
@@ -75,6 +88,7 @@ function paraFormValues(empresa: Tables<'empresas'>): EmpresaFormValues {
     municipio: empresa.municipio ?? '',
     cnae_principal: empresa.cnae_principal ?? '',
     porte: empresa.porte ?? '',
+    dominio: empresa.dominio ?? '',
     erp_atual: empresa.erp_atual ?? '',
     erp_mrr: empresa.erp_mrr === null ? '' : String(empresa.erp_mrr),
     erp_canal_venda: empresa.erp_canal_venda ?? '',
@@ -129,6 +143,8 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
       municipio: trim(values.municipio),
       cnae_principal: trim(values.cnae_principal),
       porte: trim(values.porte),
+      // Normalização (host puro, minúsculo) fica no atualizarEmpresaSchema, server-side.
+      dominio: trim(values.dominio),
       erp_atual: trim(values.erp_atual),
       // Blanking an MRR do ERP that was already set writes 0 (R$ 0,00), because null is
       // not expressible through the coalesce merge. Blank on a company that
@@ -290,6 +306,44 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                   <FormControl>
                     <Input {...field} autoComplete="off" />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="dominio"
+              render={({ field }) => (
+                <FormItem className="sm:col-span-2">
+                  <FormLabel>Site</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      autoComplete="off"
+                      inputMode="url"
+                      placeholder="exemplo.com.br"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {empresa.dominio && empresa.dominio_origem ? (
+                      <>
+                        Origem: {ORIGEM_DOMINIO[empresa.dominio_origem] ?? empresa.dominio_origem}
+                        {empresa.dominio_confianca ? ` · confiança ${empresa.dominio_confianca}` : ''}.
+                        {' '}
+                        <a
+                          href={`https://${empresa.dominio}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          Abrir
+                        </a>
+                      </>
+                    ) : (
+                      'Domínio web da empresa. Editar aqui marca a origem como manual.'
+                    )}
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

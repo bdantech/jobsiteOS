@@ -88,6 +88,16 @@ export type CriarEmpresaInput = z.infer<typeof criarEmpresaSchema>
 // this is a different company, which is a merge, not an edit.
 export const atualizarEmpresaSchema = criarEmpresaSchema.omit({ cnpj: true }).partial().extend({
   id: z.string().uuid(),
+  // O "site" da empresa É a coluna empresas.dominio (Radar §3): a mesma unidade de
+  // cobrança do enriquecimento de contatos. Normaliza para o host puro (sem esquema,
+  // sem caminho, minúsculo) para bater com o formato que a cascata de domínio grava.
+  // '' limpa o campo (o write helper 0038 marca dominio_origem='manual' quando muda).
+  dominio: z
+    .string()
+    .trim()
+    .max(255)
+    .transform((s) => (s ? (s.replace(/^https?:\/\//i, '').split('/')[0] ?? '').toLowerCase() : s))
+    .optional(),
 })
 export type AtualizarEmpresaInput = z.infer<typeof atualizarEmpresaSchema>
 
