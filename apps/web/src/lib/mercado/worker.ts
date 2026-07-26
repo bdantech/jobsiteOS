@@ -201,6 +201,23 @@ export async function dispararProtestosClientesMensal(): Promise<DispararJobResu
   return postar('/jobs/radar/protestos-clientes', {}, 'radar-protestos-clientes')
 }
 
+/**
+ * Radar (§5): protestos sob demanda de uma empresa (+ SPEs do grupo criadas a partir de
+ * um ano). Ação PAGA — a autorização e a confirmação de custo ficam no caller (a aba
+ * Análise financeira mostra a estimativa antes de disparar).
+ */
+export async function dispararProtestosEmpresa(input: {
+  empresaId: string
+  incluirSpes: boolean
+  anoMin: number | null
+}): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/radar/protestos-empresa',
+    { empresa_id: input.empresaId, incluir_spes: input.incluirSpes, ano_min: input.anoMin },
+    'radar-protestos-empresa',
+  )
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string

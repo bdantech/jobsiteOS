@@ -15,7 +15,11 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararLoteRadar, dispararSincronizarOnepay } from '@/lib/mercado/worker'
+import {
+  dispararLoteRadar,
+  dispararProtestosEmpresa,
+  dispararSincronizarOnepay,
+} from '@/lib/mercado/worker'
 
 /**
  * Mutações do módulo Radar. Todas pelos write helpers de @jobsiteos/core (RPCs
@@ -101,6 +105,22 @@ export async function sincronizarOnepayAction(): Promise<ActionResult<{ enfileir
   const { erro } = await autorizar()
   if (erro) return erro
   const r = await dispararSincronizarOnepay()
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Dispara protestos (ação PAGA) de uma empresa + SPEs opcionais. A confirmação de custo
+ * já aconteceu no cliente (radar_protestos_empresa_previa mostrou a estimativa); este
+ * clique é a aprovação. Autoriza pelo módulo Radar, dono do dado e do orçamento.
+ */
+export async function rodarProtestosEmpresaAction(input: {
+  empresaId: string
+  incluirSpes: boolean
+  anoMin: number | null
+}): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararProtestosEmpresa(input)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

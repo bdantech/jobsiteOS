@@ -21,7 +21,7 @@ import { sincronizarOnepay } from './radar/onepay.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
 import { criarProcessadorContatos } from './radar/contatos.js'
-import { criarProcessadorProtestos, protestosClientesMensal } from './radar/protestos.js'
+import { criarProcessadorProtestos, protestosClientesMensal, protestosEmpresa } from './radar/protestos.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -39,6 +39,7 @@ export type TipoJob =
   | 'onepay'
   | 'radar-lote'
   | 'protestos-mensal'
+  | 'protestos-empresa'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -307,6 +308,22 @@ export function dispararProtestosClientesMensal(): string {
   return dispararAvulso('protestos-mensal', async () => {
     logger.info('Rotina mensal de protestos de clientes.')
     return protestosClientesMensal()
+  })
+}
+
+/**
+ * Protestos sob demanda de uma empresa (+ SPEs opcionais), disparado da ficha. Job
+ * avulso: usa pool + service role. Single-flight por tipo — dois disparos concorrentes
+ * de empresas diferentes serializam (o segundo recebe 409), aceitável no volume real.
+ */
+export function dispararProtestosEmpresa(opts: {
+  empresaId: string
+  incluirSpes: boolean
+  anoMin: number | null
+}): string {
+  return dispararAvulso('protestos-empresa', async () => {
+    logger.info({ empresaId: opts.empresaId, incluirSpes: opts.incluirSpes, anoMin: opts.anoMin }, 'Protestos sob demanda.')
+    return protestosEmpresa(opts)
   })
 }
 

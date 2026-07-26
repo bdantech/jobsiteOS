@@ -107,6 +107,69 @@ export function criarProcessadorProtestos(lote: Tables<'lotes_enriquecimento'>):
 }
 
 /**
+ * Protestos sob demanda de UMA empresa (+ opcionalmente as SPEs ativas do grupo dela,
+ * criadas a partir de um ano). Disparado da aba Análise financeira da ficha, com custo
+ * estimado mostrado e confirmado ANTES (radar_protestos_empresa_previa resolve o mesmo
+ * conjunto). Sempre NACIONAL (cliente=true): o usuário pediu explicitamente, cobertura
+ * parcial não serve para decisão. Lote já aprovado (a confirmação no clique é a aprovação).
+ */
+export async function protestosEmpresa(opts: {
+  empresaId: string
+  incluirSpes: boolean
+  anoMin: number | null
+}): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
+  if (!env.DIRECTD_API_KEY) throw new Error('DIRECTD_API_KEY não configurada.')
+
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('cnpj, grupo_id, razao_social')
+    .eq('id', opts.empresaId)
+    .maybeSingle()
+  if (!emp?.cnpj) throw new Error('Empresa não encontrada ou sem CNPJ.')
+
+  const porCnpj = new Map<string, { cnpj: string; empresa_id: string | null }>()
+  porCnpj.set(emp.cnpj, { cnpj: emp.cnpj, empresa_id: opts.empresaId })
+
+  if (opts.incluirSpes && emp.grupo_id) {
+    let q = supabaseAdmin
+      .from('mercado_universo')
+      .select('cnpj, empresa_id')
+      .eq('grupo_id', emp.grupo_id)
+      .eq('is_spe', true)
+      .eq('situacao_cadastral', 'ativa')
+    // year >= anoMin ⇔ data >= 1º de janeiro do ano (nulas ficam de fora, como na prévia).
+    if (opts.anoMin != null) q = q.gte('data_inicio_atividade', `${opts.anoMin}-01-01`)
+    const { data: spes } = await q
+    for (const s of spes ?? []) if (!porCnpj.has(s.cnpj)) porCnpj.set(s.cnpj, { cnpj: s.cnpj, empresa_id: s.empresa_id })
+  }
+
+  const { data: lote, error } = await supabaseAdmin
+    .from('lotes_enriquecimento')
+    .insert({
+      tipo: 'protestos',
+      nome: `Protestos — ${emp.razao_social ?? emp.cnpj}${opts.incluirSpes ? ' + SPEs' : ''}`,
+      definicao_filtro: {} as never,
+      parametros: { cliente: true, motivo: 'sob_demanda', empresa_id: opts.empresaId } as never,
+      status: 'aprovado',
+      criado_por: null,
+    })
+    .select('id')
+    .single()
+  if (error || !lote) throw new Error(`Falha ao abrir lote de protestos: ${error?.message}`)
+
+  const itens = [...porCnpj.values()].map((v) => ({ lote_id: lote.id, cnpj: v.cnpj, empresa_id: v.empresa_id }))
+  if (itens.length > 0) {
+    const { error: erroItens } = await supabaseAdmin.from('lote_itens').insert(itens)
+    if (erroItens) logger.error({ erro: erroItens.message }, 'Falha ao inserir itens do lote sob demanda.')
+  }
+  await supabaseAdmin.from('lotes_enriquecimento').update({ total_itens: itens.length }).eq('id', lote.id)
+
+  const loteMin = { id: lote.id, tipo: 'protestos', parametros: { cliente: true } } as unknown as Tables<'lotes_enriquecimento'>
+  const r = await executarLote(lote.id, criarProcessadorProtestos(loteMin))
+  return { lote_id: lote.id, itens: itens.length, ...r }
+}
+
+/**
  * Rotina mensal de clientes (§5): para cada cliente Onepay, consulta protestos
  * NACIONAL da matriz + SPEs ativas do grupo. Registra tudo como um lote automático
  * (criado_por null, já aprovado — é política, não pedido ad hoc). O teto de orçamento

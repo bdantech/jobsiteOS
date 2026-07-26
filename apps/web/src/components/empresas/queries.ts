@@ -70,6 +70,8 @@ export const empresasKeys = {
   notas: (id: string) => ['empresas', 'notas', id] as const,
   eventos: (id: string) => ['empresas', 'eventos', id] as const,
   analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
+  previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
+    ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
 }
 
 /** Snapshot atual de protesto de um CNPJ (último registro append-only). */
@@ -111,6 +113,29 @@ export interface AnaliseFinanceira {
   atual: ProtestoAtual | null
   grupo: ProtestoGrupo | null
   historico: ProtestoHistoricoItem[]
+}
+
+/** Prévia de custo para rodar protestos (empresa + SPEs). Do RPC radar_protestos_empresa_previa. */
+export interface PreviaProtestos {
+  tem_acesso: boolean
+  qtd: number
+  custo_estimado: number
+}
+
+export async function buscarPreviaProtestos(
+  empresaId: string,
+  incluirSpes: boolean,
+  anoMin: number | null,
+): Promise<PreviaProtestos> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_protestos_empresa_previa' as never, {
+    p_empresa_id: empresaId,
+    p_incluir_spes: incluirSpes,
+    p_ano_min: anoMin,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<PreviaProtestos>
+  return { tem_acesso: r.tem_acesso ?? false, qtd: r.qtd ?? 0, custo_estimado: r.custo_estimado ?? 0 }
 }
 
 export async function buscarAnaliseFinanceira(empresaId: string): Promise<AnaliseFinanceira> {

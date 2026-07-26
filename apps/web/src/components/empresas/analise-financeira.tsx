@@ -1,14 +1,35 @@
 'use client'
 
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Lock, ShieldCheck, TrendingUp } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { AlertTriangle, Loader2, Lock, ShieldCheck, TrendingUp } from 'lucide-react'
 import type { Json } from '@jobsiteos/core'
+import { rodarProtestosEmpresaAction } from '@/actions/radar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   buscarAnaliseFinanceira,
+  buscarPreviaProtestos,
   empresasKeys,
   type ProtestoAtual,
   type ProtestoGrupo,
@@ -242,6 +263,124 @@ function Historico({ itens }: { itens: ProtestoHistoricoItem[] }) {
   )
 }
 
+const ANO_ATUAL = new Date().getFullYear()
+const ANOS = Array.from({ length: ANO_ATUAL - 1999 }, (_, i) => ANO_ATUAL - i) // atual … 2000
+
+/** Diálogo de disparo pago: empresa (+ SPEs opcionais) com estimativa antes de confirmar. */
+function RodarProtestosDialog({
+  empresaId,
+  temGrupo,
+  open,
+  onOpenChange,
+  onDisparado,
+}: {
+  empresaId: string
+  temGrupo: boolean
+  open: boolean
+  onOpenChange: (aberto: boolean) => void
+  onDisparado: () => void
+}) {
+  const [incluirSpes, setIncluirSpes] = React.useState(false)
+  const [anoMin, setAnoMin] = React.useState<number>(ANO_ATUAL - 5)
+  const [rodando, setRodando] = React.useState(false)
+
+  const anoEfetivo = incluirSpes ? anoMin : null
+  const previa = useQuery({
+    queryKey: empresasKeys.previaProtestos(empresaId, incluirSpes, anoEfetivo),
+    queryFn: () => buscarPreviaProtestos(empresaId, incluirSpes, anoEfetivo),
+    enabled: open,
+  })
+
+  const qtd = previa.data?.qtd ?? 0
+  const custoBrl = brl(previa.data?.custo_estimado ?? 0)
+  const semAcesso = previa.data ? !previa.data.tem_acesso : false
+
+  async function rodar() {
+    setRodando(true)
+    const r = await rodarProtestosEmpresaAction({ empresaId, incluirSpes, anoMin: anoEfetivo })
+    setRodando(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    if (!r.data.enfileirado) {
+      toast.error(r.data.aviso ?? 'O worker não aceitou o job.')
+      return
+    }
+    toast.success('Consulta enfileirada. Os protestos aparecem em instantes.')
+    onOpenChange(false)
+    onDisparado()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rodar protestos</DialogTitle>
+          <DialogDescription>
+            Consulta DirectD nacional — ação paga. Confira a estimativa antes de confirmar.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {temGrupo ? (
+            <div className="flex items-center justify-between rounded-md border border-border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="incluir-spes">Incluir SPEs do grupo</Label>
+                <p className="text-xs text-muted-foreground">SPEs ativas do grupo econômico.</p>
+              </div>
+              <Switch id="incluir-spes" checked={incluirSpes} onCheckedChange={setIncluirSpes} />
+            </div>
+          ) : null}
+
+          {incluirSpes ? (
+            <div className="space-y-1">
+              <Label>Criadas a partir de</Label>
+              <Select value={String(anoMin)} onValueChange={(v) => setAnoMin(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  {ANOS.map((a) => (
+                    <SelectItem key={a} value={String(a)}>
+                      {a}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Só SPEs com início de atividade nesse ano ou depois.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="rounded-md bg-muted/50 p-3 text-sm">
+            {previa.isPending ? (
+              <span className="text-muted-foreground">Calculando estimativa…</span>
+            ) : semAcesso ? (
+              <span className="text-muted-foreground">Sem acesso ao módulo Radar.</span>
+            ) : (
+              <span>
+                <strong>{qtd}</strong> empresa(s) · custo estimado <strong>{custoBrl}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={rodando}>
+            Cancelar
+          </Button>
+          <Button onClick={rodar} disabled={rodando || qtd === 0 || semAcesso}>
+            {rodando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Rodar ({custoBrl})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Aba "Análise financeira" da ficha da empresa. Protesto atual da própria empresa,
  * total somado do grupo econômico e o histórico de consultas — tudo do RPC
@@ -249,10 +388,22 @@ function Historico({ itens }: { itens: ProtestoHistoricoItem[] }) {
  * `tem_acesso: false` e mostramos um estado bloqueado, nunca um erro.
  */
 export function AnaliseFinanceira({ empresaId }: { empresaId: string }) {
+  const qc = useQueryClient()
+  const [rodarAberto, setRodarAberto] = React.useState(false)
   const { data, isPending, isError, error } = useQuery({
     queryKey: empresasKeys.analiseFinanceira(empresaId),
     queryFn: () => buscarAnaliseFinanceira(empresaId),
   })
+
+  // Os protestos chegam em segundo plano; recarrega algumas vezes após o disparo.
+  function aoDisparar() {
+    let n = 0
+    const timer = setInterval(() => {
+      n++
+      void qc.invalidateQueries({ queryKey: empresasKeys.analiseFinanceira(empresaId) })
+      if (n >= 12) clearInterval(timer)
+    }, 5_000)
+  }
 
   if (isPending) {
     return (
@@ -300,12 +451,26 @@ export function AnaliseFinanceira({ empresaId }: { empresaId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="outline" onClick={() => setRodarAberto(true)}>
+          Rodar protestos
+        </Button>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <BlocoEmpresa atual={data.atual} />
         <BlocoGrupo grupo={data.grupo} />
       </div>
       {data.atual?.tem_protesto ? <Cartorios linhas={cartorios} /> : null}
       <Historico itens={data.historico} />
+
+      <RodarProtestosDialog
+        empresaId={empresaId}
+        temGrupo={data.grupo !== null}
+        open={rodarAberto}
+        onOpenChange={setRodarAberto}
+        onDisparado={aoDisparar}
+      />
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
   dispararSincronizarOnepay,
   dispararLoteRadar,
   dispararProtestosClientesMensal,
+  dispararProtestosEmpresa,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -159,6 +160,22 @@ app.post('/jobs/radar/lote', (req: Request, res: Response, next: NextFunction) =
 app.post('/jobs/radar/protestos-clientes', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const id = dispararProtestosClientesMensal()
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const protestosEmpresaSchema = z.object({
+  empresa_id: z.string().uuid(),
+  incluir_spes: z.boolean().default(false),
+  ano_min: z.number().int().min(1900).max(2100).nullable().default(null),
+})
+
+app.post('/jobs/radar/protestos-empresa', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { empresa_id, incluir_spes, ano_min } = protestosEmpresaSchema.parse(req.body ?? {})
+    const id = dispararProtestosEmpresa({ empresaId: empresa_id, incluirSpes: incluir_spes, anoMin: ano_min })
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)
