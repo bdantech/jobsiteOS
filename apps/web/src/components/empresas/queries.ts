@@ -72,6 +72,34 @@ export const empresasKeys = {
   analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
+  onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+}
+
+/**
+ * Agregados dos clientes Onepay (região, camada, faixa de capital) para a aba Análise.
+ * Do RPC radar_onepay_analytics (SECURITY DEFINER, gate no Radar). `tem_acesso:false`
+ * quando falta o módulo. Chaves cruas (região/faixa) — os rótulos/ordem moram na UI.
+ */
+export interface OnepayAnalytics {
+  tem_acesso: boolean
+  total: number
+  por_regiao: Record<string, number>
+  por_camada: Record<string, number>
+  por_capital: Record<string, number>
+}
+
+export async function buscarOnepayAnalytics(): Promise<OnepayAnalytics> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_onepay_analytics' as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<OnepayAnalytics>
+  return {
+    tem_acesso: r.tem_acesso ?? false,
+    total: r.total ?? 0,
+    por_regiao: r.por_regiao ?? {},
+    por_camada: r.por_camada ?? {},
+    por_capital: r.por_capital ?? {},
+  }
 }
 
 /** Snapshot atual de protesto de um CNPJ (último registro append-only). */

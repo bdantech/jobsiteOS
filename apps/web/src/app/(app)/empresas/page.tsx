@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
 import { requireSessionContext } from '@/lib/auth'
-import { EmpresasLista } from '@/components/empresas/empresas-lista'
+import { EmpresasTabs } from '@/components/empresas/empresas-tabs'
 
 export const metadata: Metadata = {
   title: 'Empresas',
@@ -14,10 +14,21 @@ export const metadata: Metadata = {
  * the sidebar and the AI tool list make. RLS would already return zero rows to
  * an ungranted user; this is what turns that into an honest page instead of an
  * empty table.
+ *
+ * Três abas (Empresas / Clientes Onepay / Análise). As duas últimas leem dados do
+ * Radar, então passamos `temRadar` para a UI mostrar um estado amigável a quem não
+ * tem o módulo — o RLS já protege o dado; isto só evita uma tela vazia sem explicação.
  */
-export default async function EmpresasPage() {
+export default async function EmpresasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
   const { grantedModuleIds } = await requireSessionContext()
   if (!canAccessRoute('/empresas', grantedModuleIds)) redirect('/sem-acesso')
 
-  return <EmpresasLista />
+  const { tab } = await searchParams
+  const temRadar = canAccessRoute('/radar', grantedModuleIds)
+
+  return <EmpresasTabs temRadar={temRadar} abaInicial={tab} />
 }

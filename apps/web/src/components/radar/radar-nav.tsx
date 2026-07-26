@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Ban, LayoutDashboard, Layers, Settings, Wallet } from 'lucide-react'
+import { Ban, LayoutDashboard, Layers, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,10 +17,10 @@ interface ItemNav {
   somenteAdmin?: boolean
 }
 
+// Clientes Onepay saiu daqui: agora vive no menu Empresas (aba Clientes Onepay).
 const ITENS: readonly ItemNav[] = [
   { href: '/radar', label: 'Painel', icon: LayoutDashboard },
   { href: '/radar/lotes', label: 'Lotes', icon: Layers },
-  { href: '/radar/clientes', label: 'Clientes Onepay', icon: Wallet },
   { href: '/radar/supressao', label: 'Supressão', icon: Ban },
   { href: '/radar/config', label: 'Configurações', icon: Settings, somenteAdmin: true },
 ]
