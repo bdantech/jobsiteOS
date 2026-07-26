@@ -1,4 +1,4 @@
-import type { Estagio, Tables, TipoEmpresa } from '@jobsiteos/core'
+import type { Estagio, Json, Tables, TipoEmpresa } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 import { resumoDoEvento } from './format'
 
@@ -69,6 +69,64 @@ export const empresasKeys = {
   detalhe: (id: string) => ['empresas', 'detalhe', id] as const,
   notas: (id: string) => ['empresas', 'notas', id] as const,
   eventos: (id: string) => ['empresas', 'eventos', id] as const,
+  analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
+}
+
+/** Snapshot atual de protesto de um CNPJ (último registro append-only). */
+export interface ProtestoAtual {
+  tem_protesto: boolean | null
+  qtd_protestos: number | null
+  valor_total: number | null
+  consultado_em: string
+  fonte: string
+  cartorios: Json | null
+}
+
+/** Soma dos últimos snapshots de cada CNPJ do grupo econômico. */
+export interface ProtestoGrupo {
+  valor_total: number
+  qtd_protestos: number
+  qtd_empresas_com_protesto: number
+  qtd_empresas_consultadas: number
+}
+
+export interface ProtestoHistoricoItem {
+  consultado_em: string
+  fonte: string
+  tem_protesto: boolean | null
+  qtd_protestos: number | null
+  valor_total: number | null
+  cartorios: Json | null
+}
+
+/**
+ * Análise financeira da ficha: protesto atual da empresa, total somado do grupo e o
+ * histórico de consultas. Vem do RPC empresa_analise_financeira (0036), SECURITY DEFINER
+ * com gate no módulo Radar — sem o módulo, `tem_acesso: false` (a aba mostra um estado
+ * amigável em vez de erro). O RPC ainda não está nos tipos gerados; cast localizado.
+ */
+export interface AnaliseFinanceira {
+  tem_acesso: boolean
+  cnpj?: string
+  atual: ProtestoAtual | null
+  grupo: ProtestoGrupo | null
+  historico: ProtestoHistoricoItem[]
+}
+
+export async function buscarAnaliseFinanceira(empresaId: string): Promise<AnaliseFinanceira> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('empresa_analise_financeira' as never, {
+    p_empresa_id: empresaId,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<AnaliseFinanceira>
+  return {
+    tem_acesso: r.tem_acesso ?? false,
+    cnpj: r.cnpj,
+    atual: r.atual ?? null,
+    grupo: r.grupo ?? null,
+    historico: r.historico ?? [],
+  }
 }
 
 /**

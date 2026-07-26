@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { GrupoSecao } from '@/components/mercado/grupos/grupo-secao'
 import { EstagioBadge, labelTipo } from './estagio-badge'
 import { formatData } from './format'
+import { AnaliseFinanceira } from './analise-financeira'
 import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaNotas } from './empresa-notas'
@@ -169,6 +170,7 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
+          <TabsTrigger value="financeiro">Análise financeira</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
           {data.grupo_id ? <TabsTrigger value="grupo">Grupo econômico</TabsTrigger> : null}
         </TabsList>
@@ -210,6 +212,10 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
 
               <TabsContent value="notas" className="mt-0">
                 <EmpresaNotas empresaId={data.id} />
+              </TabsContent>
+
+              <TabsContent value="financeiro" className="mt-0">
+                <AnaliseFinanceira empresaId={data.id} />
               </TabsContent>
 
               <TabsContent value="historico" className="mt-0">
