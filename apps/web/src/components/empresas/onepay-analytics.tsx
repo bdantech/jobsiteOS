@@ -1,19 +1,41 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Lock } from 'lucide-react'
-import { CAMADAS, CAMADA_DESCRICOES, type Camada } from '@jobsiteos/core'
+import { CAMADAS, CAMADA_DESCRICOES, CAMADA_LABELS, formatCnpj, type Camada } from '@jobsiteos/core'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   CirculosCamadas,
   type DadosCamada,
 } from '@/components/mercado/camadas/circulos-camadas'
-import { buscarOnepayAnalytics, empresasKeys, type OnepayAnalytics } from './queries'
+import {
+  buscarClientesOnepayFiltrados,
+  buscarOnepayAnalytics,
+  empresasKeys,
+  type OnepayAnalytics,
+} from './queries'
 
 const pctDe = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 1000) / 10 : 0)
 const fmtPct = (p: number) => `${p.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
+const brl = (n: number | null) =>
+  n == null ? null : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+
+/** Um recorte clicado num gráfico → a lista de clientes que caem nele. */
+export interface Filtro {
+  dimensao: 'regiao' | 'camada' | 'capital'
+  valor: string
+  label: string
+}
 
 // ─── a) Mapa do Brasil por região ───────────────────────────────────────────
 // SVG estilizado (não é geografia exata): 5 regiões em posições relativas corretas,
@@ -31,10 +53,18 @@ const REGIOES: readonly Regiao[] = [
   { key: 'sul', label: 'Sul', path: 'M48,84 L68,80 L70,90 L58,102 L46,98 L42,88 Z' },
 ]
 
-function MapaRegioes({ porRegiao }: { porRegiao: Record<string, number> }) {
+function MapaRegioes({
+  porRegiao,
+  onAbrir,
+}: {
+  porRegiao: Record<string, number>
+  onAbrir: (f: Filtro) => void
+}) {
   const totalComUf = REGIOES.reduce((s, r) => s + (porRegiao[r.key] ?? 0), 0)
   const semUf = porRegiao.sem_uf ?? 0
   const maxN = Math.max(1, ...REGIOES.map((r) => porRegiao[r.key] ?? 0))
+  const abrir = (key: string, label: string, n: number) =>
+    n > 0 ? onAbrir({ dimensao: 'regiao', valor: key, label: `Região ${label}` }) : undefined
 
   return (
     <Card>
@@ -50,9 +80,10 @@ function MapaRegioes({ porRegiao }: { porRegiao: Record<string, number> }) {
               <path
                 key={r.key}
                 d={r.path}
-                className="fill-primary stroke-background"
+                className={`fill-primary stroke-background ${n > 0 ? 'cursor-pointer hover:brightness-110' : ''}`}
                 style={{ fillOpacity: op }}
                 strokeWidth={1.2}
+                onClick={() => abrir(r.key, r.label, n)}
               >
                 <title>{`${r.label}: ${n} (${fmtPct(pctDe(n, totalComUf))})`}</title>
               </path>
@@ -67,20 +98,24 @@ function MapaRegioes({ porRegiao }: { porRegiao: Record<string, number> }) {
             .map((r) => {
               const op = r.n === 0 ? 0.08 : 0.25 + 0.75 * (r.n / maxN)
               return (
-                <li key={r.key} className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 shrink-0 rounded-sm bg-primary"
-                    style={{ opacity: op }}
-                  />
-                  <span className="flex-1">{r.label}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {r.n} · {fmtPct(pctDe(r.n, totalComUf))}
-                  </span>
+                <li key={r.key}>
+                  <button
+                    type="button"
+                    disabled={r.n === 0}
+                    onClick={() => abrir(r.key, r.label, r.n)}
+                    className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-muted/60 disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span className="inline-block h-3 w-3 shrink-0 rounded-sm bg-primary" style={{ opacity: op }} />
+                    <span className="flex-1">{r.label}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {r.n} · {fmtPct(pctDe(r.n, totalComUf))}
+                    </span>
+                  </button>
                 </li>
               )
             })}
           {semUf > 0 ? (
-            <li className="pt-1 text-xs text-muted-foreground">
+            <li className="px-1 pt-1 text-xs text-muted-foreground">
               {semUf} cliente(s) sem UF (fora do universo Mercado).
             </li>
           ) : null}
@@ -91,7 +126,15 @@ function MapaRegioes({ porRegiao }: { porRegiao: Record<string, number> }) {
 }
 
 // ─── b) Camadas (mesmo visual do Mercado) ────────────────────────────────────
-function CamadasClientes({ porCamada, total }: { porCamada: Record<string, number>; total: number }) {
+function CamadasClientes({
+  porCamada,
+  total,
+  onAbrir,
+}: {
+  porCamada: Record<string, number>
+  total: number
+  onAbrir: (f: Filtro) => void
+}) {
   const [sel, setSel] = React.useState<Camada | null>('som')
   const soma = CAMADAS.reduce((s, c) => s + (porCamada[c] ?? 0), 0)
   const foraUniverso = total - soma
@@ -117,7 +160,12 @@ function CamadasClientes({ porCamada, total }: { porCamada: Record<string, numbe
           dados={dados}
           selecionada={sel}
           onSelecionar={setSel}
-          dicaVazia="Clique numa camada para ver os clientes dela."
+          dicaVazia="Selecione uma camada e clique em “Ver empresas”."
+          acao={{
+            label: 'Ver empresas',
+            onClick: (camada) =>
+              onAbrir({ dimensao: 'camada', valor: camada, label: `Camada ${CAMADA_LABELS[camada]}` }),
+          }}
         />
         {foraUniverso > 0 ? (
           <p className="mt-3 text-xs text-muted-foreground">
@@ -158,9 +206,17 @@ function fatiaPath(cx: number, cy: number, r: number, a0: number, a1: number) {
   return `M ${cx} ${cy} L ${p0.x} ${p0.y} A ${r} ${r} 0 ${grande} 1 ${p1.x} ${p1.y} Z`
 }
 
-function CapitalPie({ porCapital }: { porCapital: Record<string, number> }) {
+function CapitalPie({
+  porCapital,
+  onAbrir,
+}: {
+  porCapital: Record<string, number>
+  onAbrir: (f: Filtro) => void
+}) {
   const itens = FAIXAS_CAPITAL.map((f) => ({ ...f, n: porCapital[f.key] ?? 0 }))
   const total = itens.reduce((s, i) => s + i.n, 0)
+  const abrir = (key: string, label: string, n: number) =>
+    n > 0 ? onAbrir({ dimensao: 'capital', valor: key, label: `Capital ${label}` }) : undefined
 
   // Ângulos acumulados a partir do topo (-90°). Só fatias com valor entram no desenho.
   let ang = -Math.PI / 2
@@ -189,9 +245,25 @@ function CapitalPie({ porCapital }: { porCapital: Record<string, number> }) {
             <svg viewBox="0 0 100 100" className="w-full max-w-[200px] shrink-0" role="img" aria-label="Distribuição por capital social">
               {fatias.map((f) =>
                 f.d === null ? (
-                  <circle key={f.key} cx={50} cy={50} r={48} fill={f.cor} />
+                  <circle
+                    key={f.key}
+                    cx={50}
+                    cy={50}
+                    r={48}
+                    fill={f.cor}
+                    className="cursor-pointer hover:brightness-110"
+                    onClick={() => abrir(f.key, f.label, f.n)}
+                  />
                 ) : (
-                  <path key={f.key} d={f.d} fill={f.cor} stroke="var(--background)" strokeWidth={0.5}>
+                  <path
+                    key={f.key}
+                    d={f.d}
+                    fill={f.cor}
+                    stroke="var(--background)"
+                    strokeWidth={0.5}
+                    className="cursor-pointer hover:brightness-110"
+                    onClick={() => abrir(f.key, f.label, f.n)}
+                  >
                     <title>{`${f.label}: ${f.n} (${fmtPct(pctDe(f.n, total))})`}</title>
                   </path>
                 ),
@@ -200,12 +272,19 @@ function CapitalPie({ porCapital }: { porCapital: Record<string, number> }) {
 
             <ul className="flex-1 space-y-1 text-sm">
               {itens.map((f) => (
-                <li key={f.key} className="flex items-center gap-2">
-                  <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: f.cor }} />
-                  <span className="flex-1">{f.label}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {f.n} · {fmtPct(pctDe(f.n, total))}
-                  </span>
+                <li key={f.key}>
+                  <button
+                    type="button"
+                    disabled={f.n === 0}
+                    onClick={() => abrir(f.key, f.label, f.n)}
+                    className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-muted/60 disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: f.cor }} />
+                    <span className="flex-1">{f.label}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {f.n} · {fmtPct(pctDe(f.n, total))}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -234,12 +313,72 @@ function SemRadar() {
   )
 }
 
+/** Lista de clientes de um recorte clicado num gráfico. */
+function ClientesFiltradosDialog({
+  filtro,
+  onOpenChange,
+}: {
+  filtro: Filtro | null
+  onOpenChange: (aberto: boolean) => void
+}) {
+  const aberto = filtro !== null
+  const q = useQuery({
+    queryKey: empresasKeys.onepayClientesFiltrados(filtro?.dimensao ?? '', filtro?.valor ?? ''),
+    queryFn: () => buscarClientesOnepayFiltrados(filtro!.dimensao, filtro!.valor),
+    enabled: aberto,
+  })
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{filtro?.label ?? ''}</DialogTitle>
+          <DialogDescription>Clientes Onepay neste recorte.</DialogDescription>
+        </DialogHeader>
+        {q.isPending ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (q.data ?? []).length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Nenhum cliente.</p>
+        ) : (
+          <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
+            {(q.data ?? []).map((c) => {
+              const nome = c.nome ?? formatCnpj(c.cnpj)
+              const meta = [c.uf, c.camada ? CAMADA_LABELS[c.camada as Camada] : null, brl(c.capital_social)]
+                .filter(Boolean)
+                .join(' · ')
+              return (
+                <li key={c.cnpj} className="rounded-md border border-border p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    {c.empresa_id ? (
+                      <Link href={`/empresas/${c.empresa_id}`} className="text-sm font-medium hover:underline">
+                        {nome}
+                      </Link>
+                    ) : (
+                      <span className="text-sm font-medium">{nome}</span>
+                    )}
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {formatCnpj(c.cnpj)}
+                    </span>
+                  </div>
+                  {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Aba "Análise" (menu Empresas): retrato dos clientes Onepay em três recortes —
  * região do Brasil, camada do Mercado e faixa de capital social. Do RPC
  * radar_onepay_analytics (gate no Radar; `tem_acesso:false` mostra estado amigável).
+ * Clicar em qualquer segmento abre a lista de clientes daquele recorte.
  */
 export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
+  const [filtro, setFiltro] = React.useState<Filtro | null>(null)
   const { data, isPending, isError, error } = useQuery<OnepayAnalytics>({
     queryKey: empresasKeys.onepayAnalytics(),
     queryFn: buscarOnepayAnalytics,
@@ -282,13 +421,20 @@ export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {data.total.toLocaleString('pt-BR')} cliente(s) Onepay.
+        {data.total.toLocaleString('pt-BR')} cliente(s) Onepay. Clique num segmento para ver as empresas.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
-        <MapaRegioes porRegiao={data.por_regiao} />
-        <CamadasClientes porCamada={data.por_camada} total={data.total} />
+        <MapaRegioes porRegiao={data.por_regiao} onAbrir={setFiltro} />
+        <CamadasClientes porCamada={data.por_camada} total={data.total} onAbrir={setFiltro} />
       </div>
-      <CapitalPie porCapital={data.por_capital} />
+      <CapitalPie porCapital={data.por_capital} onAbrir={setFiltro} />
+
+      <ClientesFiltradosDialog
+        filtro={filtro}
+        onOpenChange={(aberto) => {
+          if (!aberto) setFiltro(null)
+        }}
+      />
     </div>
   )
 }

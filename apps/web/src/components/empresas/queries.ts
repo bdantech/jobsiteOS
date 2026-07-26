@@ -73,6 +73,32 @@ export const empresasKeys = {
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+  onepayClientesFiltrados: (dimensao: string, valor: string) =>
+    ['empresas', 'onepay-clientes', dimensao, valor] as const,
+}
+
+/** Um cliente Onepay dentro de um recorte da Análise (região/camada/faixa de capital). */
+export interface ClienteOnepayFiltrado {
+  cnpj: string
+  nome: string | null
+  empresa_id: string | null
+  uf: string | null
+  camada: string | null
+  capital_social: number | null
+}
+
+export async function buscarClientesOnepayFiltrados(
+  dimensao: string,
+  valor: string,
+): Promise<ClienteOnepayFiltrado[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_onepay_clientes' as never, {
+    p_dimensao: dimensao,
+    p_valor: valor,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as { clientes?: ClienteOnepayFiltrado[] }
+  return r.clientes ?? []
 }
 
 /**

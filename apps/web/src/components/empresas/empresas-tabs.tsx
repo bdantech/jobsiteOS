@@ -53,10 +53,23 @@ export function EmpresasTabs({ temRadar, abaInicial }: { temRadar: boolean; abaI
 
   return (
     <Tabs value={aba} onValueChange={trocar} className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="todas">Empresas</TabsTrigger>
-        <TabsTrigger value="clientes">Clientes Onepay</TabsTrigger>
-        <TabsTrigger value="analise">Análise</TabsTrigger>
+      {/* Mesmo formato das navs dos outros módulos (Radar/Mercado): underline, não pill. */}
+      <TabsList className="mb-2 flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b border-border bg-transparent p-0 pb-px">
+        {(
+          [
+            ['todas', 'Empresas'],
+            ['clientes', 'Clientes Onepay'],
+            ['analise', 'Análise'],
+          ] as const
+        ).map(([valor, rotulo]) => (
+          <TabsTrigger
+            key={valor}
+            value={valor}
+            className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 font-medium shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+          >
+            {rotulo}
+          </TabsTrigger>
+        ))}
       </TabsList>
 
       <TabsContent value="todas" className="mt-0">
