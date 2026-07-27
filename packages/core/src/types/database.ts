@@ -335,6 +335,7 @@ export type Database = {
       }
       credito_snapshots: {
         Row: {
+          analisado_cnpj: string | null
           available_limit: number | null
           capturado_em: string
           cnpj: string
@@ -350,6 +351,7 @@ export type Database = {
           via_headquarters: boolean | null
         }
         Insert: {
+          analisado_cnpj?: string | null
           available_limit?: number | null
           capturado_em?: string
           cnpj: string
@@ -365,6 +367,7 @@ export type Database = {
           via_headquarters?: boolean | null
         }
         Update: {
+          analisado_cnpj?: string | null
           available_limit?: number | null
           capturado_em?: string
           cnpj?: string
@@ -1424,6 +1427,7 @@ export type Database = {
         Row: {
           access_key: string
           atualizada_em: string
+          contato_fornecedor: Json | null
           contato_sacado: Json | null
           credit_disponivel: number | null
           credit_limite: number | null
@@ -1467,6 +1471,7 @@ export type Database = {
         Insert: {
           access_key: string
           atualizada_em?: string
+          contato_fornecedor?: Json | null
           contato_sacado?: Json | null
           credit_disponivel?: number | null
           credit_limite?: number | null
@@ -1510,6 +1515,7 @@ export type Database = {
         Update: {
           access_key?: string
           atualizada_em?: string
+          contato_fornecedor?: Json | null
           contato_sacado?: Json | null
           credit_disponivel?: number | null
           credit_limite?: number | null
@@ -2105,6 +2111,7 @@ export type Database = {
       notas_funil: {
         Row: {
           access_key: string | null
+          contato_fornecedor: Json | null
           contato_sacado: Json | null
           dias_para_vencimento: number | null
           direction: string | null
@@ -2533,6 +2540,7 @@ export type Database = {
         Returns: {
           access_key: string
           atualizada_em: string
+          contato_fornecedor: Json | null
           contato_sacado: Json | null
           credit_disponivel: number | null
           credit_limite: number | null

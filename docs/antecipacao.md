@@ -253,17 +253,17 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
 
 ## Limitações conhecidas
 
-- **O sync nunca rodou contra o endpoint real**, mas o contrato é conhecido: o recurso é
-  `{ONEPAY_BI_URL}/api/v1/invoices` (confirmado) e os filtros estão travados por teste.
-  O que resta desconhecido é o FORMATO do payload. Como é a mesma
-  API e o mesmo token do sync de clientes, **nenhuma variável nova precisa ser
-  provisionada**: sem `ONEPAY_NF_URL`/`ONEPAY_NF_TOKEN`, ele cai em `ONEPAY_BI_URL` +
-  caminho padrão e em `ONEPAY_BI_TOKEN`. Se o recurso tiver outro nome, o conserto é
-  definir `ONEPAY_NF_URL` com a URL completa — uma variável, sem deploy de código.
-  O parser do payload é tolerante de propósito: aceita `data`/`items`, campos
-  ausentes e a `accessKey` vindo do XML quando o JSON não a traz. Se o *formato* for
-  diferente, o ponto de ajuste é a interface `NfPayload` em
-  `jobs/antecipacao/sync-nfs.ts` — nada mais depende do formato bruto.
+- **O sync ainda não rodou contra o endpoint real**, mas o contrato inteiro é conhecido
+  e está travado por teste: o recurso é `{ONEPAY_BI_URL}/api/v1/invoices`, os filtros
+  estão em `sync-plano.test.ts` e o formato do payload em `nf-payload.test.ts` — cujo
+  fixture é o payload real, colado inteiro. Como é a mesma API e o mesmo token do sync
+  de clientes, **nenhuma variável nova precisa ser provisionada**: sem
+  `ONEPAY_NF_URL`/`ONEPAY_NF_TOKEN`, ele cai em `ONEPAY_BI_URL` + caminho padrão e em
+  `ONEPAY_BI_TOKEN`. Se o recurso mudar de lugar, o conserto é `ONEPAY_NF_URL` com a URL
+  completa — sem deploy de código.
+  A normalização (`packages/core/src/antecipacao/nf-payload.ts`) é tolerante de
+  propósito: o XML é a segunda fonte de tudo, então uma nota chega mesmo que o JSON não
+  traga `accessKey`, `amount`, `number` ou as datas.
 - **`notas_funil` é `security_invoker`.** Um usuário com `antecipacao` mas sem `radar`
   ou `mercado` vê `fornecedor_tem_protesto` e `fornecedor_uf` como null — as tabelas de
   base são de outros módulos. A **classificação** não é afetada: o worker usa service
@@ -271,5 +271,9 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
 - **O Kanban não tem drag-and-drop.** Mover para "perdida" exige motivo, e um gesto de
   arrastar que abre um diálogo obrigatório é pior que um menu. O menu do card faz o mesmo
   em dois cliques, com o motivo onde ele precisa estar.
+- **A escolha de destinatário tem três degraus**, e o terceiro é novo: `contatos`
+  (curado, ponto focal primeiro) → `supplier.contact` do payload da NF → descarte
+  `sem_contato`. O segundo degrau existe porque descartar tendo um e-mail na mão seria
+  pagar um lote de contatos no Radar para redescobrir o que a API já mandou.
 - **`nota_itens` não é lido por ninguém ainda.** É a base do Pricing, extraída agora
   porque o XML está passando agora.

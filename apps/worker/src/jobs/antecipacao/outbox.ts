@@ -31,8 +31,10 @@ import { lerConfigDisparo } from '../../antecipacao/config.js'
  *   supressão → é um pedido explícito de não ser abordado (ou LGPD);
  *   cooldown  → protege a relação, e conta TOQUE MANUAL do vendedor também, para
  *               que a régua não atropele quem acabou de falar com a pessoa;
- *   contato   → sem canal válido não há mensagem; o descarte com motivo
- *               `sem_contato` é insumo direto para um lote do Radar.
+ *   contato   → sem canal válido não há mensagem. A hierarquia é `contatos`
+ *               (curado, ponto focal primeiro) → o `supplier.contact` que veio no
+ *               payload da NF → desistir. O descarte com motivo `sem_contato` é
+ *               insumo direto para um lote do Radar.
  */
 
 export interface ResultadoOutbox {
@@ -109,7 +111,7 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
       const accessKeys = notas.map((n) => n.access_key)
 
       for (const canal of canaisHabilitados(disparo)) {
-        const contato = await escolherContato(f.fornecedor_empresa_id, canal)
+        const contato = await escolherContato(f.fornecedor_empresa_id, canal, contatoDoPayload(notas))
 
         if (!contato) {
           await registrar({
@@ -195,12 +197,26 @@ async function fornecedoresElegiveis(faixa: Faixa): Promise<FornecedorElegivel[]
 async function notasDoFornecedor(cnpj: string, faixa: Faixa) {
   const { data } = await supabaseAdmin
     .from('notas_funil')
-    .select('access_key, valor, receita_esperada, sacado_nome, sacado_cnpj')
+    .select('access_key, valor, receita_esperada, sacado_nome, sacado_cnpj, contato_fornecedor')
     .eq('fornecedor_cnpj', cnpj)
     .eq('faixa', faixa)
     .in('estagio_funil', [...ESTAGIOS_ABERTOS])
     .limit(200)
   return (data ?? []).filter((n): n is typeof n & { access_key: string } => Boolean(n.access_key))
+}
+
+/**
+ * O `supplier.contact` que veio no payload. Qualquer nota viva do fornecedor
+ * serve — é o mesmo fornecedor — então vale a primeira que tiver um.
+ */
+function contatoDoPayload(
+  notas: readonly { contato_fornecedor: unknown }[],
+): { email?: string | null; phone?: string | null } | null {
+  for (const n of notas) {
+    const c = n.contato_fornecedor as { email?: string | null; phone?: string | null } | null
+    if (c && (c.email || c.phone)) return c
+  }
+  return null
 }
 
 /** O sacado com o maior valor agregado — é dele que a mensagem fala. */
@@ -257,32 +273,48 @@ async function emCooldown(
 async function escolherContato(
   empresaId: string | null,
   canal: Canal,
+  doPayload: { email?: string | null; phone?: string | null } | null,
 ): Promise<ContatoEscolhido | null> {
-  if (!empresaId) return null
+  const hojeIso = new Date().toISOString().slice(0, 10)
+  const { data: suprimidosGlobais } = await supabaseAdmin
+    .from('supressao')
+    .select('valor')
+    .in('escopo', canal === 'email' ? ['email'] : ['whatsapp', 'telefone'])
+    .or(`expira_em.is.null,expira_em.gte.${hojeIso}`)
+  const bloqueadosGlobais = new Set((suprimidosGlobais ?? []).map((s) => s.valor))
+
+  /**
+   * O contato que veio no payload da NF é o ÚLTIMO recurso — `contatos` é curado
+   * e tem ponto focal, então ganha sempre. Mas descartar por `sem_contato` tendo
+   * um e-mail na mão seria pagar um lote no Radar para redescobrir o que a API já
+   * mandou.
+   */
+  const fallback = (): ContatoEscolhido | null => {
+    const bruto = canal === 'email' ? doPayload?.email : doPayload?.phone
+    if (!bruto) return null
+    const normalizado = canal === 'email' ? bruto.trim().toLowerCase() : bruto.replace(/\D/g, '')
+    if (normalizado === '' || bloqueadosGlobais.has(normalizado)) return null
+    return { id: null, valor: normalizado, ponto_focal: false }
+  }
+
+  if (!empresaId) return fallback()
 
   const { data: contatos } = await supabaseAdmin
     .from('contatos')
     .select('id, nome, email, telefone, whatsapp, ponto_focal, senioridade')
     .eq('empresa_id', empresaId)
     .order('ponto_focal', { ascending: false })
-  if (!contatos?.length) return null
-
-  const hoje = new Date().toISOString().slice(0, 10)
-  const { data: suprimidos } = await supabaseAdmin
-    .from('supressao')
-    .select('escopo, valor')
-    .in('escopo', canal === 'email' ? ['email'] : ['whatsapp', 'telefone'])
-    .or(`expira_em.is.null,expira_em.gte.${hoje}`)
-  const bloqueados = new Set((suprimidos ?? []).map((s) => s.valor))
+  if (!contatos?.length) return fallback()
 
   for (const c of contatos) {
     const bruto = canal === 'email' ? c.email : (c.whatsapp ?? c.telefone)
     if (!bruto) continue
     const normalizado = canal === 'email' ? bruto.trim().toLowerCase() : bruto.replace(/\D/g, '')
-    if (normalizado === '' || bloqueados.has(normalizado)) continue
+    if (normalizado === '' || bloqueadosGlobais.has(normalizado)) continue
     return { id: c.id, valor: normalizado, ponto_focal: c.ponto_focal ?? false }
   }
-  return null
+
+  return fallback()
 }
 
 async function registrar(args: {

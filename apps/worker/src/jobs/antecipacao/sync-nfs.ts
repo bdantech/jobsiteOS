@@ -7,9 +7,15 @@ import {
   formatarMoeda,
 } from '../../../../../packages/core/src/antecipacao/economia.js'
 import {
-  parseNfeXml,
-  vencimentoDasParcelas,
-} from '../../../../../packages/core/src/antecipacao/nfe-xml.js'
+  extrairNotas,
+  normalizarNfPayload,
+  totalDePaginas,
+  type CreditAnalysisPayload,
+  type NfPayload,
+  type NotaNormalizada,
+  type ParticipantePayload,
+  type RespostaNf,
+} from '../../../../../packages/core/src/antecipacao/nf-payload.js'
 import type { TablesInsert } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
@@ -44,60 +50,9 @@ import { lerConfigEconomia, lerConfigSync } from '../../antecipacao/config.js'
  */
 
 // ─── O payload ──────────────────────────────────────────────────────────────
-// Todos os campos opcionais de propósito: é uma API de terceiro, e uma nota sem
-// `series` não pode derrubar a página inteira.
-
-interface ContatoPayload {
-  name?: string | null
-  email?: string | null
-  phone?: string | null
-}
-
-interface ParticipantePayload {
-  taxId?: string | null
-  name?: string | null
-  registered?: boolean | null
-  contact?: ContatoPayload | null
-}
-
-interface CreditAnalysisPayload {
-  status?: string | null
-  role?: string | null
-  viaHeadquarters?: boolean | null
-  creditLimit?: number | null
-  availableLimit?: number | null
-  consumedLimit?: number | null
-  expirationDate?: string | null
-  monthlyRateD0?: number | null
-  monthlyRateD1?: number | null
-}
-
-interface NfPayload {
-  id?: string | null
-  accessKey?: string | null
-  type?: string | null
-  direction?: string | null
-  number?: string | number | null
-  series?: string | number | null
-  value?: number | string | null
-  issuedAt?: string | null
-  dueDate?: string | null
-  status?: string | null
-  recipient?: ParticipantePayload | null
-  supplier?: ParticipantePayload | null
-  creditAnalysis?: CreditAnalysisPayload | null
-  xml?: string | null
-}
-
-interface RespostaNf {
-  data?: NfPayload[]
-  items?: NfPayload[]
-  page?: number
-  page_size?: number
-  total_pages?: number
-  totalPages?: number
-  total?: number
-}
+// As interfaces e a normalização vivem em packages/core/src/antecipacao/
+// nf-payload.ts, junto do teste que usa o payload REAL como fixture. É o mesmo
+// motivo do plano de sincronização: contrato de terceiro precisa de teste.
 
 export interface ResultadoSyncNfs {
   modo: string
@@ -163,13 +118,6 @@ function urlBase(): string {
   return /\/api\//.test(bruta) ? bruta : `${bruta}${CAMINHO_NF_PADRAO}`
 }
 
-function extrair(resp: RespostaNf): NfPayload[] {
-  if (Array.isArray(resp.data)) return resp.data
-  if (Array.isArray(resp.items)) return resp.items
-  if (Array.isArray(resp)) return resp as NfPayload[]
-  return []
-}
-
 function numeroOuNulo(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
@@ -180,6 +128,12 @@ function textoOuNulo(v: unknown): string | null {
   if (v === null || v === undefined) return null
   const s = String(v).trim()
   return s === '' ? null : s
+}
+
+/** 14 dígitos ou null: a coluna tem check e um valor torto derrubaria o insert. */
+function cnpjOuNulo(v: unknown): string | null {
+  const c = normalizeCnpj(String(v ?? ''))
+  return c.length === 14 ? c : null
 }
 
 function dataOuNulo(v: unknown): string | null {
@@ -240,7 +194,7 @@ export async function sincronizarNotasFiscais(
         timeoutMs: 120_000,
       })
 
-      const itens = extrair(resp)
+      const itens = extrairNotas(resp)
       acc.paginas++
 
       for (const item of itens) {
@@ -256,7 +210,7 @@ export async function sincronizarNotasFiscais(
         if (r.falhaParse) acc.falhas_parse++
       }
 
-      const totalPaginas = resp.total_pages ?? resp.totalPages
+      const totalPaginas = totalDePaginas(resp)
       const acabou =
         itens.length === 0 ||
         itens.length < cfgSync.page_size ||
@@ -294,53 +248,24 @@ const NADA: ResultadoNota = {
 }
 
 async function processarNota(item: NfPayload, taxaPadrao: number): Promise<ResultadoNota> {
-  const parsed = parseNfeXml(item.xml)
-
-  // A accessKey do payload manda; o XML é o fallback. Sem nenhuma das duas não há
-  // chave natural, e sem chave natural não há idempotência — a nota é ignorada em
-  // vez de duplicar a cada sync.
-  const accessKey = textoOuNulo(item.accessKey) ?? parsed.access_key
-  if (!accessKey) {
-    logger.warn({ id: item.id }, 'NF sem accessKey — ignorada.')
+  // Toda a leitura do payload (e do XML) acontece no core, testada contra o
+  // payload real. Aqui só sobra o que precisa do banco.
+  const r = normalizarNfPayload(item)
+  if (!r.ok) {
+    logger.warn({ id: r.id, motivo: r.motivo }, 'NF descartada no sync.')
     return NADA
   }
+  const nota: NotaNormalizada = r.nota
+  const { access_key: accessKey, fornecedor_cnpj: fornecedorCnpj, sacado_cnpj: sacadoCnpj } = nota
 
-  const fornecedorCnpj = normalizeCnpj(item.supplier?.taxId ?? parsed.emitente_cnpj ?? '')
-  const sacadoCnpj = normalizeCnpj(item.recipient?.taxId ?? parsed.destinatario_cnpj ?? '')
-  if (fornecedorCnpj.length !== 14 || sacadoCnpj.length !== 14) {
-    logger.warn({ accessKey }, 'NF sem CNPJ válido de fornecedor/sacado — ignorada.')
-    return NADA
-  }
+  const dias = diasParaVencimento(nota.vencimento)
 
-  const valor = numeroOuNulo(item.value) ?? parsed.valor_total
-  if (valor === null) {
-    logger.warn({ accessKey }, 'NF sem valor — ignorada.')
-    return NADA
-  }
-
-  // ── Vencimento: XML → endpoint → estimado. A origem é sempre gravada, porque
-  // uma data de emissão+30 não pode se passar por uma data real de duplicata.
-  const doXml = vencimentoDasParcelas(parsed.parcelas)
-  const doEndpoint = dataOuNulo(item.dueDate)
-  const emitidaEm = textoOuNulo(item.issuedAt) ?? parsed.emitida_em
-  let vencimento = doXml ?? doEndpoint
-  let vencimentoOrigem: 'xml' | 'endpoint' | 'estimado' | null = doXml ? 'xml' : doEndpoint ? 'endpoint' : null
-  if (!vencimento && emitidaEm) {
-    const base = new Date(emitidaEm)
-    if (!Number.isNaN(base.getTime())) {
-      vencimento = new Date(base.getTime() + 30 * 86_400_000).toISOString().slice(0, 10)
-      vencimentoOrigem = 'estimado'
-    }
-  }
-
-  const dias = diasParaVencimento(vencimento)
-
-  // ── Crédito do sacado. `monthlyRateD0` é a taxa que precifica a nota.
-  const credito = item.creditAnalysis ?? null
+  // `monthlyRateD0` é a taxa que precifica a nota; sem ela, o último snapshot do
+  // sacado; sem nenhum, o default da config.
   const { receita, taxa } = calcularReceitaEsperada({
-    valor,
+    valor: nota.valor,
     diasParaVencimento: dias,
-    taxaMensal: credito?.monthlyRateD0 ?? (await taxaDoUltimoSnapshot(sacadoCnpj)),
+    taxaMensal: nota.credito?.monthlyRateD0 ?? (await taxaDoUltimoSnapshot(sacadoCnpj)),
     taxaPadrao,
   })
 
@@ -353,36 +278,37 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
 
   const linha: TablesInsert<'notas_fiscais'> = {
     access_key: accessKey,
-    nf_id_externo: textoOuNulo(item.id),
-    tipo: (textoOuNulo(item.type) ?? 'NFe').toUpperCase() === 'NFSE' ? 'NFSe' : 'NFe',
-    direction: textoOuNulo(item.direction) === 'issued' ? 'issued' : 'received',
-    numero: textoOuNulo(item.number) ?? parsed.numero,
-    serie: textoOuNulo(item.series) ?? parsed.serie,
-    valor,
-    emitida_em: emitidaEm,
-    vencimento,
-    vencimento_origem: vencimentoOrigem,
-    parcelas: parsed.parcelas.length > 0 ? (parsed.parcelas as never) : null,
-    status_sync: textoOuNulo(item.status),
+    nf_id_externo: nota.nf_id_externo,
+    tipo: nota.tipo,
+    direction: nota.direction,
+    numero: nota.numero,
+    serie: nota.serie,
+    valor: nota.valor,
+    emitida_em: nota.emitida_em,
+    vencimento: nota.vencimento,
+    vencimento_origem: nota.vencimento_origem,
+    parcelas: nota.parcelas.length > 0 ? (nota.parcelas as never) : null,
+    status_sync: nota.status_sync,
     sacado_cnpj: sacadoCnpj,
-    sacado_nome: textoOuNulo(item.recipient?.name),
-    sacado_cadastrado: item.recipient?.registered ?? null,
+    sacado_nome: nota.sacado_nome,
+    sacado_cadastrado: nota.sacado_cadastrado,
     sacado_empresa_id: sacado.empresaId,
+    contato_sacado: nota.contato_sacado as never,
     fornecedor_cnpj: fornecedorCnpj,
-    fornecedor_nome: textoOuNulo(item.supplier?.name),
-    fornecedor_cadastrado: item.supplier?.registered ?? null,
+    fornecedor_nome: nota.fornecedor_nome,
+    fornecedor_cadastrado: nota.fornecedor_cadastrado,
     fornecedor_empresa_id: fornecedor.empresaId,
-    contato_sacado: (item.recipient?.contact ?? null) as never,
+    contato_fornecedor: nota.contato_fornecedor as never,
     receita_esperada: receita,
     taxa_usada: taxa,
     dias_para_vencimento: dias,
-    credit_status: textoOuNulo(credito?.status),
-    credit_role: textoOuNulo(credito?.role),
-    credit_limite: numeroOuNulo(credito?.creditLimit),
-    credit_disponivel: numeroOuNulo(credito?.availableLimit),
-    raw_xml: item.xml ?? null,
-    xml_parse_erro: parsed.erro,
-    sincronizada_em: new Date().toISOString(),
+    credit_status: nota.credito?.status ?? null,
+    credit_role: nota.credito?.role ?? null,
+    credit_limite: nota.credito?.creditLimit ?? null,
+    credit_disponivel: nota.credito?.availableLimit ?? null,
+    raw_xml: nota.raw_xml,
+    xml_parse_erro: nota.xml_parse_erro,
+    sincronizada_em: nota.sincronizada_em,
   }
 
   const { error } = await supabaseAdmin.from('notas_fiscais').upsert(linha, { onConflict: 'access_key' })
@@ -399,20 +325,20 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     await emitirEvento(fornecedor.empresaId, EVENTO_TIPOS.NF_SINCRONIZADA, {
       titulo: 'Nova nota fiscal',
       resumo:
-        `${linha.fornecedor_nome ?? fornecedorCnpj} → ${linha.sacado_nome ?? sacadoCnpj}: ` +
-        `${formatarMoeda(valor)}${dias !== null ? `, vence em ${dias} dias` : ''}.`,
+        `${nota.fornecedor_nome ?? fornecedorCnpj} → ${nota.sacado_nome ?? sacadoCnpj}: ` +
+        `${formatarMoeda(nota.valor)}${dias !== null ? `, vence em ${dias} dias` : ''}.`,
       url: `/antecipacao?nota=${accessKey}`,
       access_key: accessKey,
-      valor,
+      valor: nota.valor,
     })
     eventos++
   }
 
-  const itens = await gravarItens(accessKey, parsed.itens, jaExistia)
-  const snapshot = await gravarSnapshotCredito(sacadoCnpj, credito, sacado.empresaId)
+  const itens = await gravarItens(accessKey, nota.itens, jaExistia)
+  const snapshot = await gravarSnapshotCredito(sacadoCnpj, nota.credito, sacado.empresaId)
   if (snapshot.evento) eventos++
 
-  await atualizarTipagem(fornecedor.empresaId, fornecedorCnpj, item.supplier?.registered ?? false)
+  await atualizarTipagem(fornecedor.empresaId, fornecedorCnpj, nota.fornecedor_cadastrado ?? false)
 
   const enfileirados =
     (await enfileirarLookup(fornecedorCnpj, 'fornecedor_nf', fornecedor.conhecido)) +
@@ -426,7 +352,7 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     snapshot: snapshot.gravado,
     enfileirados,
     eventos,
-    falhaParse: parsed.erro !== null,
+    falhaParse: nota.xml_parse_erro !== null,
   }
 }
 
@@ -459,7 +385,7 @@ async function taxaDoUltimoSnapshot(cnpj: string): Promise<number | null> {
  */
 async function gravarItens(
   accessKey: string,
-  itens: ReturnType<typeof parseNfeXml>['itens'],
+  itens: NotaNormalizada['itens'],
   jaExistia: boolean,
 ): Promise<number> {
   if (itens.length === 0) return 0
@@ -525,6 +451,10 @@ async function gravarSnapshotCredito(
     expiration_date: dataOuNulo(credito.expirationDate),
     monthly_rate_d0: numeroOuNulo(credito.monthlyRateD0),
     monthly_rate_d1: numeroOuNulo(credito.monthlyRateD1),
+    // Quando `via_headquarters`, a análise é da MATRIZ. O snapshot continua
+    // indexado pelo sacado (é a nota dele), e esta coluna é o referente que
+    // torna a flag legível.
+    analisado_cnpj: cnpjOuNulo(credito.analyzedTaxId),
     origem: 'sync_nf',
   })
   if (error) {
