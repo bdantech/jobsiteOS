@@ -132,7 +132,7 @@ nunca mais ser consultado.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0051`.
+- **Banco**: migrations `0045`–`0053`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
