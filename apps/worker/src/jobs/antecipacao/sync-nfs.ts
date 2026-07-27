@@ -139,10 +139,11 @@ function autorizacao(): Record<string, string> {
 }
 
 /**
- * O caminho do recurso de NFs. Chute informado: o Prompt só diz
- * `GET {ONEPAY_BI_URL}/api/v1/...`. Se o recurso real tiver outro nome, a
- * correção é UMA variável de ambiente (`ONEPAY_NF_URL` com a URL completa), não
- * um deploy de código.
+ * O caminho do recurso de NFs, CONFIRMADO contra a API
+ * (`{ONEPAY_BI_URL}/api/v1/invoices`) — o Prompt só dizia `/api/v1/...`.
+ *
+ * Continua sendo um default e não uma constante fixa: se o recurso mudar de
+ * caminho ou de host, a correção é `ONEPAY_NF_URL` com a URL completa, sem deploy.
  */
 const CAMINHO_NF_PADRAO = '/api/v1/invoices'
 

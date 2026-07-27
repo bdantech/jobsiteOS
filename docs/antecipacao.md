@@ -253,14 +253,14 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
 
 ## Limitações conhecidas
 
-- **O sync nunca rodou contra o endpoint real, e o CAMINHO é um chute.** O contrato dos
-  FILTROS é conhecido e está travado por teste; o nome do recurso, não — o job assume
-  `/api/v1/invoices`. Como é a mesma
+- **O sync nunca rodou contra o endpoint real**, mas o contrato é conhecido: o recurso é
+  `{ONEPAY_BI_URL}/api/v1/invoices` (confirmado) e os filtros estão travados por teste.
+  O que resta desconhecido é o FORMATO do payload. Como é a mesma
   API e o mesmo token do sync de clientes, **nenhuma variável nova precisa ser
   provisionada**: sem `ONEPAY_NF_URL`/`ONEPAY_NF_TOKEN`, ele cai em `ONEPAY_BI_URL` +
   caminho padrão e em `ONEPAY_BI_TOKEN`. Se o recurso tiver outro nome, o conserto é
   definir `ONEPAY_NF_URL` com a URL completa — uma variável, sem deploy de código.
-  O parser do payload também é tolerante de propósito: aceita `data`/`items`, campos
+  O parser do payload é tolerante de propósito: aceita `data`/`items`, campos
   ausentes e a `accessKey` vindo do XML quando o JSON não a traz. Se o *formato* for
   diferente, o ponto de ajuste é a interface `NfPayload` em
   `jobs/antecipacao/sync-nfs.ts` — nada mais depende do formato bruto.
