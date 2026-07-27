@@ -188,3 +188,47 @@
       'calt' 1;
   }
 }
+
+/*
+ * Impressão: só o documento fiscal vai para a folha.
+ *
+ * O modal da NF vive num portal do Radix, IRMÃO do shell — então um
+ * `window.print()` sem isto imprimiria a sidebar, o Kanban e o overlay escuro
+ * atrás do documento. A regra esconde a raiz da aplicação e promove o conteúdo do
+ * diálogo a fluxo normal da página, tirando o `position: fixed`, o `transform` de
+ * centralização e o `max-height` — os três, juntos, cortariam o documento na
+ * primeira página.
+ *
+ * Depende de `[role="dialog"]`, que é o que o DialogContent do shadcn emite. Se um
+ * dia o diálogo mudar de primitivo, isto para de isolar e volta a imprimir a
+ * página toda — barulhento o suficiente para ser notado na primeira impressão.
+ */
+@media print {
+  body:has([role='dialog']) > *:not([data-radix-popper-content-wrapper]) {
+    display: none !important;
+  }
+
+  [role='dialog'] {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  /* O corpo rolável do modal não pode manter o próprio scroll na folha. */
+  [role='dialog'] * {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Fecha-lo é um gesto de tela; na folha é um quadrado sem sentido. */
+  [role='dialog'] button {
+    display: none !important;
+  }
+}

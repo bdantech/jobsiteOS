@@ -202,6 +202,25 @@ export async function fetchSacadosAProspectar(): Promise<SacadoProspectar[]> {
   return (data ?? []) as SacadoProspectar[]
 }
 
+/**
+ * O XML de UMA nota, sob demanda.
+ *
+ * Fora de `COLUNAS_CARD` de propósito: são dezenas a centenas de KB por nota, e o
+ * funil pinta 30 cards de uma vez — numa rede de obra isso é a diferença entre a
+ * lista abrir e a lista travar.
+ */
+export async function fetchXmlDaNota(
+  accessKey: string,
+): Promise<{ raw_xml: string | null; xml_parse_erro: string | null }> {
+  const { data, error } = await supabase
+    .from('notas_fiscais')
+    .select('raw_xml, xml_parse_erro')
+    .eq('access_key', accessKey)
+    .maybeSingle()
+  if (error) throw error
+  return { raw_xml: data?.raw_xml ?? null, xml_parse_erro: data?.xml_parse_erro ?? null }
+}
+
 /** O mínimo operável, que define os cortes de urgência do card. */
 export async function fetchMinimoOperavel(): Promise<number> {
   const { data } = await supabase

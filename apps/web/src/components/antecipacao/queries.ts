@@ -30,6 +30,7 @@ export const antecipacaoKeys = {
   contas: () => [...antecipacaoKeys.all, 'contas'] as const,
   outbox: (filtros: FiltrosOutbox) => [...antecipacaoKeys.all, 'outbox', filtros] as const,
   config: () => [...antecipacaoKeys.all, 'config'] as const,
+  xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
   filaLookup: () => [...antecipacaoKeys.all, 'fila-lookup'] as const,
 }
 
@@ -88,6 +89,26 @@ export async function buscarFunil(
   const { data, error, count } = await query
   if (error) throw error
   return { notas: (data ?? []) as NotaFunil[], total: count ?? 0 }
+}
+
+/**
+ * O XML de UMA nota, sob demanda.
+ *
+ * Deliberadamente fora de `COLUNAS_CARD`: um XML de NFe tem dezenas a centenas de
+ * KB, e trazê-lo junto dos 40 cards de uma coluna do Kanban seria baixar megabytes
+ * para pintar cabeçalhos que nem o mostram. Só quando o modal abre.
+ */
+export async function buscarXmlDaNota(
+  accessKey: string,
+): Promise<{ raw_xml: string | null; xml_parse_erro: string | null }> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('notas_fiscais')
+    .select('raw_xml, xml_parse_erro')
+    .eq('access_key', accessKey)
+    .maybeSingle()
+  if (error) throw error
+  return { raw_xml: data?.raw_xml ?? null, xml_parse_erro: data?.xml_parse_erro ?? null }
 }
 
 export interface CelulaResumo {

@@ -46,6 +46,7 @@ export const antecipacaoKeys = {
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
   prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
   minimo: () => [...antecipacaoKeys.all, 'minimo-operavel'] as const,
+  xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
 }
 
 // ─── Leituras ───────────────────────────────────────────────────────────────

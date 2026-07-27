@@ -130,6 +130,49 @@ Só marca `nao_encontrado` quando alguma fonte respondeu dizendo que não conhec
 quando as tentativas acabaram (default 10). Um dia de rede ruim não condena um CNPJ a
 nunca mais ser consultado.
 
+## O leitor de NF
+
+Clicar num card abre a nota **como documento** — layout de DANFE no desktop, blocos
+empilhados no celular. Dois formatos:
+
+| Formato | Suporte |
+| --- | --- |
+| **NFe** (modelo 55) | completo: identificação, protocolo, emitente/destinatário com endereço e IE, itens com imposto, totais, transporte, fatura e duplicatas |
+| **NFS-e nacional** (`infNFSe`/`DPS`) | completo: prestador, tomador, serviço, valores e ISS |
+| **NFS-e municipal antiga** (ABRASF, `Rps`) | **não suportada** — cada prefeitura tem o seu layout e não há esquema único. O leitor diz isso em vez de desenhar errado |
+
+A detecção é por marcador, e a **ordem importa**: `InfNfse` (municipal) e `infNFSe`
+(nacional) são a mesma string sob comparação case-insensitive, então os marcadores
+municipais são checados primeiro. O discriminador confiável é o RPS — o padrão nacional
+o substituiu pelo DPS. Um teste trava isso.
+
+O leitor (`packages/core/src/antecipacao/documento-fiscal.ts`) é compartilhado pelas
+duas plataformas; o que muda é o desenho. **Nada nele lança**: um XML corrompido vira um
+aviso legível, porque a alternativa é uma tela branca no meio de uma ligação.
+
+**O XML é carregado sob demanda**, quando o modal abre — nunca na consulta da lista. Um
+XML de NFe tem dezenas a centenas de KB e o Kanban pinta 40 cards por coluna.
+
+O modal tem aba **XML** (bruto, copiável e baixável) porque quando um campo não aparece
+no documento desenhado, a pergunta seguinte é sempre "mas está no XML?".
+
+Não é o DANFE oficial e não finge ser: sem código de barras, sem canhoto, sem tarja de
+documento auxiliar. O rodapé diz que é representação para conferência interna.
+
+## O card
+
+**Web** — enxuto: fornecedor, número e tipo da nota, valor, sacado e crédito. Receita
+esperada e vencimento saem do corpo e vivem no **tooltip**, junto do nome completo do
+fornecedor (quase sempre truncado). Uma coluna tem 40 cards; cada linha a menos é uma
+linha a mais de contexto sem rolar.
+
+**Mobile** — ganha número e tipo, mas **mantém o prazo com cor de urgência**. Não há
+hover para compensar, e o §9 pede o sinal: é o que faz o card ser lido em um segundo, na
+rua. Enxugar os dois igualmente deixaria o card do celular bonito e mudo.
+
+Em ambos, **clicar/tocar abre a nota**. O caminho para o fornecedor não se perdeu: no
+web o nome é link e o "+N notas" é link; no mobile o "Ver fornecedor" é explícito.
+
 ## Onde está o quê
 
 - **Banco**: migrations `0045`–`0053`.
@@ -276,4 +319,9 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
   `sem_contato`. O segundo degrau existe porque descartar tendo um e-mail na mão seria
   pagar um lote de contatos no Radar para redescobrir o que a API já mandou.
 - **`nota_itens` não é lido por ninguém ainda.** É a base do Pricing, extraída agora
-  porque o XML está passando agora.
+  porque o XML está passando agora. O leitor de NF desenha os itens direto do
+  `raw_xml`, não desta tabela — são consumidores diferentes do mesmo dado.
+- **A impressão do modal depende de `[role="dialog"]`.** A regra em `globals.css` esconde
+  o shell e promove o diálogo a fluxo normal da folha. Se o diálogo mudar de primitivo, a
+  impressão volta a sair com a sidebar — barulhento o bastante para ser notado na
+  primeira vez.

@@ -31,6 +31,7 @@ import {
 } from '../format'
 import type { FornecedorFunil, NotaFunil } from '../types'
 import { MoverEstagioSheet } from './mover-estagio-sheet'
+import { NotaDocumentoSheet } from './nota-documento-sheet'
 import { SemInteresseSheet } from './sem-interesse-sheet'
 
 /**
@@ -102,6 +103,7 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const swipeRef = useRef<Swipeable>(null)
   const [moverAberto, setMoverAberto] = useState(false)
   const [semInteresseAberto, setSemInteresseAberto] = useState(false)
+  const [documentoAberto, setDocumentoAberto] = useState(false)
 
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
@@ -112,6 +114,8 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const abrirFornecedor = useCallback(() => {
     if (nota.fornecedor_cnpj) router.push(`/antecipacao/fornecedores/${nota.fornecedor_cnpj}`)
   }, [router, nota.fornecedor_cnpj])
+
+  const abrirDocumento = useCallback(() => setDocumentoAberto(true), [])
 
   // O próximo estágio "natural" — o que o swipe para a direita sugere primeiro.
   const indiceAtual = ESTAGIOS_ABERTOS.indexOf(nota.estagio_funil as (typeof ESTAGIOS_ABERTOS)[number])
@@ -151,9 +155,9 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
         }}
       >
         <Pressable
-          onPress={abrirFornecedor}
+          onPress={abrirDocumento}
           accessibilityRole="button"
-          accessibilityLabel={`Abrir ${nota.fornecedor_nome ?? 'fornecedor'}`}
+          accessibilityLabel={`Abrir a nota ${nota.numero ?? ''} de ${nota.fornecedor_nome ?? 'fornecedor'}`}
           className={cn(
             'gap-2 rounded-xl border border-border bg-card p-3 active:opacity-70',
             nota.fornecedor_suprimido && 'opacity-60',
@@ -164,6 +168,17 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
             <Text numberOfLines={1} className="font-medium">
               {nota.fornecedor_nome ?? nota.fornecedor_cnpj}
             </Text>
+            {/* Identificação da nota: é o que a pessoa confere contra o papel na
+                mão do fornecedor. */}
+            <View className="flex-row items-center gap-1.5">
+              <View className="rounded border border-border px-1.5 py-0.5">
+                <Text className="text-[10px] font-medium">{nota.tipo_nf ?? 'NFe'}</Text>
+              </View>
+              <Text variant="muted" className="text-xs tabular-nums">
+                nº {nota.numero ?? '—'}
+                {nota.serie ? `/${nota.serie}` : ''}
+              </Text>
+            </View>
             <View className="flex-row flex-wrap items-center gap-1.5">
               {nota.faixa ? (
                 <Chip
@@ -210,14 +225,21 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
             </View>
           </View>
 
-          {outras > 0 ? (
-            <View className="flex-row items-center gap-1">
-              <Files size={12} color={colors.mutedForeground} />
-              <Text variant="muted" className="text-[11px]">
-                +{outras} nota{outras > 1 ? 's' : ''} viva{outras > 1 ? 's' : ''} deste fornecedor
-              </Text>
-            </View>
-          ) : null}
+          {/* O toque no card abre a NOTA, então o caminho para o fornecedor
+              precisa ser explícito — e é aqui, onde o agregado já está. */}
+          <Pressable
+            onPress={abrirFornecedor}
+            accessibilityRole="button"
+            accessibilityLabel={`Ver todas as notas de ${nota.fornecedor_nome ?? 'fornecedor'}`}
+            className="flex-row items-center gap-1 self-start active:opacity-60"
+          >
+            <Files size={12} color={colors.mutedForeground} />
+            <Text variant="muted" className="text-[11px] underline">
+              {outras > 0
+                ? `+${outras} nota${outras > 1 ? 's' : ''} viva${outras > 1 ? 's' : ''} — ver fornecedor`
+                : 'Ver fornecedor'}
+            </Text>
+          </Pressable>
 
           {/* Prazo + sacado */}
           <View className="flex-row items-center justify-between gap-2 border-t border-border pt-2">
@@ -249,6 +271,16 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
         open={moverAberto}
         onOpenChange={setMoverAberto}
       />
+      {nota.access_key ? (
+        <NotaDocumentoSheet
+          accessKey={nota.access_key}
+          titulo={`Nota ${nota.numero ?? nota.access_key}${nota.serie ? `/${nota.serie}` : ''}`}
+          subtitulo={`${nota.fornecedor_nome ?? nota.fornecedor_cnpj} → ${nota.sacado_nome ?? nota.sacado_cnpj}`}
+          open={documentoAberto}
+          onOpenChange={setDocumentoAberto}
+        />
+      ) : null}
+
       {nota.fornecedor_cnpj ? (
         <SemInteresseSheet
           cnpj={nota.fornecedor_cnpj}
