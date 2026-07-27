@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Lock } from 'lucide-react'
+import { Building2, ChartPie, Lock, Wallet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesOnepay } from '@/components/radar/clientes-onepay'
@@ -57,16 +57,17 @@ export function EmpresasTabs({ temRadar, abaInicial }: { temRadar: boolean; abaI
       <TabsList className="mb-2 flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b border-border bg-transparent p-0 pb-px">
         {(
           [
-            ['todas', 'Empresas'],
-            ['clientes', 'Clientes Onepay'],
-            ['analise', 'Análise'],
+            ['todas', 'Empresas', Building2],
+            ['clientes', 'Clientes Onepay', Wallet],
+            ['analise', 'Análise', ChartPie],
           ] as const
-        ).map(([valor, rotulo]) => (
+        ).map(([valor, rotulo, Icone]) => (
           <TabsTrigger
             key={valor}
             value={valor}
-            className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 font-medium shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            className="shrink-0 gap-2 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 font-medium shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
           >
+            <Icone className="size-4" aria-hidden />
             {rotulo}
           </TabsTrigger>
         ))}
