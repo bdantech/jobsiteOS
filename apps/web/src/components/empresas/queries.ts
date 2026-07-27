@@ -70,6 +70,7 @@ export const empresasKeys = {
   notas: (id: string) => ['empresas', 'notas', id] as const,
   eventos: (id: string) => ['empresas', 'eventos', id] as const,
   analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
+  grupoProtestos: (id: string) => ['empresas', 'analise-financeira', id, 'grupo-protestos'] as const,
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
@@ -190,6 +191,33 @@ export async function buscarPreviaProtestos(
   if (error) throw new Error(error.message)
   const r = (data ?? {}) as Partial<PreviaProtestos>
   return { tem_acesso: r.tem_acesso ?? false, qtd: r.qtd ?? 0, custo_estimado: r.custo_estimado ?? 0 }
+}
+
+/** Snapshot de protesto de uma empresa do grupo (com cartorios) para o diálogo do grupo. */
+export interface GrupoEmpresaProtesto {
+  cnpj: string
+  empresa_id: string | null
+  nome: string
+  valor_total: number | null
+  qtd_protestos: number | null
+  consultado_em: string
+  fonte: string
+  cartorios: Json | null
+}
+
+export interface GrupoProtestos {
+  tem_acesso: boolean
+  empresas: GrupoEmpresaProtesto[]
+}
+
+export async function buscarGrupoProtestos(empresaId: string): Promise<GrupoProtestos> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('empresa_grupo_protestos' as never, {
+    p_empresa_id: empresaId,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<GrupoProtestos>
+  return { tem_acesso: r.tem_acesso ?? false, empresas: r.empresas ?? [] }
 }
 
 export async function buscarAnaliseFinanceira(empresaId: string): Promise<AnaliseFinanceira> {
