@@ -170,10 +170,12 @@ export async function protestosEmpresa(opts: {
 }
 
 /**
- * Rotina mensal de clientes (§5): para cada cliente Onepay, consulta protestos
- * NACIONAL da matriz + SPEs ativas do grupo. Registra tudo como um lote automático
- * (criado_por null, já aprovado — é política, não pedido ad hoc). O teto de orçamento
- * é respeitado pelo próprio harness (interrompe ao estourar).
+ * Rotina mensal (§5): consulta protestos NACIONAL dos clientes Onepay (matriz) + das
+ * SPEs marcadas para monitoramento (protesto_monitoramento — as "afiançadas", curadas
+ * na aba Grupo econômico). Antes pegava TODAS as SPEs ativas do grupo de cada cliente;
+ * agora as SPEs são opt-in, para não gastar consulta paga em obra que não interessa.
+ * Lote automático já aprovado (é política, não pedido ad hoc); o teto de orçamento é
+ * respeitado pelo harness (interrompe ao estourar).
  */
 export async function protestosClientesMensal(): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
   if (!env.DIRECTD_API_KEY) throw new Error('DIRECTD_API_KEY não configurada.')
@@ -182,7 +184,7 @@ export async function protestosClientesMensal(): Promise<{ lote_id: string; iten
     .from('lotes_enriquecimento')
     .insert({
       tipo: 'protestos',
-      nome: 'Protestos — clientes (mensal)',
+      nome: 'Protestos — clientes + monitoradas (mensal)',
       definicao_filtro: {} as never,
       parametros: { cliente: true, motivo: 'rotina_mensal' } as never,
       status: 'aprovado',
@@ -192,26 +194,19 @@ export async function protestosClientesMensal(): Promise<{ lote_id: string; iten
     .single()
   if (error || !lote) throw new Error(`Falha ao abrir lote mensal: ${error?.message}`)
 
-  // Monta o conjunto de CNPJs: cada cliente + SPEs ATIVAS do grupo dele.
-  const { data: clientes } = await supabaseAdmin.from('clientes_onepay').select('cnpj, empresa_id')
+  // Conjunto de CNPJs: cada cliente Onepay (matriz, sempre) + SPEs marcadas (opt-in).
   const porCnpj = new Map<string, { cnpj: string; empresa_id: string | null }>()
 
-  for (const c of clientes ?? []) {
-    porCnpj.set(c.cnpj, { cnpj: c.cnpj, empresa_id: c.empresa_id })
-    const { data: mu } = await supabaseAdmin
-      .from('mercado_universo')
-      .select('grupo_id')
-      .eq('cnpj', c.cnpj)
-      .maybeSingle()
-    if (!mu?.grupo_id) continue
-    const { data: spes } = await supabaseAdmin
-      .from('mercado_universo')
-      .select('cnpj, empresa_id')
-      .eq('grupo_id', mu.grupo_id)
-      .eq('is_spe', true)
-      .eq('situacao_cadastral', 'ativa')
-    for (const s of spes ?? []) if (!porCnpj.has(s.cnpj)) porCnpj.set(s.cnpj, { cnpj: s.cnpj, empresa_id: s.empresa_id })
-  }
+  const { data: clientes } = await supabaseAdmin.from('clientes_onepay').select('cnpj, empresa_id')
+  for (const c of clientes ?? []) porCnpj.set(c.cnpj, { cnpj: c.cnpj, empresa_id: c.empresa_id })
+
+  // protesto_monitoramento é nova (0043) e ainda não está nos tipos gerados; cast
+  // localizado (mesmo padrão de radar_cobertura) para não regenerar o database.ts.
+  const { data: monitoradas } = await supabaseAdmin
+    .from('protesto_monitoramento' as never)
+    .select('cnpj, empresa_id')
+  for (const m of (monitoradas ?? []) as unknown as { cnpj: string; empresa_id: string | null }[])
+    if (!porCnpj.has(m.cnpj)) porCnpj.set(m.cnpj, { cnpj: m.cnpj, empresa_id: m.empresa_id })
 
   const itens = [...porCnpj.values()].map((v) => ({ lote_id: lote.id, cnpj: v.cnpj, empresa_id: v.empresa_id }))
   if (itens.length > 0) {

@@ -24,6 +24,7 @@ import { GrupoSecao } from '@/components/mercado/grupos/grupo-secao'
 import { EstagioBadge, labelTipo } from './estagio-badge'
 import { formatData } from './format'
 import { AnaliseFinanceira } from './analise-financeira'
+import { MonitoramentoProtesto } from './monitoramento-protesto'
 import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaNotas } from './empresa-notas'
@@ -222,10 +223,13 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                 <EmpresaTimeline empresaId={data.id} />
               </TabsContent>
 
-              {/* Módulo Mercado (§5.4). */}
+              {/* Módulo Mercado (§5.4) + curadoria de monitoramento de protesto (Radar). */}
               {data.grupo_id ? (
                 <TabsContent value="grupo" className="mt-0">
-                  <GrupoSecao grupoId={data.grupo_id} />
+                  <div className="space-y-4">
+                    <GrupoSecao grupoId={data.grupo_id} />
+                    <MonitoramentoProtesto grupoId={data.grupo_id} />
+                  </div>
                 </TabsContent>
               ) : null}
             </>

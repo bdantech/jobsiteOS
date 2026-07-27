@@ -124,6 +124,23 @@ export async function rodarProtestosEmpresaAction(input: {
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 
+/** Marca/desmarca uma SPE (afiançada) no monitoramento mensal de protesto. */
+export async function monitorarProtestoAction(cnpj: string): Promise<ActionResult<null>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  const { error } = await supabase.rpc('app_monitorar_protesto' as never, { p_cnpj: cnpj } as never)
+  if (error) return { ok: false, message: error.message, code: 'unknown' }
+  return { ok: true, data: null }
+}
+
+export async function desmonitorarProtestoAction(cnpj: string): Promise<ActionResult<null>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  const { error } = await supabase.rpc('app_desmonitorar_protesto' as never, { p_cnpj: cnpj } as never)
+  if (error) return { ok: false, message: error.message, code: 'unknown' }
+  return { ok: true, data: null }
+}
+
 export async function cancelarLoteAction(id: string): Promise<ActionResult<Tables<'lotes_enriquecimento'>>> {
   const { erro, supabase } = await autorizar()
   if (erro) return erro

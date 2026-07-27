@@ -20,6 +20,30 @@ export const radarKeys = {
   clientes: () => ['radar', 'clientes'] as const,
   supressao: () => ['radar', 'supressao'] as const,
   config: () => ['radar', 'config'] as const,
+  spesMonitoramento: (grupoId: string) => ['radar', 'monitoramento', grupoId] as const,
+}
+
+/** Uma SPE do grupo e se está no monitoramento periódico de protesto (afiançada). */
+export interface SpeMonitoramento {
+  cnpj: string
+  razao_social: string | null
+  situacao_cadastral: string | null
+  data_inicio_atividade: string | null
+  capital_social: number | null
+  empresa_id: string | null
+  monitorada: boolean
+}
+
+export async function buscarSpesMonitoramento(
+  grupoId: string,
+): Promise<{ tem_acesso: boolean; spes: SpeMonitoramento[] }> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_grupo_spes_monitoramento' as never, {
+    p_grupo_id: grupoId,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as { tem_acesso?: boolean; spes?: SpeMonitoramento[] }
+  return { tem_acesso: r.tem_acesso ?? false, spes: r.spes ?? [] }
 }
 
 export interface CoberturaCamada {
