@@ -178,11 +178,33 @@ pirâmide passou a usar a versão compartilhada com o engine do Mercado amarrado
 
 - **Agenda**: 06:30, 10:30, 14:30, 18:30, 22:30, 02:30 America/São_Paulo →
   `30 9,13,17,21,1,5 * * *` em UTC (`apps/web/vercel.json`).
-- **Janela com sobreposição**: desde o último `onepay_nf` concluído **menos** o colchão
-  (default 6h), porque o lado de lá atrasa. Sobrepor é seguro porque o processamento é
-  **idempotente por `access_key`**: nota nova insere, repetida atualiza — e cancelamento
-  e mudança de `creditAnalysis` chegam como UPDATE da mesma linha, que é exatamente o
-  que se quer.
+- **A janela é o que o endpoint permite**, e ele oferece dois filtros
+  **mutuamente exclusivos** (mandar os dois → 400):
+
+  | Filtro | O que traz | Limite |
+  | --- | --- | --- |
+  | `sync_hours=N` | notas **sincronizadas** nas últimas N horas | N ∈ [1, 4] |
+  | `start_date`/`end_date` | notas **emitidas** no intervalo | máximo 10 dias |
+
+  O incremental é o `sync_hours` — é literalmente a pergunta do job. Mas o teto é 4h e o
+  cron roda de 4 em 4: a cobertura é contígua e **sem folga**. Daí três modos
+  (`packages/core/src/antecipacao/sync-plano.ts`, testado):
+
+  - **incremental** — gap ≤ 4h → `sync_hours = ceil(gap)`. O arredondamento para cima é
+    o único colchão que o teto permite (~1h).
+  - **recuperação** — gap > 4h (corrida falhou ou atrasou) ou primeira execução → janela
+    por **emissão**, fatiada em blocos de ≤10 dias.
+  - **varredura** — o job diário revarre os últimos 30 dias de emissão. É o que fecha,
+    em até 24h, o buraco que o teto de 4h deixa quando uma corrida falha.
+
+  Tudo isso é barato porque o processamento é **idempotente por `access_key`**: nota
+  nova insere, repetida atualiza — e cancelamento e mudança de `creditAnalysis` chegam
+  como UPDATE da mesma linha, que é exatamente o que se quer. Sobrepor não custa nada.
+
+  **A recuperação é uma aproximação**, e vale saber: ela filtra por emissão, não por
+  sincronização. Uma nota antiga sincronizada durante o buraco não cai nela — cai na
+  varredura diária, desde que tenha sido emitida nos últimos 30 dias. Fora disso, só
+  aumentando `varredura_dias`.
 - **O XML é guardado sempre** (`raw_xml`). É a semente do Pricing. Falha de parse
   **loga e segue**: valor e vencimento também vêm do endpoint, o erro fica em
   `xml_parse_erro` e o XML fica para reprocessar.
@@ -231,8 +253,9 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
 
 ## Limitações conhecidas
 
-- **O sync nunca rodou contra o endpoint real, e o CAMINHO é um chute.** O Prompt só
-  diz `GET {ONEPAY_BI_URL}/api/v1/...`; o job assume `/api/v1/invoices`. Como é a mesma
+- **O sync nunca rodou contra o endpoint real, e o CAMINHO é um chute.** O contrato dos
+  FILTROS é conhecido e está travado por teste; o nome do recurso, não — o job assume
+  `/api/v1/invoices`. Como é a mesma
   API e o mesmo token do sync de clientes, **nenhuma variável nova precisa ser
   provisionada**: sem `ONEPAY_NF_URL`/`ONEPAY_NF_TOKEN`, ele cai em `ONEPAY_BI_URL` +
   caminho padrão e em `ONEPAY_BI_TOKEN`. Se o recurso tiver outro nome, o conserto é

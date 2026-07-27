@@ -16,6 +16,11 @@ import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
 import { emitirEvento } from '../../radar/eventos.js'
+import {
+  montarPlanoSync,
+  querystringSync,
+  type ModoSync,
+} from '../../../../../packages/core/src/antecipacao/sync-plano.js'
 import { lerConfigEconomia, lerConfigSync } from '../../antecipacao/config.js'
 
 /**
@@ -88,13 +93,16 @@ interface RespostaNf {
   data?: NfPayload[]
   items?: NfPayload[]
   page?: number
-  pageSize?: number
+  page_size?: number
+  total_pages?: number
   totalPages?: number
   total?: number
 }
 
 export interface ResultadoSyncNfs {
-  janela: { de: string; ate: string }
+  modo: string
+  plano: string
+  requisicoes: number
   paginas: number
   notas: number
   novas: number
@@ -107,14 +115,12 @@ export interface ResultadoSyncNfs {
   falhas_parse: number
 }
 
-// ─── Janela ─────────────────────────────────────────────────────────────────
+// ─── O plano de requisições ─────────────────────────────────────────────────
+// A lógica (e o CONTRATO do endpoint) vive em packages/core/src/antecipacao/
+// sync-plano.ts, que é onde há teste. Aqui fica só a leitura do último sync —
+// a única parte que precisa do banco.
 
-/**
- * Desde o último `onepay_nf` CONCLUÍDO, menos o colchão. Sem histórico (primeira
- * execução, ou a fonte nunca terminou bem), cai na janela inicial da config —
- * "desde sempre" traria anos de nota e estouraria a primeira corrida.
- */
-async function calcularJanela(sobreposicaoHoras: number, janelaInicialDias: number) {
+async function ultimoSyncConcluido(): Promise<Date | null> {
   const { data } = await supabaseAdmin
     .from('mercado_ingestoes')
     .select('terminado_em')
@@ -124,12 +130,7 @@ async function calcularJanela(sobreposicaoHoras: number, janelaInicialDias: numb
     .limit(1)
     .maybeSingle()
 
-  const ate = new Date()
-  const de = data?.terminado_em
-    ? new Date(new Date(data.terminado_em).getTime() - sobreposicaoHoras * 3_600_000)
-    : new Date(ate.getTime() - janelaInicialDias * 86_400_000)
-
-  return { de: de.toISOString().slice(0, 10), ate: ate.toISOString().slice(0, 10) }
+  return data?.terminado_em ? new Date(data.terminado_em) : null
 }
 
 function autorizacao(): Record<string, string> {
@@ -189,7 +190,9 @@ function dataOuNulo(v: unknown): string | null {
 
 // ─── O job ──────────────────────────────────────────────────────────────────
 
-export async function sincronizarNotasFiscais(): Promise<ResultadoSyncNfs> {
+export async function sincronizarNotasFiscais(
+  modo: ModoSync = 'incremental',
+): Promise<ResultadoSyncNfs> {
   if (!env.ONEPAY_NF_URL && !env.ONEPAY_BI_URL) {
     throw new Error(
       'Nenhuma URL do Onepay configurada. Defina ONEPAY_BI_URL (a mesma do sync de clientes) ou, ' +
@@ -197,12 +200,18 @@ export async function sincronizarNotasFiscais(): Promise<ResultadoSyncNfs> {
     )
   }
 
-  const [cfgSync, cfgEconomia] = await Promise.all([lerConfigSync(), lerConfigEconomia()])
-  const janela = await calcularJanela(cfgSync.sobreposicao_horas, cfgSync.janela_inicial_dias)
+  const [cfgSync, cfgEconomia, ultimoSync] = await Promise.all([
+    lerConfigSync(),
+    lerConfigEconomia(),
+    ultimoSyncConcluido(),
+  ])
+  const plano = montarPlanoSync({ modo, ultimoSync, agora: new Date(), cfg: cfgSync })
   const base = urlBase()
 
   const acc: ResultadoSyncNfs = {
-    janela,
+    modo: plano.modo,
+    plano: plano.descricao,
+    requisicoes: plano.requisicoes.length,
     paginas: 0,
     notas: 0,
     novas: 0,
@@ -215,37 +224,48 @@ export async function sincronizarNotasFiscais(): Promise<ResultadoSyncNfs> {
     falhas_parse: 0,
   }
 
-  logger.info({ janela, base }, 'Sync de NFs iniciado.')
+  logger.info({ plano: plano.descricao, requisicoes: plano.requisicoes.length, base }, 'Sync de NFs iniciado.')
 
-  let page = 1
-  let totalPages = 1
-  do {
-    const url =
-      `${base}?page=${page}&pageSize=${cfgSync.page_size}` +
-      `&period.startDate=${janela.de}&period.endDate=${janela.ate}`
-    const resp = await requisitarJson<RespostaNf>(url, {
-      headers: autorizacao(),
-      timeoutMs: 120_000,
-    })
-    totalPages = Math.max(1, resp.totalPages ?? 1)
+  for (const req of plano.requisicoes) {
+    let page = 1
 
-    for (const item of extrair(resp)) {
-      const r = await processarNota(item, cfgEconomia.taxa_mensal_padrao)
-      acc.notas++
-      if (r.ignorada) acc.ignoradas++
-      if (r.nova) acc.novas++
-      if (r.atualizada) acc.atualizadas++
-      acc.itens += r.itens
-      acc.snapshots_credito += r.snapshot ? 1 : 0
-      acc.cnpjs_enfileirados += r.enfileirados
-      acc.eventos += r.eventos
-      if (r.falhaParse) acc.falhas_parse++
+    // Pagina até a página vir CURTA. `total_pages` é usado quando existe, mas não
+    // é exigido: um endpoint que só devolve a lista continua sendo paginado
+    // corretamente, e um que devolve `total_pages` errado não trava o job.
+    for (;;) {
+      const url = `${base}?${querystringSync(req, page, cfgSync.page_size)}`
+      const resp = await requisitarJson<RespostaNf>(url, {
+        headers: autorizacao(),
+        timeoutMs: 120_000,
+      })
+
+      const itens = extrair(resp)
+      acc.paginas++
+
+      for (const item of itens) {
+        const r = await processarNota(item, cfgEconomia.taxa_mensal_padrao)
+        acc.notas++
+        if (r.ignorada) acc.ignoradas++
+        if (r.nova) acc.novas++
+        if (r.atualizada) acc.atualizadas++
+        acc.itens += r.itens
+        acc.snapshots_credito += r.snapshot ? 1 : 0
+        acc.cnpjs_enfileirados += r.enfileirados
+        acc.eventos += r.eventos
+        if (r.falhaParse) acc.falhas_parse++
+      }
+
+      const totalPaginas = resp.total_pages ?? resp.totalPages
+      const acabou =
+        itens.length === 0 ||
+        itens.length < cfgSync.page_size ||
+        (typeof totalPaginas === 'number' && page >= totalPaginas)
+      if (acabou) break
+
+      page++
     }
+  }
 
-    page++
-  } while (page <= totalPages)
-
-  acc.paginas = totalPages
   logger.info(acc, 'Sync de NFs concluído.')
   return acc
 }

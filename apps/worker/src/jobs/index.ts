@@ -373,24 +373,41 @@ export async function dispararSyncNfs(): Promise<string> {
 }
 
 /**
- * O job DIÁRIO (§9): limpa supressões vencidas, reclassifica com expiração,
- * consome a fila de lookup cadastral e regenera a outbox.
+ * O job DIÁRIO (§9): varre as NFs por emissão, limpa supressões vencidas,
+ * consome a fila de lookup cadastral, reclassifica com expiração e regenera a
+ * outbox.
  *
  * A ordem é uma cadeia de dependências, não uma preferência:
+ *   varredura  → a rede de segurança do sync. `sync_hours` só olha 4 horas para
+ *                trás e o cron roda de 4 em 4: uma corrida que falhe abre um
+ *                buraco que nenhum incremental posterior alcança. A varredura por
+ *                EMISSÃO o fecha, e é de graça porque o upsert é idempotente;
  *   supressões → um fornecedor cuja supressão caiu hoje precisa voltar a ser
  *                elegível ANTES de a faixa ser recalculada;
  *   lookup     → o dado cadastral que chega agora é o que as variáveis de faixa
  *                vão ler;
  *   reclassificar → faixa + expiração + receita esperada;
  *   outbox     → só faz sentido sobre faixas já corretas.
+ *
+ * A varredura é best-effort: se o endpoint estiver fora, o resto do diário (que
+ * não depende dele) precisa rodar mesmo assim — senão uma indisponibilidade de
+ * terceiro deixaria o funil sem expirar nota nenhuma.
  */
 export function dispararAntecipacaoDiario(): string {
   return dispararAvulso('antecipacao-diario', async (client) => {
+    let varredura: unknown
+    try {
+      varredura = await sincronizarNotasFiscais('varredura')
+    } catch (erro) {
+      logger.error({ erro: String(erro) }, 'Varredura de NFs falhou; o diário segue.')
+      varredura = { erro: String(erro) }
+    }
+
     const supressoes = await limparSupressoesExpiradas()
     const lookup = await lookupCadastral()
     const reclassificacao = await reclassificarFunil(client)
     const outbox = await gerarOutbox()
-    return { supressoes, lookup, reclassificacao, outbox }
+    return { varredura, supressoes, lookup, reclassificacao, outbox }
   })
 }
 

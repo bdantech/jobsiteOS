@@ -323,15 +323,36 @@ export interface ConfigSupressao {
 }
 export const CONFIG_SUPRESSAO_PADRAO: ConfigSupressao = { soft_dias_padrao: 90 }
 
+/**
+ * Os limites aqui NÃO são preferências — são o contrato do endpoint de NFs:
+ *
+ *   sync_hours ∈ [1, 4]   e SUBSTITUI o filtro de datas (mandar os dois → 400)
+ *   start_date/end_date   filtram por EMISSÃO, com intervalo máximo de 10 dias
+ *
+ * Mexer em `sync_horas_max` ou `intervalo_max_dias` para além disso não amplia a
+ * janela: faz o endpoint responder 400.
+ */
 export interface ConfigSync {
-  sobreposicao_horas: number
+  /** Teto de `sync_hours`. O endpoint recusa acima de 4. */
+  sync_horas_max: number
+  /** Teto do intervalo de emissão por requisição. O endpoint recusa acima de 10. */
+  intervalo_max_dias: number
   page_size: number
+  /** Primeira execução (sem histórico): quantos dias de EMISSÃO trazer. */
   janela_inicial_dias: number
+  /**
+   * A rede de segurança do job diário. `sync_hours` só enxerga 4 horas para trás,
+   * e o cron roda de 4 em 4 — uma corrida que falhe abre um buraco que nenhum
+   * `sync_hours` posterior alcança. Esta varredura por emissão o fecha em até 24h.
+   */
+  varredura_dias: number
 }
 export const CONFIG_SYNC_PADRAO: ConfigSync = {
-  sobreposicao_horas: 6,
+  sync_horas_max: 4,
+  intervalo_max_dias: 10,
   page_size: 200,
   janela_inicial_dias: 60,
+  varredura_dias: 30,
 }
 
 export interface ConfigLookup {

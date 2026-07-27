@@ -113,19 +113,39 @@ const CAMPOS: readonly CampoNum[] = [
   {
     chave: 'SYNC',
     grupo: 'sync',
-    campo: 'sobreposicao_horas',
-    label: 'Sobreposição do sync (horas)',
+    campo: 'sync_horas_max',
+    label: 'Teto de sync_hours (horas)',
     descricao:
-      'Colchão da janela: buscamos desde o último sync bem-sucedido MENOS isto, porque o lado de lá atrasa. Sobrepor é seguro porque o processamento é idempotente por chave de acesso.',
+      'LIMITE DO ENDPOINT, não preferência: o filtro `sync_hours` aceita 1 a 4. Subir daqui não amplia a janela — faz a API responder 400. O job pede o gap desde a última corrida, arredondado para cima, dentro deste teto.',
+    min: 1,
+    max: 4,
+  },
+  {
+    chave: 'SYNC',
+    grupo: 'sync',
+    campo: 'intervalo_max_dias',
+    label: 'Teto do intervalo por emissão (dias)',
+    descricao:
+      'LIMITE DO ENDPOINT: `start_date`/`end_date` aceitam no máximo 10 dias por requisição. A recuperação e a varredura fatiam a janela em blocos deste tamanho.',
+    min: 1,
+    max: 10,
+  },
+  {
+    chave: 'SYNC',
+    grupo: 'sync',
+    campo: 'varredura_dias',
+    label: 'Varredura diária por emissão (dias)',
+    descricao:
+      'A rede de segurança. `sync_hours` só enxerga 4h para trás e o cron roda de 4 em 4: uma corrida que falhe abre um buraco que nenhum incremental posterior alcança. O job diário revarre esta janela de emissão e o fecha em até 24h — de graça, porque o upsert é idempotente por chave de acesso.',
     min: 0,
-    max: 72,
+    max: 365,
   },
   {
     chave: 'SYNC',
     grupo: 'sync',
     campo: 'page_size',
     label: 'Tamanho da página do sync',
-    descricao: 'Quantas notas por requisição ao endpoint.',
+    descricao: 'Quantas notas por requisição ao endpoint. O default da API é 50; não há máximo.',
     min: 10,
     max: 1000,
   },
@@ -135,7 +155,7 @@ const CAMPOS: readonly CampoNum[] = [
     campo: 'janela_inicial_dias',
     label: 'Janela da primeira execução (dias)',
     descricao:
-      'Sem histórico de sync, quantos dias trazer. "Desde sempre" traria anos de nota e estouraria a primeira corrida.',
+      'Sem histórico de sync, quantos dias de EMISSÃO trazer — fatiados no teto acima. "Desde sempre" traria anos de nota e estouraria a primeira corrida.',
     min: 1,
     max: 730,
   },
