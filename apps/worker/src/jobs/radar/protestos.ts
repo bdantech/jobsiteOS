@@ -21,7 +21,8 @@ import type { ProcessarItem, ResultadoItem } from './lote.js'
  * mudou de sem→com protesto (ou o valor cresceu além do limiar) → evento.
  */
 
-const LIMIAR_AGRAVAMENTO = 1.2 // valor cresceu >20% → protesto.agravado
+const LIMIAR_AGRAVAMENTO = 1.2 // por empresa: valor cresceu >20% → protesto.agravado
+const LIMIAR_GRUPO = 1.1 // por grupo (rotina mensal): total cresceu >10% vs. mês anterior
 
 export function criarProcessadorProtestos(lote: Tables<'lotes_enriquecimento'>): ProcessarItem {
   const params = (lote.parametros ?? {}) as { incluir_fora_sp?: boolean; cliente?: boolean }
@@ -208,6 +209,35 @@ export async function protestosClientesMensal(): Promise<{ lote_id: string; iten
   for (const m of (monitoradas ?? []) as unknown as { cnpj: string; empresa_id: string | null }[])
     if (!porCnpj.has(m.cnpj)) porCnpj.set(m.cnpj, { cnpj: m.cnpj, empresa_id: m.empresa_id })
 
+  // Mapa cnpj→grupo (+ um nome por grupo) para comparar o TOTAL do grupo mês a mês.
+  const cnpjs = [...porCnpj.keys()]
+  const grupoDeCnpj = new Map<string, string | null>()
+  const nomeGrupo = new Map<string, string>()
+  const { data: muRows } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('cnpj, grupo_id, razao_social')
+    .in('cnpj', cnpjs)
+  for (const m of muRows ?? []) {
+    grupoDeCnpj.set(m.cnpj, m.grupo_id ?? null)
+    if (m.grupo_id && m.razao_social && !nomeGrupo.has(m.grupo_id)) nomeGrupo.set(m.grupo_id, m.razao_social)
+  }
+
+  // Total protestado por grupo, somando o último snapshot de cada CNPJ monitorado.
+  async function totaisPorGrupo(): Promise<Map<string, number>> {
+    const tot = new Map<string, number>()
+    const { data } = await supabaseAdmin.from('protestos_atual').select('cnpj, valor_total').in('cnpj', cnpjs)
+    for (const p of data ?? []) {
+      if (!p.cnpj) continue
+      const g = grupoDeCnpj.get(p.cnpj)
+      if (!g) continue
+      tot.set(g, (tot.get(g) ?? 0) + (Number(p.valor_total) || 0))
+    }
+    return tot
+  }
+
+  // Baseline ANTES do lote: protestos_atual ainda reflete o mês anterior.
+  const antes = await totaisPorGrupo()
+
   const itens = [...porCnpj.values()].map((v) => ({ lote_id: lote.id, cnpj: v.cnpj, empresa_id: v.empresa_id }))
   if (itens.length > 0) {
     const { error: erroItens } = await supabaseAdmin.from('lote_itens').insert(itens)
@@ -223,5 +253,26 @@ export async function protestosClientesMensal(): Promise<{ lote_id: string; iten
   // O processador só usa lote.parametros; um objeto mínimo basta.
   const loteMin = { id: lote.id, tipo: 'protestos', parametros: { cliente: true } } as unknown as Tables<'lotes_enriquecimento'>
   const r = await executarLote(lote.id, criarProcessadorProtestos(loteMin))
+
+  // Regra do grupo: total protestado subiu > +10% vs. o mês anterior → notifica.
+  // Vale por GRUPO (a derivada por empresa já cobre empresa nova/agravada a +20%).
+  const depois = await totaisPorGrupo()
+  for (const [g, novo] of depois) {
+    const velho = antes.get(g) ?? 0
+    if (velho > 0 && novo > velho * LIMIAR_GRUPO) {
+      const nome = nomeGrupo.get(g) ?? 'Grupo econômico'
+      const pct = Math.round(((novo - velho) / velho) * 100)
+      const corpo = `${nome}: protestos do grupo subiram de R$ ${velho.toFixed(2)} para R$ ${novo.toFixed(2)} (+${pct}%).`
+      const url = `/mercado/grupos/${g}`
+      await emitirEvento(null, EVENTO_TIPOS.GRUPO_PROTESTO_AGRAVADO, {
+        titulo: 'Protesto do grupo agravado',
+        resumo: corpo,
+        url,
+        grupo_id: g,
+      })
+      await notificarPerfis(['Admin', 'Crédito'], { titulo: 'Protesto do grupo agravado', corpo, url })
+    }
+  }
+
   return { lote_id: lote.id, itens: itens.length, ...r }
 }
