@@ -13,9 +13,11 @@ source of truth. Every module reads and writes state on top of it. Nothing dupli
 ```
 apps/web         Next.js 15 (App Router, RSC by default) → Vercel. Also the mobile backend (/api/*).
 apps/mobile      Expo (React Native, Expo Router, EAS) → iOS + Android.
-apps/worker      Node/TypeScript container → Railway. The Mercado ingestion (Receita, CNO, derived jobs).
+apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Receita, CNO), jobs do Radar
+                 e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
+docs/            Notas por módulo: radar.md, antecipacao.md.
 prompts/         The build specs.
 ```
 
@@ -170,12 +172,25 @@ reason to hold: they were **promoted**.
   the list-imported companies that never passed through staging). `security_invoker`, so RLS applies.
   Every variable in the filter catalog is a real column on it.
 
-### The filter engine: one tree, two compilers
+### The filter engine: one tree, three compilers, two catalogs
 
 `packages/core/src/mercado/filters.ts`. **One** JSON tree —
-`{ operador: 'e' | 'ou', condicoes: [{ variavel, operador, valor }] }` — powers **three** features:
-camada rules, Explorador filters, and segmentos. A `CATALOGO` whitelists the variables; anything else
-fails zod validation before a compiler ever sees it.
+`{ operador: 'e' | 'ou', condicoes: [{ variavel, operador, valor }] }` — powers camada rules,
+Explorador filters, segmentos, Radar batch selection **and** the Antecipação faixa rules. A catalog
+whitelists the variables; anything else fails zod validation before a compiler ever sees it.
+
+Since Prompt 04 the engine is a **factory**, `criarFiltroEngine(catalogo)`, with two instances:
+
+| Engine | Catalog | Filters over |
+| --- | --- | --- |
+| `mercadoEngine` (the unqualified exports) | `CATALOGO` | `mercado_explorador` |
+| `faixaEngine` | `CATALOGO_FAIXAS` (`packages/core/src/antecipacao/faixas.ts`) | `notas_funil` |
+
+The compilers are shared; the catalogs are **not**, and that isolation is the point. `obras_ativas`
+does not exist on the funnel view and `dias_para_vencimento` does not exist on the Explorador view — a
+single merged catalog would let a faixa rule compile to a column that isn't there, and nobody would
+find out until the nightly reclassification failed over 40.000 notes. Both directions are tested
+(`src/antecipacao/faixas.test.ts`).
 
 Two compilers, and the split is a security boundary, not a convenience:
 
@@ -324,6 +339,62 @@ things that are not optional:
   Pirâmide's "camada de promoção" card persists the admin's choice and pushes it on the reclassify call,
   but the worker currently ignores the body field. **Keep the env var in sync with the setting** until
   one of them wins.
+
+## Antecipação
+
+O **funil de notas fiscais** — onde o trabalho de mercado vira dinheiro. Notas detalhadas em
+[`docs/antecipacao.md`](docs/antecipacao.md); o essencial:
+
+### `faixa` is not `estagio_funil`
+
+Same distinction as `camada` vs. `estagio`, same reason. **`faixa`** (`alta` | `boa` | `media` | `null`)
+is **computed** by a versioned rule and only the reclassification job writes it. **`estagio_funil`**
+(`a_prospectar` → … → `convertida` | `perdida` | `expirada`) moves only by **human action**, through
+`app_mover_estagio_nf` — `notas_fiscais` has no UPDATE grant for `authenticated`, so "move a card
+without recording the event" is not expressible, not merely discouraged.
+
+Nobody moves a note between faixas. You change the rule, or the data changes. `faixa_motivo` always
+says why a note is out: `regra`, `expirada`, `suprimido`, `fora_das_faixas`.
+
+### The daily job is load-bearing
+
+**Without it the funnel rots in two weeks.** The notes don't change — the calendar does. A note that
+sat in faixa alta with 40 days of runway becomes, on its own, impossible to operate, and would stay at
+the top of the Kanban sorted by an expected revenue that is also wrong (revenue depends on the term).
+
+`/api/cron/antecipacao-diario` (05:00 UTC) runs, in this order — a dependency chain, not a preference:
+expired suppressions → cadastral lookup → reclassify (+ expire) → regenerate the outbox.
+
+### The sync is idempotent by `access_key`
+
+`/api/cron/antecipacao-sync` every four hours (`30 9,13,17,21,1,5 * * *` UTC = 06:30/10:30/…/02:30 in
+São Paulo). The window reaches back to the last successful run **minus** a 6h cushion, because the
+upstream is late sometimes. Overlapping is safe precisely because processing upserts on `access_key`:
+new note inserts, repeated note updates — and a cancellation or a `creditAnalysis` change arrive as an
+UPDATE of the same row, which is exactly what we want. Runs are logged in `mercado_ingestoes` with
+fonte `onepay_nf`, so the Ingestões screen and its re-run button work with no new code.
+
+`raw_xml` is **always** stored — it is the seed of the future Pricing module. A parse failure logs and
+carries on (`xml_parse_erro`); value and due date also come from the endpoint.
+
+### Shadow mode: nothing is sent
+
+Enabling a channel in `/antecipacao/disparos` does **not** enable sending. It enables *generation*: the
+job writes the exact message that would go out, to the recipient it would pick, into `mensagens_outbox`
+as `pendente_envio`. Validating the cadence before wiring the channels is the whole point — wiring
+first and checking later is how a contact base gets burned. What Prompt 05 still owes is the
+**transport**, not the cadence: grouping, recipient hierarchy, cooldown and account round-robin already
+exist.
+
+Discards with reason `sem_contato` are not failures, they are input: each is a supplier in a faixa that
+nobody can reach, and the list of them is exactly the filter for a Radar contacts batch.
+
+### Suppression has a shelf life
+
+One list (Radar's), now with `expira_em`. **Soft** (default 90 days) is "not now" and the daily job
+lets it lapse; **eterna** (`null`) is LGPD and never expires. `estaSuprimido()` and the `notas_funil`
+view apply the **same** validity predicate — if they disagreed, a supplier would vanish from the Kanban
+and keep receiving messages, or the reverse.
 
 ## Conventions
 

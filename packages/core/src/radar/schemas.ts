@@ -79,11 +79,29 @@ export type CancelarLoteInput = z.infer<typeof cancelarLoteSchema>
 
 // ─── Supressão ──────────────────────────────────────────────────────────────
 
+/** Onde a supressão nasceu. Uma lista só, com origem — nunca duas listas. */
+export const CONTEXTOS_SUPRESSAO = ['geral', 'antecipacao'] as const
+export const contextoSupressaoSchema = z.enum(CONTEXTOS_SUPRESSAO)
+export type ContextoSupressao = z.infer<typeof contextoSupressaoSchema>
+export const CONTEXTO_SUPRESSAO_LABELS: Record<ContextoSupressao, string> = {
+  geral: 'Geral',
+  antecipacao: 'Antecipação',
+}
+
 export const suprimirSchema = z.object({
   escopo: escopoSupressaoSchema.describe('email | telefone | whatsapp | empresa (CNPJ).'),
   valor: z.string().trim().min(1).describe('Endereço, número ou CNPJ a suprimir.'),
   motivo: motivoSupressaoSchema.describe('Por que suprimir — obrigatório.'),
   observacao: z.string().trim().max(500).optional(),
+  expira_em: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use o formato AAAA-MM-DD.')
+    .optional()
+    .nullable()
+    .describe('Data de expiração (AAAA-MM-DD). Ausente/nula = supressão ETERNA.'),
+  contexto: contextoSupressaoSchema
+    .optional()
+    .describe('De onde veio a supressão. Default: geral.'),
 })
 export type SuprimirInput = z.infer<typeof suprimirSchema>
 

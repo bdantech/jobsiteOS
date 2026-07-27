@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      antecipacao_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antecipacao_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_config: {
         Row: {
           atualizado_em: string
@@ -203,6 +232,39 @@ export type Database = {
         }
         Relationships: []
       }
+      cnpj_lookup_fila: {
+        Row: {
+          cnpj: string
+          criado_em: string
+          motivo: string
+          resolvido_em: string | null
+          status: string
+          tentativas: number
+          ultimo_erro: string | null
+          ultimo_provedor: string | null
+        }
+        Insert: {
+          cnpj: string
+          criado_em?: string
+          motivo?: string
+          resolvido_em?: string | null
+          status?: string
+          tentativas?: number
+          ultimo_erro?: string | null
+          ultimo_provedor?: string | null
+        }
+        Update: {
+          cnpj?: string
+          criado_em?: string
+          motivo?: string
+          resolvido_em?: string | null
+          status?: string
+          tentativas?: number
+          ultimo_erro?: string | null
+          ultimo_provedor?: string | null
+        }
+        Relationships: []
+      }
       contatos: {
         Row: {
           apollo_person_id: string | null
@@ -217,6 +279,7 @@ export type Database = {
           linkedin_url: string | null
           nome: string | null
           origem: string | null
+          ponto_focal: boolean
           senioridade: string | null
           telefone: string | null
           telefone_status: string | null
@@ -235,6 +298,7 @@ export type Database = {
           linkedin_url?: string | null
           nome?: string | null
           origem?: string | null
+          ponto_focal?: boolean
           senioridade?: string | null
           telefone?: string | null
           telefone_status?: string | null
@@ -253,6 +317,7 @@ export type Database = {
           linkedin_url?: string | null
           nome?: string | null
           origem?: string | null
+          ponto_focal?: boolean
           senioridade?: string | null
           telefone?: string | null
           telefone_status?: string | null
@@ -267,6 +332,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      credito_snapshots: {
+        Row: {
+          available_limit: number | null
+          capturado_em: string
+          cnpj: string
+          consumed_limit: number | null
+          credit_limit: number | null
+          expiration_date: string | null
+          id: string
+          monthly_rate_d0: number | null
+          monthly_rate_d1: number | null
+          origem: string
+          role: string | null
+          status: string | null
+          via_headquarters: boolean | null
+        }
+        Insert: {
+          available_limit?: number | null
+          capturado_em?: string
+          cnpj: string
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          expiration_date?: string | null
+          id?: string
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          origem?: string
+          role?: string | null
+          status?: string | null
+          via_headquarters?: boolean | null
+        }
+        Update: {
+          available_limit?: number | null
+          capturado_em?: string
+          cnpj?: string
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          expiration_date?: string | null
+          id?: string
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          origem?: string
+          role?: string | null
+          status?: string | null
+          via_headquarters?: boolean | null
+        }
+        Relationships: []
       }
       empresa_eventos: {
         Row: {
@@ -363,8 +476,10 @@ export type Database = {
           origem: string | null
           porte: string | null
           razao_social: string | null
+          tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
+          ultima_antecipacao: string | null
         }
         Insert: {
           atualizado_em?: string
@@ -393,8 +508,10 @@ export type Database = {
           origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
+          ultima_antecipacao?: string | null
         }
         Update: {
           atualizado_em?: string
@@ -423,8 +540,10 @@ export type Database = {
           origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
+          ultima_antecipacao?: string | null
         }
         Relationships: [
           {
@@ -498,6 +617,91 @@ export type Database = {
             columns: ["lote_id"]
             isOneToOne: false
             referencedRelation: "lotes_enriquecimento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faixa_disparos: {
+        Row: {
+          assunto_email: string | null
+          atualizado_em: string
+          atualizado_por: string | null
+          cooldown_dias: number
+          email_habilitado: boolean
+          faixa: string
+          template_email: string | null
+          template_whatsapp: string | null
+          whatsapp_contas: string[]
+          whatsapp_habilitado: boolean
+        }
+        Insert: {
+          assunto_email?: string | null
+          atualizado_em?: string
+          atualizado_por?: string | null
+          cooldown_dias?: number
+          email_habilitado?: boolean
+          faixa: string
+          template_email?: string | null
+          template_whatsapp?: string | null
+          whatsapp_contas?: string[]
+          whatsapp_habilitado?: boolean
+        }
+        Update: {
+          assunto_email?: string | null
+          atualizado_em?: string
+          atualizado_por?: string | null
+          cooldown_dias?: number
+          email_habilitado?: boolean
+          faixa?: string
+          template_email?: string | null
+          template_whatsapp?: string | null
+          whatsapp_contas?: string[]
+          whatsapp_habilitado?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faixa_disparos_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faixa_regras: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          faixa: string
+          id: string
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          faixa: string
+          id?: string
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          faixa?: string
+          id?: string
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faixa_regras_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -722,6 +926,101 @@ export type Database = {
           },
         ]
       }
+      mensagens_outbox: {
+        Row: {
+          access_keys: string[]
+          assunto: string | null
+          atualizada_em: string
+          canal: string
+          corpo: string | null
+          criada_em: string
+          descartada_por: string | null
+          destinatario: string | null
+          destinatario_contato_id: string | null
+          destinatario_ponto_focal: boolean
+          faixa: string | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          motivo_descarte: string | null
+          status: string
+          valor_total: number | null
+          whatsapp_conta_id: string | null
+        }
+        Insert: {
+          access_keys: string[]
+          assunto?: string | null
+          atualizada_em?: string
+          canal: string
+          corpo?: string | null
+          criada_em?: string
+          descartada_por?: string | null
+          destinatario?: string | null
+          destinatario_contato_id?: string | null
+          destinatario_ponto_focal?: boolean
+          faixa?: string | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          motivo_descarte?: string | null
+          status?: string
+          valor_total?: number | null
+          whatsapp_conta_id?: string | null
+        }
+        Update: {
+          access_keys?: string[]
+          assunto?: string | null
+          atualizada_em?: string
+          canal?: string
+          corpo?: string | null
+          criada_em?: string
+          descartada_por?: string | null
+          destinatario?: string | null
+          destinatario_contato_id?: string | null
+          destinatario_ponto_focal?: boolean
+          faixa?: string | null
+          fornecedor_cnpj?: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          motivo_descarte?: string | null
+          status?: string
+          valor_total?: number | null
+          whatsapp_conta_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mensagens_outbox_descartada_por_fkey"
+            columns: ["descartada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_destinatario_contato_id_fkey"
+            columns: ["destinatario_contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_whatsapp_conta_id_fkey"
+            columns: ["whatsapp_conta_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mercado_ingestoes: {
         Row: {
           erro: string | null
@@ -937,6 +1236,7 @@ export type Database = {
           dominio_origem: string | null
           email_rfb: string | null
           empresa_id: string | null
+          fora_recorte_cnae: boolean
           grafo_sefaz: boolean
           grupo_id: string | null
           is_spe: boolean
@@ -948,6 +1248,7 @@ export type Database = {
           numero: string | null
           opcao_mei: boolean | null
           opcao_simples: boolean | null
+          origem_ingestao: string
           porte_rfb: string | null
           razao_social: string | null
           situacao_cadastral: string | null
@@ -979,6 +1280,7 @@ export type Database = {
           dominio_origem?: string | null
           email_rfb?: string | null
           empresa_id?: string | null
+          fora_recorte_cnae?: boolean
           grafo_sefaz?: boolean
           grupo_id?: string | null
           is_spe?: boolean
@@ -990,6 +1292,7 @@ export type Database = {
           numero?: string | null
           opcao_mei?: boolean | null
           opcao_simples?: boolean | null
+          origem_ingestao?: string
           porte_rfb?: string | null
           razao_social?: string | null
           situacao_cadastral?: string | null
@@ -1021,6 +1324,7 @@ export type Database = {
           dominio_origem?: string | null
           email_rfb?: string | null
           empresa_id?: string | null
+          fora_recorte_cnae?: boolean
           grafo_sefaz?: boolean
           grupo_id?: string | null
           is_spe?: boolean
@@ -1032,6 +1336,7 @@ export type Database = {
           numero?: string | null
           opcao_mei?: boolean | null
           opcao_simples?: boolean | null
+          origem_ingestao?: string
           porte_rfb?: string | null
           razao_social?: string | null
           situacao_cadastral?: string | null
@@ -1054,6 +1359,217 @@ export type Database = {
             columns: ["grupo_id"]
             isOneToOne: false
             referencedRelation: "grupos_economicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nota_itens: {
+        Row: {
+          access_key: string
+          cfop: string | null
+          codigo: string | null
+          descricao: string | null
+          id: string
+          ncm: string | null
+          ordem: number | null
+          quantidade: number | null
+          unidade: string | null
+          valor_total: number | null
+          valor_unitario: number | null
+        }
+        Insert: {
+          access_key: string
+          cfop?: string | null
+          codigo?: string | null
+          descricao?: string | null
+          id?: string
+          ncm?: string | null
+          ordem?: number | null
+          quantidade?: number | null
+          unidade?: string | null
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Update: {
+          access_key?: string
+          cfop?: string | null
+          codigo?: string | null
+          descricao?: string | null
+          id?: string
+          ncm?: string | null
+          ordem?: number | null
+          quantidade?: number | null
+          unidade?: string | null
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nota_itens_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "nota_itens_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "notas_funil"
+            referencedColumns: ["access_key"]
+          },
+        ]
+      }
+      notas_fiscais: {
+        Row: {
+          access_key: string
+          atualizada_em: string
+          contato_sacado: Json | null
+          credit_disponivel: number | null
+          credit_limite: number | null
+          credit_role: string | null
+          credit_status: string | null
+          criada_em: string
+          dias_para_vencimento: number | null
+          direction: string
+          emitida_em: string | null
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          estagio_funil: string
+          faixa: string | null
+          faixa_alterada_em: string | null
+          faixa_motivo: string | null
+          faixa_regra_versao: number | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          nf_id_externo: string | null
+          numero: string | null
+          parcelas: Json | null
+          perda_motivo: string | null
+          raw_xml: string | null
+          receita_esperada: number | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string
+          sacado_empresa_id: string | null
+          sacado_nome: string | null
+          serie: string | null
+          sincronizada_em: string | null
+          status_sync: string | null
+          taxa_usada: number | null
+          tipo: string
+          valor: number
+          vencimento: string | null
+          vencimento_origem: string | null
+          xml_parse_erro: string | null
+        }
+        Insert: {
+          access_key: string
+          atualizada_em?: string
+          contato_sacado?: Json | null
+          credit_disponivel?: number | null
+          credit_limite?: number | null
+          credit_role?: string | null
+          credit_status?: string | null
+          criada_em?: string
+          dias_para_vencimento?: number | null
+          direction: string
+          emitida_em?: string | null
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          estagio_funil?: string
+          faixa?: string | null
+          faixa_alterada_em?: string | null
+          faixa_motivo?: string | null
+          faixa_regra_versao?: number | null
+          fornecedor_cadastrado?: boolean | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          nf_id_externo?: string | null
+          numero?: string | null
+          parcelas?: Json | null
+          perda_motivo?: string | null
+          raw_xml?: string | null
+          receita_esperada?: number | null
+          sacado_cadastrado?: boolean | null
+          sacado_cnpj: string
+          sacado_empresa_id?: string | null
+          sacado_nome?: string | null
+          serie?: string | null
+          sincronizada_em?: string | null
+          status_sync?: string | null
+          taxa_usada?: number | null
+          tipo: string
+          valor: number
+          vencimento?: string | null
+          vencimento_origem?: string | null
+          xml_parse_erro?: string | null
+        }
+        Update: {
+          access_key?: string
+          atualizada_em?: string
+          contato_sacado?: Json | null
+          credit_disponivel?: number | null
+          credit_limite?: number | null
+          credit_role?: string | null
+          credit_status?: string | null
+          criada_em?: string
+          dias_para_vencimento?: number | null
+          direction?: string
+          emitida_em?: string | null
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          estagio_funil?: string
+          faixa?: string | null
+          faixa_alterada_em?: string | null
+          faixa_motivo?: string | null
+          faixa_regra_versao?: number | null
+          fornecedor_cadastrado?: boolean | null
+          fornecedor_cnpj?: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          nf_id_externo?: string | null
+          numero?: string | null
+          parcelas?: Json | null
+          perda_motivo?: string | null
+          raw_xml?: string | null
+          receita_esperada?: number | null
+          sacado_cadastrado?: boolean | null
+          sacado_cnpj?: string
+          sacado_empresa_id?: string | null
+          sacado_nome?: string | null
+          serie?: string | null
+          sincronizada_em?: string | null
+          status_sync?: string | null
+          taxa_usada?: number | null
+          tipo?: string
+          valor?: number
+          vencimento?: string | null
+          vencimento_origem?: string | null
+          xml_parse_erro?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_estagio_alterado_por_fkey"
+            columns: ["estagio_alterado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
@@ -1182,6 +1698,38 @@ export type Database = {
         }
         Relationships: []
       }
+      protesto_monitoramento: {
+        Row: {
+          cnpj: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string | null
+          grupo_id: string | null
+        }
+        Insert: {
+          cnpj: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string | null
+          grupo_id?: string | null
+        }
+        Update: {
+          cnpj?: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string | null
+          grupo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       protestos_consultas: {
         Row: {
           cartorios: Json | null
@@ -1304,27 +1852,33 @@ export type Database = {
       }
       supressao: {
         Row: {
+          contexto: string
           criado_em: string
           criado_por: string | null
           escopo: string
+          expira_em: string | null
           id: string
           motivo: string
           observacao: string | null
           valor: string
         }
         Insert: {
+          contexto?: string
           criado_em?: string
           criado_por?: string | null
           escopo: string
+          expira_em?: string | null
           id?: string
           motivo: string
           observacao?: string | null
           valor: string
         }
         Update: {
+          contexto?: string
           criado_em?: string
           criado_por?: string | null
           escopo?: string
+          expira_em?: string | null
           id?: string
           motivo?: string
           observacao?: string | null
@@ -1387,8 +1941,98 @@ export type Database = {
           },
         ]
       }
+      whatsapp_contas: {
+        Row: {
+          apelido: string
+          ativo: boolean
+          atualizada_em: string
+          criada_em: string
+          id: string
+          numero: string
+          provedor: string
+          token_definido_em: string | null
+          token_secret_id: string | null
+          usuario_responsavel: string | null
+        }
+        Insert: {
+          apelido: string
+          ativo?: boolean
+          atualizada_em?: string
+          criada_em?: string
+          id?: string
+          numero: string
+          provedor?: string
+          token_definido_em?: string | null
+          token_secret_id?: string | null
+          usuario_responsavel?: string | null
+        }
+        Update: {
+          apelido?: string
+          ativo?: boolean
+          atualizada_em?: string
+          criada_em?: string
+          id?: string
+          numero?: string
+          provedor?: string
+          token_definido_em?: string | null
+          token_secret_id?: string | null
+          usuario_responsavel?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_contas_usuario_responsavel_fkey"
+            columns: ["usuario_responsavel"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
+      antecipacao_fornecedores: {
+        Row: {
+          dias_para_vencimento_min: number | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          fornecedor_suprimido: boolean | null
+          fornecedor_tipagem: string | null
+          melhor_faixa: string | null
+          notas_vivas: number | null
+          receita_esperada_total: number | null
+          valor_total: number | null
+        }
+        Relationships: []
+      }
+      antecipacao_sacados: {
+        Row: {
+          available_limit: number | null
+          credit_limit: number | null
+          credito_status: string | null
+          demanda_pipeline: number | null
+          fornecedores: number | null
+          notas_em_faixa: number | null
+          receita_esperada_total: number | null
+          sacado_cnpj: string | null
+          sacado_empresa_id: string | null
+          sacado_nome: string | null
+        }
+        Relationships: []
+      }
+      antecipacao_sacados_a_prospectar: {
+        Row: {
+          fornecedores_operando: number | null
+          notas: number | null
+          sacado_cnpj: string | null
+          sacado_empresa_id: string | null
+          sacado_nome: string | null
+          sacado_uf: string | null
+          ultima_nota_em: string | null
+          valor_agregado: number | null
+        }
+        Relationships: []
+      }
       mercado_explorador: {
         Row: {
           camada: string | null
@@ -1413,6 +2057,7 @@ export type Database = {
           erp_detalhes: Json | null
           erp_mrr: number | null
           estagio: string | null
+          fora_recorte_cnae: boolean | null
           grafo_sefaz: boolean | null
           grupo_id: string | null
           grupo_spes_24m: number | null
@@ -1426,6 +2071,7 @@ export type Database = {
           obras_ativas: number | null
           obras_iniciadas_24m: number | null
           opcao_simples: boolean | null
+          origem_ingestao: string | null
           porte_rfb: string | null
           protestos_consultados_em: string | null
           qtd_contatos: number | null
@@ -1456,6 +2102,70 @@ export type Database = {
           },
         ]
       }
+      notas_funil: {
+        Row: {
+          access_key: string | null
+          contato_sacado: Json | null
+          dias_para_vencimento: number | null
+          direction: string | null
+          emitida_em: string | null
+          estagio_alterado_em: string | null
+          estagio_funil: string | null
+          faixa: string | null
+          faixa_alterada_em: string | null
+          faixa_motivo: string | null
+          faixa_regra_versao: number | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_cnpj: string | null
+          fornecedor_e_cliente_onepay: boolean | null
+          fornecedor_empresa_id: string | null
+          fornecedor_ja_antecipou: boolean | null
+          fornecedor_nome: string | null
+          fornecedor_suprimido: boolean | null
+          fornecedor_tem_protesto: boolean | null
+          fornecedor_tipagem: string | null
+          fornecedor_uf: string | null
+          nf_id_externo: string | null
+          numero: string | null
+          parcelas: Json | null
+          perda_motivo: string | null
+          receita_esperada: number | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string | null
+          sacado_credito_role: string | null
+          sacado_credito_status: string | null
+          sacado_empresa_id: string | null
+          sacado_limite: number | null
+          sacado_limite_cobre_nota: boolean | null
+          sacado_limite_disponivel: number | null
+          sacado_nome: string | null
+          sacado_uf: string | null
+          serie: string | null
+          sincronizada_em: string | null
+          status_sync: string | null
+          taxa_usada: number | null
+          tipo_nf: string | null
+          valor: number | null
+          vencimento: string | null
+          vencimento_origem: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       protestos_atual: {
         Row: {
           cartorios: Json | null
@@ -1482,6 +2192,8 @@ export type Database = {
       }
     }
     Functions: {
+      antecipacao_metricas_faixa: { Args: never; Returns: Json }
+      antecipacao_resumo_funil: { Args: never; Returns: Json }
       app_aprovar_lote: {
         Args: { p: Json }
         Returns: {
@@ -1527,6 +2239,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_ativar_faixa_regra: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          faixa: string
+          id: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "faixa_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_atualizar_empresa: {
         Args: { p: Json }
         Returns: {
@@ -1556,8 +2286,10 @@ export type Database = {
           origem: string | null
           porte: string | null
           razao_social: string | null
+          tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
+          ultima_antecipacao: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1622,8 +2354,10 @@ export type Database = {
           origem: string | null
           porte: string | null
           razao_social: string | null
+          tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
+          ultima_antecipacao: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1710,7 +2444,142 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_definir_ponto_focal: {
+        Args: { p: Json }
+        Returns: {
+          apollo_person_id: string | null
+          cargo: string | null
+          criado_em: string
+          departamento: string | null
+          email: string | null
+          email_status: string | null
+          empresa_id: string
+          enriquecido_em: string | null
+          id: string
+          linkedin_url: string | null
+          nome: string | null
+          origem: string | null
+          ponto_focal: boolean
+          senioridade: string | null
+          telefone: string | null
+          telefone_status: string | null
+          whatsapp: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contatos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_descartar_mensagem: {
+        Args: { p: Json }
+        Returns: {
+          access_keys: string[]
+          assunto: string | null
+          atualizada_em: string
+          canal: string
+          corpo: string | null
+          criada_em: string
+          descartada_por: string | null
+          destinatario: string | null
+          destinatario_contato_id: string | null
+          destinatario_ponto_focal: boolean
+          faixa: string | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          motivo_descarte: string | null
+          status: string
+          valor_total: number | null
+          whatsapp_conta_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mensagens_outbox"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_desmonitorar_protesto: {
+        Args: { p_cnpj: string }
+        Returns: undefined
+      }
       app_is_admin: { Args: never; Returns: boolean }
+      app_marcar_sem_interesse: {
+        Args: { p: Json }
+        Returns: {
+          contexto: string
+          criado_em: string
+          criado_por: string | null
+          escopo: string
+          expira_em: string | null
+          id: string
+          motivo: string
+          observacao: string | null
+          valor: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "supressao"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_monitorar_protesto: { Args: { p_cnpj: string }; Returns: undefined }
+      app_mover_estagio_nf: {
+        Args: { p: Json }
+        Returns: {
+          access_key: string
+          atualizada_em: string
+          contato_sacado: Json | null
+          credit_disponivel: number | null
+          credit_limite: number | null
+          credit_role: string | null
+          credit_status: string | null
+          criada_em: string
+          dias_para_vencimento: number | null
+          direction: string
+          emitida_em: string | null
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          estagio_funil: string
+          faixa: string | null
+          faixa_alterada_em: string | null
+          faixa_motivo: string | null
+          faixa_regra_versao: number | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_cnpj: string
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          nf_id_externo: string | null
+          numero: string | null
+          parcelas: Json | null
+          perda_motivo: string | null
+          raw_xml: string | null
+          receita_esperada: number | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string
+          sacado_empresa_id: string | null
+          sacado_nome: string | null
+          serie: string | null
+          sincronizada_em: string | null
+          status_sync: string | null
+          taxa_usada: number | null
+          tipo: string
+          valor: number
+          vencimento: string | null
+          vencimento_origem: string | null
+          xml_parse_erro: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notas_fiscais"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_promover_empresa: {
         Args: { p: Json }
         Returns: {
@@ -1740,8 +2609,10 @@ export type Database = {
           origem: string | null
           porte: string | null
           razao_social: string | null
+          tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
+          ultima_antecipacao: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1750,7 +2621,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_registrar_toque_manual: { Args: { p: Json }; Returns: undefined }
       app_remover_supressao: { Args: { p: Json }; Returns: undefined }
+      app_salvar_antecipacao_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "antecipacao_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_salvar_camada_regra: {
         Args: { p: Json }
         Returns: {
@@ -1765,6 +2652,45 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "camada_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_faixa_disparo: {
+        Args: { p: Json }
+        Returns: {
+          assunto_email: string | null
+          atualizado_em: string
+          atualizado_por: string | null
+          cooldown_dias: number
+          email_habilitado: boolean
+          faixa: string
+          template_email: string | null
+          template_whatsapp: string | null
+          whatsapp_contas: string[]
+          whatsapp_habilitado: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "faixa_disparos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_faixa_regra: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          faixa: string
+          id: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "faixa_regras"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1784,12 +2710,35 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_salvar_whatsapp_conta: {
+        Args: { p: Json }
+        Returns: {
+          apelido: string
+          ativo: boolean
+          atualizada_em: string
+          criada_em: string
+          id: string
+          numero: string
+          provedor: string
+          token_definido_em: string | null
+          token_secret_id: string | null
+          usuario_responsavel: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "whatsapp_contas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_suprimir: {
         Args: { p: Json }
         Returns: {
+          contexto: string
           criado_em: string
           criado_por: string | null
           escopo: string
+          expira_em: string | null
           id: string
           motivo: string
           observacao: string | null
@@ -1808,6 +2757,11 @@ export type Database = {
         Args: { p_principal: string; p_secundarios: string[] }
         Returns: string[]
       }
+      empresa_analise_financeira: {
+        Args: { p_empresa_id: string }
+        Returns: Json
+      }
+      empresa_grupo_protestos: { Args: { p_empresa_id: string }; Returns: Json }
       mercado_amostra_camada: {
         Args: {
           p_camada: string
@@ -1841,6 +2795,24 @@ export type Database = {
       mercado_where: {
         Args: { p_arvore: Json; p_termo: string }
         Returns: string
+      }
+      radar_cobertura: { Args: never; Returns: Json }
+      radar_grupo_spes_monitoramento: {
+        Args: { p_grupo_id: string }
+        Returns: Json
+      }
+      radar_onepay_analytics: { Args: never; Returns: Json }
+      radar_onepay_clientes: {
+        Args: { p_dimensao: string; p_valor: string }
+        Returns: Json
+      }
+      radar_protestos_empresa_previa: {
+        Args: {
+          p_ano_min: number
+          p_empresa_id: string
+          p_incluir_spes: boolean
+        }
+        Returns: Json
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

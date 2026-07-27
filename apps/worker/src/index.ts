@@ -18,6 +18,11 @@ import {
   dispararLoteRadar,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
+  dispararSyncNfs,
+  dispararAntecipacaoDiario,
+  dispararReclassificacaoFunil,
+  dispararOutbox,
+  dispararLookupCadastral,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -177,6 +182,54 @@ app.post('/jobs/radar/protestos-empresa', (req: Request, res: Response, next: Ne
     const { empresa_id, incluir_spes, ano_min } = protestosEmpresaSchema.parse(req.body ?? {})
     const id = dispararProtestosEmpresa({ empresaId: empresa_id, incluirSpes: incluir_spes, anoMin: ano_min })
     res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
+
+/**
+ * 202, como os demais: o sync pagina um endpoint de terceiro e parseia XML por
+ * nota, e depois ainda reclassifica o funil. O caller acompanha por
+ * `mercado_ingestoes` (fonte `onepay_nf`).
+ */
+app.post('/jobs/antecipacao/sync-nfs', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = await dispararSyncNfs()
+    res.status(202).json({ ingestao_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/diario', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAntecipacaoDiario(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararReclassificacaoFunil(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/outbox', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararOutbox(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/lookup', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararLookupCadastral(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

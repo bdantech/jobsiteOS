@@ -104,7 +104,7 @@ export async function fetchEmpresa360(id: string): Promise<Empresa360 | null> {
   // a company. Answer that directly instead of turning it into an error state.
   if (!UUID_RE.test(id)) return null
 
-  const [empresaResult, notasResult, eventosResult] = await Promise.all([
+  const [empresaResult, notasResult, eventosResult, contatosResult] = await Promise.all([
     supabase.from('empresas').select('*').eq('id', id).maybeSingle(),
     supabase
       .from('empresa_notas')
@@ -118,6 +118,15 @@ export async function fetchEmpresa360(id: string): Promise<Empresa360 | null> {
       .eq('empresa_id', id)
       .order('criado_em', { ascending: false })
       .limit(DETAIL_LIMIT),
+    // Ponto focal primeiro: a lista mostra a MESMA ordem que a escolha de
+    // destinatário usa (Antecipação §3.2), senão ninguém entende por que uma
+    // mensagem foi para quem foi.
+    supabase
+      .from('contatos')
+      .select('*')
+      .eq('empresa_id', id)
+      .order('ponto_focal', { ascending: false })
+      .order('nome', { ascending: true, nullsFirst: false }),
   ])
 
   if (empresaResult.error) throw empresaResult.error
@@ -126,6 +135,7 @@ export async function fetchEmpresa360(id: string): Promise<Empresa360 | null> {
   if (!empresaResult.data) return null
   if (notasResult.error) throw notasResult.error
   if (eventosResult.error) throw eventosResult.error
+  if (contatosResult.error) throw contatosResult.error
 
   const notasRows = notasResult.data ?? []
   const eventosRows = eventosResult.data ?? []
@@ -154,5 +164,5 @@ export async function fetchEmpresa360(id: string): Promise<Empresa360 | null> {
     ator_nome: evento.ator_usuario_id ? (nomes.get(evento.ator_usuario_id) ?? null) : null,
   }))
 
-  return { empresa: empresaResult.data, notas, eventos }
+  return { empresa: empresaResult.data, notas, eventos, contatos: contatosResult.data ?? [] }
 }

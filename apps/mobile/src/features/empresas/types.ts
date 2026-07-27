@@ -39,6 +39,8 @@ export interface Empresa360 {
   empresa: Empresa
   notas: NotaComAutor[]
   eventos: EventoComAtor[]
+  /** Contatos com o ponto focal primeiro (Antecipação §3.2). */
+  contatos: Tables<'contatos'>[]
 }
 
 /** `undefined` estagio = "Todas" (no filter). */

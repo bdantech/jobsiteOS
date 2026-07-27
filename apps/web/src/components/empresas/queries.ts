@@ -69,6 +69,7 @@ export const empresasKeys = {
   detalhe: (id: string) => ['empresas', 'detalhe', id] as const,
   notas: (id: string) => ['empresas', 'notas', id] as const,
   eventos: (id: string) => ['empresas', 'eventos', id] as const,
+  contatos: (id: string) => ['empresas', 'contatos', id] as const,
   analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
   grupoProtestos: (id: string) => ['empresas', 'analise-financeira', id, 'grupo-protestos'] as const,
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
@@ -324,6 +325,26 @@ export async function buscarNotas(empresaId: string): Promise<NotaComAutor[]> {
     ...nota,
     autor_nome: nomes.get(nota.autor_usuario_id) ?? null,
   }))
+}
+
+/**
+ * Contatos da empresa, com o PONTO FOCAL primeiro.
+ *
+ * A ordenação não é cosmética: toda escolha de destinatário no sistema (a outbox
+ * da Antecipação, os botões de contato no mobile) segue a hierarquia "ponto focal
+ * → melhor contato disponível". A lista mostrar a mesma ordem que o código usa é o
+ * que faz alguém entender por que uma mensagem foi para quem foi.
+ */
+export async function buscarContatos(empresaId: string): Promise<Tables<'contatos'>[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('contatos')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('ponto_focal', { ascending: false })
+    .order('nome', { ascending: true, nullsFirst: false })
+  if (error) throw new Error(error.message)
+  return data ?? []
 }
 
 export async function buscarEventos(empresaId: string): Promise<EventoComAtor[]> {

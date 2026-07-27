@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { adminModule } from './modules/admin.js'
+import { antecipacaoModule } from './modules/antecipacao.js'
 import { empresasModule } from './modules/empresas.js'
 import { mercadoModule } from './modules/mercado.js'
 import { notificacoesModule } from './modules/notificacoes.js'
@@ -18,6 +19,9 @@ export * from './types.js'
 export const MODULES: readonly AppModule[] = [
   mercadoModule,
   radarModule,
+  // Antecipação sits after Radar and before Empresas: it is where the market
+  // work turns into money, and it is the screen a salesperson opens first.
+  antecipacaoModule,
   empresasModule,
   adminModule,
   notificacoesModule,

@@ -45,6 +45,22 @@ export const EVENTO_TIPOS = {
   CLIENTE_LIMITE_QUASE_ESGOTADO: 'cliente.limite_quase_esgotado',
   CLIENTE_STATUS_OPERACIONAL_ALTERADO: 'cliente.status_operacional_alterado',
   CLIENTE_REATIVADO: 'cliente.reativado',
+
+  // Antecipação (funil de NFs)
+  NF_SINCRONIZADA: 'nf.sincronizada',
+  NF_FAIXA_ALTERADA: 'nf.faixa_alterada',
+  NF_EXPIRADA: 'nf.expirada',
+  NF_ESTAGIO_ALTERADO: 'nf.estagio_alterado',
+  NF_CONVERTIDA: 'nf.convertida',
+  NF_PERDIDA: 'nf.perdida',
+  FORNECEDOR_SEM_INTERESSE: 'fornecedor.sem_interesse',
+  FORNECEDOR_TIPAGEM_ALTERADA: 'fornecedor.tipagem_alterada',
+  SACADO_LIMITE_INSUFICIENTE: 'sacado.limite_insuficiente',
+  SACADO_CREDITO_ALTERADO: 'sacado.credito_alterado',
+  OUTBOX_MENSAGEM_GERADA: 'outbox.mensagem_gerada',
+  TOQUE_MANUAL: 'toque.manual',
+  CONTATO_PONTO_FOCAL_DEFINIDO: 'contato.ponto_focal_definido',
+  CNPJ_LOOKUP_NAO_ENCONTRADO: 'cnpj.lookup_nao_encontrado',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -80,6 +96,20 @@ export const EVENTO_LABELS: Record<string, string> = {
   'cliente.limite_quase_esgotado': 'Limite quase esgotado',
   'cliente.status_operacional_alterado': 'Status operacional alterado',
   'cliente.reativado': 'Cliente reativado',
+  'nf.sincronizada': 'Nota fiscal sincronizada',
+  'nf.faixa_alterada': 'Faixa da nota alterada',
+  'nf.expirada': 'Nota expirada',
+  'nf.estagio_alterado': 'Estágio da nota alterado',
+  'nf.convertida': 'Nota convertida',
+  'nf.perdida': 'Nota perdida',
+  'fornecedor.sem_interesse': 'Fornecedor sem interesse',
+  'fornecedor.tipagem_alterada': 'Tipagem do fornecedor alterada',
+  'sacado.limite_insuficiente': 'Limite do sacado insuficiente',
+  'sacado.credito_alterado': 'Crédito do sacado alterado',
+  'outbox.mensagem_gerada': 'Mensagem gerada na outbox',
+  'toque.manual': 'Toque manual',
+  'contato.ponto_focal_definido': 'Ponto focal definido',
+  'cnpj.lookup_nao_encontrado': 'CNPJ não encontrado no lookup cadastral',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

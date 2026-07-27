@@ -1,8 +1,10 @@
 import {
+  Banknote,
   Bell,
   Building2,
   LayoutGrid,
   Map,
+  Radar,
   Shield,
   type LucideIcon,
 } from 'lucide-react-native'
@@ -18,6 +20,8 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   shield: Shield,
   bell: Bell,
   map: Map,
+  radar: Radar,
+  banknote: Banknote,
 }
 
 export function moduleIcon(token: string): LucideIcon {

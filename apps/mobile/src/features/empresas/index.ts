@@ -1,3 +1,4 @@
+export { ContatosSection } from './components/contatos-section'
 export { EmpresaCard } from './components/empresa-card'
 export { EmpresaHeader } from './components/empresa-header'
 export { ErpBlock } from './components/erp-block'

@@ -316,8 +316,157 @@ check(
 const rc4 = await user.from('app_config').insert({ chave: 'invadido', valor: '"x"' })
 check('NÃO cria chave de config nova sem ser admin', !!rc4.error, `-> err=${rc4.error?.code ?? 'NENHUM — CRIOU!'}`)
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANTECIPAÇÃO (migrations 0045–0052)
+//
+// O funil de NFs. Três invariantes que uma policy solta destruiria:
+//   1. `notas_funil` é security_invoker — sem o módulo, o funil não existe.
+//   2. `notas_fiscais` e `mensagens_outbox` NÃO têm grant de update/insert: o
+//      único caminho de escrita é o RPC, que grava evento + audit na transação.
+//      É isso que torna "mover um card sem registrar o evento" inexprimível.
+//   3. O ponteiro do token de WhatsApp não é legível (0052 conserta o revoke por
+//      coluna que 0046 fez em cima de um grant de tabela e que não pegou).
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('\n── Antecipação, SEM o módulo concedido ──')
+
+const CHAVE_PROBE = 'PROBE000000000000000000000000000000000000RLS'
+await admin.from('notas_fiscais').delete().eq('access_key', CHAVE_PROBE)
+await admin.from('notas_fiscais').insert({
+  access_key: CHAVE_PROBE,
+  tipo: 'NFe',
+  direction: 'received',
+  valor: 123456.78,
+  vencimento: new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10),
+  vencimento_origem: 'xml',
+  dias_para_vencimento: 40,
+  sacado_cnpj: '11222333000181',
+  sacado_nome: 'SACADO DO PROBE',
+  sacado_cadastrado: true,
+  fornecedor_cnpj: '11444777000161',
+  fornecedor_nome: 'FORNECEDOR DO PROBE',
+  fornecedor_cadastrado: true,
+  credit_status: 'APPROVED',
+  credit_disponivel: 999999,
+  faixa: 'alta',
+  faixa_motivo: 'regra',
+})
+
+for (const tabela of [
+  'notas_fiscais',
+  'nota_itens',
+  'credito_snapshots',
+  'faixa_regras',
+  'faixa_disparos',
+  'mensagens_outbox',
+  'cnpj_lookup_fila',
+  'antecipacao_config',
+]) {
+  const { data, error } = await user.from(tabela).select('*').limit(1)
+  check(`não lê ${tabela} sem o módulo`, (data?.length ?? 0) === 0 || !!error)
+}
+
+const ra0 = await user.from('notas_funil').select('access_key').eq('access_key', CHAVE_PROBE)
+check(
+  'a view notas_funil não vaza o funil (security_invoker)',
+  (ra0.data?.length ?? 0) === 0 || !!ra0.error,
+  `-> ${ra0.data?.length ?? 0} linhas — A VIEW ESTÁ IGNORANDO O RLS!`,
+)
+
+const ra1 = await user.rpc('app_mover_estagio_nf', {
+  p: { access_key: CHAVE_PROBE, estagio_funil: 'em_prospeccao' },
+})
+check('não move estágio sem o módulo', !!ra1.error, `-> err=${ra1.error?.code ?? 'NENHUM — MOVEU!'}`)
+
+const ra2 = await user.rpc('app_marcar_sem_interesse', {
+  p: { fornecedor_cnpj: '11444777000161', motivo: 'probe' },
+})
+check('não suprime fornecedor sem o módulo', !!ra2.error, `-> err=${ra2.error?.code ?? 'NENHUM — SUPRIMIU!'}`)
+
+// ── com o módulo antecipacao concedido ──────────────────────────────────────
+console.log('\n── Antecipação, COM o módulo concedido ──')
+
+await admin.from('perfil_modulos').insert({ perfil_id: perfilVendas.id, modulo_id: 'antecipacao' })
+
+const rb1 = await user.from('notas_funil').select('access_key, faixa, dias_para_vencimento, fornecedor_tipagem').eq('access_key', CHAVE_PROBE)
+check('agora lê o funil pela view', (rb1.data?.length ?? 0) === 1, `-> ${rb1.data?.length ?? 0} linhas`)
+check('a view calcula dias_para_vencimento', rb1.data?.[0]?.dias_para_vencimento === 40, `-> ${rb1.data?.[0]?.dias_para_vencimento}`)
+check('a view calcula a tipagem do fornecedor', rb1.data?.[0]?.fornecedor_tipagem === 'ativacao', `-> ${rb1.data?.[0]?.fornecedor_tipagem}`)
+
+const rb2 = await user.from('faixa_regras').select('faixa, versao, ativa').eq('ativa', true)
+check('lê as regras de faixa ativas', (rb2.data?.length ?? 0) === 3, `-> ${rb2.data?.length ?? 0}`)
+
+// A nota só muda de estágio pelo RPC: a tabela não tem grant de update.
+const rb3 = await user.from('notas_fiscais').update({ estagio_funil: 'convertida' }).eq('access_key', CHAVE_PROBE)
+const { data: aposDireto } = await admin
+  .from('notas_fiscais').select('estagio_funil').eq('access_key', CHAVE_PROBE).single()
+check(
+  'NÃO escreve em notas_fiscais direto na tabela (só pelo RPC)',
+  aposDireto?.estagio_funil === 'a_prospectar',
+  `-> virou ${aposDireto?.estagio_funil} — ESCREVEU! err=${rb3.error?.code ?? 'nenhum'}`,
+)
+
+const rb4 = await user.rpc('app_mover_estagio_nf', {
+  p: { access_key: CHAVE_PROBE, estagio_funil: 'em_prospeccao' },
+})
+check('move estágio pelo RPC com o módulo', !rb4.error && rb4.data?.estagio_funil === 'em_prospeccao',
+  `-> ${rb4.data?.estagio_funil ?? `err=${rb4.error?.message}`}`)
+
+if (!rb4.error) {
+  const { data: ev } = await admin.from('empresa_eventos').select('tipo, ator_usuario_id')
+    .eq('tipo', 'nf.estagio_alterado').order('criado_em', { ascending: false }).limit(1)
+  check('...e emitiu nf.estagio_alterado', ev?.length === 1)
+  const { data: al } = await admin.from('audit_log').select('acao, usuario_id')
+    .eq('acao', 'antecipacao.estagio_movido').order('criado_em', { ascending: false }).limit(1)
+  check('...e gravou o audit_log atribuído ao ator', al?.[0]?.usuario_id === uid)
+}
+
+// "Perdida" sem motivo tem de ser recusada: o motivo é o insumo da métrica.
+const rb5 = await user.rpc('app_mover_estagio_nf', {
+  p: { access_key: CHAVE_PROBE, estagio_funil: 'perdida' },
+})
+check('NÃO marca perdida sem motivo', !!rb5.error, `-> err=${rb5.error?.code ?? 'NENHUM — ACEITOU!'}`)
+
+// A régua e as contas são alavanca da empresa: admin, mesmo com o módulo.
+const rb6 = await user.from('faixa_regras').insert({ faixa: 'alta', versao: 999, definicao: {}, ativa: false })
+check('NÃO cria regra de faixa sem ser admin', !!rb6.error, `-> err=${rb6.error?.code ?? 'NENHUM — CRIOU!'}`)
+
+const rb7 = await user.rpc('app_salvar_whatsapp_conta', {
+  p: { apelido: 'probe', numero: '5511999990000', token: 'segredo-do-probe' },
+})
+check('NÃO cadastra conta de WhatsApp sem ser admin', !!rb7.error, `-> err=${rb7.error?.code ?? 'NENHUM — CADASTROU!'}`)
+
+// O ponteiro do segredo não pode voltar por PostgREST (0052).
+const rb8 = await user.from('whatsapp_contas').select('token_secret_id').limit(1)
+check('NÃO lê token_secret_id (sem grant de coluna)', !!rb8.error,
+  `-> err=${rb8.error?.code ?? 'NENHUM — LEU O PONTEIRO DO SEGREDO!'}`)
+
+const rb9 = await user.from('whatsapp_contas').select('id, apelido, token_definido_em').limit(1)
+check('...mas lê apelido e token_definido_em', !rb9.error, `-> err=${rb9.error?.code ?? 'nenhum'}`)
+
+// A outbox é gerada pelo worker; o usuário só lê e descarta pelo RPC.
+const rb10 = await user.from('mensagens_outbox').insert({
+  canal: 'email', fornecedor_cnpj: '11444777000161', access_keys: [CHAVE_PROBE],
+})
+check('NÃO insere na outbox (só o worker gera)', !!rb10.error, `-> err=${rb10.error?.code ?? 'NENHUM — INSERIU!'}`)
+
+// Supressão soft: expira, e a nota sai da faixa na hora.
+const rb11 = await user.rpc('app_marcar_sem_interesse', {
+  p: { fornecedor_cnpj: '11444777000161', motivo: 'probe: sem interesse agora', eterna: false, dias: 90 },
+})
+check('suprime fornecedor com o módulo', !rb11.error && !!rb11.data?.id, `-> err=${rb11.error?.message ?? 'nenhum'}`)
+check('a supressão soft ganha data de expiração', !!rb11.data?.expira_em, `-> ${rb11.data?.expira_em}`)
+check("a supressão carrega contexto 'antecipacao'", rb11.data?.contexto === 'antecipacao', `-> ${rb11.data?.contexto}`)
+
+const { data: aposSupressao } = await admin
+  .from('notas_fiscais').select('faixa, faixa_motivo').eq('access_key', CHAVE_PROBE).single()
+check('suprimir tira a nota da faixa na hora', aposSupressao?.faixa === null && aposSupressao?.faixa_motivo === 'suprimido',
+  `-> faixa=${aposSupressao?.faixa} motivo=${aposSupressao?.faixa_motivo}`)
+
 // ── teardown ─────────────────────────────────────────────────────────────────
 if (rm7.data?.id) await admin.from('segmentos').delete().eq('id', rm7.data.id)
+await admin.from('notas_fiscais').delete().eq('access_key', CHAVE_PROBE)
+await admin.from('supressao').delete().eq('valor', '11444777000161')
 await admin.from('mercado_universo').delete().in('cnpj', ['11222333000181', '11444777000161', '33000167000101'])
 await admin.from('empresas').delete().in('cnpj', ['11222333000181', '11444777000161', '33000167000101'])
 await admin.from('usuarios').delete().eq('id', uid)

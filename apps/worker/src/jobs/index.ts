@@ -22,6 +22,11 @@ import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
 import { criarProcessadorContatos } from './radar/contatos.js'
 import { criarProcessadorProtestos, protestosClientesMensal, protestosEmpresa } from './radar/protestos.js'
+import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
+import { reclassificarFunil } from './antecipacao/reclassificar.js'
+import { gerarOutbox } from './antecipacao/outbox.js'
+import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
+import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -40,6 +45,11 @@ export type TipoJob =
   | 'radar-lote'
   | 'protestos-mensal'
   | 'protestos-empresa'
+  | 'antecipacao-sync-nfs'
+  | 'antecipacao-reclassificar'
+  | 'antecipacao-outbox'
+  | 'antecipacao-lookup'
+  | 'antecipacao-diario'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -118,7 +128,7 @@ async function executar(
   tipo: TipoJob,
   ingestaoId: string,
   trabalho: (client: pg.Client) => Promise<Contadores & { meta?: Record<string, unknown> }>,
-  fonte: 'receita_cnpj' | 'cno',
+  fonte: 'receita_cnpj' | 'cno' | 'onepay_nf',
 ): Promise<void> {
   const client = await sessaoDedicada()
   try {
@@ -325,6 +335,82 @@ export function dispararProtestosEmpresa(opts: {
     logger.info({ empresaId: opts.empresaId, incluirSpes: opts.incluirSpes, anoMin: opts.anoMin }, 'Protestos sob demanda.')
     return protestosEmpresa(opts)
   })
+}
+
+// ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
+
+/**
+ * Sync de NFs (§3), de 4 em 4 horas. Abre uma linha em `mercado_ingestoes` com
+ * fonte `onepay_nf` — mesma política de retry/alerta dos outros syncs, e é dela
+ * que a JANELA da próxima execução é derivada (último concluído menos o colchão).
+ *
+ * A reclassificação roda no fim, na MESMA corrida: sem isso uma nota recém
+ * chegada ficaria sem faixa até o job diário, e "nova NF em faixa alta" — que é
+ * um push para o comercial — chegaria com até 24h de atraso.
+ */
+export async function dispararSyncNfs(): Promise<string> {
+  const id = await abrirIngestao('onepay_nf', { origem: 'worker' })
+  reservar('antecipacao-sync-nfs', id)
+
+  void executar(
+    'antecipacao-sync-nfs',
+    id,
+    async (client) => {
+      const sync = await sincronizarNotasFiscais()
+      const reclass = await reclassificarFunil(client)
+      const outbox = await gerarOutbox()
+      await anotarMeta(id, { sync, reclassificacao: reclass, outbox })
+      return {
+        linhas_processadas: sync.notas,
+        linhas_novas: sync.novas,
+        linhas_atualizadas: sync.atualizadas,
+      }
+    },
+    'onepay_nf',
+  )
+
+  return id
+}
+
+/**
+ * O job DIÁRIO (§9): limpa supressões vencidas, reclassifica com expiração,
+ * consome a fila de lookup cadastral e regenera a outbox.
+ *
+ * A ordem é uma cadeia de dependências, não uma preferência:
+ *   supressões → um fornecedor cuja supressão caiu hoje precisa voltar a ser
+ *                elegível ANTES de a faixa ser recalculada;
+ *   lookup     → o dado cadastral que chega agora é o que as variáveis de faixa
+ *                vão ler;
+ *   reclassificar → faixa + expiração + receita esperada;
+ *   outbox     → só faz sentido sobre faixas já corretas.
+ */
+export function dispararAntecipacaoDiario(): string {
+  return dispararAvulso('antecipacao-diario', async (client) => {
+    const supressoes = await limparSupressoesExpiradas()
+    const lookup = await lookupCadastral()
+    const reclassificacao = await reclassificarFunil(client)
+    const outbox = await gerarOutbox()
+    return { supressoes, lookup, reclassificacao, outbox }
+  })
+}
+
+/** Reclassificação sob demanda — o que a ativação de uma regra de faixa dispara. */
+export function dispararReclassificacaoFunil(): string {
+  return dispararAvulso('antecipacao-reclassificar', async (client) => {
+    const reclassificacao = await reclassificarFunil(client)
+    const outbox = await gerarOutbox()
+    return { reclassificacao, outbox }
+  })
+}
+
+/** Regeneração da outbox sob demanda (depois de mexer na régua de disparo). */
+export function dispararOutbox(): string {
+  return dispararAvulso('antecipacao-outbox', async () => gerarOutbox())
+}
+
+/** Lookup cadastral sob demanda — para esvaziar a fila sem esperar o diário. */
+export function dispararLookupCadastral(): string {
+  return dispararAvulso('antecipacao-lookup', async () => lookupCadastral())
 }
 
 /**

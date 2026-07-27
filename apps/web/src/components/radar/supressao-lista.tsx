@@ -118,6 +118,14 @@ export function SupressaoLista() {
                     <p className="text-xs text-muted-foreground">
                       {ESCOPO_SUPRESSAO_LABELS[s.escopo as EscopoSupressao] ?? s.escopo} ·{' '}
                       {MOTIVO_SUPRESSAO_LABELS[s.motivo as MotivoSupressao] ?? s.motivo}
+                      {/* A VALIDADE é a informação que decide o comportamento: uma
+                          supressão vencida não suprime nada, e uma eterna nunca sai
+                          sozinha. Sem isto na tela, as duas parecem a mesma coisa. */}
+                      {' · '}
+                      {s.expira_em
+                        ? `expira em ${new Date(`${s.expira_em}T00:00:00`).toLocaleDateString('pt-BR')}`
+                        : 'eterna'}
+                      {s.contexto && s.contexto !== 'geral' ? ` · ${s.contexto}` : ''}
                       {s.observacao ? ` · ${s.observacao}` : ''}
                     </p>
                   </div>

@@ -27,6 +27,7 @@ import { AnaliseFinanceira } from './analise-financeira'
 import { MonitoramentoProtesto } from './monitoramento-protesto'
 import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
+import { EmpresaContatos } from './empresa-contatos'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
@@ -170,6 +171,7 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
       <Tabs defaultValue="dados" className="space-y-4">
         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
+          <TabsTrigger value="contatos">Contatos</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
           <TabsTrigger value="financeiro">Análise financeira</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -209,6 +211,11 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
             <>
               <TabsContent value="dados" className="mt-0">
                 <EmpresaForm empresa={data} />
+              </TabsContent>
+
+              {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}
+              <TabsContent value="contatos" className="mt-0">
+                <EmpresaContatos empresaId={data.id} />
               </TabsContent>
 
               <TabsContent value="notas" className="mt-0">

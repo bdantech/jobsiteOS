@@ -19,9 +19,13 @@ import type { CamadaComRegra, PreviaRegra } from '@jobsiteos/core'
  */
 
 /** fonte -> worker route. `lista` is deliberately absent: list imports are not a worker job. */
-const ROTAS: Record<'receita_cnpj' | 'cno', string> = {
+const ROTAS: Record<'receita_cnpj' | 'cno' | 'onepay_nf', string> = {
   receita_cnpj: '/jobs/receita',
   cno: '/jobs/cno',
+  // O sync de NFs É uma ingestão (fonte `onepay_nf`, migration 0050), então
+  // entra em ROTAS: é o que faz o botão "Reexecutar" da tela de Ingestões
+  // funcionar para ele sem código novo.
+  onepay_nf: '/jobs/antecipacao/sync-nfs',
 }
 
 /**
@@ -216,6 +220,41 @@ export async function dispararProtestosEmpresa(input: {
     { empresa_id: input.empresaId, incluir_spes: input.incluirSpes, ano_min: input.anoMin },
     'radar-protestos-empresa',
   )
+}
+
+// ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
+
+/**
+ * Sync de NFs (§3). Enqueue-only: o worker pagina o endpoint, parseia XML por
+ * nota, reclassifica o funil e regenera a outbox em segundo plano. O caller
+ * acompanha por `mercado_ingestoes` (fonte `onepay_nf`).
+ */
+export async function dispararSyncNfs(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/sync-nfs', { origem: 'cron' }, 'antecipacao-sync-nfs')
+}
+
+/** O job diário (§9): supressões expiradas → lookup cadastral → reclassificar → outbox. */
+export async function dispararAntecipacaoDiario(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/diario', {}, 'antecipacao-diario')
+}
+
+/**
+ * Reclassificação do funil sob demanda. É o que a ATIVAÇÃO de uma regra de faixa
+ * dispara: ativar sem reclassificar deixaria o funil inteiro carregando as faixas
+ * que a regra ANTIGA atribuiu — a mesma armadilha da pirâmide (§5.1).
+ */
+export async function dispararReclassificacaoFunil(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/reclassificar', {}, 'antecipacao-reclassificar')
+}
+
+/** Regeneração da outbox — depois de mexer na régua de disparo de uma faixa. */
+export async function dispararOutbox(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/outbox', {}, 'antecipacao-outbox')
+}
+
+/** Lookup cadastral sob demanda, para esvaziar a fila sem esperar o diário. */
+export async function dispararLookupCadastral(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/lookup', {}, 'antecipacao-lookup')
 }
 
 export interface ReclassificarInput {

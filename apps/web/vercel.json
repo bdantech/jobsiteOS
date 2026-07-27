@@ -20,6 +20,14 @@
     {
       "path": "/api/cron/radar-protestos-clientes",
       "schedule": "0 8 5 * *"
+    },
+    {
+      "path": "/api/cron/antecipacao-sync",
+      "schedule": "30 9,13,17,21,1,5 * * *"
+    },
+    {
+      "path": "/api/cron/antecipacao-diario",
+      "schedule": "0 5 * * *"
     }
   ]
 }

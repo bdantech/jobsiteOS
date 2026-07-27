@@ -406,21 +406,27 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     coluna: 'consumed_pct',
     descricao: 'Fração do limite de crédito consumida (0 a 1). Clientes Onepay.',
   },
+
+  // Antecipação (§3.1) — colunas em mercado_explorador via migration 0049
+  {
+    id: 'fora_recorte_cnae',
+    label: 'Fora do recorte de CNAE',
+    tipo: 'booleano',
+    coluna: 'fora_recorte_cnae',
+    descricao:
+      'Empresa que entrou pelo lookup cadastral de fornecedores de NF e cujo CNAE não é de ' +
+      'construção. A regra do TAM exige false: eles existem no staging para o funil de ' +
+      'Antecipação, mas não sobem na pirâmide comercial.',
+  },
+  {
+    id: 'origem_ingestao',
+    label: 'Origem da ingestão',
+    tipo: 'enum',
+    coluna: 'origem_ingestao',
+    opcoes: ['receita_dump', 'lookup', 'lista'],
+    descricao: 'Como o CNPJ entrou na base: dump da Receita, lookup cadastral ou importação de lista.',
+  },
 ]
-
-const POR_ID = new Map(CATALOGO.map((v) => [v.id, v]))
-
-export function variavel(id: string): VariavelCatalogo | undefined {
-  return POR_ID.get(id)
-}
-
-export const VARIAVEL_IDS = CATALOGO.map((v) => v.id)
-
-export function operadoresDe(id: string): readonly Operador[] {
-  const v = POR_ID.get(id)
-  if (!v) return []
-  return OPERADORES_POR_TIPO[v.tipo]
-}
 
 // ─── A árvore ───────────────────────────────────────────────────────────────
 
@@ -448,105 +454,6 @@ export function isGrupo(no: No): no is Grupo {
   return 'condicoes' in no
 }
 
-const condicaoSchema: z.ZodType<Condicao> = z
-  .object({
-    variavel: z.string(),
-    operador: operadorSchema,
-    valor: z.unknown().optional(),
-  })
-  .superRefine((cond, ctx) => {
-    const v = POR_ID.get(cond.variavel)
-    if (!v) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Variável desconhecida: "${cond.variavel}".`,
-      })
-      return
-    }
-
-    if (!OPERADORES_POR_TIPO[v.tipo].includes(cond.operador)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Operador "${OPERADOR_LABELS[cond.operador]}" não se aplica a "${v.label}".`,
-      })
-      return
-    }
-
-    const precisaValor = !OPERADORES_SEM_VALOR.includes(cond.operador)
-    if (precisaValor && (cond.valor === undefined || cond.valor === null)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `"${v.label}" precisa de um valor.` })
-      return
-    }
-
-    if (cond.operador === 'entre') {
-      if (!Array.isArray(cond.valor) || cond.valor.length !== 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `"${v.label}" com "está entre" precisa de exatamente dois valores.`,
-        })
-      }
-      return
-    }
-
-    if (['em', 'nao_em', 'contem_algum'].includes(cond.operador)) {
-      if (!Array.isArray(cond.valor) || cond.valor.length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `"${v.label}" precisa de uma lista com ao menos um valor.`,
-        })
-      }
-      return
-    }
-
-    if (v.tipo === 'enum' && v.opcoes && precisaValor) {
-      const valores = Array.isArray(cond.valor) ? cond.valor : [cond.valor]
-      for (const val of valores) {
-        if (!v.opcoes.includes(String(val))) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `"${String(val)}" não é um valor válido para "${v.label}".`,
-          })
-        }
-      }
-    }
-
-    if (v.tipo === 'numero' && precisaValor) {
-      const valores = Array.isArray(cond.valor) ? cond.valor : [cond.valor]
-      for (const val of valores) {
-        if (typeof val !== 'number' || !Number.isFinite(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `"${v.label}" precisa de um número.`,
-          })
-        }
-      }
-    }
-  })
-
-export const filtroSchema: z.ZodType<No> = z.lazy(() =>
-  z.union([
-    z.object({
-      operador: z.enum(['e', 'ou']),
-      condicoes: z.array(filtroSchema).min(1, 'Um grupo precisa de ao menos uma condição.'),
-    }),
-    condicaoSchema,
-  ]),
-)
-
-/** Rules and segments always store a top-level GROUP, never a bare condition. */
-export const arvoreSchema = z.object({
-  operador: z.enum(['e', 'ou']),
-  condicoes: z.array(filtroSchema).min(1),
-})
-
-export function parseArvore(input: unknown): Grupo {
-  const r = arvoreSchema.safeParse(input)
-  if (!r.success) {
-    throw new FiltroError(r.error.issues.map((i) => i.message).join(' '))
-  }
-  return r.data as Grupo
-}
-
 // ─── Forma resolvida ────────────────────────────────────────────────────────
 // After normalization every leaf names a COLUMN, not a variable. This is the
 // only shape the compilers ever see, which means neither of them can be handed
@@ -570,27 +477,19 @@ function isGrupoResolvido(no: NoResolvido): no is GrupoResolvido {
   return 'condicoes' in no
 }
 
-/** Expands derived variables. Both compilers run this first, so they cannot diverge. */
-function normalizar(no: No, hoje: Date): NoResolvido {
-  if (isGrupo(no)) {
-    return { operador: no.operador, condicoes: no.condicoes.map((c) => normalizar(c, hoje)) }
-  }
+export type NoResolvidoJson =
+  | { op: 'e' | 'ou'; c: NoResolvidoJson[] }
+  | { col: string; op: Operador; v?: unknown }
 
-  const v = POR_ID.get(no.variavel)
-  if (!v) throw new FiltroError(`Variável desconhecida: "${no.variavel}".`)
-
-  if (v.derivada) return v.derivada(no, hoje)
-
-  if (!v.coluna) {
-    // Unreachable: the catalog test asserts every entry has a column or a
-    // derivation. A guard, not a user-facing error.
-    throw new FiltroError(`Variável "${no.variavel}" não tem coluna e não foi derivada.`)
-  }
-
-  return { coluna: v.coluna, operador: no.operador, valor: no.valor }
+export interface SqlCompilado {
+  /** WHERE clause body, with $1..$n placeholders. Never contains a literal value. */
+  text: string
+  values: unknown[]
 }
 
-// ─── Compilador 1: PostgREST (browser, sob RLS) ─────────────────────────────
+// ─── Os três compiladores, independentes de catálogo ────────────────────────
+// They only ever see the RESOLVED shape, so they cannot be handed a variable —
+// which is why they live outside the factory and are shared by every engine.
 
 /**
  * PostgREST treats , ( ) . : and " as syntax. A value carrying any of them —
@@ -658,28 +557,6 @@ function pgrstNo(no: NoResolvido): string {
   return `${no.operador === 'e' ? 'and' : 'or'}(${partes})`
 }
 
-/**
- * Returns the string to hand to `.or()`:
- *
- *   const filtro = compileToPostgrest(arvore)
- *   supabase.from('mercado_explorador').select('*', { count: 'exact' }).or(filtro)
- *
- * `.or()` on a single top-level and(...) is logically that and(...), which is
- * why a top-level AND group is not a special case.
- */
-export function compileToPostgrest(arvore: unknown, hoje: Date = new Date()): string {
-  const raiz = normalizar(parseArvore(arvore), hoje)
-  return pgrstNo(raiz)
-}
-
-// ─── Compilador 2: SQL parametrizado (worker, confiável) ────────────────────
-
-export interface SqlCompilado {
-  /** WHERE clause body, with $1..$n placeholders. Never contains a literal value. */
-  text: string
-  values: unknown[]
-}
-
 function sqlNo(no: NoResolvido, values: unknown[]): string {
   if (isGrupoResolvido(no)) {
     const partes = no.condicoes.map((c) => sqlNo(c, values))
@@ -729,32 +606,6 @@ function sqlNo(no: NoResolvido, values: unknown[]): string {
   }
 }
 
-export function compileToSql(arvore: unknown, hoje: Date = new Date()): SqlCompilado {
-  const raiz = normalizar(parseArvore(arvore), hoje)
-  const values: unknown[] = []
-  const text = sqlNo(raiz, values)
-  return { text, values }
-}
-
-// ─── Compilador 3: árvore resolvida em JSON (RPC do Explorador) ──────────────
-
-/**
- * A MESMA árvore normalizada, mas serializada em JSON compacto para viajar até uma
- * função Postgres (mercado_explorar / mercado_contar_exato) que a compila lá dentro,
- * sob SECURITY DEFINER. Por que não usar compileToPostgrest direto na view? Porque a
- * view roda sob RLS, e o operador ILIKE da BUSCA não é leakproof — sob RLS o planner
- * é proibido de usar o índice de trigrama e varre o universo inteiro (timeout). A RPC
- * definer roda sem RLS (portão feito uma vez), então o trigrama volta a valer.
- *
- * Sai JÁ resolvido (coluna, não variável): a derivação de idade_anos → data e a
- * checagem de catálogo acontecem AQUI, no TS que tem o catálogo; a função Postgres só
- * precisa casar coluna (contra uma whitelist) e operador. Mesma normalização dos
- * outros compiladores, então os três não podem divergir.
- */
-export type NoResolvidoJson =
-  | { op: 'e' | 'ou'; c: NoResolvidoJson[] }
-  | { col: string; op: Operador; v?: unknown }
-
 function serializarResolvido(no: NoResolvido): NoResolvidoJson {
   if (isGrupoResolvido(no)) {
     return { op: no.operador, c: no.condicoes.map(serializarResolvido) }
@@ -764,29 +615,265 @@ function serializarResolvido(no: NoResolvido): NoResolvidoJson {
     : { col: no.coluna, op: no.operador, v: no.valor }
 }
 
-export function resolverParaJson(arvore: unknown, hoje: Date = new Date()): NoResolvidoJson {
-  return serializarResolvido(normalizar(parseArvore(arvore), hoje))
+// ─── A fábrica ──────────────────────────────────────────────────────────────
+
+/**
+ * ONE engine per CATALOG, and the catalog is the whitelist.
+ *
+ * The engine used to be a module-level singleton bound to `CATALOGO`, and that
+ * was fine while the Mercado's `mercado_explorador` was the only surface with
+ * filterable columns. The Antecipação funnel has its own — `notas_funil`, whose
+ * variables (sacado_credito_status, dias_para_vencimento…) mean nothing over a
+ * company row, and whose columns do not exist on the Mercado view. Merging the
+ * two catalogs would let a faixa rule reference `obras_ativas` and compile to a
+ * column the funnel view does not have — an error nobody sees until the nightly
+ * reclassification fails on 40.000 notes.
+ *
+ * So: one factory, two instances, one set of compilers. The safety property is
+ * unchanged — a variable outside THIS engine's catalog fails zod before any
+ * compiler sees it.
+ */
+export interface FiltroEngine {
+  catalogo: readonly VariavelCatalogo[]
+  variavelIds: readonly string[]
+  variavel: (id: string) => VariavelCatalogo | undefined
+  operadoresDe: (id: string) => readonly Operador[]
+  /** Any node: a bare condition or a group. */
+  filtroSchema: z.ZodType<No>
+  /** Rules and segments always store a top-level GROUP, never a bare condition. */
+  arvoreSchema: z.ZodType<Grupo>
+  parseArvore: (input: unknown) => Grupo
+  compileToPostgrest: (arvore: unknown, hoje?: Date) => string
+  compileToSql: (arvore: unknown, hoje?: Date) => SqlCompilado
+  resolverParaJson: (arvore: unknown, hoje?: Date) => NoResolvidoJson
+  descrever: (no: No, nivel?: number) => string
 }
 
-// ─── Leitura humana (UI: "regra atual", card de confirmação da IA) ──────────
+export function criarFiltroEngine(catalogo: readonly VariavelCatalogo[]): FiltroEngine {
+  const porId = new Map(catalogo.map((v) => [v.id, v]))
 
+  const condicaoSchema: z.ZodType<Condicao> = z
+    .object({
+      variavel: z.string(),
+      operador: operadorSchema,
+      valor: z.unknown().optional(),
+    })
+    .superRefine((cond, ctx) => {
+      const v = porId.get(cond.variavel)
+      if (!v) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Variável desconhecida: "${cond.variavel}".`,
+        })
+        return
+      }
+
+      if (!OPERADORES_POR_TIPO[v.tipo].includes(cond.operador)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Operador "${OPERADOR_LABELS[cond.operador]}" não se aplica a "${v.label}".`,
+        })
+        return
+      }
+
+      const precisaValor = !OPERADORES_SEM_VALOR.includes(cond.operador)
+      if (precisaValor && (cond.valor === undefined || cond.valor === null)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `"${v.label}" precisa de um valor.` })
+        return
+      }
+
+      if (cond.operador === 'entre') {
+        if (!Array.isArray(cond.valor) || cond.valor.length !== 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `"${v.label}" com "está entre" precisa de exatamente dois valores.`,
+          })
+        }
+        return
+      }
+
+      if (['em', 'nao_em', 'contem_algum'].includes(cond.operador)) {
+        if (!Array.isArray(cond.valor) || cond.valor.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `"${v.label}" precisa de uma lista com ao menos um valor.`,
+          })
+        }
+        return
+      }
+
+      if (v.tipo === 'enum' && v.opcoes && precisaValor) {
+        const valores = Array.isArray(cond.valor) ? cond.valor : [cond.valor]
+        for (const val of valores) {
+          if (!v.opcoes.includes(String(val))) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `"${String(val)}" não é um valor válido para "${v.label}".`,
+            })
+          }
+        }
+      }
+
+      if (v.tipo === 'numero' && precisaValor) {
+        const valores = Array.isArray(cond.valor) ? cond.valor : [cond.valor]
+        for (const val of valores) {
+          if (typeof val !== 'number' || !Number.isFinite(val)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `"${v.label}" precisa de um número.`,
+            })
+          }
+        }
+      }
+    })
+
+  const filtroSchema: z.ZodType<No> = z.lazy(() =>
+    z.union([
+      z.object({
+        operador: z.enum(['e', 'ou']),
+        condicoes: z.array(filtroSchema).min(1, 'Um grupo precisa de ao menos uma condição.'),
+      }),
+      condicaoSchema,
+    ]),
+  )
+
+  const arvoreSchema = z.object({
+    operador: z.enum(['e', 'ou']),
+    condicoes: z.array(filtroSchema).min(1),
+  }) as unknown as z.ZodType<Grupo>
+
+  function parseArvore(input: unknown): Grupo {
+    const r = arvoreSchema.safeParse(input)
+    if (!r.success) {
+      throw new FiltroError(r.error.issues.map((i) => i.message).join(' '))
+    }
+    return r.data
+  }
+
+  /** Expands derived variables. Every compiler runs this first, so they cannot diverge. */
+  function normalizar(no: No, hoje: Date): NoResolvido {
+    if (isGrupo(no)) {
+      return { operador: no.operador, condicoes: no.condicoes.map((c) => normalizar(c, hoje)) }
+    }
+
+    const v = porId.get(no.variavel)
+    if (!v) throw new FiltroError(`Variável desconhecida: "${no.variavel}".`)
+
+    if (v.derivada) return v.derivada(no, hoje)
+
+    if (!v.coluna) {
+      // Unreachable: the catalog test asserts every entry has a column or a
+      // derivation. A guard, not a user-facing error.
+      throw new FiltroError(`Variável "${no.variavel}" não tem coluna e não foi derivada.`)
+    }
+
+    return { coluna: v.coluna, operador: no.operador, valor: no.valor }
+  }
+
+  return {
+    catalogo,
+    variavelIds: catalogo.map((v) => v.id),
+    variavel: (id) => porId.get(id),
+    operadoresDe: (id) => {
+      const v = porId.get(id)
+      return v ? OPERADORES_POR_TIPO[v.tipo] : []
+    },
+    filtroSchema,
+    arvoreSchema,
+    parseArvore,
+
+    /**
+     * Returns the string to hand to `.or()`:
+     *
+     *   const filtro = compileToPostgrest(arvore)
+     *   supabase.from('mercado_explorador').select('*', { count: 'exact' }).or(filtro)
+     *
+     * `.or()` on a single top-level and(...) is logically that and(...), which is
+     * why a top-level AND group is not a special case.
+     */
+    compileToPostgrest: (arvore, hoje = new Date()) => pgrstNo(normalizar(parseArvore(arvore), hoje)),
+
+    compileToSql: (arvore, hoje = new Date()) => {
+      const raiz = normalizar(parseArvore(arvore), hoje)
+      const values: unknown[] = []
+      const text = sqlNo(raiz, values)
+      return { text, values }
+    },
+
+    /**
+     * A MESMA árvore normalizada, mas serializada em JSON compacto para viajar até uma
+     * função Postgres (mercado_explorar / mercado_contar_exato) que a compila lá dentro,
+     * sob SECURITY DEFINER. Por que não usar compileToPostgrest direto na view? Porque a
+     * view roda sob RLS, e o operador ILIKE da BUSCA não é leakproof — sob RLS o planner
+     * é proibido de usar o índice de trigrama e varre o universo inteiro (timeout). A RPC
+     * definer roda sem RLS (portão feito uma vez), então o trigrama volta a valer.
+     *
+     * Sai JÁ resolvido (coluna, não variável): a derivação de idade_anos → data e a
+     * checagem de catálogo acontecem AQUI, no TS que tem o catálogo; a função Postgres só
+     * precisa casar coluna (contra uma whitelist) e operador.
+     */
+    resolverParaJson: (arvore, hoje = new Date()) =>
+      serializarResolvido(normalizar(parseArvore(arvore), hoje)),
+
+    descrever: function descrever(no: No, nivel = 0): string {
+      if (isGrupo(no)) {
+        const juncao = no.operador === 'e' ? ' E ' : ' OU '
+        const partes = no.condicoes.map((c) => descrever(c, nivel + 1))
+        const texto = partes.join(juncao)
+        return nivel === 0 ? texto : `(${texto})`
+      }
+
+      const v = porId.get(no.variavel)
+      const label = v?.label ?? no.variavel
+      const op = OPERADOR_LABELS[no.operador]
+
+      if (OPERADORES_SEM_VALOR.includes(no.operador)) return `${label} ${op}`
+      if (Array.isArray(no.valor)) {
+        return no.operador === 'entre'
+          ? `${label} ${op} ${no.valor[0]} e ${no.valor[1]}`
+          : `${label} ${op} ${no.valor.join(', ')}`
+      }
+      return `${label} ${op} ${String(no.valor)}`
+    },
+  }
+}
+
+// ─── O engine do Mercado ────────────────────────────────────────────────────
+// The original, unqualified names still mean the Mercado engine: every existing
+// caller (Explorador, pirâmide, segmentos, lotes do Radar) keeps working, and a
+// second engine has to be asked for by name.
+
+export const mercadoEngine: FiltroEngine = criarFiltroEngine(CATALOGO)
+
+export const VARIAVEL_IDS = mercadoEngine.variavelIds
+export const filtroSchema = mercadoEngine.filtroSchema
+export const arvoreSchema = mercadoEngine.arvoreSchema
+
+export function variavel(id: string): VariavelCatalogo | undefined {
+  return mercadoEngine.variavel(id)
+}
+
+export function operadoresDe(id: string): readonly Operador[] {
+  return mercadoEngine.operadoresDe(id)
+}
+
+export function parseArvore(input: unknown): Grupo {
+  return mercadoEngine.parseArvore(input)
+}
+
+export function compileToPostgrest(arvore: unknown, hoje: Date = new Date()): string {
+  return mercadoEngine.compileToPostgrest(arvore, hoje)
+}
+
+export function compileToSql(arvore: unknown, hoje: Date = new Date()): SqlCompilado {
+  return mercadoEngine.compileToSql(arvore, hoje)
+}
+
+export function resolverParaJson(arvore: unknown, hoje: Date = new Date()): NoResolvidoJson {
+  return mercadoEngine.resolverParaJson(arvore, hoje)
+}
+
+/** Leitura humana (UI: "regra atual", card de confirmação da IA). */
 export function descrever(no: No, nivel = 0): string {
-  if (isGrupo(no)) {
-    const juncao = no.operador === 'e' ? ' E ' : ' OU '
-    const partes = no.condicoes.map((c) => descrever(c, nivel + 1))
-    const texto = partes.join(juncao)
-    return nivel === 0 ? texto : `(${texto})`
-  }
-
-  const v = POR_ID.get(no.variavel)
-  const label = v?.label ?? no.variavel
-  const op = OPERADOR_LABELS[no.operador]
-
-  if (OPERADORES_SEM_VALOR.includes(no.operador)) return `${label} ${op}`
-  if (Array.isArray(no.valor)) {
-    return no.operador === 'entre'
-      ? `${label} ${op} ${no.valor[0]} e ${no.valor[1]}`
-      : `${label} ${op} ${no.valor.join(', ')}`
-  }
-  return `${label} ${op} ${String(no.valor)}`
+  return mercadoEngine.descrever(no, nivel)
 }

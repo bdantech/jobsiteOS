@@ -90,6 +90,20 @@ const envSchema = z.object({
   DIRECTD_API_KEY: z.string().optional(),
   ONEPAY_BI_URL: z.string().url().optional(),
   ONEPAY_BI_TOKEN: z.string().optional(),
+
+  // ─── Antecipação (Prompt 04): sync de notas fiscais ───────────────────────
+  /**
+   * OVERRIDE opcional do endpoint de NFs. Na prática não é preciso definir: é a
+   * MESMA API e o MESMO token do sync de clientes, então o job cai em
+   * ONEPAY_BI_URL + o caminho padrão. Defina isto só se o recurso de NFs viver em
+   * outro caminho (aí passe a URL COMPLETA) ou em outro host.
+   *
+   * Duas variáveis com o mesmo valor não são redundância inofensiva: são a chance
+   * de elas divergirem no dia em que o host mudar e alguém atualizar só uma.
+   */
+  ONEPAY_NF_URL: z.string().url().optional(),
+  /** Idem: ausente, cai no ONEPAY_BI_TOKEN. É a mesma credencial. */
+  ONEPAY_NF_TOKEN: z.string().optional(),
   /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
   ANTHROPIC_API_KEY: z.string().optional(),
 

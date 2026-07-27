@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from
 import { useTheme } from '@/components/color-scheme-provider'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import {
+  ContatosSection,
   Empresa360Skeleton,
   EmpresaHeader,
   ErpBlock,
@@ -59,7 +60,7 @@ export default function EmpresaDetalheScreen() {
     )
   }
 
-  const { empresa, notas, eventos } = data
+  const { empresa, notas, eventos, contatos } = data
 
   return (
     <KeyboardAvoidingView
@@ -86,6 +87,8 @@ export default function EmpresaDetalheScreen() {
         {/* Renders itself away when the company has no grupo_id (most of them) or
             when the perfil doesn't grant `mercado`. Taps through to the group. */}
         <GrupoSection grupoId={empresa.grupo_id} cnpj={empresa.cnpj} />
+        {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}
+        <ContatosSection contatos={contatos} />
         <NotasSection empresaId={empresa.id} notas={notas} />
         <TimelineSection eventos={eventos} />
       </ScrollView>
