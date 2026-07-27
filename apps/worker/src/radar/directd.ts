@@ -32,7 +32,13 @@ function parseNumero(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** Fallback: soma qtd/valor descendo na árvore de cartórios (por UF, senão por cartório). */
+/**
+ * Fallback: soma qtd/valor descendo na árvore de cartórios. As duas respostas do DirectD
+ * têm formatos diferentes:
+ *   SP       — estado.cartoriosProtesto[] , cartório.numProtestos
+ *   Nacional — estado.cartorios[]         , cartório.numeroProtestos
+ * ambos com cartório.valorTotalProtestosCartorio (o Nacional prefixa "R$ ").
+ */
 function somarCartorios(cartorios: unknown): { qtd: number; valor: number } {
   let qtd = 0
   let valor = 0
@@ -46,12 +52,12 @@ function somarCartorios(cartorios: unknown): { qtd: number; valor: number } {
       valor += vUf
       continue
     }
-    const lista = e.cartoriosProtesto ?? e.protesto
-    if (Array.isArray(lista)) {
-      for (const c of lista) {
+    const filhos = e.cartoriosProtesto ?? e.cartorios
+    if (Array.isArray(filhos)) {
+      for (const c of filhos) {
         const cc = (c ?? {}) as Record<string, unknown>
-        qtd += parseNumero(cc.numProtestos)
-        valor += parseNumero(cc.valorTotalProtestosCartorio ?? cc.valorProtestado)
+        qtd += parseNumero(cc.numProtestos ?? cc.numeroProtestos)
+        valor += parseNumero(cc.valorTotalProtestosCartorio)
       }
     }
   }
@@ -74,11 +80,12 @@ function extrair(payload: unknown, custo: number): ResultadoConsultaCredito {
   let qtd = num('totalNumProtestos', 'qtdTitulos', 'totalTitulos', 'TotalTitulos', 'quantidadeProtestos', 'qtdeProtestos')
   let valor = num('valorTotalProtestos', 'valorTotal', 'ValorTotal', 'valorProtestado')
   const cartorios = (raiz.protestos ?? raiz.cartorios ?? raiz.Cartorios ?? raiz.detalhes ?? null) as unknown
-  // Endpoints que só devolvem o detalhe por cartório: soma o que der.
-  if (qtd === 0 && valor === 0) {
+  // Fallback POR CAMPO: o Nacional traz valorTotalProtestos no topo mas não a contagem
+  // com o mesmo nome — então valor vinha certo e qtd ficava 0. Soma dos cartórios cobre.
+  if (qtd === 0 || valor === 0) {
     const s = somarCartorios(cartorios)
-    qtd = s.qtd
-    valor = s.valor
+    if (qtd === 0) qtd = s.qtd
+    if (valor === 0) valor = s.valor
   }
   const constam = raiz.constamProtestos === true || raiz.constaProtesto === true
   const tem = constam || qtd > 0 || valor > 0 || (Array.isArray(cartorios) && cartorios.length > 0)

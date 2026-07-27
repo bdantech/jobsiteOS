@@ -67,20 +67,35 @@ function parseNumeroBr(v: unknown): number | null {
   const n = Number(normal.replace(/[^\d.-]/g, ''))
   return Number.isFinite(n) ? n : null
 }
+/**
+ * Duas estruturas do DirectD: SP usa estado.cartoriosProtesto[] + cartório.numProtestos +
+ * cartório.nome; Nacional usa estado.cartorios[] + cartório.numeroProtestos e só a cidade
+ * (sem nome). Estes helpers normalizam as duas.
+ */
+function filhosDoEstado(uf: unknown): unknown[] {
+  if (typeof uf !== 'object' || uf === null || Array.isArray(uf)) return []
+  const e = uf as Record<string, unknown>
+  const lista = e.cartoriosProtesto ?? e.cartorios
+  return Array.isArray(lista) ? lista : []
+}
+function nomeCidadeCartorio(cc: Record<string, unknown>): { nome: string; cidade: string | null } {
+  const nome = typeof cc.nome === 'string' ? cc.nome : null
+  const cidade = typeof cc.cidade === 'string' ? cc.cidade : null
+  // Nacional não traz nome: usa a cidade como rótulo e não repete a cidade embaixo.
+  return { nome: nome ?? cidade ?? 'Cartório', cidade: nome ? cidade : null }
+}
 function parseCartorios(cartorios: Json | null): CartorioLinha[] {
   if (!Array.isArray(cartorios)) return []
   const linhas: CartorioLinha[] = []
   for (const uf of cartorios) {
-    if (typeof uf !== 'object' || uf === null || Array.isArray(uf)) continue
-    const lista = (uf as Record<string, unknown>).cartoriosProtesto
-    if (!Array.isArray(lista)) continue
-    for (const c of lista) {
+    for (const c of filhosDoEstado(uf)) {
       if (typeof c !== 'object' || c === null || Array.isArray(c)) continue
       const cc = c as Record<string, unknown>
+      const { nome, cidade } = nomeCidadeCartorio(cc)
       linhas.push({
-        nome: typeof cc.nome === 'string' ? cc.nome : 'Cartório',
-        cidade: typeof cc.cidade === 'string' ? cc.cidade : null,
-        qtd: parseNumeroBr(cc.numProtestos),
+        nome,
+        cidade,
+        qtd: parseNumeroBr(cc.numProtestos ?? cc.numeroProtestos),
         valor: parseNumeroBr(cc.valorTotalProtestosCartorio),
       })
     }
@@ -118,17 +133,14 @@ function extrairProtestos(cartorios: Json | null, empresa?: string): ProtestoIte
   const out: ProtestoItem[] = []
   if (!Array.isArray(cartorios)) return out
   for (const uf of cartorios) {
-    if (typeof uf !== 'object' || uf === null || Array.isArray(uf)) continue
-    const lista = (uf as Record<string, unknown>).cartoriosProtesto
-    if (!Array.isArray(lista)) continue
-    for (const c of lista) {
+    for (const c of filhosDoEstado(uf)) {
       if (typeof c !== 'object' || c === null || Array.isArray(c)) continue
       const cc = c as Record<string, unknown>
-      const nome = typeof cc.nome === 'string' ? cc.nome : 'Cartório'
-      const cidade = typeof cc.cidade === 'string' ? cc.cidade : null
-      const prot = cc.protesto
-      if (Array.isArray(prot) && prot.length > 0) {
-        for (const p of prot) {
+      const { nome, cidade } = nomeCidadeCartorio(cc)
+      // SP: protesto[]; Nacional: titulos[]. Cada item tem dataProtesto + valorProtestado.
+      const itens = cc.protesto ?? cc.titulos
+      if (Array.isArray(itens) && itens.length > 0) {
+        for (const p of itens) {
           if (typeof p !== 'object' || p === null || Array.isArray(p)) continue
           const pp = p as Record<string, unknown>
           const dl = typeof pp.dataProtesto === 'string' ? pp.dataProtesto : null
