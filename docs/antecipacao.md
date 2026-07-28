@@ -130,6 +130,90 @@ Só marca `nao_encontrado` quando alguma fonte respondeu dizendo que não conhec
 quando as tentativas acabaram (default 10). Um dia de rede ruim não condena um CNPJ a
 nunca mais ser consultado.
 
+## Contatos: o dado chega na nota, e agora vira contato
+
+O payload da NF traz `supplier.contact` e `recipient.contact`. Até a rodada de melhorias
+esse dado só era gravado como **jsonb dentro da nota**, servindo de último recurso para a
+Outbox. Resultado medido: `contatos` com **zero linhas** enquanto 21 fornecedores e 89
+sacados mandavam nome, e-mail e telefone seis vezes por dia — e o Radar era acionado para
+redescobrir (pagando) o que a API já tinha entregue.
+
+`materializarContato` roda no sync e `backfillContatosNf` varre o que já está no banco. A
+lógica de decisão está em `core/antecipacao/contato-nf.ts`, testada, e sai toda de uma
+premissa: **o dado da NF é o mais fraco de todos.** Não foi curado por ninguém, veio de um
+cadastro preenchido para emitir nota, e chega repetido a cada sync.
+
+| situação | ação |
+| --- | --- |
+| não existe contato equivalente | **insere**, `origem = 'nf'` |
+| existe e veio da NF | **completa só os campos vazios** |
+| existe de outra origem (Apollo, manual) | **não toca** |
+
+"Completa só o que está vazio" é o que torna seguro rodar seis vezes por dia para sempre:
+a segunda passagem não desfaz a primeira, e uma correção manual sobrevive a todas elas.
+Equivalência é por e-mail **ou** por telefone normalizado — o mesmo número em duas formas
+(`+5511…` e `11…`) tem de casar, senão a supressão fura.
+
+**Exige `empresa_id`**, e isso é decisão: `contatos.empresa_id` é NOT NULL, e um contato
+órfão não aparece em ficha nenhuma nem é alcançável pela hierarquia de ponto focal.
+Fornecedor de aquisição só ganha contatos depois de **promovido** (abaixo); até lá a
+Outbox continua lendo o jsonb da nota normalmente.
+
+O backfill roda **depois** do lookup no job diário, de propósito: promover cria a empresa,
+e só a partir daí o contato tem onde ser gravado.
+
+## Fornecedor de aquisição não vira `empresas` — e isso é decisão
+
+O sync só cria empresa para participante `registered`. São centenas de CNPJs novos por
+semana que ninguém trabalha; criar empresa para todos transformaria o CRM num espelho da
+carteira de notas dos clientes. Eles existem em **`mercado_universo`** via lookup
+cadastral, que é o suficiente para o funil classificar e para a ficha mostrar cadastro.
+
+A decisão só se sustenta porque existe a **porta manual**: o botão *Promover para
+Empresas* na ficha do fornecedor. Ele chama `app_promover_empresa` com
+`tipo = 'fornecedor'`, e esse parâmetro é novo (migration `0058`) — antes o RPC gravava
+`'construtora'` fixo, o que envenenaria a pirâmide comercial, os segmentos e o TAM, que
+leem essa coluna. O `tipo` também precisou entrar no **schema zod**: zod descarta chave
+desconhecida em silêncio, então sem isso o valor sumiria a caminho do banco e o erro
+apareceria meses depois, como um fabricante de esquadria contado no TAM.
+
+## Cadastro da Receita na ficha (capital social e afins)
+
+`empresas` **não guarda** capital social, situação cadastral nem data de abertura — e não
+vai guardar. A tabela registra o que *o time* sabe (estágio, ERP, dono); o que a Receita
+diz mora em `mercado_universo`. Duplicar criaria duas verdades que divergem no dia em que
+uma das duas for atualizada.
+
+O card `CadastroRfb` (web: `components/cadastro/`, mobile: `features/cadastro/`) lê o
+universo por CNPJ e aparece em três telas: ficha da empresa, ficha do fornecedor no funil,
+e a versão mobile das duas. Ausência é **estado**, não erro: sem linha no universo o card
+diz que o CNPJ está na fila de enriquecimento. Um card vazio seria lido como "capital zero,
+empresa nova" — uma conclusão, não uma ausência.
+
+### O recorte de RLS que isso expôs
+
+`notas_funil` é `security_invoker`, e `mercado_universo` só liberava leitura para quem tem
+o módulo **`mercado`**. Medido contra a base real, simulando o perfil **Comercial** (que
+tem só `antecipacao`):
+
+| | Admin | Comercial |
+| --- | --- | --- |
+| notas visíveis | 766 | 766 |
+| notas com `sacado_construcao` | 8 | **0** |
+| notas com capital do fornecedor | 76 | **0** |
+| **sacados a prospectar** | 8 | **0** |
+
+A tela de prospecção ficava **vazia** — sem erro, sem aviso — exatamente para o único time
+que a usa. E vazia de um jeito convincente: "nenhuma construtora nesta condição" é uma
+frase em que se acredita. Ninguém foi atingido só porque ainda não existe usuário
+Comercial; isso é sorte de cronograma, não desenho.
+
+Migration `0060` estende a policy: Mercado lê o universo inteiro; Antecipação lê **apenas
+o cadastro de CNPJs que aparecem em notas que a própria pessoa pode ler** (61 de 876.204
+linhas, na base atual). Uma policy só com `or` em vez de duas, porque `or` curto-circuita
+por linha e o usuário de Mercado não pode pagar o `exists` numa varredura de 740 mil
+linhas. O probe de RLS cobre os dois lados.
+
 ## O leitor de NF
 
 Clicar num card abre a nota **como documento** — layout de DANFE no desktop, blocos
@@ -212,11 +296,14 @@ quanto?") é a mesma nos dois caminhos.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0056`.
+- **Banco**: migrations `0045`–`0060`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
   - `cnpj_lookup_fila` + `antecipacao_config`
+  - `0058`/`0059`: cadastro do fornecedor em `notas_funil` (capital social, situação,
+    valor protestado, último nº de NFe) + `tipo`/`origem` em `app_promover_empresa`
+  - `0060`: Antecipação lê o cadastro dos CNPJs que aparecem nas suas notas
   - views: `notas_funil` (a superfície única), `antecipacao_fornecedores`,
     `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
   - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
@@ -227,9 +314,9 @@ quanto?") é a mesma nos dois caminhos.
 - **Core** (`packages/core/src/antecipacao/`): schemas e vocabulário, `faixas.ts` (o
   **segundo** engine de filtros — catálogo próprio sobre `notas_funil`), `nfe-xml.ts` (o
   parser, semente do Pricing), `economia.ts` (receita esperada, tipagem, urgência,
-  templates), mutations. Registry: `antecipacaoModule` — **não** é webOnly.
+  templates), `contato-nf.ts` (a decisão inserir/completar/não-tocar), mutations. Registry: `antecipacaoModule` — **não** é webOnly.
 - **Worker** (`apps/worker/src/jobs/antecipacao/`): `sync-nfs`, `reclassificar`,
-  `outbox`, `lookup-cadastral`, `supressoes`; config em `apps/worker/src/antecipacao/`.
+  `outbox`, `lookup-cadastral`, `contatos-nf`, `supressoes`; config em `apps/worker/src/antecipacao/`.
 - **Web** (`apps/web/src/app/(app)/antecipacao/` + `components/antecipacao/`): Kanban,
   por sacado, sacados a prospectar, métricas por faixa, regras de faixa, disparos,
   Outbox, contas WhatsApp, settings.
@@ -253,6 +340,25 @@ testado (`src/antecipacao/faixas.test.ts`).
 
 O construtor visual (`apps/web/src/components/filtros/`) é genérico sobre o engine; a
 pirâmide passou a usar a versão compartilhada com o engine do Mercado amarrado.
+
+Repare que a variável de capital no funil se chama `fornecedor_capital_social`, e não
+`capital_social`. O prefixo não é estilo: se ela tivesse o mesmo nome da variável do
+Mercado, o teste de isolamento passaria a **compilar** em vez de lançar, e o guarda-corpo
+entre os dois catálogos sumiria sem nada quebrar. Há teste para isso.
+
+### Métricas cadastrais do fornecedor, e o que cada uma NÃO diz
+
+| Variável | Cuidado |
+| --- | --- |
+| `fornecedor_capital_social` | **Nulo** enquanto o lookup não rodar, e nulo não satisfaz comparação — uma regra com ela exclui em silêncio quem a fila ainda não processou. |
+| `fornecedor_situacao_cadastral` | `ativa`/`suspensa`/`inapta`/`baixada`/`nula`. Nota de empresa baixada não se antecipa. |
+| `fornecedor_tem_protesto` | Consulta de protesto é **paga e opt-in por empresa**. `false` significa "não consultamos" muito mais vezes do que "não tem". Serve para **excluir quem tem**, nunca para atestar quem não tem — hoje, 1 fornecedor consultado em 378. |
+| `fornecedor_protesto_valor` | R$ 800 e R$ 800 mil de protesto não são o mesmo risco, e o booleano não distingue. |
+| `fornecedor_ultimo_numero_nf` | Proxy de **porte**, não de relação conosco: o `nNF` é sequencial por emitente, então estima quantas notas ele emitiu no total. **Só NFe** — o número da NFS-e nacional é identificador composto (chega a 2.6 × 10¹² nesta base) e misturá-lo faria qualquer emissor de serviço parecer o maior da carteira. Quem só emite serviço fica nulo. Na base atual: mediana 71.952, máximo 23,2M, 262 de 378 fornecedores com valor. |
+
+O uso que motivou a última: *"grandes fornecedores não antecipam, mas emitem muitas NFs"* —
+um corte por `fornecedor_ultimo_numero_nf < N` tira do funil quem tem caixa e não precisa
+da antecipação.
 
 ## O sync (§3)
 

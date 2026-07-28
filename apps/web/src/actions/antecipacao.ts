@@ -21,6 +21,7 @@ import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
   dispararAntecipacaoDiario,
+  dispararContatosNf,
   dispararLookupCadastral,
   dispararOutbox,
   dispararReclassificacaoFunil,
@@ -267,4 +268,8 @@ export async function regenerarOutboxAction() {
 
 export async function rodarLookupAction() {
   return enfileirar(dispararLookupCadastral)
+}
+
+export async function rodarContatosNfAction() {
+  return enfileirar(dispararContatosNf)
 }

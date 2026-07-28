@@ -48,6 +48,39 @@ test('o engine do Mercado REJEITA variável do catálogo de faixas', () => {
   )
 })
 
+test('as variáveis cadastrais do fornecedor são PREFIXADAS, não homônimas', () => {
+  // `fornecedor_capital_social` e `capital_social` apontam para a MESMA coluna de
+  // origem (mercado_universo.capital_social) em views diferentes. Se a variável
+  // das faixas se chamasse `capital_social`, o teste de isolamento acima passaria
+  // a compilar em vez de lançar, e o guarda-corpo entre os dois catálogos sumiria
+  // sem que nada quebrasse — o pior tipo de regressão.
+  const ids = CATALOGO_FAIXAS.map((v) => v.id)
+  assert.ok(ids.includes('fornecedor_capital_social'))
+  assert.ok(!ids.includes('capital_social'))
+
+  const sql = compileFaixaToSql({
+    operador: 'e',
+    condicoes: [{ variavel: 'fornecedor_capital_social', operador: 'maior_que', valor: 100_000 }],
+  })
+  assert.match(sql.text, /fornecedor_capital_social/)
+  assert.deepEqual(sql.values, [100_000])
+})
+
+test('o proxy de porte compila como número e aceita corte por faixa', () => {
+  // O uso real: "tire do funil quem já passou da nota 500 mil" — fornecedor
+  // grande demais para precisar antecipar.
+  const sql = compileFaixaToSql({
+    operador: 'e',
+    condicoes: [
+      { variavel: 'fornecedor_ultimo_numero_nf', operador: 'menor_que', valor: 500_000 },
+      { variavel: 'fornecedor_situacao_cadastral', operador: 'igual', valor: 'ativa' },
+    ],
+  })
+  assert.match(sql.text, /fornecedor_ultimo_numero_nf/)
+  assert.match(sql.text, /fornecedor_situacao_cadastral/)
+  assert.deepEqual(sql.values, [500_000, 'ativa'])
+})
+
 test('a regra seed da faixa alta compila com valores só em placeholders', () => {
   const { text, values } = compileFaixaToSql({
     operador: 'e',

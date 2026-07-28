@@ -2127,15 +2127,19 @@ export type Database = {
           faixa_motivo: string | null
           faixa_regra_versao: number | null
           fornecedor_cadastrado: boolean | null
+          fornecedor_capital_social: number | null
           fornecedor_cnpj: string | null
           fornecedor_e_cliente_onepay: boolean | null
           fornecedor_empresa_id: string | null
           fornecedor_ja_antecipou: boolean | null
           fornecedor_nome: string | null
+          fornecedor_protesto_valor: number | null
+          fornecedor_situacao_cadastral: string | null
           fornecedor_suprimido: boolean | null
           fornecedor_tem_protesto: boolean | null
           fornecedor_tipagem: string | null
           fornecedor_uf: string | null
+          fornecedor_ultimo_numero_nf: number | null
           nf_id_externo: string | null
           numero: string | null
           parcelas: Json | null

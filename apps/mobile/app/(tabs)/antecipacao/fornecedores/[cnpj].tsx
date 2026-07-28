@@ -12,6 +12,7 @@ import { Building2, Star } from 'lucide-react-native'
 import { ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { CadastroRfbCard } from '@/features/cadastro/cadastro-rfb-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -171,6 +172,9 @@ export default function FornecedorScreen() {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Cadastro da Receita: "vale a pena?" antes de "para quem eu ligo?". */}
+      <CadastroRfbCard cnpj={cnpj} />
 
       {/* ─── Crédito do sacado por nota ───────────────────────────────────── */}
       <Card>

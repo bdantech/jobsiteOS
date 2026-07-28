@@ -28,6 +28,7 @@ import {
   type ModoSync,
 } from '../../../../../packages/core/src/antecipacao/sync-plano.js'
 import { lerConfigEconomia, lerConfigSync } from '../../antecipacao/config.js'
+import { materializarContato, somarContatos } from './contatos-nf.js'
 
 /**
  * Sync de notas fiscais (§3), de 4 em 4 horas.
@@ -65,6 +66,8 @@ export interface ResultadoSyncNfs {
   itens: number
   snapshots_credito: number
   cnpjs_enfileirados: number
+  contatos_criados: number
+  contatos_completados: number
   eventos: number
   ignoradas: number
   falhas_parse: number
@@ -174,6 +177,8 @@ export async function sincronizarNotasFiscais(
     itens: 0,
     snapshots_credito: 0,
     cnpjs_enfileirados: 0,
+    contatos_criados: 0,
+    contatos_completados: 0,
     eventos: 0,
     ignoradas: 0,
     falhas_parse: 0,
@@ -206,6 +211,8 @@ export async function sincronizarNotasFiscais(
         acc.itens += r.itens
         acc.snapshots_credito += r.snapshot ? 1 : 0
         acc.cnpjs_enfileirados += r.enfileirados
+        acc.contatos_criados += r.contatos_criados
+        acc.contatos_completados += r.contatos_completados
         acc.eventos += r.eventos
         if (r.falhaParse) acc.falhas_parse++
       }
@@ -232,6 +239,8 @@ interface ResultadoNota {
   itens: number
   snapshot: boolean
   enfileirados: number
+  contatos_criados: number
+  contatos_completados: number
   eventos: number
   falhaParse: boolean
 }
@@ -243,6 +252,8 @@ const NADA: ResultadoNota = {
   itens: 0,
   snapshot: false,
   enfileirados: 0,
+  contatos_criados: 0,
+  contatos_completados: 0,
   eventos: 0,
   falhaParse: false,
 }
@@ -344,6 +355,11 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     (await enfileirarLookup(fornecedorCnpj, 'fornecedor_nf', fornecedor.conhecido)) +
     (await enfileirarLookup(sacadoCnpj, 'sacado_nf', sacado.conhecido))
 
+  const contatos = somarContatos(
+    await materializarContato(fornecedor.empresaId, nota.contato_fornecedor),
+    await materializarContato(sacado.empresaId, nota.contato_sacado),
+  )
+
   return {
     ignorada: false,
     nova: !jaExistia,
@@ -351,6 +367,8 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     itens,
     snapshot: snapshot.gravado,
     enfileirados,
+    contatos_criados: contatos.criados,
+    contatos_completados: contatos.completados,
     eventos,
     falhaParse: nota.xml_parse_erro !== null,
   }

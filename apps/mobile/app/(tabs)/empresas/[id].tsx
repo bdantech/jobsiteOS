@@ -13,6 +13,7 @@ import {
   empresaTitulo,
   useEmpresa360Query,
 } from '@/features/empresas'
+import { CadastroRfbCard } from '@/features/cadastro/cadastro-rfb-card'
 import { GrupoSection } from '@/features/mercado/components/grupo'
 
 /**
@@ -83,6 +84,10 @@ export default function EmpresaDetalheScreen() {
         }
       >
         <EmpresaHeader empresa={empresa} />
+        {/* O que a Receita diz (capital, idade, situação) antes do que o time
+            preencheu. `empresas` não guarda dado cadastral de propósito — a fonte
+            é `mercado_universo`, e duplicar criaria duas verdades. */}
+        <CadastroRfbCard cnpj={empresa.cnpj} />
         <ErpBlock empresa={empresa} />
         {/* Renders itself away when the company has no grupo_id (most of them) or
             when the perfil doesn't grant `mercado`. Taps through to the group. */}

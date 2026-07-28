@@ -57,7 +57,50 @@ export const CATALOGO_FAIXAS: readonly VariavelCatalogo[] = [
     label: 'Fornecedor tem protesto',
     tipo: 'booleano',
     coluna: 'fornecedor_tem_protesto',
-    descricao: 'Última consulta de protesto do Radar indicou protesto.',
+    descricao:
+      'Última consulta de protesto do Radar indicou protesto. ATENÇÃO: consulta de protesto é ' +
+      'paga e opt-in por empresa, então `false` aqui significa "não consultamos" com muito mais ' +
+      'frequência do que "não tem". Serve para EXCLUIR quem tem, não para atestar quem não tem.',
+  },
+  {
+    id: 'fornecedor_protesto_valor',
+    label: 'Valor protestado do fornecedor',
+    tipo: 'numero',
+    coluna: 'fornecedor_protesto_valor',
+    descricao:
+      'Soma dos protestos na última consulta. R$ 800 de protesto e R$ 800 mil não são o mesmo ' +
+      'risco, e o booleano não distingue os dois.',
+  },
+  {
+    id: 'fornecedor_capital_social',
+    label: 'Capital social do fornecedor',
+    tipo: 'numero',
+    coluna: 'fornecedor_capital_social',
+    descricao:
+      'Vem de `mercado_universo`, ou seja: do lookup cadastral. Fornecedor ainda não enriquecido ' +
+      'fica NULO — e nulo não satisfaz nenhum operador de comparação, então uma regra com esta ' +
+      'variável exclui silenciosamente quem a fila ainda não processou.',
+  },
+  {
+    id: 'fornecedor_situacao_cadastral',
+    label: 'Situação cadastral do fornecedor',
+    tipo: 'texto',
+    coluna: 'fornecedor_situacao_cadastral',
+    descricao:
+      'ativa | suspensa | inapta | baixada | nula, normalizado no lookup. Nota de empresa baixada ' +
+      'não se antecipa.',
+  },
+  {
+    id: 'fornecedor_ultimo_numero_nf',
+    label: 'Último número de NFe do fornecedor',
+    tipo: 'numero',
+    coluna: 'fornecedor_ultimo_numero_nf',
+    descricao:
+      'A maior sequência de NFe já observada deste emitente — proxy de PORTE, não de relação ' +
+      'conosco: o `nNF` é sequencial por emitente, então ele estima quantas notas o fornecedor ' +
+      'emitiu no total, inclusive as que nunca passam por nós. Serve para tirar do funil o ' +
+      'gigante que emite muito e não precisa antecipar. Só NFe: o número da NFS-e nacional é ' +
+      'identificador composto, não sequência. Quem só emite serviço fica nulo.',
   },
   {
     id: 'fornecedor_suprimido',

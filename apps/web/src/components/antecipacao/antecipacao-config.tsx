@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   reclassificarFunilAction,
   rodarDiarioAction,
+  rodarContatosNfAction,
   rodarLookupAction,
   salvarConfigAction,
   sincronizarNfsAction,
@@ -388,6 +389,19 @@ export function AntecipacaoConfig() {
           >
             <Play className="mr-2 h-4 w-4" aria-hidden />
             Lookup cadastral
+          </Button>
+          {/*
+           * Retroativo por natureza: o sync é incremental e nunca rebusca nota
+           * antiga, então o contato que chegou antes desta rotina existir só sai
+           * do jsonb por aqui. Depois disso o diário mantém em dia sozinho.
+           */}
+          <Button
+            variant="outline"
+            disabled={rodando !== null}
+            onClick={() => void rodar('Contatos das NFs', rodarContatosNfAction)}
+          >
+            <Play className="mr-2 h-4 w-4" aria-hidden />
+            Contatos das NFs
           </Button>
         </CardContent>
       </Card>

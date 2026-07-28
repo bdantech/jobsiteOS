@@ -136,6 +136,24 @@ export const promoverEmpresaSchema = z.object({
   cnpj: cnpjSchema.describe(
     'CNPJ (14 dígitos) da empresa no universo que será promovida para a base de Empresas.',
   ),
+  /**
+   * O default é 'construtora' porque esta promoção nasceu no Explorador, onde
+   * todo mundo é construtora. O funil de Antecipação promove FORNECEDOR, e
+   * gravar 'construtora' num fabricante de esquadria envenena a base: a pirâmide
+   * comercial, os segmentos e o TAM leem essa coluna.
+   *
+   * Precisa estar aqui, e não só no RPC: zod DESCARTA chave desconhecida em
+   * silêncio, então um `tipo` que não existisse no schema chegaria ao banco como
+   * ausente — e o erro apareceria meses depois, como um fornecedor contado no TAM.
+   */
+  tipo: z
+    .enum(['construtora', 'fornecedor'])
+    .optional()
+    .describe('Tipo da empresa criada. Padrão: construtora.'),
+  origem: z
+    .enum(['mercado', 'antecipacao'])
+    .optional()
+    .describe('De qual módulo partiu a promoção. Padrão: mercado.'),
 })
 export type PromoverEmpresaInput = z.infer<typeof promoverEmpresaSchema>
 

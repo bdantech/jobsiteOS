@@ -257,6 +257,16 @@ export async function dispararLookupCadastral(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/lookup', {}, 'antecipacao-lookup')
 }
 
+/**
+ * Materializa em `contatos` o que chegou dentro das notas. Sob demanda porque a
+ * primeira execução é RETROATIVA: o sync é incremental e nunca rebusca nota
+ * antiga, então o contato que chegou antes desta rotina existir só sai do jsonb
+ * por aqui.
+ */
+export async function dispararContatosNf(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/contatos', {}, 'antecipacao-contatos')
+}
+
 export interface ReclassificarInput {
   camada: string
   regraId: string

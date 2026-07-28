@@ -463,12 +463,79 @@ const { data: aposSupressao } = await admin
 check('suprimir tira a nota da faixa na hora', aposSupressao?.faixa === null && aposSupressao?.faixa_motivo === 'suprimido',
   `-> faixa=${aposSupressao?.faixa} motivo=${aposSupressao?.faixa_motivo}`)
 
+// ── Antecipação SEM Mercado: o recorte do universo (migration 0060) ──────────
+//
+// Este é o cenário do perfil Comercial real, e o que ele protege é um bug que já
+// existiu: `notas_funil` é security_invoker, `mercado_universo` só liberava para
+// quem tem `mercado`, e a tela "Sacados a prospectar" ficava VAZIA para o único
+// time que a usa — sem erro, sem aviso, com uma mensagem convincente de "nada
+// nesta condição".
+//
+// O probe acumula grants, então aqui o `mercado` é retirado de propósito.
+console.log('\n── Antecipação SEM o módulo Mercado (recorte do universo) ──')
+
+await admin.from('perfil_modulos').delete().eq('perfil_id', perfilVendas.id).eq('modulo_id', 'mercado')
+
+// O fornecedor da nota do probe, agora COM cadastro no universo — é o que o
+// lookup cadastral grava e o que a ficha do fornecedor mostra.
+await admin.from('mercado_universo').insert({
+  cnpj: '11444777000161',
+  cnpj_raiz: '11444777',
+  razao_social: 'FORNECEDOR DO PROBE LTDA',
+  situacao_cadastral: 'ativa',
+  capital_social: 250000,
+  origem_ingestao: 'lookup',
+  fora_recorte_cnae: true,
+})
+
+const ru1 = await user.from('mercado_universo').select('cnpj').eq('cnpj', '33000167000101')
+check('sem Mercado, NÃO lê um CNPJ do universo que não está em nota nenhuma',
+  (ru1.data?.length ?? 0) === 0, `-> ${ru1.data?.length ?? 0} linhas`)
+
+const ru2 = await user.from('mercado_universo').select('cnpj, capital_social').eq('cnpj', '11444777000161')
+check('sem Mercado, LÊ o cadastro do fornecedor que aparece na nota',
+  (ru2.data?.length ?? 0) === 1, `-> ${ru2.data?.length ?? 0} linhas`)
+
+const ru3 = await user.from('notas_funil')
+  .select('access_key, fornecedor_capital_social, fornecedor_uf').eq('access_key', CHAVE_PROBE)
+check('o funil enxerga o capital social sem o módulo Mercado',
+  ru3.data?.[0]?.fornecedor_capital_social !== null,
+  `-> ${ru3.data?.[0]?.fornecedor_capital_social}`)
+
+// A promoção a partir do funil grava tipo='fornecedor' (migration 0058). Gravar
+// 'construtora' num fabricante de esquadria envenenaria a pirâmide comercial, os
+// segmentos e o TAM, que leem essa coluna.
+await admin.from('perfil_modulos').insert({ perfil_id: perfilVendas.id, modulo_id: 'mercado' })
+
+// CNPJ próprio: `11444777000161` já virou empresa lá em cima com tipo
+// 'construtora', e promover uma empresa QUE JÁ EXISTE não reclassifica o tipo —
+// comportamento correto, mas que esconderia o que este teste quer ver.
+const CNPJ_FORNEC = '11444777000242'
+await admin.from('mercado_universo').insert({
+  cnpj: CNPJ_FORNEC,
+  cnpj_raiz: '11444777',
+  razao_social: 'ESQUADRIAS DO PROBE LTDA',
+  situacao_cadastral: 'ativa',
+  fora_recorte_cnae: true,
+})
+
+const ru4 = await user.rpc('app_promover_empresa', {
+  p: { cnpj: CNPJ_FORNEC, tipo: 'fornecedor', origem: 'antecipacao' },
+})
+check('promove fornecedor do funil com tipo correto', ru4.data?.tipo === 'fornecedor',
+  `-> tipo=${ru4.data?.tipo} err=${ru4.error?.message ?? 'nenhum'}`)
+check("a promoção do funil marca origem='antecipacao'", ru4.data?.origem === 'antecipacao',
+  `-> ${ru4.data?.origem}`)
+
+const ru5 = await user.rpc('app_promover_empresa', { p: { cnpj: CNPJ_FORNEC, tipo: 'gambiarra' } })
+check('rejeita tipo fora do check', !!ru5.error, `-> err=${ru5.error?.code ?? 'NENHUM — ACEITOU!'}`)
+
 // ── teardown ─────────────────────────────────────────────────────────────────
 if (rm7.data?.id) await admin.from('segmentos').delete().eq('id', rm7.data.id)
 await admin.from('notas_fiscais').delete().eq('access_key', CHAVE_PROBE)
 await admin.from('supressao').delete().eq('valor', '11444777000161')
-await admin.from('mercado_universo').delete().in('cnpj', ['11222333000181', '11444777000161', '33000167000101'])
-await admin.from('empresas').delete().in('cnpj', ['11222333000181', '11444777000161', '33000167000101'])
+await admin.from('mercado_universo').delete().in('cnpj', ['11222333000181', '11444777000161', '11444777000242', '33000167000101'])
+await admin.from('empresas').delete().in('cnpj', ['11222333000181', '11444777000161', '11444777000242', '33000167000101'])
 await admin.from('usuarios').delete().eq('id', uid)
 await admin.auth.admin.deleteUser(uid)
 await admin.from('perfis').delete().eq('id', perfilVendas.id)

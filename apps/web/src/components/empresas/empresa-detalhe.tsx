@@ -25,6 +25,7 @@ import { EstagioBadge, labelTipo } from './estagio-badge'
 import { formatData } from './format'
 import { AnaliseFinanceira } from './analise-financeira'
 import { MonitoramentoProtesto } from './monitoramento-protesto'
+import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
 import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
@@ -209,7 +210,14 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
           }
           conteudo={
             <>
-              <TabsContent value="dados" className="mt-0">
+              {/*
+               * O cadastro da Receita ANTES do formulário: quem abre "Dados" quer
+               * primeiro saber com quem está lidando (capital, idade, situação) e
+               * só depois editar o que é nosso. O card lê `mercado_universo` — os
+               * dados da RFB não são duplicados em `empresas` de propósito.
+               */}
+              <TabsContent value="dados" className="mt-0 space-y-4">
+                <CadastroRfb cnpj={data.cnpj} />
                 <EmpresaForm empresa={data} />
               </TabsContent>
 

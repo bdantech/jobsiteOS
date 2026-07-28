@@ -1,8 +1,10 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ExternalLink, History, SearchX } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { AlertTriangle, ExternalLink, History, SearchX, UserPlus } from 'lucide-react'
 import {
   EVENTO_LABELS,
   FAIXA_LABELS,
@@ -17,6 +19,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FichaVoltar } from '@/components/ficha/ficha'
+import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
+import { EmpresaContatos } from '@/components/empresas/empresa-contatos'
+import { promoverEmpresaAction } from '@/actions/mercado'
 import { NotaCard } from './nota-card'
 import { FAIXA_BADGE, TIPAGEM_BADGE, formatarDataHora, formatarInteiro, formatarMoeda } from './format'
 import { antecipacaoKeys, buscarDetalheFornecedor } from './queries'
@@ -30,10 +35,34 @@ import { antecipacaoKeys, buscarDetalheFornecedor } from './queries'
  * outras quatro notas durante a ligação.
  */
 export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
+  const qc = useQueryClient()
+  const [promovendo, setPromovendo] = React.useState(false)
+
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: antecipacaoKeys.fornecedor(cnpj),
     queryFn: () => buscarDetalheFornecedor(cnpj),
   })
+
+  /**
+   * Fornecedor de AQUISIÇÃO não vira `empresas` no sync, e isso é decisão: são
+   * centenas de CNPJs por semana que ninguém trabalha, e criar empresa para todos
+   * transformaria o CRM num espelho da carteira de notas dos clientes.
+   *
+   * Mas a decisão só se sustenta se houver a porta manual — que é este botão.
+   * Promover cria a empresa a partir do cadastro já enriquecido, e é a partir daí
+   * que existem contatos, timeline e toques para este fornecedor.
+   */
+  async function promover() {
+    setPromovendo(true)
+    const r = await promoverEmpresaAction({ cnpj, tipo: 'fornecedor', origem: 'antecipacao' })
+    setPromovendo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success('Fornecedor promovido — agora ele tem ficha, contatos e histórico.')
+    void qc.invalidateQueries({ queryKey: antecipacaoKeys.fornecedor(cnpj) })
+  }
 
   if (isPending) {
     return (
@@ -124,12 +153,17 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
               </div>
             </div>
 
-            {empresaId && (
+            {empresaId ? (
               <Button variant="outline" asChild>
                 <Link href={`/empresas/${empresaId}`}>
                   <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
                   Company 360
                 </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => void promover()} disabled={promovendo}>
+                <UserPlus className="mr-2 h-4 w-4" aria-hidden />
+                {promovendo ? 'Promovendo…' : 'Promover para Empresas'}
               </Button>
             )}
           </div>
@@ -158,6 +192,32 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
           </dl>
         </CardContent>
       </Card>
+
+      {/*
+       * Cadastro antes de contatos, e contatos antes das notas: é a ordem da
+       * decisão. "Vale a pena?" (capital, idade, situação) → "para quem eu ligo?"
+       * → "sobre o quê?".
+       */}
+      <CadastroRfb cnpj={cnpj} />
+
+      {empresaId ? (
+        <EmpresaContatos empresaId={empresaId} />
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <CardTitle className="text-base">Contatos</CardTitle>
+            </div>
+            <CardDescription>
+              O contato que veio na nota fiscal só vira lista depois que o fornecedor
+              existe em Empresas — <code>contatos</code> pende de uma empresa. Promova acima
+              e o próximo sync (ou o job diário) materializa o que já está guardado na nota.
+              Até lá a Outbox continua usando esse contato normalmente.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       {toques.length > 0 && (
         <Card>

@@ -26,6 +26,7 @@ import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
+import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 
 /**
@@ -49,6 +50,7 @@ export type TipoJob =
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
   | 'antecipacao-lookup'
+  | 'antecipacao-contatos'
   | 'antecipacao-diario'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
@@ -405,9 +407,13 @@ export function dispararAntecipacaoDiario(): string {
 
     const supressoes = await limparSupressoesExpiradas()
     const lookup = await lookupCadastral()
+    // Depois do lookup, de propósito: promover um fornecedor cria a empresa, e
+    // só a partir daí o contato dele tem onde ser gravado. Rodando antes, o
+    // recém-promovido esperaria até amanhã.
+    const contatos = await backfillContatosNf()
     const reclassificacao = await reclassificarFunil(client)
     const outbox = await gerarOutbox()
-    return { varredura, supressoes, lookup, reclassificacao, outbox }
+    return { varredura, supressoes, lookup, contatos, reclassificacao, outbox }
   })
 }
 
@@ -428,6 +434,17 @@ export function dispararOutbox(): string {
 /** Lookup cadastral sob demanda — para esvaziar a fila sem esperar o diário. */
 export function dispararLookupCadastral(): string {
   return dispararAvulso('antecipacao-lookup', async () => lookupCadastral())
+}
+
+/**
+ * Materializa em `contatos` o que já está no jsonb das notas.
+ *
+ * Sob demanda porque a primeira execução é retroativa sobre a base inteira: o
+ * sync é incremental e nunca rebusca a nota de ontem, então o contato que chegou
+ * antes desta função existir só sai do jsonb por aqui.
+ */
+export function dispararContatosNf(): string {
+  return dispararAvulso('antecipacao-contatos', async () => backfillContatosNf())
 }
 
 /**

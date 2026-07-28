@@ -22,6 +22,7 @@ import {
   dispararAntecipacaoDiario,
   dispararReclassificacaoFunil,
   dispararOutbox,
+  dispararContatosNf,
   dispararLookupCadastral,
   statusJob,
   JobEmExecucaoError,
@@ -230,6 +231,14 @@ app.post('/jobs/antecipacao/outbox', (_req: Request, res: Response, next: NextFu
 app.post('/jobs/antecipacao/lookup', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararLookupCadastral(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/contatos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararContatosNf(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }
