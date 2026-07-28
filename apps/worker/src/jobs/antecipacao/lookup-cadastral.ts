@@ -334,19 +334,38 @@ export async function lookupCadastral(): Promise<ResultadoLookup> {
     }
 
     if (resolvido) {
-      await gravarNoUniverso(resolvido)
+      // A fila só é marcada resolvida se a linha DE FATO entrou no universo.
+      // Marcar sobre uma escrita que falhou é o que transforma uma falha
+      // transitória em invisibilidade permanente: o CNPJ nunca mais é re-tentado
+      // e some de toda tela que dependa do cadastro dele.
+      const gravou = await gravarNoUniverso(resolvido)
+
       await supabaseAdmin
         .from('cnpj_lookup_fila')
-        .update({
-          status: 'resolvido_api',
-          tentativas: item.tentativas + 1,
-          ultimo_provedor: provedorUsado,
-          ultimo_erro: null,
-          resolvido_em: new Date().toISOString(),
-        })
+        .update(
+          gravou
+            ? {
+                status: 'resolvido_api',
+                tentativas: item.tentativas + 1,
+                ultimo_provedor: provedorUsado,
+                ultimo_erro: null,
+                resolvido_em: new Date().toISOString(),
+              }
+            : {
+                status: 'erro',
+                tentativas: item.tentativas + 1,
+                ultimo_provedor: provedorUsado,
+                ultimo_erro: 'Provedor respondeu, mas a gravação em mercado_universo falhou.',
+              },
+        )
         .eq('cnpj', item.cnpj)
-      acc.resolvidos++
-      if (provedorUsado) acc.por_provedor[provedorUsado] = (acc.por_provedor[provedorUsado] ?? 0) + 1
+
+      if (gravou) {
+        acc.resolvidos++
+        if (provedorUsado) acc.por_provedor[provedorUsado] = (acc.por_provedor[provedorUsado] ?? 0) + 1
+      } else {
+        acc.erros++
+      }
       continue
     }
 
@@ -385,10 +404,21 @@ export async function lookupCadastral(): Promise<ResultadoLookup> {
  * Entra em `mercado_universo` — não numa tabela nova. É isto que faz o resto do
  * sistema (Explorador, filter engine, Company 360) enxergar o fornecedor sem
  * código novo. `fora_recorte_cnae` é o que impede que ele suba na pirâmide.
+ *
+ * `cnaes_todos` e `cnae_grupos` são colunas GENERATED ALWAYS (migration 0011):
+ * escrever nelas faz o Postgres rejeitar a linha inteira com 428C9. Só se grava
+ * `cnae_principal` e `cnaes_secundarios`; as derivadas saem sozinhas. A primeira
+ * versão escrevia as duas e falhava em 100% dos casos — em silêncio, porque o
+ * erro só ia para o log e a fila era marcada como resolvida assim mesmo.
+ *
+ * Devolve se GRAVOU. Quem chama depende disso: marcar `resolvido_api` sobre uma
+ * escrita que falhou é o que transforma uma falha transitória em invisibilidade
+ * permanente.
  */
-async function gravarNoUniverso(c: CadastroNormalizado): Promise<void> {
+async function gravarNoUniverso(c: CadastroNormalizado): Promise<boolean> {
   const divisoes = [...new Set(c.cnaes_todos.map((x) => x.slice(0, 2)))]
   const foraDoRecorte = !divisoes.some((d) => DIVISOES_CONSTRUCAO.has(d))
+  const secundarios = c.cnaes_todos.filter((x) => x !== c.cnae_principal)
 
   const { error } = await supabaseAdmin.from('mercado_universo').upsert(
     {
@@ -403,8 +433,7 @@ async function gravarNoUniverso(c: CadastroNormalizado): Promise<void> {
       natureza_juridica: c.natureza_juridica,
       porte_rfb: c.porte_rfb,
       cnae_principal: c.cnae_principal,
-      cnaes_todos: c.cnaes_todos,
-      cnae_grupos: divisoes,
+      cnaes_secundarios: secundarios.length > 0 ? secundarios : null,
       capital_social: c.capital_social,
       data_inicio_atividade: c.data_inicio_atividade,
       uf: c.uf,
@@ -416,5 +445,10 @@ async function gravarNoUniverso(c: CadastroNormalizado): Promise<void> {
     },
     { onConflict: 'cnpj' },
   )
-  if (error) logger.error({ cnpj: c.cnpj, erro: error.message }, 'Falha ao gravar cadastro no universo.')
+
+  if (error) {
+    logger.error({ cnpj: c.cnpj, erro: error.message }, 'Falha ao gravar cadastro no universo.')
+    return false
+  }
+  return true
 }
