@@ -25,10 +25,19 @@ import {
   fetchDetalheFornecedor,
   fetchFunil,
   fetchMinimoOperavel,
+  fetchDetalheSacado,
   fetchSacados,
   fetchSacadosAProspectar,
+  fetchSacadosSemCnae,
 } from './api'
-import type { DetalheFornecedor, FiltrosFunil, PaginaFunil, SacadoFunil, SacadoProspectar } from './types'
+import type {
+  DetalheFornecedor,
+  DetalheSacado,
+  FiltrosFunil,
+  PaginaFunil,
+  SacadoFunil,
+  SacadoProspectar,
+} from './types'
 
 /**
  * A raiz do cache do módulo.
@@ -45,6 +54,8 @@ export const antecipacaoKeys = {
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
   prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
+  prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
+  sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   minimo: () => [...antecipacaoKeys.all, 'minimo-operavel'] as const,
   xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
 }
@@ -101,6 +112,23 @@ export function useSacadosQuery(): UseQueryResult<SacadoFunil[], Error> {
 
 export function useSacadosProspectarQuery(): UseQueryResult<SacadoProspectar[], Error> {
   return useQuery({ queryKey: antecipacaoKeys.prospectar(), queryFn: fetchSacadosAProspectar })
+}
+
+export function useDetalheSacadoQuery(
+  cnpj: string | undefined,
+): UseQueryResult<DetalheSacado, Error> {
+  return useQuery({
+    queryKey: antecipacaoKeys.sacado(cnpj ?? ''),
+    queryFn: () => fetchDetalheSacado(cnpj as string),
+    enabled: Boolean(cnpj),
+  })
+}
+
+export function useSacadosSemCnaeQuery(): UseQueryResult<number, Error> {
+  return useQuery({
+    queryKey: antecipacaoKeys.prospectarPendentes(),
+    queryFn: fetchSacadosSemCnae,
+  })
 }
 
 export function useMinimoOperavelQuery(): UseQueryResult<number, Error> {

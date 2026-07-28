@@ -22,6 +22,12 @@ export interface PaginaFunil {
   total: number
 }
 
+export interface DetalheSacado {
+  sacado: SacadoFunil | null
+  prospect: SacadoProspectar | null
+  notas: NotaFunil[]
+}
+
 export interface DetalheFornecedor {
   fornecedor: FornecedorFunil | null
   notas: NotaFunil[]

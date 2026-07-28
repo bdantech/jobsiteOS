@@ -10,6 +10,7 @@ export {
   mensagemDeErro,
   useDefinirPontoFocal,
   useDetalheFornecedorQuery,
+  useDetalheSacadoQuery,
   useFunilQuery,
   useMarcarSemInteresse,
   useMinimoOperavelQuery,
@@ -17,6 +18,7 @@ export {
   useRegistrarToque,
   useSacadosProspectarQuery,
   useSacadosQuery,
+  useSacadosSemCnaeQuery,
 } from './queries'
 export * from './format'
 export type * from './types'

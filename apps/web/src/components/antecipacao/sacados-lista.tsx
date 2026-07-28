@@ -137,7 +137,12 @@ export function SacadosLista() {
                 return (
                   <TableRow key={s.sacado_cnpj}>
                     <TableCell className="max-w-[16rem]">
-                      <p className="truncate font-medium">{s.sacado_nome ?? '—'}</p>
+                      <Link
+                        href={`/antecipacao/sacados/${s.sacado_cnpj}`}
+                        className="block truncate font-medium hover:underline"
+                      >
+                        {s.sacado_nome ?? '—'}
+                      </Link>
                       <p className="font-mono text-xs tabular-nums text-muted-foreground">
                         {s.sacado_cnpj ? formatCnpj(s.sacado_cnpj) : '—'}
                       </p>

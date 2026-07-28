@@ -9,6 +9,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import type {
   DetalheFornecedor,
+  DetalheSacado,
   FiltrosFunil,
   FornecedorFunil,
   NotaFunil,
@@ -190,6 +191,46 @@ export async function fetchSacados(): Promise<SacadoFunil[]> {
     .limit(100)
   if (error) throw error
   return (data ?? []) as SacadoFunil[]
+}
+
+/**
+ * O sacado e as NFs que ELE RECEBEU. Serve os dois caminhos (capacidade e
+ * prospecção), por isso traz as duas leituras agregadas.
+ */
+export async function fetchDetalheSacado(cnpj: string): Promise<DetalheSacado> {
+  const [capacidade, prospect, notas] = await Promise.all([
+    supabase.from('antecipacao_sacados').select('*').eq('sacado_cnpj', cnpj).maybeSingle(),
+    supabase
+      .from('antecipacao_sacados_a_prospectar')
+      .select('*')
+      .eq('sacado_cnpj', cnpj)
+      .maybeSingle(),
+    supabase
+      .from('notas_funil')
+      .select(COLUNAS_CARD)
+      .eq('sacado_cnpj', cnpj)
+      .order('emitida_em', { ascending: false, nullsFirst: false })
+      .limit(100),
+  ])
+  if (notas.error) throw notas.error
+  return {
+    sacado: (capacidade.data as SacadoFunil | null) ?? null,
+    prospect: (prospect.data as SacadoProspectar | null) ?? null,
+    notas: (notas.data ?? []) as NotaFunil[],
+  }
+}
+
+/**
+ * Quantos sacados ainda não têm CNAE e por isso NÃO aparecem em "a prospectar".
+ * Mostrar o número é o que impede a ausência de parecer "não há oportunidade".
+ */
+export async function fetchSacadosSemCnae(): Promise<number> {
+  const { count } = await supabase
+    .from('cnpj_lookup_fila')
+    .select('cnpj', { count: 'exact', head: true })
+    .eq('motivo', 'sacado_nf')
+    .in('status', ['pendente', 'erro'])
+  return count ?? 0
 }
 
 export async function fetchSacadosAProspectar(): Promise<SacadoProspectar[]> {

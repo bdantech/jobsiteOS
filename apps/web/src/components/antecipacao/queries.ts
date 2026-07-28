@@ -25,6 +25,8 @@ export const antecipacaoKeys = {
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
   prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
+  prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
+  sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   regras: (faixa: Faixa) => [...antecipacaoKeys.all, 'regras', faixa] as const,
   disparos: () => [...antecipacaoKeys.all, 'disparos'] as const,
   contas: () => [...antecipacaoKeys.all, 'contas'] as const,
@@ -221,6 +223,61 @@ export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
     .limit(200)
   if (error) throw error
   return (data ?? []) as SacadoProspectar[]
+}
+
+/**
+ * Quantos sacados ainda não têm CNAE, e por isso NÃO aparecem na lista.
+ *
+ * O recorte por CNAE tira muito ruído, mas cria uma janela: entre a nota chegar e
+ * o lookup cadastral responder, a construtora fica invisível. Mostrar o número é o
+ * que impede que essa ausência pareça "não há oportunidade".
+ */
+export async function contarSacadosSemCnae(): Promise<number> {
+  const supabase = createClient()
+  const { count } = await supabase
+    .from('cnpj_lookup_fila')
+    .select('cnpj', { count: 'exact', head: true })
+    .eq('motivo', 'sacado_nf')
+    .in('status', ['pendente', 'erro'])
+  return count ?? 0
+}
+
+export interface DetalheSacado {
+  sacado: SacadoFunil | null
+  prospect: SacadoProspectar | null
+  notas: NotaFunil[]
+}
+
+/**
+ * O sacado e as NFs que ELE RECEBEU.
+ *
+ * Traz as duas visões agregadas porque a mesma tela serve os dois caminhos: quem
+ * chega pela capacidade quer limite vs. demanda; quem chega por "a prospectar"
+ * quer volume e desde quando. Uma consulta a menos do que buscar sob demanda.
+ */
+export async function buscarDetalheSacado(cnpj: string): Promise<DetalheSacado> {
+  const supabase = createClient()
+  const [capacidade, prospect, notas] = await Promise.all([
+    supabase.from('antecipacao_sacados').select('*').eq('sacado_cnpj', cnpj).maybeSingle(),
+    supabase
+      .from('antecipacao_sacados_a_prospectar')
+      .select('*')
+      .eq('sacado_cnpj', cnpj)
+      .maybeSingle(),
+    supabase
+      .from('notas_funil')
+      .select(COLUNAS_CARD)
+      .eq('sacado_cnpj', cnpj)
+      .order('emitida_em', { ascending: false, nullsFirst: false })
+      .limit(200),
+  ])
+  if (notas.error) throw notas.error
+
+  return {
+    sacado: (capacidade.data as SacadoFunil | null) ?? null,
+    prospect: (prospect.data as SacadoProspectar | null) ?? null,
+    notas: (notas.data ?? []) as NotaFunil[],
+  }
 }
 
 export interface RegraFaixa extends Tables<'faixa_regras'> {

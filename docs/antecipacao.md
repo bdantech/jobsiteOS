@@ -173,15 +173,52 @@ rua. Enxugar os dois igualmente deixaria o card do celular bonito e mudo.
 Em ambos, **clicar/tocar abre a nota**. O caminho para o fornecedor não se perdeu: no
 web o nome é link e o "+N notas" é link; no mobile o "Ver fornecedor" é explícito.
 
+## Sacados a prospectar: o recorte é por CNAE
+
+Construtoras que **recebem NF** e **não estão na plataforma**. Duas condições, e só:
+
+```sql
+where not sacado_cadastrado
+  and sacado_construcao      -- CNAE na divisão 41, 42 ou 43
+```
+
+**A regra original do Prompt não funcionava.** Ela pedia "sacado não cadastrado E fornecedor
+que já antecipou", e `fornecedor_ja_antecipou` casa o CNPJ do FORNECEDOR contra
+`clientes_onepay` — que só contém **construtoras**, isto é, os sacados. O predicado era
+quase sempre falso e a tela vinha vazia.
+
+O que de fato separa oportunidade de ruído é o **CNAE do sacado**. Sem ele a lista vira
+"todo CNPJ que já apareceu como destinatário": posto de gasolina, papelaria, o contador
+do fornecedor. O sinal antigo não sumiu — virou a coluna
+`notas_de_quem_ja_antecipou`, um indicador de temperatura **dentro** da lista em vez de
+um portão na entrada dela.
+
+**De onde vem o CNAE:** `mercado_universo` — inclusive dos sacados que nunca estiveram no
+recorte de construção do dump da Receita, porque o lookup cadastral (§3.1) os insere lá.
+O sync já enfileira todo sacado desconhecido com motivo `sacado_nf`.
+
+**A troca assumida:** sacado com CNAE ainda desconhecido **não aparece**. Existe uma
+janela entre a nota chegar e o lookup responder. A tela mostra quantos estão pendentes —
+sem isso, uma lista curta pareceria "não há oportunidade" quando na verdade é "ainda não
+sabemos".
+
+O ranking é por **valor agregado**, sem janela de tempo: um relacionamento grande e
+antigo ainda supera um menor e atual. `ultima_nota_em` e `primeira_nota_em` estão na tela
+para você notar, mas não entram na ordenação.
+
+Clicar num sacado abre `/antecipacao/sacados/{cnpj}` com **as notas que ele recebeu** —
+a mesma tela que a aba de capacidade usa, porque a pergunta ("quem emite para ele, e
+quanto?") é a mesma nos dois caminhos.
+
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0053`.
+- **Banco**: migrations `0045`–`0056`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
   - `cnpj_lookup_fila` + `antecipacao_config`
   - views: `notas_funil` (a superfície única), `antecipacao_fornecedores`,
-    `antecipacao_sacados`, `antecipacao_sacados_a_prospectar`
+    `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
   - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
     `app_ativar_faixa_regra`, `app_salvar_faixa_disparo`, `app_salvar_whatsapp_conta`,
     `app_descartar_mensagem`, `app_definir_ponto_focal`, `app_registrar_toque_manual`,

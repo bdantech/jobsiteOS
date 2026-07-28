@@ -2028,10 +2028,14 @@ export type Database = {
       }
       antecipacao_sacados_a_prospectar: {
         Row: {
-          fornecedores_operando: number | null
+          fornecedores: number | null
           notas: number | null
+          notas_de_quem_ja_antecipou: number | null
+          primeira_nota_em: string | null
+          sacado_cnae_principal: string | null
           sacado_cnpj: string | null
           sacado_empresa_id: string | null
+          sacado_municipio: string | null
           sacado_nome: string | null
           sacado_uf: string | null
           ultima_nota_em: string | null
@@ -2138,14 +2142,19 @@ export type Database = {
           perda_motivo: string | null
           receita_esperada: number | null
           sacado_cadastrado: boolean | null
+          sacado_cnae_grupos: string[] | null
+          sacado_cnae_principal: string | null
           sacado_cnpj: string | null
+          sacado_construcao: boolean | null
           sacado_credito_role: string | null
           sacado_credito_status: string | null
           sacado_empresa_id: string | null
           sacado_limite: number | null
           sacado_limite_cobre_nota: boolean | null
           sacado_limite_disponivel: number | null
+          sacado_municipio: string | null
           sacado_nome: string | null
+          sacado_razao_social: string | null
           sacado_uf: string | null
           serie: string | null
           sincronizada_em: string | null
