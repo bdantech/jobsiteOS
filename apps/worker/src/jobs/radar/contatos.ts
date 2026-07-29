@@ -82,17 +82,21 @@ async function revelar(
   revelarTelefone: boolean,
   webhookUrl: string | null,
 ): Promise<{ matches: PessoaApollo[]; creditos: number }> {
+  // Os `reveal_*` e o `webhook_url` são QUERY PARAMS — no corpo o Apollo os descarta
+  // sem erro, e o pedido vira um match comum: e-mail vem (é o padrão do endpoint) e o
+  // telefone nunca é pedido, então o webhook nunca toca. Foi exatamente esse silêncio
+  // que queimou dois lotes. Só o `details` vai no corpo.
+  const query = new URLSearchParams({ reveal_personal_emails: 'true' })
+  if (revelarTelefone && webhookUrl) {
+    query.set('reveal_phone_number', 'true')
+    query.set('webhook_url', webhookUrl)
+  }
   const resp = await requisitarJson<{ matches?: PessoaApollo[]; credits_consumed?: number }>(
-    `${APOLLO}/people/bulk_match`,
+    `${APOLLO}/people/bulk_match?${query.toString()}`,
     {
       method: 'POST',
       headers: cabecalhos(),
-      body: {
-        details: ids.map((id) => ({ id })),
-        reveal_personal_emails: true,
-        reveal_phone_number: revelarTelefone,
-        ...(revelarTelefone && webhookUrl ? { webhook_url: webhookUrl } : {}),
-      },
+      body: { details: ids.map((id) => ({ id })) },
       tentativas: 2,
     },
   )
