@@ -41,6 +41,23 @@ const CFG: CargosAlvo = {
   departamentos: ['finance', 'operations', 'engineering', 'procurement', 'executive'],
   senioridades: ['owner', 'founder', 'c_suite', 'partner', 'vp', 'head', 'director', 'manager'],
   senioridades_qualificam: ['owner', 'founder', 'c_suite', 'partner'],
+  excluir_titulos: [
+    'recursos humanos',
+    'recrutamento',
+    'seleção',
+    'DHO',
+    'gente',
+    'cultura',
+    'people',
+    'talent',
+    'business partner',
+    'marketing',
+    'comercial',
+    'vendas',
+    'sales',
+    'sucesso do cliente',
+  ],
+  excluir_departamentos: ['human_resources', 'sales', 'marketing'],
   prioritarios: {
     titulos: ['sócio', 'socio', 'proprietário', 'fundador', 'CFO', 'financeiro', 'controladoria', 'controller'],
     departamentos: ['finance'],
@@ -117,12 +134,58 @@ test('o caso real da cury.net: 8 slots deixam de ir para obra', () => {
   assert.deepEqual(nomes(doApollo), ['comptroller', 'controladoria', 'eng-rj', 'suprimentos'])
 })
 
-test('senioridade desconhecida vai para o fim, mas não é eliminada', () => {
-  const entrada: Array<CandidatoCargo & { id: string }> = [
-    { id: 'sem-senioridade', title: 'Diretor Técnico' },
-    { id: 'diretor', title: 'Diretor de Engenharia', seniority: 'director' },
-  ]
-  assert.deepEqual(nomes(entrada), ['diretor', 'sem-senioridade'])
+test('senioridade fora da allow-list é eliminada, não só rebaixada', () => {
+  // Sem senioridade reconhecida não entra: é o que barra entry/intern/senior.
+  assert.equal(qualifica({ title: 'Diretor Técnico' }, CFG), false)
+  assert.equal(qualifica({ title: 'Diretor Técnico', seniority: 'director' }, CFG), true)
+})
+
+/**
+ * A leva da 7lm.com.br: 8 contatos pagos e quase nada de financeiro ou dono. Cada
+ * caso abaixo é um contato real e a regra que o deixou passar indevidamente.
+ */
+test('7lm: sigla COO não pode casar "Coordenador"', () => {
+  // Era `includes('coo')`: "COOrdenador de Recrutamento" casava a sigla de COO.
+  assert.equal(qualifica({ title: 'Coordenador de Recrutamento e Seleção', seniority: 'manager', departments: ['master_human_resources'] }, CFG), false)
+  assert.equal(qualifica({ title: 'Coordenadora de DHO', seniority: 'manager', departments: ['master_human_resources'] }, CFG), false)
+  // E a sigla de verdade continua casando.
+  assert.equal(qualifica({ title: 'COO / Diretor Supply Chain', seniority: 'c_suite' }, CFG), true)
+  assert.equal(qualifica({ title: 'CFO e DRI', seniority: 'c_suite' }, CFG), true)
+})
+
+test('7lm: estagiário e analista não entram, nem como prioritários', () => {
+  // Ambos casavam termo do grupo prioritário e iam para o TOPO da fila paga.
+  assert.equal(qualifica({ title: 'Finance Department Intern', seniority: 'intern', departments: ['master_finance'] }, CFG), false)
+  assert.equal(qualifica({ title: 'Controller Analyst', seniority: 'entry', departments: ['master_finance'] }, CFG), false)
+  // O mesmo cargo em nível de gestão entra.
+  assert.equal(qualifica({ title: 'Controller', seniority: 'director', departments: ['master_finance'] }, CFG), true)
+})
+
+test('7lm: "Business Partner" de RH não é sócio', () => {
+  // O Apollo marca a senioridade como `partner`; só a exclusão por título segura.
+  assert.equal(qualifica({ title: 'Business Partner (BP)', seniority: 'partner', departments: ['master_sales'] }, CFG), false)
+  // Sócio de verdade continua entrando.
+  assert.equal(qualifica({ title: 'Managing Partner', seniority: 'partner' }, CFG), true)
+  assert.equal(qualifica({ title: 'Owner Partner', seniority: 'owner' }, CFG), true)
+})
+
+test('7lm: diretoria de RH é excluída, mesmo casando "diretor"', () => {
+  assert.equal(qualifica({ title: 'Diretora Gente & Cultura / Sucesso do Cliente', seniority: 'director' }, CFG), false)
+  assert.equal(qualifica({ title: 'Diretor De Gente & Gestão', seniority: 'director' }, CFG), false)
+  // Diretoria que interessa segue passando.
+  assert.equal(qualifica({ title: 'Executive Director', seniority: 'director' }, CFG), true)
+  assert.equal(qualifica({ title: 'Diretor Financeiro do Grupo', seniority: 'director', departments: ['master_finance'] }, CFG), true)
+})
+
+test('7lm: departamento vetado corta mesmo com título aceitável', () => {
+  assert.equal(qualifica({ title: 'Commercial Director', seniority: 'director', departments: ['master_sales'] }, CFG), false)
+})
+
+test('exclusão vence prioridade: nada entra por ser financeiro se a área é vetada', () => {
+  assert.equal(
+    qualifica({ title: 'Business Partner Financeiro', seniority: 'manager', departments: ['master_finance'] }, CFG),
+    false,
+  )
 })
 
 test('C-level em inglês entra pela senioridade, sem casar título', () => {

@@ -113,15 +113,28 @@ então revela os escolhidos. Filtrar na API não funciona: `person_titles` e
 `person_seniorities` se combinam por **OR** (pedir "CFO" + "manager" traz todo
 manager da empresa) e `person_departments` não existe.
 
-Quem entra:
+Duas barreiras primeiro, nesta ordem:
 
-1. `titulos` — casam por **trecho**, ignorando acento e caixa, porque os cargos reais
+1. **`excluir_titulos` / `excluir_departamentos`** — vetam por área e vencem tudo,
+   inclusive os prioritários. RH, comercial, marketing e jurídico não decidem
+   antecipação. Sem isto, "Diretora Gente & Cultura" entra por `diretor` e "Business
+   Partner" entra por senioridade `partner`.
+2. **`senioridades` é allow-list** — quem não está na lista não entra. É o que barra
+   `entry` e `intern`; ambos já passaram, e como casavam `finance`/`controller` foram
+   classificados prioritários e furaram a fila à frente de diretores.
+
+Só então, quem entra:
+
+3. `titulos` — casam por **trecho**, ignorando acento e caixa, porque os cargos reais
    vêm sujos (`"◾ Head of Procurement at LBX Construtora"`, `"CFO e DRI"`). Precisa
-   ter termos em **português e inglês**. Nunca inclua `manager` solto: traz todo
-   "Construction Manager" da obra.
-2. `senioridades_qualificam` — entram sem depender do título. Existe porque o alto
+   ter termos em **português e inglês**. Termo de até 4 caracteres é tratado como
+   sigla e exige palavra isolada — sem isso `COO` casa "**Coo**rdenador de
+   Recrutamento", que foi como duas pessoas de RH entraram num lote pago. Nunca
+   inclua `manager` solto (traz a obra inteira), nem `partner`/`owner` (casam
+   "Business Partner" e "Product Owner").
+4. `senioridades_qualificam` — entram sem depender do título. Existe porque o alto
    escalão costuma vir em inglês ("Chief Operating Officer" não casa `COO`).
-3. `prioritarios` — donos e financeiro, que entram mesmo com título fora da lista
+5. `prioritarios` — donos e financeiro, que entram mesmo com título fora da lista
    ("Owner Partner", "Comptroller").
 
 Ordem de preferência dentro dos escolhidos: **prioritários primeiro**, depois

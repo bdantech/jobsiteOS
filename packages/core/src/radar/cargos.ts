@@ -36,6 +36,14 @@ export interface CargosAlvo {
   titulos: string[]
   /** Termos de departamento. Só desempatam — não qualificam nem eliminam ninguém. */
   departamentos: string[]
+  /**
+   * Corta ANTES de qualquer regra de entrada, inclusive prioritários. Para áreas que
+   * nunca decidem antecipação: RH, marketing, vendas, TI. Sem isto, "Diretora Gente
+   * & Cultura" e "Business Partner" entram por 'diretor' e 'partner'.
+   */
+  excluir_titulos?: string[]
+  /** Idem, por departamento do Apollo (`human_resources`, `sales`…). */
+  excluir_departamentos?: string[]
   /** ORDEM = PRIORIDADE, da maior senioridade para a menor. */
   senioridades: string[]
   /**
@@ -64,14 +72,30 @@ function normalizar(s: string): string {
  * Match por trecho, e não por igualdade: os cargos reais do Apollo vêm sujos —
  * "◾ Head of Procurement at LBX Construtora", "CFO e DRI", "Gerente Geral de Obras /
  * Gerente de Contrato". Exigir título exato descartaria todos esses.
+ *
+ * Mas trecho puro é armadilha com sigla: `includes('coo')` casa "COOrdenador de
+ * Recrutamento", e foi assim que duas pessoas de RH entraram num lote pago. Então:
+ *
+ * - termo curto (≤4, as siglas — COO, CFO, CEO, BP): tem de ser palavra isolada;
+ * - termo longo: basta INICIAR uma palavra, para 'diretor' casar "Diretora".
+ *
+ * Nos dois casos o match começa em limite de palavra — 'finance' não casa
+ * "refinanciamento".
  */
+const TAMANHO_SIGLA = 4
+
+function casaUm(alvoNormalizado: string, termo: string): boolean {
+  const t = normalizar(termo).trim()
+  if (!t) return false
+  const escapado = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const fim = t.length <= TAMANHO_SIGLA ? '(?![a-z0-9])' : ''
+  return new RegExp(`(?<![a-z0-9])${escapado}${fim}`).test(alvoNormalizado)
+}
+
 function casa(texto: string | undefined, termos: string[] | undefined): boolean {
   if (!texto || !termos?.length) return false
   const alvo = normalizar(texto)
-  return termos.some((t) => {
-    const n = normalizar(t)
-    return n.length > 0 && alvo.includes(n)
-  })
+  return termos.some((t) => casaUm(alvo, t))
 }
 
 /** O Apollo devolve `master_finance`, `master_engineering_technical`, `c_suite`… */
@@ -90,17 +114,34 @@ export function ehPrioritario(p: CandidatoCargo, cfg: CargosAlvo): boolean {
   )
 }
 
+/** Vetado por área, independente de cargo ou senioridade. Vence todas as outras regras. */
+export function ehExcluido(p: CandidatoCargo, cfg: CargosAlvo): boolean {
+  return casa(p.title, cfg.excluir_titulos) || casa(departamentoDe(p), cfg.excluir_departamentos)
+}
+
 /**
  * Entra quem casa a lista de cargos-alvo pelo TÍTULO, mais duas exceções que passam
  * com título fora da lista: os prioritários (um sócio aparece como "Owner Partner",
  * um financeiro como "Comptroller", sem casar termo nenhum) e o alto escalão de
  * `senioridades_qualificam`.
  *
+ * Duas barreiras vêm ANTES de qualquer uma dessas portas:
+ *
+ * 1. área vetada (`excluir_*`) — RH e vendas não decidem antecipação;
+ * 2. senioridade fora de `senioridades` — 'entry' e 'intern' não entram nem como
+ *    prioritários. Já pagamos por um "Finance Department Intern" que, por casar
+ *    'finance', foi classificado prioritário e furou a fila à frente de diretores.
+ *
  * Departamento de propósito NÃO qualifica: `master_operations` deixaria entrar todo
  * "Construction Manager" da obra, que é exatamente o que se quer evitar.
  */
 export function qualifica(p: CandidatoCargo, cfg: CargosAlvo): boolean {
-  if (p.seniority && (cfg.senioridades_qualificam ?? []).includes(p.seniority)) return true
+  if (ehExcluido(p, cfg)) return false
+  // Allow-list de senioridade: sem senioridade reconhecida, não passa. Assumimos que
+  // o Apollo classifica quem importa — perder um sócio sem `seniority` custa menos
+  // que revelar a base de estagiários de toda empresa da carteira.
+  if (!p.seniority || !cfg.senioridades.includes(p.seniority)) return false
+  if ((cfg.senioridades_qualificam ?? []).includes(p.seniority)) return true
   return casa(p.title, cfg.titulos) || ehPrioritario(p, cfg)
 }
 
