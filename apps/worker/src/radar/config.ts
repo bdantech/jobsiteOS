@@ -30,6 +30,7 @@ export interface OrcamentoRadar {
 export interface CargosAlvo {
   titulos: string[]
   departamentos: string[]
+  /** Ordem = prioridade: é ela que decide quem fica nos slots pagos por empresa. */
   senioridades: string[]
   max_contatos_por_empresa: number
 }
@@ -61,10 +62,10 @@ export const lerOrcamento = (): Promise<OrcamentoRadar> =>
   ler('orcamento', { teto_mensal_total: 5000, alerta_percentual: 0.8, max_itens_por_lote: 2000 })
 
 export const lerCargosAlvo = (): Promise<CargosAlvo> =>
-  ler('cargos_alvo', { titulos: [], departamentos: [], senioridades: [], max_contatos_por_empresa: 4 })
+  ler('cargos_alvo', { titulos: [], departamentos: [], senioridades: [], max_contatos_por_empresa: 8 })
 
 export const lerApolloCfg = (): Promise<ApolloCfg> =>
-  ler('apollo', { revelar_telefone_em_lote: false, bulk_size: 10 })
+  ler('apollo', { revelar_telefone_em_lote: true, bulk_size: 10 })
 
 /** Limiar de dias sem antecipar que marca um cliente como dormente (§7). */
 export const lerLimiarDormente = (): Promise<number> =>

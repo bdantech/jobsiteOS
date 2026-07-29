@@ -1,4 +1,5 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
+import { ordenarPorAlvo } from '../../../../../packages/core/src/radar/cargos.js'
 import type { Tables, TablesInsert } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
@@ -16,9 +17,13 @@ import type { ProcessarItem, ResultadoItem } from './lote.js'
  * Então o processador deduplica por domínio (nesta corrida e por TTL) e vincula os
  * contatos à empresa do item; os CNPJs-irmãos que compartilham o domínio herdam os
  * contatos pela relação de grupo/domínio (sem duplicar linhas — apollo_person_id é
- * único). Sequência: organizations/enrich → mixed_people/api_search (filtra pelos
- * cargos-alvo) → people/bulk_match (blocos de 10, revela e-mail; telefone é opcional
- * e assíncrono via webhook).
+ * único). Sequência: organizations/enrich → mixed_people/api_search (filtra por
+ * título e senioridade, de graça) → ordena por senioridade e corta em
+ * `max_contatos_por_empresa` → people/bulk_match (blocos de 10), que cobra e revela
+ * o e-mail na hora. O TELEFONE NÃO VEM AQUI: o Apollo o entrega minutos depois, no
+ * webhook (`radar/apollo-webhook.ts`), que casa a linha por apollo_person_id. Por
+ * isso o contato nasce com telefone_status 'pendente' e o telefone fica fora do
+ * upsert — um reprocessamento não pode apagar o que o webhook trouxe.
  */
 
 const APOLLO = 'https://api.apollo.io/api/v1'
@@ -34,7 +39,8 @@ interface PessoaApollo {
   email?: string
   email_status?: string
   linkedin_url?: string
-  phone_numbers?: Array<{ raw_number?: string }>
+  /** Raro no bulk_match (o telefone é assíncrono), mas o Apollo às vezes já traz um. */
+  phone_numbers?: Array<{ raw_number?: string; sanitized_number?: string }>
 }
 
 function cabecalhos(): Record<string, string> {
@@ -57,7 +63,12 @@ async function buscarPessoas(orgId: string, cargos: CargosAlvo): Promise<PessoaA
       organization_ids: [orgId],
       person_titles: cargos.titulos,
       person_seniorities: cargos.senioridades,
-      person_departments: cargos.departamentos,
+      // `person_departments` NÃO existe na People Search — o Apollo descartava em
+      // silêncio (foi assim que vieram cargos de `master_sales`, fora da lista-alvo).
+      // Departamento agora só desempata a ordenação, em `ordenarPorAlvo`.
+      // E sem `include_similar_titles: false` o Apollo alarga os títulos para
+      // "cargos com os mesmos termos", o que trazia "Construction Manager" & cia.
+      include_similar_titles: false,
       per_page: 25,
       page: 1,
     },
@@ -101,16 +112,23 @@ async function dominioNoTtl(dominio: string, ttlDias: number): Promise<boolean> 
   return (count ?? 0) > 0
 }
 
-async function gravarContato(empresaId: string, p: PessoaApollo): Promise<void> {
+async function gravarContato(empresaId: string, p: PessoaApollo, pediuTelefone: boolean): Promise<void> {
+  if (!p.id) {
+    // Sem person_id o webhook não teria como casar a linha depois (é a chave do
+    // update), e o upsert duplicaria — `unique(apollo_person_id)` não pega nulls.
+    logger.warn({ nome: p.name }, 'Match do Apollo sem person_id; contato ignorado.')
+    return
+  }
+
+  // Telefone fica FORA do upsert de propósito: ele chega depois, pelo webhook, e
+  // um reprocessamento (TTL vencido) reescreveria com null o número já recebido.
   const row: TablesInsert<'contatos'> = {
     empresa_id: empresaId,
-    apollo_person_id: p.id ?? null,
+    apollo_person_id: p.id,
     nome: p.name ?? ([p.first_name, p.last_name].filter(Boolean).join(' ') || null),
     cargo: p.title ?? null,
     email: p.email ?? null,
     email_status: normalizarEmailStatus(p.email_status),
-    telefone: p.phone_numbers?.[0]?.raw_number ?? null,
-    telefone_status: p.phone_numbers?.[0]?.raw_number ? 'recebido' : null,
     senioridade: p.seniority ?? null,
     departamento: p.departments?.[0] ?? null,
     linkedin_url: p.linkedin_url ?? null,
@@ -118,7 +136,25 @@ async function gravarContato(empresaId: string, p: PessoaApollo): Promise<void> 
     enriquecido_em: new Date().toISOString(),
   }
   const { error } = await supabaseAdmin.from('contatos').upsert(row, { onConflict: 'apollo_person_id' })
-  if (error) logger.error({ apollo: p.id, erro: error.message }, 'Falha ao gravar contato Apollo.')
+  if (error) {
+    logger.error({ apollo: p.id, erro: error.message }, 'Falha ao gravar contato Apollo.')
+    return
+  }
+
+  // Estado do telefone à parte, para nunca rebaixar o que o webhook já trouxe.
+  const tel = p.phone_numbers?.find((n) => n.sanitized_number || n.raw_number)
+  const numero = tel?.sanitized_number ?? tel?.raw_number ?? null
+  const patch = numero
+    ? { telefone: numero, telefone_status: 'recebido' as const }
+    : pediuTelefone
+      ? { telefone_status: 'pendente' as const }
+      : null
+  if (!patch) return
+
+  let q = supabaseAdmin.from('contatos').update(patch).eq('apollo_person_id', p.id)
+  if (!numero) q = q.is('telefone', null) // 'pendente' não sobrescreve número já recebido
+  const { error: erroTel } = await q
+  if (erroTel) logger.error({ apollo: p.id, erro: erroTel.message }, 'Falha ao marcar estado do telefone.')
 }
 
 function normalizarEmailStatus(s: string | undefined): string | null {
@@ -162,10 +198,18 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       return { status: 'pulado', fonte: 'apollo', erro: 'Nenhuma empresa promovida com este domínio para vincular.' }
     }
 
-    // Telefone é assíncrono (webhook). Só o pedimos se houver URL de webhook configurada;
-    // senão revelamos só e-mail (síncrono) e não travamos o item em aguardando_webhook.
+    // Telefone é assíncrono: o Apollo só o entrega no webhook. Sem URL configurada
+    // o pedido seria pago e nunca respondido — falha ANTES de gastar crédito, em vez
+    // de rebaixar para "só e-mail" em silêncio (o modo antigo, que escondia o problema).
     const querTelefone = params.revelar_telefone ?? cfgApollo.revelar_telefone_em_lote
     const webhookUrl = env.APOLLO_WEBHOOK_URL ?? null
+    if (querTelefone && !webhookUrl) {
+      return {
+        status: 'erro',
+        fonte: 'apollo',
+        erro: 'Telefone pedido, mas APOLLO_WEBHOOK_URL não está configurada — o Apollo não teria para onde entregar.',
+      }
+    }
     const revelarTelefone = querTelefone && !!webhookUrl
 
     let orgId: string | null
@@ -179,10 +223,12 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       return { status: 'sem_dados', fonte: 'apollo', resultado: { motivo: 'organização não encontrada no Apollo' } }
     }
 
-    // Seleciona (não cobra): pessoas dos cargos-alvo, limitadas por config, maior senioridade primeiro.
-    const pessoas = (await buscarPessoas(orgId, cfgCargos))
-      .filter((p) => p.id)
-      .slice(0, cfgCargos.max_contatos_por_empresa || 4)
+    // Seleciona (não cobra): pessoas dos cargos-alvo, ordenadas por senioridade e
+    // então cortadas em `max_contatos_por_empresa` — o corte é o que se paga.
+    const pessoas = ordenarPorAlvo(
+      (await buscarPessoas(orgId, cfgCargos)).filter((p) => p.id),
+      cfgCargos,
+    ).slice(0, cfgCargos.max_contatos_por_empresa || 8)
 
     if (pessoas.length === 0) {
       dominiosFeitos.add(dominio)
@@ -204,7 +250,7 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       }
       creditos += r.creditos
       for (const m of r.matches) {
-        await gravarContato(empresaId, m)
+        await gravarContato(empresaId, m, revelarTelefone)
         if (m.email) revelados++
       }
     }

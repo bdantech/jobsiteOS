@@ -35,16 +35,23 @@ export async function processarWebhookApollo(corpo: unknown): Promise<{ atualiza
       ? { telefone: numero, telefone_status: 'recebido' as const }
       : { telefone_status: 'indisponivel' as const }
 
-    const { data, error } = await supabaseAdmin
-      .from('contatos')
-      .update(patch)
-      .eq('apollo_person_id', p.id)
-      .select('id')
+    let q = supabaseAdmin.from('contatos').update(patch).eq('apollo_person_id', p.id)
+    // 'indisponivel' nunca invalida um número que já temos: o Apollo reenvia o
+    // webhook, e uma entrega vazia depois de uma cheia não pode desfazer a cheia.
+    if (!numero) q = q.is('telefone', null)
+    const { data, error } = await q.select('id')
     if (error) {
       logger.error({ apollo: p.id, erro: error.message }, 'Falha ao aplicar telefone do webhook Apollo.')
       continue
     }
-    atualizados += data?.length ?? 0
+    const n = data?.length ?? 0
+    if (n === 0) {
+      // Não é ruído: significa telefone chegando para um contato que não existe
+      // (webhook mais rápido que o insert do lote, ou person_id de outro ambiente).
+      // Sem este log o número sumia e o 200 dizia que estava tudo bem.
+      logger.warn({ apollo: p.id, tinha_numero: !!numero }, 'Webhook Apollo não casou nenhum contato.')
+    }
+    atualizados += n
   }
 
   return { atualizados }

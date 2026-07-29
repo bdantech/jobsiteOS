@@ -2,4 +2,5 @@
 export * from './schemas.js'
 export * from './supressao.js'
 export * from './credit.js'
+export * from './cargos.js'
 export * from './mutations.js'

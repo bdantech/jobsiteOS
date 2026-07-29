@@ -31,11 +31,14 @@ insert into radar_config (chave, valor) values
       'gerente administrativo','suprimentos','compras','comprador','procurement',
       'engenheiro','engenharia','gerente de obras','diretor de obras','planejamento',
       'COO','diretor executivo','sócio-diretor'),
+    -- Departamento NÃO é filtro: `person_departments` não existe na People Search do
+    -- Apollo. Serve de desempate na ordenação local (ver ordenarPorAlvo no worker).
     'departamentos', jsonb_build_array('finance','operations','engineering','procurement','executive'),
+    -- A ORDEM importa: é a prioridade do corte por max_contatos_por_empresa.
     'senioridades', jsonb_build_array('owner','founder','c_suite','partner','vp','head','director','manager'),
-    'max_contatos_por_empresa', 4
+    'max_contatos_por_empresa', 8
   )),
-  ('apollo', jsonb_build_object('revelar_telefone_em_lote', false, 'bulk_size', 10)),
+  ('apollo', jsonb_build_object('revelar_telefone_em_lote', true, 'bulk_size', 10)),
   ('protestos', jsonb_build_object('clientes_sempre_nacional', true, 'prospeccao_incluir_fora_sp_default', false))
 on conflict (chave) do nothing;
 

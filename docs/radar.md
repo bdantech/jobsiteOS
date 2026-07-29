@@ -84,9 +84,36 @@ O telefone chega **depois**, separado, quando o `bulk_match` foi pedido com
   URL pública do túnel + `?secret=…` no `APOLLO_WEBHOOK_URL`.
 - **Prod**: o próprio host público do worker no Railway:
   `https://<host-do-worker>/webhooks/apollo?secret=<APOLLO_WEBHOOK_SECRET>`.
+  **Tem de ser o host do worker (Railway), não o do app web (Vercel)** — a rota é
+  do Express; no Next não existe, e o Apollo só receberia 404.
 
-Sem `APOLLO_WEBHOOK_URL`, o job revela só e-mail (síncrono) e não trava itens
-esperando telefone.
+Ciclo de vida de `contatos.telefone_status`:
+
+| valor | significado |
+|---|---|
+| `null` | telefone não foi pedido neste enriquecimento |
+| `pendente` | pedido ao Apollo, aguardando o webhook |
+| `recebido` | número entregue |
+| `indisponivel` | o Apollo respondeu que não tem número |
+
+Se `revelar_telefone` estiver ligado (settings `apollo.revelar_telefone_em_lote` ou
+o checkbox do lote) e `APOLLO_WEBHOOK_URL` estiver vazia, o item **falha antes de
+gastar crédito**, em vez de rebaixar para "só e-mail" em silêncio.
+
+O telefone fica de fora do upsert de contatos de propósito: ele só é escrito pelo
+webhook, e um reprocessamento (TTL vencido) sobrescreveria com `null` o número já
+recebido. Pelo mesmo motivo, `indisponivel` nunca sobrepõe um número existente.
+
+## Cargos-alvo (settings `cargos_alvo`)
+
+- `titulos` e `senioridades` vão como filtro para o Apollo, com
+  `include_similar_titles: false` — sem isso o Apollo alarga a busca para "cargos
+  com os mesmos termos" e traz gente fora da lista.
+- `departamentos` **não é filtro de API**: `person_departments` não existe na People
+  Search e era descartado em silêncio. Hoje serve só de desempate na ordenação
+  local, e nunca elimina ninguém (sócios e diretores costumam vir sem departamento).
+- A **ordem** de `senioridades` é a prioridade do corte: o worker ordena por ela e
+  então fatia em `max_contatos_por_empresa` — e a fatia é o que se paga.
 
 ## Variáveis de ambiente (worker)
 
