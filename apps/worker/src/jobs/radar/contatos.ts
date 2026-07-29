@@ -1,11 +1,11 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { ordenarPorAlvo } from '../../../../../packages/core/src/radar/cargos.js'
+import { selecionarAlvos, type CargosAlvo } from '../../../../../packages/core/src/radar/cargos.js'
 import type { Tables, TablesInsert } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
-import { requisitarJson } from '../../net/http.js'
-import { lerApolloCfg, lerCargosAlvo, lerCustos, lerTtl, type CargosAlvo } from '../../radar/config.js'
+import { criarPacer, requisitarJson } from '../../net/http.js'
+import { lerApolloCfg, lerCargosAlvo, lerCustos, lerTtl } from '../../radar/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
@@ -55,26 +55,43 @@ async function enriquecerOrg(dominio: string): Promise<string | null> {
   return resp.organization?.id ?? null
 }
 
+const POR_PAGINA = 100 // teto da API
+
+/**
+ * Varre a empresa inteira — sem filtro de cargo e sem gastar crédito: esta busca é
+ * gratuita, só o bulk_match cobra. Filtrar aqui era o erro: `person_titles` e
+ * `person_seniorities` se combinam por OR no Apollo, então a lista de cargos-alvo
+ * não restringia nada, só deixava entrar qualquer 'manager'. A seleção passou a ser
+ * local, em `selecionarAlvos`, onde a regra é nossa e testada.
+ */
 async function buscarPessoas(orgId: string, cargos: CargosAlvo): Promise<PessoaApollo[]> {
-  const resp = await requisitarJson<{ people?: PessoaApollo[] }>(`${APOLLO}/mixed_people/api_search`, {
-    method: 'POST',
-    headers: cabecalhos(),
-    body: {
-      organization_ids: [orgId],
-      person_titles: cargos.titulos,
-      person_seniorities: cargos.senioridades,
-      // `person_departments` NÃO existe na People Search — o Apollo descartava em
-      // silêncio (foi assim que vieram cargos de `master_sales`, fora da lista-alvo).
-      // Departamento agora só desempata a ordenação, em `ordenarPorAlvo`.
-      // E sem `include_similar_titles: false` o Apollo alarga os títulos para
-      // "cargos com os mesmos termos", o que trazia "Construction Manager" & cia.
-      include_similar_titles: false,
-      per_page: 25,
-      page: 1,
-    },
-    tentativas: 2,
-  })
-  return resp.people ?? []
+  const maxPaginas = Math.max(1, cargos.max_paginas_busca || 3)
+  const pace = criarPacer(300) // a busca não custa crédito, mas custa rate limit
+  const todas: PessoaApollo[] = []
+
+  for (let page = 1; page <= maxPaginas; page++) {
+    await pace()
+    const resp = await requisitarJson<{
+      people?: PessoaApollo[]
+      pagination?: { total_pages?: number; total_entries?: number }
+    }>(`${APOLLO}/mixed_people/api_search`, {
+      method: 'POST',
+      headers: cabecalhos(),
+      body: { organization_ids: [orgId], per_page: POR_PAGINA, page },
+      tentativas: 2,
+    })
+
+    const pagina = resp.people ?? []
+    todas.push(...pagina)
+
+    const totalPaginas = resp.pagination?.total_pages ?? 0
+    if (pagina.length < POR_PAGINA || (totalPaginas > 0 && page >= totalPaginas)) break
+    if (page === maxPaginas && totalPaginas > maxPaginas) {
+      // Silêncio aqui viraria "a empresa só tem 300 pessoas" na análise de custo.
+      logger.warn({ orgId, paginas_lidas: page, total_paginas: totalPaginas }, 'Busca do Apollo truncada pelo teto.')
+    }
+  }
+  return todas
 }
 
 async function revelar(
@@ -227,16 +244,22 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       return { status: 'sem_dados', fonte: 'apollo', resultado: { motivo: 'organização não encontrada no Apollo' } }
     }
 
-    // Seleciona (não cobra): pessoas dos cargos-alvo, ordenadas por senioridade e
-    // então cortadas em `max_contatos_por_empresa` — o corte é o que se paga.
-    const pessoas = ordenarPorAlvo(
-      (await buscarPessoas(orgId, cfgCargos)).filter((p) => p.id),
-      cfgCargos,
-    ).slice(0, cfgCargos.max_contatos_por_empresa || 8)
+    // Busca todo mundo (grátis) → seleciona pelos cargos-alvo (local) → corta no
+    // limite por empresa. Só o que sobra do corte é revelado, e revelar é o que custa.
+    const encontradas = (await buscarPessoas(orgId, cfgCargos)).filter((p) => p.id)
+    const pessoas = selecionarAlvos(encontradas, cfgCargos).slice(0, cfgCargos.max_contatos_por_empresa || 8)
+    logger.info(
+      { dominio, encontradas: encontradas.length, elegiveis: pessoas.length },
+      'Seleção de contatos do Apollo.',
+    )
 
     if (pessoas.length === 0) {
       dominiosFeitos.add(dominio)
-      return { status: 'sem_dados', fonte: 'apollo', resultado: { motivo: 'nenhuma pessoa nos cargos-alvo' } }
+      return {
+        status: 'sem_dados',
+        fonte: 'apollo',
+        resultado: { motivo: 'nenhuma pessoa nos cargos-alvo', encontradas: encontradas.length },
+      }
     }
 
     // Revela em blocos (bulk_size, default 10).

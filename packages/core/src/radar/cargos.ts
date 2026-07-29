@@ -1,56 +1,127 @@
 /**
- * Prioridade dos cargos-alvo do Apollo (§4).
+ * Seleção e prioridade dos cargos-alvo do Apollo (§4).
  *
- * Isto decide QUEM entra nos slots pagos: a busca do Apollo devolve até 25 pessoas
- * de graça, e só as `max_contatos_por_empresa` primeiras vão para o bulk_match, que
- * cobra por contato revelado. Ordenar errado não quebra nada visível — só gasta o
- * orçamento com quem não interessa. Na primeira leva, sem ordenação nenhuma,
- * "Construction Manager" levou 24% dos contatos revelados enquanto CFOs entravam
- * por sorte de posição na resposta.
+ * A busca do Apollo (`mixed_people/api_search`) é GRÁTIS e devolve a empresa
+ * inteira; o `bulk_match` é que cobra, por contato revelado. Então o filtro tem de
+ * acontecer AQUI, entre as duas: varremos todo mundo sem pagar nada, escolhemos, e
+ * só então revelamos os escolhidos.
  *
- * Mora no core, e não no worker, porque é regra de negócio pura e testável — o
- * worker só faz o IO em volta.
+ * Filtrar no Apollo não funciona: `person_titles` e `person_seniorities` se
+ * combinam por OR, então pedir "sócio, CFO" + "manager" traz todo manager da
+ * empresa — foi assim que "Construction Manager" ficou com um terço dos contatos
+ * pagos. `person_departments` nem existe na API. Aqui a regra é nossa e testável.
+ *
+ * Ordem de preferência:
+ *   1. donos e financeiro (`prioritarios`) furam a fila;
+ *   2. dentro de cada grupo, senioridade da maior para a menor;
+ *   3. empatou, quem está num departamento-alvo vem antes.
  */
 
-/** O mínimo que a ordenação precisa; o resto do payload do Apollo é irrelevante aqui. */
+/** O que a busca do Apollo devolve limpo (nome e e-mail vêm mascarados — não servem aqui). */
 export interface CandidatoCargo {
+  title?: string
   seniority?: string
   departments?: string[]
 }
 
-export interface PrioridadeCargos {
-  /** Ordem = prioridade. A primeira senioridade da lista ganha os primeiros slots. */
-  senioridades: string[]
-  /** Só desempata (ver `foraDoDepartamentoAlvo`) — nunca elimina. */
+/** Quem fura a fila. Basta casar UM dos três critérios. */
+export interface GrupoPrioritario {
+  titulos?: string[]
+  departamentos?: string[]
+  senioridades?: string[]
+}
+
+export interface CargosAlvo {
+  /** Termos que qualificam pelo cargo. Match por trecho, ignorando acento e caixa. */
+  titulos: string[]
+  /** Termos de departamento. Só desempatam — não qualificam nem eliminam ninguém. */
   departamentos: string[]
+  /** ORDEM = PRIORIDADE, da maior senioridade para a menor. */
+  senioridades: string[]
+  /**
+   * Senioridades que entram SEM depender do título. Existe porque o alto escalão
+   * costuma vir em inglês — "Chief Operating Officer" não casa 'COO', "Managing
+   * Director" não casa 'diretor' — e um C-level descartado por causa da grafia é o
+   * pior erro possível aqui. Não inclua 'manager': é o que traz a obra de volta.
+   */
+  senioridades_qualificam?: string[]
+  /** Donos e financeiro. Entram mesmo com um título que não casa `titulos`. */
+  prioritarios?: GrupoPrioritario
+  max_contatos_por_empresa: number
+  /** Teto de páginas na busca (100 por página). Protege contra empresa gigante. */
+  max_paginas_busca?: number
+}
+
+/** Sem acento e sem caixa: "Diretor Financeiro" e "diretor financeiro" são o mesmo termo. */
+function normalizar(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 /**
- * Departamento NUNCA filtra, só desempata: sócios e diretores costumam vir com
- * `departments` vazio no Apollo, e cortá-los por isso descartaria justamente os
- * melhores alvos. (Também não dá para filtrar na API: `person_departments` não é
- * parâmetro do People Search — o Apollo o descarta em silêncio.)
- *
- * O Apollo devolve `master_finance`, `master_engineering_technical`, `c_suite`…,
- * enquanto o settings guarda o termo curto ('finance'); casa nos dois sentidos.
+ * Match por trecho, e não por igualdade: os cargos reais do Apollo vêm sujos —
+ * "◾ Head of Procurement at LBX Construtora", "CFO e DRI", "Gerente Geral de Obras /
+ * Gerente de Contrato". Exigir título exato descartaria todos esses.
  */
-function foraDoDepartamentoAlvo(p: CandidatoCargo, departamentos: string[]): number {
-  const dep = (p.departments?.[0] ?? '').replace(/^master_/, '')
-  if (!dep) return 1
-  return departamentos.some((d) => d && (dep.includes(d) || d.includes(dep))) ? 0 : 1
+function casa(texto: string | undefined, termos: string[] | undefined): boolean {
+  if (!texto || !termos?.length) return false
+  const alvo = normalizar(texto)
+  return termos.some((t) => {
+    const n = normalizar(t)
+    return n.length > 0 && alvo.includes(n)
+  })
 }
 
-/** Senioridade fora da lista vai para o fim, nunca para o começo. */
-function rankSenioridade(p: CandidatoCargo, senioridades: string[]): number {
-  const i = senioridades.indexOf(p.seniority ?? '')
-  return i === -1 ? senioridades.length : i
+/** O Apollo devolve `master_finance`, `master_engineering_technical`, `c_suite`… */
+function departamentoDe(p: CandidatoCargo): string {
+  return (p.departments?.[0] ?? '').replace(/^master_/, '')
 }
 
-/** Ordena por senioridade e, em empate, por departamento-alvo. Estável e não muta a entrada. */
-export function ordenarPorAlvo<T extends CandidatoCargo>(pessoas: readonly T[], alvo: PrioridadeCargos): T[] {
-  return [...pessoas].sort(
-    (a, b) =>
-      rankSenioridade(a, alvo.senioridades) - rankSenioridade(b, alvo.senioridades) ||
-      foraDoDepartamentoAlvo(a, alvo.departamentos) - foraDoDepartamentoAlvo(b, alvo.departamentos),
+/** Dono ou financeiro: entra na frente de todo o resto. */
+export function ehPrioritario(p: CandidatoCargo, cfg: CargosAlvo): boolean {
+  const pr = cfg.prioritarios
+  if (!pr) return false
+  return (
+    casa(p.title, pr.titulos) ||
+    casa(departamentoDe(p), pr.departamentos) ||
+    (!!p.seniority && (pr.senioridades ?? []).includes(p.seniority))
   )
+}
+
+/**
+ * Entra quem casa a lista de cargos-alvo pelo TÍTULO, mais duas exceções que passam
+ * com título fora da lista: os prioritários (um sócio aparece como "Owner Partner",
+ * um financeiro como "Comptroller", sem casar termo nenhum) e o alto escalão de
+ * `senioridades_qualificam`.
+ *
+ * Departamento de propósito NÃO qualifica: `master_operations` deixaria entrar todo
+ * "Construction Manager" da obra, que é exatamente o que se quer evitar.
+ */
+export function qualifica(p: CandidatoCargo, cfg: CargosAlvo): boolean {
+  if (p.seniority && (cfg.senioridades_qualificam ?? []).includes(p.seniority)) return true
+  return casa(p.title, cfg.titulos) || ehPrioritario(p, cfg)
+}
+
+/**
+ * Filtra e ordena. O worker corta em `max_contatos_por_empresa` logo depois, e é
+ * esse corte que vira fatura — o topo da lista tem de ser quem realmente interessa.
+ */
+export function selecionarAlvos<T extends CandidatoCargo>(pessoas: readonly T[], cfg: CargosAlvo): T[] {
+  const rankSenioridade = (p: T): number => {
+    const i = cfg.senioridades.indexOf(p.seniority ?? '')
+    return i === -1 ? cfg.senioridades.length : i
+  }
+  const grupo = (p: T): number => (ehPrioritario(p, cfg) ? 0 : 1)
+  const foraDoDepartamento = (p: T): number => (casa(departamentoDe(p), cfg.departamentos) ? 0 : 1)
+
+  // sort() é estável: empate triplo preserva a ordem em que o Apollo devolveu.
+  return pessoas
+    .filter((p) => qualifica(p, cfg))
+    .slice()
+    .sort(
+      (a, b) =>
+        grupo(a) - grupo(b) || rankSenioridade(a) - rankSenioridade(b) || foraDoDepartamento(a) - foraDoDepartamento(b),
+    )
 }

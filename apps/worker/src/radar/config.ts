@@ -1,3 +1,4 @@
+import type { CargosAlvo } from '../../../../packages/core/src/radar/cargos.js'
 import { supabaseAdmin } from '../db.js'
 
 /**
@@ -27,14 +28,6 @@ export interface OrcamentoRadar {
   max_itens_por_lote: number
 }
 
-export interface CargosAlvo {
-  titulos: string[]
-  departamentos: string[]
-  /** Ordem = prioridade: é ela que decide quem fica nos slots pagos por empresa. */
-  senioridades: string[]
-  max_contatos_por_empresa: number
-}
-
 export interface ApolloCfg {
   revelar_telefone_em_lote: boolean
   bulk_size: number
@@ -61,8 +54,21 @@ export const lerTtl = (): Promise<TtlDias> =>
 export const lerOrcamento = (): Promise<OrcamentoRadar> =>
   ler('orcamento', { teto_mensal_total: 5000, alerta_percentual: 0.8, max_itens_por_lote: 2000 })
 
+/**
+ * Default vazio de propósito: sem a linha em radar_config, `selecionarAlvos` não
+ * qualifica ninguém e o lote registra 'sem_dados' em vez de revelar (e cobrar) a
+ * empresa inteira. Falhar sem gastar é melhor que gastar sem critério.
+ */
 export const lerCargosAlvo = (): Promise<CargosAlvo> =>
-  ler('cargos_alvo', { titulos: [], departamentos: [], senioridades: [], max_contatos_por_empresa: 8 })
+  ler('cargos_alvo', {
+    titulos: [],
+    departamentos: [],
+    senioridades: [],
+    senioridades_qualificam: [],
+    prioritarios: {},
+    max_contatos_por_empresa: 8,
+    max_paginas_busca: 3,
+  })
 
 export const lerApolloCfg = (): Promise<ApolloCfg> =>
   ler('apollo', { revelar_telefone_em_lote: true, bulk_size: 10 })

@@ -106,14 +106,36 @@ recebido. Pelo mesmo motivo, `indisponivel` nunca sobrepõe um número existente
 
 ## Cargos-alvo (settings `cargos_alvo`)
 
-- `titulos` e `senioridades` vão como filtro para o Apollo, com
-  `include_similar_titles: false` — sem isso o Apollo alarga a busca para "cargos
-  com os mesmos termos" e traz gente fora da lista.
-- `departamentos` **não é filtro de API**: `person_departments` não existe na People
-  Search e era descartado em silêncio. Hoje serve só de desempate na ordenação
-  local, e nunca elimina ninguém (sócios e diretores costumam vir sem departamento).
-- A **ordem** de `senioridades` é a prioridade do corte: o worker ordena por ela e
-  então fatia em `max_contatos_por_empresa` — e a fatia é o que se paga.
+**A seleção é local, não da API.** A busca (`mixed_people/api_search`) é gratuita e
+devolve a empresa inteira; só o `bulk_match` cobra. Então o worker varre todo mundo
+sem pagar, filtra em [`selecionarAlvos`](../packages/core/src/radar/cargos.ts) e só
+então revela os escolhidos. Filtrar na API não funciona: `person_titles` e
+`person_seniorities` se combinam por **OR** (pedir "CFO" + "manager" traz todo
+manager da empresa) e `person_departments` não existe.
+
+Quem entra:
+
+1. `titulos` — casam por **trecho**, ignorando acento e caixa, porque os cargos reais
+   vêm sujos (`"◾ Head of Procurement at LBX Construtora"`, `"CFO e DRI"`). Precisa
+   ter termos em **português e inglês**. Nunca inclua `manager` solto: traz todo
+   "Construction Manager" da obra.
+2. `senioridades_qualificam` — entram sem depender do título. Existe porque o alto
+   escalão costuma vir em inglês ("Chief Operating Officer" não casa `COO`).
+3. `prioritarios` — donos e financeiro, que entram mesmo com título fora da lista
+   ("Owner Partner", "Comptroller").
+
+Ordem de preferência dentro dos escolhidos: **prioritários primeiro**, depois
+senioridade da maior para a menor (a ordem de `senioridades` é que manda), e por fim
+quem está num departamento-alvo. O corte em `max_contatos_por_empresa` vem em
+seguida — e a fatia é o que se paga.
+
+`departamentos` só desempata: não qualifica nem elimina. Se qualificasse,
+`master_operations` traria a obra inteira de volta; sócios e diretores, que costumam
+vir sem departamento, seriam os primeiros cortados.
+
+`max_paginas_busca` limita a varredura (100 por página, default 3). Ao truncar, o
+worker registra um `warn` — sem isso, "a empresa só tem 300 pessoas" viraria fato
+silencioso na análise de custo.
 
 ## Variáveis de ambiente (worker)
 
