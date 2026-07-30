@@ -8,8 +8,10 @@ import { AlertTriangle, EyeOff, RefreshCw, Search, ShieldCheck } from 'lucide-re
 import {
   COR_CERTIFICADO,
   ESTADO_CERTIFICADO_LABELS,
+  formatCnpj,
   formatarVencimento,
   textoDias,
+  type CorCertificado,
   type EstadoCertificado,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ocultarSpeAction, reexibirSpeAction, sincronizarCertificadosAction } from '@/actions/certificados'
 import { cn } from '@/lib/utils'
 import { buscarGridCertificados, certificadosKeys, type Celula, type LinhaCliente } from './queries'
@@ -43,10 +46,24 @@ import { buscarGridCertificados, certificadosKeys, type Celula, type LinhaClient
  * certificado" porque o efeito é o mesmo: nenhuma NF-e daquela empresa é ingerida.
  */
 
-const CLASSES: Record<'verde' | 'amarelo' | 'vermelho', string> = {
+const CLASSES: Record<CorCertificado, string> = {
   verde: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
   amarelo: 'bg-amber-400 hover:bg-amber-500 border-amber-500',
-  vermelho: 'bg-red-500 hover:bg-red-600 border-red-600',
+  // Laranja é VENCIDO: tinha certificado e expirou — liga-se para renovar.
+  laranja: 'bg-orange-500 hover:bg-orange-600 border-orange-600',
+  // Vermelho é AUSENTE: nunca apareceu no endpoint — investiga-se o cadastro.
+  vermelho: 'bg-red-600 hover:bg-red-700 border-red-700',
+}
+
+/** Moeda compacta: a coluna é estreita e "R$ 1,2 mi" cabe onde o valor cheio não cabe. */
+function moedaCompacta(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return '—'
+  return v.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  })
 }
 
 function Quadrado({
@@ -59,27 +76,51 @@ function Quadrado({
   onOcultar?: (c: Celula) => void
 }) {
   const cor = COR_CERTIFICADO[celula.estado]
-  const titulo = [
-    celula.razao_social,
-    ESTADO_CERTIFICADO_LABELS[celula.estado],
-    celula.estado === 'ausente' ? 'Sem certificado' : formatarVencimento(celula.expiraEm),
-    textoDias(celula.diasRestantes),
-    ehMatriz ? 'Matriz (não pode ser ocultada)' : 'Clique para ocultar do grid',
-  ].join(' · ')
+
+  // Uma informação por linha, em fundo escuro: o `title` nativo não permite nem
+  // quebra de linha confiável nem tamanho legível, e este tooltip é lido de relance
+  // durante uma ligação com o cliente.
+  const linhas: Array<[string, string]> = [
+    ['Empresa', celula.razao_social],
+    ['CNPJ', formatCnpj(celula.cnpj)],
+    ['Situação', ESTADO_CERTIFICADO_LABELS[celula.estado]],
+  ]
+  if (celula.estado !== 'ausente') {
+    linhas.push(['Vencimento', formatarVencimento(celula.expiraEm)])
+    linhas.push(['Prazo', textoDias(celula.diasRestantes)])
+  }
 
   return (
-    <button
-      type="button"
-      title={titulo}
-      aria-label={titulo}
-      disabled={ehMatriz}
-      onClick={() => !ehMatriz && onOcultar?.(celula)}
-      className={cn(
-        'h-7 w-7 shrink-0 rounded border transition-colors',
-        CLASSES[cor],
-        ehMatriz ? 'cursor-default ring-2 ring-offset-1 ring-foreground/20' : 'cursor-pointer',
-      )}
-    />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${celula.razao_social}: ${ESTADO_CERTIFICADO_LABELS[celula.estado]}`}
+          onClick={() => onOcultar?.(celula)}
+          className={cn(
+            'h-7 w-7 shrink-0 cursor-pointer rounded border transition-colors',
+            CLASSES[cor],
+            ehMatriz && 'ring-2 ring-foreground/25 ring-offset-1',
+          )}
+        />
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="border-neutral-700 bg-neutral-900 text-neutral-100 dark:bg-neutral-900"
+      >
+        <div className="space-y-1 py-0.5 text-sm">
+          {linhas.map(([rotulo, valor]) => (
+            <p key={rotulo} className="flex gap-2 whitespace-nowrap">
+              <span className="text-neutral-400">{rotulo}:</span>
+              <span className="font-medium">{valor}</span>
+            </p>
+          ))}
+          <p className="pt-1 text-xs text-neutral-400">
+            {ehMatriz ? 'Clique para ocultar o cliente' : 'Clique para ocultar a SPE'}
+          </p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -111,17 +152,21 @@ function CardIndicador({
 
 const pct = (v: number | null): string => (v === null ? '—' : `${Math.round(v * 100)}%`)
 
+/** Uma casa decimal: com 717 SPEs, 1% são 7 empresas — arredondar esconde o movimento. */
+const pct1 = (v: number | null): string =>
+  v === null ? '—' : `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+
 /** Quantas SPEs desenhar antes do "ver todas" — o resto continua a um clique. */
 const SPES_VISIVEIS = 24
 
-function Linha({ cliente, onOcultar }: { cliente: LinhaCliente; onOcultar: (c: Celula) => void }) {
+function Linha({ cliente, onOcultar }: { cliente: LinhaCliente; onOcultar: (c: Celula, ehMatriz: boolean) => void }) {
   const [todas, setTodas] = React.useState(false)
   const spes = todas ? cliente.spes : cliente.spes.slice(0, SPES_VISIVEIS)
   const restantes = cliente.spes.length - spes.length
 
   return (
     <div className="flex items-center gap-3 border-b px-4 py-2 last:border-b-0">
-      <div className="w-64 shrink-0">
+      <div className="w-56 shrink-0">
         <Link
           href={`/empresas/${cliente.empresaId}`}
           className="line-clamp-1 text-sm font-medium hover:underline"
@@ -134,11 +179,11 @@ function Linha({ cliente, onOcultar }: { cliente: LinhaCliente; onOcultar: (c: C
         </p>
       </div>
 
-      <Quadrado celula={cliente.matriz} ehMatriz />
+      <Quadrado celula={cliente.matriz} ehMatriz onOcultar={(c) => onOcultar(c, true)} />
 
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-1">
         {spes.map((s) => (
-          <Quadrado key={s.cnpj} celula={s} ehMatriz={false} onOcultar={onOcultar} />
+          <Quadrado key={s.cnpj} celula={s} ehMatriz={false} onOcultar={(c) => onOcultar(c, false)} />
         ))}
         {restantes > 0 && (
           <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setTodas(true)}>
@@ -149,6 +194,15 @@ function Linha({ cliente, onOcultar }: { cliente: LinhaCliente; onOcultar: (c: C
           <span className="text-xs text-muted-foreground">Nenhuma SPE vinculada</span>
         )}
       </div>
+
+      {/* Crédito disponível à direita: é o que decide se vale a pena correr atrás do
+          certificado — cliente sem limite não opera mesmo com certificado em dia. */}
+      <div className="w-28 shrink-0 text-right">
+        <p className="text-sm font-medium tabular-nums" title="Limite disponível na Onepay">
+          {moedaCompacta(cliente.creditoDisponivel)}
+        </p>
+        <p className="text-[11px] text-muted-foreground">disponível</p>
+      </div>
     </div>
   )
 }
@@ -156,7 +210,7 @@ function Linha({ cliente, onOcultar }: { cliente: LinhaCliente; onOcultar: (c: C
 export function CertificadosGrid() {
   const qc = useQueryClient()
   const [busca, setBusca] = React.useState('')
-  const [confirmar, setConfirmar] = React.useState<Celula | null>(null)
+  const [confirmar, setConfirmar] = React.useState<{ celula: Celula; ehMatriz: boolean } | null>(null)
   const [ocultasAberto, setOcultasAberto] = React.useState(false)
   const [agindo, setAgindo] = React.useState(false)
 
@@ -170,14 +224,15 @@ export function CertificadosGrid() {
   async function ocultar() {
     if (!confirmar) return
     setAgindo(true)
-    const r = await ocultarSpeAction(confirmar.cnpj)
+    const eraMatriz = confirmar.ehMatriz
+    const r = await ocultarSpeAction(confirmar.celula.cnpj)
     setAgindo(false)
     setConfirmar(null)
     if (!r.ok) {
       toast.error(r.message)
       return
     }
-    toast.success('SPE ocultada do grid.')
+    toast.success(eraMatriz ? 'Cliente ocultado do grid.' : 'SPE ocultada do grid.')
     recarregar()
   }
 
@@ -251,6 +306,9 @@ export function CertificadosGrid() {
   const ind = data.indicadores
 
   return (
+    // 150ms, e não os 700 do default: aqui o mouse varre dezenas de quadrados
+    // procurando um, e esperar 0,7s por célula torna a varredura inviável.
+    <TooltipProvider delayDuration={150}>
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <CardIndicador
@@ -261,7 +319,7 @@ export function CertificadosGrid() {
         />
         <CardIndicador
           titulo="SPEs com certificado válido"
-          valor={pct(ind.pctSpes)}
+          valor={pct1(ind.pctSpes)}
           detalhe={`${ind.spesValidas} de ${ind.spesTotal} SPEs visíveis`}
           dica="SPEs não ocultadas com certificado ativo ÷ total de SPEs visíveis."
         />
@@ -279,9 +337,9 @@ export function CertificadosGrid() {
             <div className="space-y-1.5">
               <CardTitle className="text-base">Gestão de certificados</CardTitle>
               <CardDescription>
-                Matriz e SPEs de cada construtora cliente. Verde: válido. Amarelo: vence em até 30
-                dias. Vermelho: vencido, inativo ou sem certificado — nesses casos as NF-e da
-                empresa não são ingeridas. Clique numa SPE para ocultá-la.
+                Matriz e SPEs de cada construtora cliente. Laranja é certificado vencido (existe e
+                expirou); vermelho é ausente da base. Nos dois casos as NF-e da empresa não são
+                ingeridas. Clique num quadrado para ocultá-lo do grid e das estatísticas.
                 {data.sincronizadoEm
                   ? ` Sincronizado em ${formatarVencimento(data.sincronizadoEm)}.`
                   : ' Nunca sincronizado.'}
@@ -290,7 +348,7 @@ export function CertificadosGrid() {
             <div className="flex shrink-0 items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setOcultasAberto(true)}>
                 <EyeOff className="mr-1 h-3.5 w-3.5" aria-hidden />
-                Ocultadas ({data.ocultas.length})
+                Ocultados ({data.ocultas.length})
               </Button>
               <Button variant="outline" size="sm" disabled={agindo} onClick={() => void sincronizar()}>
                 <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden />
@@ -327,7 +385,11 @@ export function CertificadosGrid() {
           ) : (
             <div className="divide-y">
               {filtrados.map((c) => (
-                <Linha key={c.cnpj} cliente={c} onOcultar={setConfirmar} />
+                <Linha
+                  key={c.cnpj}
+                  cliente={c}
+                  onOcultar={(celula, ehMatriz) => setConfirmar({ celula, ehMatriz })}
+                />
               ))}
             </div>
           )}
@@ -338,11 +400,16 @@ export function CertificadosGrid() {
       <Dialog open={!!confirmar} onOpenChange={(v) => !v && setConfirmar(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Ocultar SPE do grid?</DialogTitle>
+            <DialogTitle>
+              {confirmar?.ehMatriz ? 'Ocultar cliente do grid?' : 'Ocultar SPE do grid?'}
+            </DialogTitle>
             <DialogDescription>
-              <span className="font-medium">{confirmar?.razao_social}</span> deixa de aparecer para
-              todo o time e sai do cálculo de &ldquo;% SPEs com certificado válido&rdquo;. Dá
-              para reexibir depois, pelo botão &ldquo;Ocultadas&rdquo;.
+              <span className="font-medium">{confirmar?.celula.razao_social}</span> deixa de
+              aparecer para todo o time e sai das estatísticas
+              {confirmar?.ehMatriz
+                ? ' — inclusive do denominador de "% clientes com certificado válido".'
+                : ' — inclusive do denominador de "% SPEs com certificado válido".'}{' '}
+              Dá para reexibir depois, pelo botão &ldquo;Ocultados&rdquo;.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -360,21 +427,26 @@ export function CertificadosGrid() {
       <Dialog open={ocultasAberto} onOpenChange={setOcultasAberto}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>SPEs ocultadas</DialogTitle>
+            <DialogTitle>Clientes e SPEs ocultados</DialogTitle>
             <DialogDescription>
-              Ocultar é uma preferência do time inteiro, não sua — todos veem o mesmo grid.
+              Ocultar é uma preferência do time inteiro, não sua — todos veem o mesmo grid, e o
+              que está aqui não entra em nenhuma estatística. SPEs abertas há mais de 10 anos
+              somem sozinhas e não aparecem nesta lista.
             </DialogDescription>
           </DialogHeader>
           {data.ocultas.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma SPE ocultada.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">Nada ocultado.</p>
           ) : (
             <ul className="max-h-96 divide-y overflow-y-auto">
               {data.ocultas.map((o) => (
                 <li key={o.cnpj} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{o.razao_social}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">{o.razao_social}</p>
+                      <Badge variant="outline">{o.eh_cliente ? 'Cliente' : 'SPE'}</Badge>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {o.cnpj} · ocultada por {o.oculto_por_nome ?? 'desconhecido'} em{' '}
+                      {formatCnpj(o.cnpj)} · ocultado por {o.oculto_por_nome ?? 'desconhecido'} em{' '}
                       {formatarVencimento(o.oculto_em)}
                     </p>
                   </div>
@@ -393,6 +465,7 @@ export function CertificadosGrid() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   )
 }
 
@@ -401,7 +474,8 @@ export function LegendaCertificados() {
   const itens: Array<{ estado: EstadoCertificado; texto: string }> = [
     { estado: 'valido', texto: 'Válido (mais de 30 dias)' },
     { estado: 'vencendo', texto: 'Vence em até 30 dias' },
-    { estado: 'vencido', texto: 'Vencido, inativo ou sem certificado' },
+    { estado: 'vencido', texto: 'Vencido ou inativo' },
+    { estado: 'ausente', texto: 'Sem certificado na base' },
   ]
   return (
     <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">

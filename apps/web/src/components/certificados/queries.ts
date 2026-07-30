@@ -31,6 +31,8 @@ interface CelulaBruta {
 interface ClienteBruto extends CelulaBruta {
   empresa_id: string
   nome_fantasia: string | null
+  credito_disponivel: number | null
+  credito_limite: number | null
   spes: CelulaBruta[]
 }
 
@@ -47,6 +49,8 @@ export interface SpeOculta {
   razao_social: string
   oculto_em: string
   oculto_por_nome: string | null
+  /** Cliente (matriz) ou SPE — o painel de ocultados diz qual é qual. */
+  eh_cliente: boolean
 }
 
 export interface Celula extends AvaliacaoCertificado {
@@ -61,6 +65,9 @@ export interface LinhaCliente {
   razaoSocial: string
   matriz: Celula
   spes: Celula[]
+  /** Limite disponível do cliente na Onepay. `null` = sem dado sincronizado. */
+  creditoDisponivel: number | null
+  creditoLimite: number | null
 }
 
 export interface Indicadores {
@@ -110,6 +117,8 @@ export async function buscarGridCertificados(): Promise<Grid> {
     cnpj: c.cnpj,
     razaoSocial: c.razao_social,
     matriz: montarCelula(c, hoje),
+    creditoDisponivel: c.credito_disponivel ?? null,
+    creditoLimite: c.credito_limite ?? null,
     // Mais urgente primeiro: com até 370 SPEs numa linha, o que o olho alcança
     // primeiro tem de ser o que exige ação.
     spes: (c.spes ?? []).map((s) => montarCelula(s, hoje)).sort(ordenarCelulas),

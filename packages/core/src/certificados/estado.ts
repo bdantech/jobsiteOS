@@ -17,11 +17,19 @@ export const DIAS_ALERTA = 30
 export const ESTADOS_CERTIFICADO = ['valido', 'vencendo', 'vencido', 'ausente'] as const
 export type EstadoCertificado = (typeof ESTADOS_CERTIFICADO)[number]
 
-/** `ausente` e `vencido` são o mesmo vermelho: em ambos não há ingestão de NF-e. */
-export const COR_CERTIFICADO: Record<EstadoCertificado, 'verde' | 'amarelo' | 'vermelho'> = {
+export type CorCertificado = 'verde' | 'amarelo' | 'laranja' | 'vermelho'
+
+/**
+ * Quatro cores, não três: `vencido` e `ausente` param a ingestão do mesmo jeito, mas
+ * exigem ações DIFERENTES. Vencido é um cliente que tinha certificado e deixou expirar
+ * — liga-se para ele renovar. Ausente é um CNPJ que nunca apareceu no endpoint: pode
+ * ser SPE inativa, cadastro faltando ou empresa que nunca emitiu. Pintar os dois de
+ * vermelho misturava "cobre o cliente" com "investigue o cadastro".
+ */
+export const COR_CERTIFICADO: Record<EstadoCertificado, CorCertificado> = {
   valido: 'verde',
   vencendo: 'amarelo',
-  vencido: 'vermelho',
+  vencido: 'laranja',
   ausente: 'vermelho',
 }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  COR_CERTIFICADO,
   avaliarCertificado,
   compararUrgencia,
   contaComoValido,
@@ -68,6 +69,18 @@ test('dias restantes conta DIAS, não horas', () => {
   assert.equal(diasAte('2026-07-30T00:00:01', HOJE), 0)
   assert.equal(diasAte('2026-07-27T23:59:59', HOJE), -3)
   assert.equal(diasAte(null, HOJE), null)
+})
+
+test('vencido é laranja e ausente é vermelho — ações diferentes', () => {
+  // Vencido: o cliente tinha certificado e deixou expirar, liga-se para renovar.
+  // Ausente: o CNPJ nunca apareceu no endpoint, é investigação de cadastro.
+  assert.equal(COR_CERTIFICADO.vencido, 'laranja')
+  assert.equal(COR_CERTIFICADO.ausente, 'vermelho')
+  assert.equal(COR_CERTIFICADO.valido, 'verde')
+  assert.equal(COR_CERTIFICADO.vencendo, 'amarelo')
+  // Mudar a cor NÃO muda o que conta como válido: os dois seguem fora do KPI.
+  assert.equal(contaComoValido('vencido'), false)
+  assert.equal(contaComoValido('ausente'), false)
 })
 
 test('os dois KPIs contam verde E amarelo como válido', () => {

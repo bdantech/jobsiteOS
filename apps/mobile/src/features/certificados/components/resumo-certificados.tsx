@@ -25,6 +25,12 @@ import type { IndicadoresCertificados, ItemAtencao } from '../api'
 
 const pct = (v: number | null): string => (v === null ? '—' : `${Math.round(v * 100)}%`)
 
+/** Uma casa decimal nas SPEs: com centenas delas, 1% são várias empresas. */
+const pct1 = (v: number | null): string =>
+  v === null
+    ? '—'
+    : `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+
 function Indicador({ titulo, valor, detalhe }: { titulo: string; valor: string; detalhe: string }) {
   return (
     <Card className="flex-1">
@@ -37,9 +43,18 @@ function Indicador({ titulo, valor, detalhe }: { titulo: string; valor: string; 
   )
 }
 
-/** Vermelho para vencido/ausente, âmbar para vencendo — a mesma escala da web. */
+/**
+ * Mesma escala de quatro cores da web: âmbar vencendo, laranja vencido (existe e
+ * expirou), vermelho ausente (nunca apareceu no endpoint). São ações diferentes —
+ * cobrar renovação versus investigar cadastro.
+ */
 function corDoEstado(estado: EstadoCertificado): { fundo: string; texto: string } {
-  if (estado === 'vencendo') return { fundo: 'bg-amber-100 dark:bg-amber-500/20', texto: 'text-amber-900 dark:text-amber-200' }
+  if (estado === 'vencendo') {
+    return { fundo: 'bg-amber-100 dark:bg-amber-500/20', texto: 'text-amber-900 dark:text-amber-200' }
+  }
+  if (estado === 'vencido') {
+    return { fundo: 'bg-orange-100 dark:bg-orange-500/20', texto: 'text-orange-900 dark:text-orange-200' }
+  }
   return { fundo: 'bg-red-100 dark:bg-red-500/20', texto: 'text-red-900 dark:text-red-200' }
 }
 
@@ -63,7 +78,7 @@ export function ResumoCertificados({ indicadores, atencao, sincronizadoEm }: Res
         />
         <Indicador
           titulo="SPEs OK"
-          valor={pct(indicadores.pctSpes)}
+          valor={pct1(indicadores.pctSpes)}
           detalhe={`${indicadores.spesValidas}/${indicadores.spesTotal}`}
         />
         <Indicador

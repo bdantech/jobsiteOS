@@ -6,8 +6,9 @@ param de chegar.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0062` (tabelas, RLS, seeds de notificação) e `0063` (RPCs).
-  `certificados` (uma linha por CNPJ) e `certificados_spe_ocultas`.
+- **Banco**: migrations `0062` (tabelas, RLS, seeds de notificação), `0063` (RPCs) e
+  `0064` (ocultar cliente, corte de 10 anos, crédito). Tabelas: `certificados` (uma
+  linha por CNPJ) e `certificados_ocultos`.
 - **Core** (`packages/core/src/certificados/`): `avaliarCertificado()` — a regra de
   estado/cor, compartilhada por web, mobile e worker.
 - **Worker** (`apps/worker/src/jobs/radar/certificados.ts`): sync diário + alertas.
@@ -21,12 +22,17 @@ param de chegar.
 |---|---|---|
 | `valido` | verde | `status = 'active'` e vence em mais de 30 dias |
 | `vencendo` | amarelo | `status = 'active'` e vence em até 30 dias (inclusive hoje) |
-| `vencido` | vermelho | data passou **ou** `status ≠ 'active'` |
+| `vencido` | **laranja** | data passou **ou** `status ≠ 'active'` |
 | `ausente` | vermelho | não há certificado na base |
 
+**Quatro cores, não três.** Vencido e ausente param a ingestão do mesmo jeito, mas
+pedem ações diferentes: vencido é um cliente que tinha certificado e deixou expirar
+(liga-se para renovar); ausente é um CNPJ que nunca apareceu no endpoint (investiga-se
+o cadastro, ou é SPE que nunca operou). Com uma cor só, "cobre o cliente" e "confira o
+cadastro" ficavam misturados.
+
 **`ausente` é vermelho, não cinza.** O efeito prático de "não temos o certificado" é o
-mesmo de "está vencido": nenhuma NF-e daquela empresa é ingerida. Pintar de cinza
-esconderia justamente o caso que mais importa.
+mesmo de "está vencido": nenhuma NF-e daquela empresa é ingerida.
 
 A regra vive **em um lugar só** (`packages/core`) porque três consumidores dependem
 dela responder igual. Um quadrado verde na tela ao lado de uma notificação de
@@ -82,11 +88,28 @@ horizontalmente e as células vêm **ordenadas por urgência** (vencido → ause
 vencendo → válido), com as 24 primeiras visíveis e o resto atrás de um "+N". Assim o
 que exige ação está sempre nos primeiros centímetros da linha.
 
-- **Clique numa SPE** → confirmação → some do grid (`certificados_spe_ocultas`).
-- **A matriz não pode ser ocultada** — a RPC recusa, não só a UI.
+À direita de cada linha fica o **crédito disponível** do cliente na Onepay: é ele que
+decide se vale correr atrás do certificado — cliente sem limite não opera nem com
+certificado em dia.
+
+### O que some do grid
+
+- **Clique em qualquer quadrado** → confirmação → some do grid e **das estatísticas**
+  (`certificados_ocultos`). Vale para SPE e para a matriz: ocultar um cliente serve
+  para quem não se pretende cobrar certificado, e tira a linha do denominador.
+- **SPE aberta há mais de 10 anos some sozinha**, sem ocupar linha na tabela de
+  ocultos — é regra, não decisão de alguém. Obra encerrada mantém o CNPJ vivo na
+  Receita e ninguém vai renovar certificado dela. Na base atual isso corta 27 das 744.
 - Ocultar é preferência **global**, não por usuário: quem esconde está dizendo "esta
   não opera", e isso vale para o time. Por usuário, cada um veria um grid diferente e
   a conversa sobre cobertura ficaria impossível.
+
+### Tooltip
+
+Fundo escuro, uma informação por linha (empresa, CNPJ, situação, vencimento, prazo).
+O `title` nativo não permite quebra de linha confiável nem tamanho legível, e este
+tooltip é lido de relance durante uma ligação. Abre em 150ms, não nos 700ms do padrão:
+aqui o mouse varre dezenas de quadrados procurando um.
 
 ### Por que a RPC é SECURITY DEFINER
 
@@ -104,7 +127,8 @@ mercado.
 1. **% clientes com certificado válido** — matrizes verdes ou amarelas ÷ construtoras
    clientes.
 2. **% SPEs com certificado válido** — SPEs visíveis verdes ou amarelas ÷ SPEs
-   visíveis. Ocultar uma SPE a tira do denominador.
+   visíveis, com **uma casa decimal**: são centenas de SPEs, e 1% arredondado esconde
+   movimento de várias empresas. Ocultar uma SPE a tira do denominador.
 3. **Total de certificados ativos** — **escopo maior de propósito**: conta a base
    inteira, inclusive fornecedores, que não aparecem no grid. O card diz isso no
    tooltip.
