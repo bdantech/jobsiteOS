@@ -175,9 +175,21 @@ const CAMPOS: readonly CampoNum[] = [
     grupo: 'lookup_cadastral',
     campo: 'max_por_execucao',
     label: 'Lookup — CNPJs por execução',
-    descricao: 'Teto por corrida do job, para não estourar o rate limit dos provedores gratuitos.',
+    descricao:
+      'Teto por corrida. Precisa ser MAIOR que a chegada diária de CNPJs novos, senão a fila cresce em vez de drenar — foi o que aconteceu com 300.',
     min: 10,
     max: 5000,
+  },
+  {
+    chave: 'LOOKUP',
+    grupo: 'lookup_cadastral',
+    campo: 'orcamento_ms',
+    label: 'Lookup — orçamento de tempo (ms)',
+    descricao:
+      'Teto de duração da corrida. O teto por quantidade não basta: se a primeira fonte cair, a cascata desce para a ReceitaWS a 21s por CNPJ. A fila é persistente — o que sobra entra na próxima.',
+    min: 30_000,
+    max: 3_600_000,
+    step: 30_000,
   },
   {
     chave: 'LOOKUP',

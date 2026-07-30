@@ -171,6 +171,70 @@ export async function protestosEmpresa(opts: {
 }
 
 /**
+ * Protesto de UM fornecedor do funil, por CNPJ — sem exigir que ele exista em
+ * `empresas`.
+ *
+ * O `protestosEmpresa` acima parte de `empresas.id`, e fornecedor de aquisição não é
+ * promovido no sync. Exigir a promoção antes da consulta inverteria a ordem da
+ * decisão: promove-se quem interessa, e é justamente o protesto que ajuda a dizer
+ * quem interessa. `protestos_consultas.cnpj` é NOT NULL e `empresa_id` é nullable —
+ * o modelo sempre permitiu isto.
+ *
+ * `incluir_fora_sp: true` de propósito. O roteamento manda para o endpoint SP quando
+ * a UF é SP e PULA o item quando é fora, a menos que este parâmetro esteja ligado.
+ * Num clique deliberado sobre um fornecedor específico, voltar "pulado" sem consultar
+ * nada seria o pior resultado — e a tela mostra o custo antes de o clique acontecer.
+ */
+export async function protestoFornecedor(opts: {
+  cnpj: string
+}): Promise<{ lote_id: string; processados: number; custo: number }> {
+  if (!env.DIRECTD_API_KEY) throw new Error('DIRECTD_API_KEY não configurada.')
+
+  // O nome sai da nota, que é o que sempre existe. `mercado_universo` pode ainda não
+  // ter respondido o lookup, e `empresas` pode nem existir para este CNPJ.
+  const { data: nota } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('fornecedor_nome, fornecedor_empresa_id')
+    .eq('fornecedor_cnpj', opts.cnpj)
+    .limit(1)
+    .maybeSingle()
+
+  const { data: lote, error } = await supabaseAdmin
+    .from('lotes_enriquecimento')
+    .insert({
+      tipo: 'protestos',
+      nome: `Protesto — ${nota?.fornecedor_nome ?? opts.cnpj} (funil)`,
+      definicao_filtro: {} as never,
+      parametros: {
+        cliente: false,
+        incluir_fora_sp: true,
+        motivo: 'antecipacao_fornecedor',
+        cnpj: opts.cnpj,
+      } as never,
+      status: 'aprovado',
+      criado_por: null,
+    })
+    .select('id')
+    .single()
+  if (error || !lote) throw new Error(`Falha ao abrir lote de protesto: ${error?.message}`)
+
+  const { error: erroItem } = await supabaseAdmin
+    .from('lote_itens')
+    .insert({ lote_id: lote.id, cnpj: opts.cnpj, empresa_id: nota?.fornecedor_empresa_id ?? null })
+  if (erroItem) throw new Error(`Falha ao inserir o item do lote: ${erroItem.message}`)
+
+  await supabaseAdmin.from('lotes_enriquecimento').update({ total_itens: 1 }).eq('id', lote.id)
+
+  const loteMin = {
+    id: lote.id,
+    tipo: 'protestos',
+    parametros: { cliente: false, incluir_fora_sp: true },
+  } as unknown as Tables<'lotes_enriquecimento'>
+  const r = await executarLote(lote.id, criarProcessadorProtestos(loteMin))
+  return { lote_id: lote.id, ...r }
+}
+
+/**
  * Rotina mensal (§5): consulta protestos NACIONAL dos clientes Onepay (matriz) + das
  * SPEs marcadas para monitoramento (protesto_monitoramento — as "afiançadas", curadas
  * na aba Grupo econômico). Antes pegava TODAS as SPEs ativas do grupo de cada cliente;

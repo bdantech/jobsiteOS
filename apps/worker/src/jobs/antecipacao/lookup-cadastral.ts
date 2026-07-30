@@ -275,10 +275,20 @@ export interface ResultadoLookup {
   nao_encontrados: number
   erros: number
   por_provedor: Record<string, number>
+  /** True quando o orçamento de tempo acabou antes da fila. O resto fica para a próxima. */
+  interrompido_por_tempo?: boolean
 }
 
-export async function lookupCadastral(): Promise<ResultadoLookup> {
+/**
+ * `orcamentoMs` existe porque o teto por QUANTIDADE não protege nada sozinho. A
+ * cascata desce para a ReceitaWS a 21s por CNPJ quando as duas primeiras falham, e
+ * aí 2.000 CNPJs viram 11 horas — com o sync de NFs esperando atrás. Parar no meio
+ * é seguro: a fila é persistente e o que sobrou é a primeira coisa da próxima corrida.
+ */
+export async function lookupCadastral(opts: { orcamentoMs?: number } = {}): Promise<ResultadoLookup> {
   const cfg = await lerConfigLookup()
+  const orcamentoMs = opts.orcamentoMs ?? cfg.orcamento_ms
+  const prazo = Date.now() + orcamentoMs
   const provedores: ProvedorCadastro[] = [minhaReceita, brasilApi, receitaWs(cfg.receitaws_intervalo_ms)]
   const pacers = new Map(provedores.map((p) => [p.nome, criarPacer(p.intervaloMs)]))
 
@@ -303,6 +313,16 @@ export async function lookupCadastral(): Promise<ResultadoLookup> {
   if (!fila?.length) return acc
 
   for (const item of fila) {
+    // Checado ANTES de gastar a chamada, não depois: parar no meio de um CNPJ
+    // deixaria a fila marcada como tentada sem ter resposta nenhuma.
+    if (Date.now() >= prazo) {
+      acc.interrompido_por_tempo = true
+      logger.warn(
+        { processados: acc.processados, restantes: fila.length - acc.processados, orcamentoMs },
+        'Lookup interrompido pelo orçamento de tempo; o resto fica para a próxima corrida.',
+      )
+      break
+    }
     acc.processados++
     let resolvido: CadastroNormalizado | null = null
     let provedorUsado: string | null = null

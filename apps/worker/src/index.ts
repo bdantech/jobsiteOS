@@ -26,6 +26,7 @@ import {
   dispararOutbox,
   dispararContatosNf,
   dispararLookupCadastral,
+  dispararProtestoFornecedor,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -254,6 +255,22 @@ app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next:
 app.post('/jobs/antecipacao/outbox', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararOutbox(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const protestoFornecedorSchema = z.object({ cnpj: z.string().regex(/^[0-9]{14}$/) })
+
+/**
+ * Protesto de UM fornecedor do funil (ação PAGA) + reclassificação. O CNPJ basta:
+ * fornecedor de aquisição não existe em `empresas`, e exigir a promoção antes
+ * inverteria a ordem da decisão.
+ */
+app.post('/jobs/antecipacao/protesto-fornecedor', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { cnpj } = protestoFornecedorSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararProtestoFornecedor({ cnpj }), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

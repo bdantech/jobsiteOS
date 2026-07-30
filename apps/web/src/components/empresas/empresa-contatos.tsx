@@ -59,15 +59,16 @@ const CAMPOS = [
 
 /** Formulário do contato manual. Nada é obrigatório além de UMA forma de contato. */
 function NovoContatoDialog({
-  empresaId,
+  resolverEmpresaId,
   aberto,
   onOpenChange,
   onCriado,
 }: {
-  empresaId: string
+  /** Resolve a empresa no SUBMIT — pode promover um fornecedor que ainda não existe. */
+  resolverEmpresaId: () => Promise<string | null>
   aberto: boolean
   onOpenChange: (v: boolean) => void
-  onCriado: () => void
+  onCriado: (empresaId: string) => void
 }) {
   const [salvando, setSalvando] = React.useState(false)
   const [erro, setErro] = React.useState<string | null>(null)
@@ -75,12 +76,23 @@ function NovoContatoDialog({
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    const input = { empresa_id: empresaId } as Record<string, unknown>
-    for (const c of CAMPOS) input[c.id] = String(fd.get(c.id) ?? '').trim()
+    const valores: Record<string, unknown> = {}
+    for (const c of CAMPOS) valores[c.id] = String(fd.get(c.id) ?? '').trim()
 
     setSalvando(true)
     setErro(null)
-    const r = await criarContatoAction(input)
+
+    // A empresa é resolvida AQUI, e não ao abrir o diálogo: para o fornecedor não
+    // promovido isso significa criar a empresa, e criar uma empresa porque alguém
+    // abriu um formulário e desistiu é lixo que ninguém vai limpar.
+    const empresaId = await resolverEmpresaId()
+    if (!empresaId) {
+      setSalvando(false)
+      setErro('Não foi possível preparar a empresa para receber o contato.')
+      return
+    }
+
+    const r = await criarContatoAction({ ...valores, empresa_id: empresaId })
     setSalvando(false)
     if (!r.ok) {
       // A regra "informe ao menos um contato" chega como fieldError de `nome`.
@@ -89,7 +101,7 @@ function NovoContatoDialog({
     }
     toast.success('Contato adicionado.')
     onOpenChange(false)
-    onCriado()
+    onCriado(empresaId)
   }
 
   return (
@@ -128,17 +140,40 @@ function NovoContatoDialog({
   )
 }
 
-export function EmpresaContatos({ empresaId }: { empresaId: string }) {
+export interface EmpresaContatosProps {
+  /** `null` quando a empresa ainda não existe — ver `aoPrecisarDeEmpresa`. */
+  empresaId: string | null
+  /**
+   * Chamado antes de qualquer escrita quando `empresaId` é `null`, e devolve o id da
+   * empresa (criando-a). Existe para o fornecedor do funil, que não é promovido no
+   * sync: quem tem contato merece ficha, e a promoção vira consequência da ação em
+   * vez de um passo separado que a pessoa precisa lembrar de fazer antes.
+   */
+  aoPrecisarDeEmpresa?: () => Promise<string | null>
+}
+
+export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaContatosProps) {
   const qc = useQueryClient()
   const [marcando, setMarcando] = React.useState<string | null>(null)
   const [novoAberto, setNovoAberto] = React.useState(false)
   const [enriquecendo, setEnriquecendo] = React.useState(false)
   const [excluindo, setExcluindo] = React.useState<string | null>(null)
 
-  function recarregar() {
-    void qc.invalidateQueries({ queryKey: empresasKeys.contatos(empresaId) })
-    void qc.invalidateQueries({ queryKey: empresasKeys.eventos(empresaId) })
+  /**
+   * Recebe o id explicitamente porque, no caminho da promoção, ele acabou de nascer:
+   * ler o `empresaId` da prop aqui pegaria o `null` do render anterior e a lista
+   * ficaria vazia logo depois de adicionar o primeiro contato.
+   */
+  function recarregar(id: string | null = empresaId) {
+    if (!id) return
+    void qc.invalidateQueries({ queryKey: empresasKeys.contatos(id) })
+    void qc.invalidateQueries({ queryKey: empresasKeys.eventos(id) })
   }
+
+  const resolverEmpresaId = React.useCallback(async (): Promise<string | null> => {
+    if (empresaId) return empresaId
+    return (await aoPrecisarDeEmpresa?.()) ?? null
+  }, [empresaId, aoPrecisarDeEmpresa])
 
   /**
    * O enriquecimento é ASSÍNCRONO: o worker devolve 202 e processa em segundo plano.
@@ -147,7 +182,13 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
    */
   async function enriquecerApollo() {
     setEnriquecendo(true)
-    const r = await rodarContatosEmpresaAction({ empresaId })
+    const id = await resolverEmpresaId()
+    if (!id) {
+      setEnriquecendo(false)
+      toast.error('Não foi possível preparar a empresa para o enriquecimento.')
+      return
+    }
+    const r = await rodarContatosEmpresaAction({ empresaId: id })
     setEnriquecendo(false)
     if (!r.ok) {
       toast.error(r.message)
@@ -172,9 +213,12 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
     recarregar()
   }
 
+  // Sem empresa não há o que buscar — e `enabled: false` deixa a query em `pending`
+  // para sempre, então os estados de carregamento abaixo também olham o `empresaId`.
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: empresasKeys.contatos(empresaId),
-    queryFn: () => buscarContatos(empresaId),
+    queryKey: empresasKeys.contatos(empresaId ?? 'sem-empresa'),
+    queryFn: () => buscarContatos(empresaId as string),
+    enabled: empresaId !== null,
   })
 
   async function alternar(id: string, atual: boolean) {
@@ -189,7 +233,7 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
     recarregar()
   }
 
-  if (isPending) {
+  if (empresaId !== null && isPending) {
     return (
       <Card>
         <CardContent className="space-y-2 p-6">
@@ -201,7 +245,7 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
     )
   }
 
-  if (isError) {
+  if (empresaId !== null && isError) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
@@ -217,6 +261,8 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
     )
   }
 
+  const contatos = data ?? []
+
   return (
     <Card>
       <CardHeader>
@@ -226,6 +272,13 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
             <CardDescription>
               O ponto focal é quem toda abordagem procura primeiro — outbox da Antecipação e botões
               de contato no app. Só um por empresa; marcar outro desmarca o anterior.
+              {empresaId === null && (
+                <>
+                  {' '}
+                  Este fornecedor ainda não tem ficha em Empresas — ela é criada
+                  automaticamente quando você salvar o primeiro contato.
+                </>
+              )}
             </CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -248,14 +301,14 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
       </CardHeader>
 
       <NovoContatoDialog
-        empresaId={empresaId}
+        resolverEmpresaId={resolverEmpresaId}
         aberto={novoAberto}
         onOpenChange={setNovoAberto}
         onCriado={recarregar}
       />
 
       <CardContent className="p-0">
-        {data.length === 0 ? (
+        {contatos.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <div className="rounded-full bg-muted p-3">
               <UserRound className="h-6 w-6 text-muted-foreground" aria-hidden />
@@ -285,7 +338,7 @@ export function EmpresaContatos({ empresaId }: { empresaId: string }) {
           </div>
         ) : (
           <ul className="divide-y">
-            {data.map((c) => (
+            {contatos.map((c) => (
               <li
                 key={c.id}
                 className={cn(

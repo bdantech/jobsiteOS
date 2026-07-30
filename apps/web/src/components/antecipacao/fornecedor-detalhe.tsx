@@ -21,8 +21,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { FichaVoltar } from '@/components/ficha/ficha'
 import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
 import { EmpresaContatos } from '@/components/empresas/empresa-contatos'
-import { promoverEmpresaAction } from '@/actions/mercado'
+import { promoverFornecedorAction } from '@/actions/antecipacao'
 import { NotaCard } from './nota-card'
+import { ProtestoFornecedor } from './protesto-fornecedor'
 import { FAIXA_BADGE, TIPAGEM_BADGE, formatarDataHora, formatarInteiro, formatarMoeda } from './format'
 import { antecipacaoKeys, buscarDetalheFornecedor } from './queries'
 
@@ -52,16 +53,39 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
    * Promover cria a empresa a partir do cadastro já enriquecido, e é a partir daí
    * que existem contatos, timeline e toques para este fornecedor.
    */
-  async function promover() {
+  async function promover(): Promise<string | null> {
     setPromovendo(true)
-    const r = await promoverEmpresaAction({ cnpj, tipo: 'fornecedor', origem: 'antecipacao' })
+    // `promoverFornecedorAction`, e não a de Mercado: aquela autoriza por `/mercado` e
+    // esbarra em mais duas policies (ver 0068). Com um usuário Admin as duas
+    // funcionam; com o perfil Comercial, só esta.
+    const r = await promoverFornecedorAction(cnpj)
     setPromovendo(false)
     if (!r.ok) {
       toast.error(r.message)
-      return
+      return null
     }
-    toast.success('Fornecedor promovido — agora ele tem ficha, contatos e histórico.')
     void qc.invalidateQueries({ queryKey: antecipacaoKeys.fornecedor(cnpj) })
+    return r.data?.id ?? null
+  }
+
+  async function promoverPeloBotao() {
+    const id = await promover()
+    if (id) toast.success('Fornecedor promovido — agora ele tem ficha, contatos e histórico.')
+  }
+
+  /**
+   * A promoção como CONSEQUÊNCIA de adicionar contato, não como pré-requisito.
+   *
+   * `contatos.empresa_id` é NOT NULL, então tecnicamente a empresa precisa existir
+   * antes. Mas exigir que a pessoa lembre disso — promover, esperar, voltar, aí sim
+   * cadastrar — é o tipo de passo que faz o contato simplesmente não ser cadastrado.
+   * Um fornecedor com contato é, por definição, um fornecedor que alguém trabalha:
+   * ele merece a ficha.
+   */
+  async function promoverParaContato(): Promise<string | null> {
+    const id = await promover()
+    if (id) toast.success('Fornecedor promovido para Empresas junto com o contato.')
+    return id
   }
 
   if (isPending) {
@@ -161,7 +185,7 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
                 </Link>
               </Button>
             ) : (
-              <Button variant="outline" onClick={() => void promover()} disabled={promovendo}>
+              <Button variant="outline" onClick={() => void promoverPeloBotao()} disabled={promovendo}>
                 <UserPlus className="mr-2 h-4 w-4" aria-hidden />
                 {promovendo ? 'Promovendo…' : 'Promover para Empresas'}
               </Button>
@@ -200,24 +224,24 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
        */}
       <CadastroRfb cnpj={cnpj} />
 
-      {empresaId ? (
-        <EmpresaContatos empresaId={empresaId} />
-      ) : (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden />
-              <CardTitle className="text-base">Contatos</CardTitle>
-            </div>
-            <CardDescription>
-              O contato que veio na nota fiscal só vira lista depois que o fornecedor
-              existe em Empresas — <code>contatos</code> pende de uma empresa. Promova acima
-              e o próximo sync (ou o job diário) materializa o que já está guardado na nota.
-              Até lá a Outbox continua usando esse contato normalmente.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      {/*
+       * Protesto entre o cadastro e os contatos: é a segunda pergunta do "vale a
+       * pena?" e a que custa dinheiro para responder.
+       */}
+      <ProtestoFornecedor
+        cnpj={cnpj}
+        uf={primeira?.fornecedor_uf ?? null}
+        temProtesto={primeira?.fornecedor_tem_protesto ?? false}
+        valor={primeira?.fornecedor_protesto_valor ?? null}
+        consultadoEm={primeira?.fornecedor_protesto_em ?? null}
+      />
+
+      {/*
+       * O mesmo componente com ou sem empresa. Sem ela, `aoPrecisarDeEmpresa` promove
+       * no momento de salvar — a promoção deixa de ser um passo que a pessoa precisa
+       * lembrar de fazer antes e vira consequência de cadastrar o contato.
+       */}
+      <EmpresaContatos empresaId={empresaId} aoPrecisarDeEmpresa={promoverParaContato} />
 
       {toques.length > 0 && (
         <Card>

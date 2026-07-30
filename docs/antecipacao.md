@@ -130,6 +130,41 @@ Só marca `nao_encontrado` quando alguma fonte respondeu dizendo que não conhec
 quando as tentativas acabaram (default 10). Um dia de rede ruim não condena um CNPJ a
 nunca mais ser consultado.
 
+### A fila estava crescendo, não drenando
+
+Medido: **4.280 fornecedores** distintos nas notas, **1.134 (26%)** com cadastro. A fila
+tinha 3.330 pendentes e **nenhum deles jamais tentado**. A causa não era bug de código —
+era aritmética: `max_por_execucao = 300`, rodando **uma vez por dia**, contra ~1.100
+CNPJs novos por dia.
+
+Duas mudanças, as duas de custo zero, porque as fontes são gratuitas:
+
+- **`max_por_execucao` foi para 2.000.** O teto por corrida precisa ser maior que a
+  chegada diária, senão a fila só cresce. A primeira fonte responde em ~250ms: 2.000
+  CNPJs são ~8 minutos.
+- **`orcamento_ms` (novo, 10 min).** O teto por quantidade não protege sozinho: se a
+  primeira fonte cair, a cascata desce para a ReceitaWS a 21s por CNPJ e 2.000 viram 11
+  horas. O relógio é checado **antes** de gastar a chamada — parar no meio de um CNPJ
+  marcaria a fila como tentada sem resposta nenhuma. A fila é persistente; o que sobra é
+  a primeira coisa da próxima corrida.
+
+### E o lookup entrou no sync, entre o sync e a reclassificação
+
+A ordem certa é **sincroniza NF → coleta o cadastro do fornecedor → classifica**. O job
+diário já fazia isso; o sync de 4 em 4 horas, não:
+
+```
+antes:  sync-nfs → reclassificar → outbox
+agora:  sync-nfs → lookup → reclassificar → outbox
+```
+
+Sem o lookup no meio, a nota de um fornecedor novo era classificada com o cadastro em
+branco e só corrigida na madrugada seguinte — **até 16h de faixa errada**, em silêncio.
+Isso era inofensivo enquanto nenhuma regra usava capital social; deixa de ser no minuto
+em que a primeira existir. A fila prioriza `criado_em desc`, então os CNPJs daquela
+corrida são exatamente os primeiros da vez. O orçamento aqui é mais curto (4 min): há um
+sync a cada 4h esperando atrás.
+
 ## Contatos: o dado chega na nota, e agora vira contato
 
 O payload da NF traz `supplier.contact` e `recipient.contact`. Até a rodada de melhorias
@@ -176,6 +211,95 @@ Empresas* na ficha do fornecedor. Ele chama `app_promover_empresa` com
 leem essa coluna. O `tipo` também precisou entrar no **schema zod**: zod descarta chave
 desconhecida em silêncio, então sem isso o valor sumiria a caminho do banco e o erro
 apareceria meses depois, como um fabricante de esquadria contado no TAM.
+
+### A promoção virou consequência, não pré-requisito (0068)
+
+A porta manual tinha um problema de ordem. `contatos.empresa_id` é NOT NULL, então
+cadastrar contato de fornecedor exigia lembrar de promover **antes** — e o passo que se
+precisa lembrar é o passo que não acontece. Agora o formulário de contato promove no
+**submit**, e só no submit: promover ao *abrir* o diálogo criaria empresa para quem
+desistiu no meio. Um fornecedor com contato é, por definição, um fornecedor que alguém
+trabalha; ele merece a ficha.
+
+`EmpresaContatos` aceita `empresaId: null` + `aoPrecisarDeEmpresa`, então é o **mesmo
+componente** com ou sem empresa. Duas versões da lista de contatos divergiriam na
+primeira mudança.
+
+**E aqui apareceu a terceira porta fechada da mesma família (0060, 0066).** Promover a
+partir do funil esbarrava em três coisas, todas de módulos que o Comercial não tem:
+
+| onde | exigia |
+| --- | --- |
+| `promoverEmpresaAction` | módulo `mercado` |
+| policy `empresas_insert` | módulo `empresas` |
+| policy `mercado_universo_vincular` (UPDATE) | módulo `mercado` |
+
+E `app_promover_empresa` é SECURITY INVOKER, então nada disso era contornável do lado da
+aplicação. `app_promover_fornecedor` (0068) é DEFINER com um recorte estreito: só CNPJ
+que **é fornecedor de alguma nota**, `tipo` sempre `'fornecedor'` e `origem` sempre
+`'antecipacao'`, fixados no corpo da função e nunca vindos do cliente. Este caminho não
+consegue criar construtora nem tocar a pirâmide. É idempotente, como o de Mercado.
+
+## Protesto do fornecedor, direto do funil (0066)
+
+A hipótese comercial é que fornecedor com protesto antecipa mais — é dinheiro parado e um
+caminho de crédito a menos. O protesto já era variável do motor de faixa
+(`fornecedor_tem_protesto`, `fornecedor_protesto_valor`); o que faltava era **como
+consultar** sem passar por Mercado.
+
+O modelo sempre permitiu: `protestos_consultas.cnpj` é NOT NULL e `empresa_id` é
+nullable. Exigir a promoção antes inverteria a ordem da decisão — é o protesto que ajuda
+a decidir quem vale promover.
+
+- Botão na ficha do fornecedor → lote de **1 item** em `lotes_enriquecimento`, com
+  `motivo: 'antecipacao_fornecedor'`. O gasto continua auditável no mesmo lugar de sempre.
+- `incluir_fora_sp: true` de propósito: o roteamento **pula** o item quando a UF não é SP
+  e o parâmetro está desligado. Num clique deliberado, voltar "pulado" sem consultar nada
+  seria o pior resultado.
+- **Reclassifica o funil em seguida**, na mesma corrida. Consultar e não reclassificar
+  deixaria o dado novo na tabela e a faixa velha no card — pagou-se por uma informação
+  que a tela ainda não usa.
+- O preço aparece **antes** do clique (R$ 0,36 SP / R$ 3,50 nacional), vindo de
+  `radar_config` por um DEFINER que devolve só dois números (0067). Chumbar no front
+  criaria uma segunda verdade, e um botão que promete um preço e cobra outro é pior que
+  um botão sem preço.
+
+### O buraco de RLS que isso expôs (de novo)
+
+Mesma família da `0060`, agora em protestos: a policy de `protestos_consultas` era
+`app_tem_modulo('radar')`, `notas_funil` é `security_invoker`, e a view faz
+`coalesce(fpa.tem_protesto, false)`. Para o perfil Comercial o resultado não era "não
+sei" — era **`fornecedor_tem_protesto = false`**. Fornecedor com protesto aparecendo como
+limpo, sem erro e sem aviso.
+
+A classificação nunca esteve errada: o worker roda com service role e ignora RLS. Errado
+era só o que a **pessoa** via, que é o que decide a ligação. E passaria a doer de verdade
+agora: o Comercial pagaria R$ 3,50 e a tela continuaria dizendo a mesma coisa.
+
+`fornecedor_protesto_em` também entrou na view, porque sem ela "sem protesto" e "nunca
+consultado" são a mesma tela — e a diferença é justamente a que decide se vale gastar.
+
+## O que promoção NÃO destrava
+
+Vale registrar, porque a intuição erra aqui: promover **não** é o que libera a análise de
+capital social e protesto. Isso já chega ao funil por CNPJ, via `mercado_universo` e
+`protestos_atual` (0058/0060/0066), e o catálogo de faixa já tem as variáveis. O que
+depende de `empresas` é só **contatos** — e, por tabela, timeline e Company 360.
+
+Promover os 4.280 fornecedores para "ter análise" resolveria o problema errado, e não
+sairia de graça: `empresas` alimenta contadores, listas e segmentos, e nem toda tela
+filtra por `tipo`.
+
+### A hipótese de conversão ainda não é testável
+
+Medido contra a base: **6** fornecedores já anteciparam, contra 4.274 que não. Os 6 têm
+capital social mediano de R$ 13,5M contra R$ 60k, e 19,8 anos de idade média contra 12,4
+— o **oposto** da hipótese. Com n=6 isso não prova nada, e há viés claro:
+`fornecedor_ja_antecipou` sai de `clientes_onepay.last_anticipation`, ou seja, são
+clientes Onepay existentes, naturalmente maiores.
+
+Por isso capital e protesto entram como **sinal e ordenação**, nunca como porta de
+exclusão, até haver desfecho suficiente para medir.
 
 ## Cadastro da Receita na ficha (capital social e afins)
 
@@ -378,7 +502,7 @@ quanto?") é a mesma nos dois caminhos.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0061`, `0065`.
+- **Banco**: migrations `0045`–`0061`, `0065`–`0068`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
@@ -389,6 +513,9 @@ quanto?") é a mesma nos dois caminhos.
   - views: `notas_funil` (a superfície única), `antecipacao_fornecedores`,
     `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
   - `0065`: `sacado_camada` em `notas_funil` e na lista a prospectar
+  - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
+  - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
+  - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
   - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
     `app_ativar_faixa_regra`, `app_salvar_faixa_disparo`, `app_salvar_whatsapp_conta`,
     `app_descartar_mensagem`, `app_definir_ponto_focal`, `app_registrar_toque_manual`,

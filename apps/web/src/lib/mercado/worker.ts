@@ -279,6 +279,14 @@ export async function dispararLookupCadastral(): Promise<DispararJobResultado> {
 }
 
 /**
+ * Protesto de um fornecedor do funil (ação PAGA) + reclassificação, pelo CNPJ. Sem
+ * exigir empresa: é justamente o protesto que ajuda a decidir quem vale promover.
+ */
+export async function dispararProtestoFornecedor(cnpj: string): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/protesto-fornecedor', { cnpj }, 'antecipacao-protesto-fornecedor')
+}
+
+/**
  * Materializa em `contatos` o que chegou dentro das notas. Sob demanda porque a
  * primeira execução é RETROATIVA: o sync é incremental e nunca rebusca nota
  * antiga, então o contato que chegou antes desta rotina existir só sai do jsonb

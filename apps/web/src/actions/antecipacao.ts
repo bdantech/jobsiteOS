@@ -9,6 +9,7 @@ import {
   descartarMensagem,
   marcarSemInteresse,
   moverEstagio,
+  promoverFornecedor,
   registrarToqueManual,
   salvarAntecipacaoConfig,
   salvarFaixaDisparo,
@@ -24,6 +25,7 @@ import {
   dispararContatosNf,
   dispararLookupCadastral,
   dispararOutbox,
+  dispararProtestoFornecedor,
   dispararReclassificacaoFunil,
   dispararSyncNfs,
 } from '@/lib/mercado/worker'
@@ -264,6 +266,51 @@ export async function reclassificarFunilAction() {
 
 export async function regenerarOutboxAction() {
   return enfileirar(dispararOutbox)
+}
+
+/**
+ * Promove o fornecedor a partir do funil.
+ *
+ * Autorizada por **Antecipação**, ao contrário de `promoverEmpresaAction`, que exige
+ * Mercado. Não é frouxidão: o RPC por trás (0068) só aceita CNPJ que seja fornecedor
+ * de alguma nota, e fixa `tipo = 'fornecedor'` — este caminho não consegue criar uma
+ * construtora nem tocar a pirâmide comercial.
+ */
+export async function promoverFornecedorAction(
+  cnpj: string,
+): Promise<ActionResult<Tables<'empresas'>>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const empresa = await promoverFornecedor(supabase, { cnpj })
+    revalidatePath('/empresas')
+    return { ok: true, data: empresa }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+/**
+ * Protesto de um fornecedor do funil (ação PAGA), seguido de reclassificação.
+ *
+ * Autorizado pelo módulo **Antecipação**, e não por Radar como os outros disparos de
+ * protesto. É uma decisão: o público desta tela é o Comercial, que tem só
+ * `antecipacao` — exigir Radar deixaria o botão visível e inútil justamente para quem
+ * ele existe. O gasto continua auditável no mesmo lugar de sempre, porque a consulta
+ * abre um lote em `lotes_enriquecimento` com `motivo: 'antecipacao_fornecedor'`.
+ *
+ * O teto natural é o clique: um CNPJ por vez, com o custo mostrado antes.
+ */
+export async function rodarProtestoFornecedorAction(
+  cnpj: string,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  if (!/^[0-9]{14}$/.test(cnpj)) {
+    return { ok: false, message: 'CNPJ inválido.', code: 'validation' }
+  }
+  const r = await dispararProtestoFornecedor(cnpj)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 
 export async function rodarLookupAction() {

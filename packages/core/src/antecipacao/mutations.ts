@@ -8,6 +8,7 @@ import {
   definirPontoFocalSchema,
   marcarSemInteresseSchema,
   moverEstagioSchema,
+  promoverFornecedorSchema,
   registrarToqueManualSchema,
   salvarAntecipacaoConfigSchema,
   salvarFaixaDisparoSchema,
@@ -18,6 +19,7 @@ import {
   type DescartarMensagemInput,
   type MarcarSemInteresseInput,
   type MoverEstagioInput,
+  type PromoverFornecedorInput,
   type RegistrarToqueManualInput,
   type SalvarAntecipacaoConfigInput,
   type SalvarFaixaDisparoInput,
@@ -41,6 +43,24 @@ export async function moverEstagio(
 ): Promise<Tables<'notas_fiscais'>> {
   const dados = parseOuFalhar(moverEstagioSchema, input)
   const { data, error } = await supabase.rpc('app_mover_estagio_nf', { p: dados as unknown as Json })
+  if (error) throw traduzirErro(error)
+  return data
+}
+
+/**
+ * Promove o fornecedor a partir do funil.
+ *
+ * RPC próprio, e não `promoverEmpresa` de Mercado: aquele é SECURITY INVOKER e
+ * esbarra em três policies de módulos que o público do funil não tem (ver 0068).
+ * O CNPJ é normalizado antes porque o RPC exige 14 dígitos.
+ */
+export async function promoverFornecedor(
+  supabase: Supabase,
+  input: PromoverFornecedorInput | unknown,
+): Promise<Tables<'empresas'>> {
+  const dados = parseOuFalhar(promoverFornecedorSchema, input)
+  const p = { cnpj: normalizeCnpj(dados.cnpj) }
+  const { data, error } = await supabase.rpc('app_promover_fornecedor', { p: p as unknown as Json })
   if (error) throw traduzirErro(error)
   return data
 }

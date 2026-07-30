@@ -170,6 +170,16 @@ export const moverEstagioSchema = z
   })
 export type MoverEstagioInput = z.infer<typeof moverEstagioSchema>
 
+/**
+ * Promover o fornecedor a partir do funil. Só o CNPJ entra: `tipo` e `origem` são
+ * fixados pelo RPC (migration 0068), nunca pelo cliente — é o que impede que este
+ * caminho crie uma "construtora" e envenene a pirâmide comercial.
+ */
+export const promoverFornecedorSchema = z.object({
+  cnpj: cnpjSchema.describe('CNPJ do fornecedor (14 dígitos, com ou sem pontuação).'),
+})
+export type PromoverFornecedorInput = z.infer<typeof promoverFornecedorSchema>
+
 export const marcarSemInteresseSchema = z.object({
   fornecedor_cnpj: cnpjSchema.describe('CNPJ do fornecedor (14 dígitos, com ou sem pontuação).'),
   motivo: z.string().trim().min(1, 'Informe o motivo.').max(500).describe('Por que não abordar — obrigatório.'),
@@ -366,9 +376,19 @@ export interface ConfigLookup {
   max_tentativas: number
   max_por_execucao: number
   receitaws_intervalo_ms: number
+  /**
+   * Teto de TEMPO da corrida. Sem ele, o teto por quantidade não protege nada: se a
+   * primeira fonte cair, a cascata desce para a ReceitaWS a 21s por CNPJ e 2.000
+   * CNPJs viram 11 horas de job — segurando o sync de NFs atrás dele.
+   */
+  orcamento_ms: number
 }
 export const CONFIG_LOOKUP_PADRAO: ConfigLookup = {
   max_tentativas: 10,
-  max_por_execucao: 300,
+  // 300 era menos que a chegada diária de CNPJs novos: a fila CRESCIA. As fontes são
+  // gratuitas e a primeira responde em ~250ms, então o custo de subir isto é tempo de
+  // job, limitado pelo orçamento abaixo.
+  max_por_execucao: 2_000,
   receitaws_intervalo_ms: 21_000,
+  orcamento_ms: 10 * 60_000,
 }

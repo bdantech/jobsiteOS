@@ -22,7 +22,12 @@ import { sincronizarCertificados } from './radar/certificados.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
-import { criarProcessadorProtestos, protestosClientesMensal, protestosEmpresa } from './radar/protestos.js'
+import {
+  criarProcessadorProtestos,
+  protestoFornecedor,
+  protestosClientesMensal,
+  protestosEmpresa,
+} from './radar/protestos.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
@@ -54,6 +59,7 @@ export type TipoJob =
   | 'antecipacao-outbox'
   | 'antecipacao-lookup'
   | 'antecipacao-contatos'
+  | 'antecipacao-protesto-fornecedor'
   | 'antecipacao-diario'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
@@ -395,6 +401,10 @@ export function dispararContatosEmpresa(opts: { empresaId: string; revelarTelefo
  * A reclassificação roda no fim, na MESMA corrida: sem isso uma nota recém
  * chegada ficaria sem faixa até o job diário, e "nova NF em faixa alta" — que é
  * um push para o comercial — chegaria com até 24h de atraso.
+ *
+ * E o LOOKUP roda entre os dois, pela mesma razão levada um passo adiante: de nada
+ * adianta classificar na hora se o cadastro do fornecedor — que é o que a regra lê —
+ * só chega de madrugada.
  */
 export async function dispararSyncNfs(): Promise<string> {
   const id = await abrirIngestao('onepay_nf', { origem: 'worker' })
@@ -405,9 +415,19 @@ export async function dispararSyncNfs(): Promise<string> {
     id,
     async (client) => {
       const sync = await sincronizarNotasFiscais()
+      // O lookup ENTRE o sync e a reclassificação, não depois: o fornecedor chega na
+      // nota só com nome e CNPJ, e é o cadastro dele (capital, situação, Simples) que
+      // as variáveis de faixa leem. Rodando só no diário, toda nota sincronizada
+      // durante o dia seria classificada com o cadastro em branco e só corrigida na
+      // madrugada seguinte — até 16h de faixa errada, em silêncio.
+      //
+      // A fila prioriza `criado_em desc`, então os CNPJs desta corrida são exatamente
+      // os primeiros da vez. O orçamento de tempo é mais curto que o do diário: aqui
+      // há um sync a cada 4h esperando, e o que sobrar entra na próxima.
+      const lookup = await lookupCadastral({ orcamentoMs: 4 * 60_000 })
       const reclass = await reclassificarFunil(client)
       const outbox = await gerarOutbox()
-      await anotarMeta(id, { sync, reclassificacao: reclass, outbox })
+      await anotarMeta(id, { sync, lookup, reclassificacao: reclass, outbox })
       return {
         linhas_processadas: sync.notas,
         linhas_novas: sync.novas,
@@ -460,6 +480,27 @@ export function dispararAntecipacaoDiario(): string {
     const reclassificacao = await reclassificarFunil(client)
     const outbox = await gerarOutbox()
     return { varredura, supressoes, lookup, contatos, reclassificacao, outbox }
+  })
+}
+
+/**
+ * Protesto de um fornecedor do funil (ação PAGA), com reclassificação em seguida.
+ *
+ * A reclassificação é o ponto: `fornecedor_tem_protesto` e `fornecedor_protesto_valor`
+ * são variáveis do motor de faixa. Consultar e não reclassificar deixaria o dado novo
+ * na tabela e a faixa velha no card — o usuário pagou por uma informação que a tela
+ * ainda não usa, que é o pior dos dois mundos.
+ *
+ * Reclassifica o funil INTEIRO, e não só as notas deste fornecedor: é a mesma função
+ * que o diário roda, é SQL puro sobre a tabela, e uma segunda implementação "só deste
+ * CNPJ" seria um segundo lugar onde a regra de faixa pode divergir.
+ */
+export function dispararProtestoFornecedor(opts: { cnpj: string }): string {
+  return dispararAvulso('antecipacao-protesto-fornecedor', async (client) => {
+    logger.info({ cnpj: opts.cnpj }, 'Protesto de fornecedor sob demanda.')
+    const protesto = await protestoFornecedor(opts)
+    const reclassificacao = await reclassificarFunil(client)
+    return { protesto, reclassificacao }
   })
 }
 

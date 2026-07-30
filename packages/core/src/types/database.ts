@@ -2233,6 +2233,7 @@ export type Database = {
           operavel: boolean
           nao_operavel_motivo: string | null
           sacado_camada: string | null
+          fornecedor_protesto_em: string | null
         }
         Relationships: [
           {
@@ -2277,6 +2278,7 @@ export type Database = {
       }
     }
     Functions: {
+      antecipacao_custo_protesto: { Args: never; Returns: Json }
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
       app_aprovar_lote: {
@@ -2704,6 +2706,16 @@ export type Database = {
           uf: string | null
           ultima_antecipacao: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_promover_fornecedor: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["empresas"]["Row"]
         SetofOptions: {
           from: "*"
           to: "empresas"
