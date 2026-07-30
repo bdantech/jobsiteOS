@@ -1,8 +1,10 @@
 import { formatCnpj, normalizeCnpj } from '../../schemas/cnpj.js'
 import { criarLote, suprimir } from '../../radar/mutations.js'
 import {
+  FAMILIA_LABELS,
   ORIGEM_METRICA_LABELS,
   MODELO_LABELS,
+  type FamiliaSinal,
   type ModeloId,
   type OrigemMetrica,
 } from '../../radar/faturamento.js'
@@ -156,6 +158,7 @@ async function faturamentoEmpresa(input: FaturamentoEmpresaInput, ctx: ToolConte
   const detalhes = (ultimoModelo?.detalhes ?? {}) as {
     versao_estimador?: number
     modelos?: Array<{ id: ModeloId; valor: number; peso: number }>
+    familias?: FamiliaSinal[]
     restricoes?: string[]
   }
 
@@ -192,6 +195,10 @@ async function faturamentoEmpresa(input: FaturamentoEmpresaInput, ctx: ToolConte
             valor: m.valor,
             peso: m.peso,
           })),
+          // Confiança 'alta' exige DUAS famílias: MRR e usuários de ERP saem do mesmo
+          // dado e concordam mecanicamente, então concordância entre eles não é
+          // evidência. Diga isso ao explicar, ou a explicação vira propaganda.
+          familias_independentes: (detalhes.familias ?? []).map((f) => FAMILIA_LABELS[f] ?? f),
           restricoes: detalhes.restricoes ?? [],
         },
     historico: (serie ?? []).map((m) => ({

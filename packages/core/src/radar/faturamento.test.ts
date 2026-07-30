@@ -112,10 +112,11 @@ test('coeficiente do tipo vence o global quando existe', () => {
 
 // ─── Confiança ──────────────────────────────────────────────────────────────
 
-test('dois modelos concordando dentro de 2× é confiança alta', () => {
+test('duas FAMÍLIAS concordando dentro de 2× é confiança alta', () => {
+  // Equipe (10M) × ERP (8M) — medições independentes, razão 1,25.
   const r = estimarFaturamento({ funcionarios: 20, qtd_usuarios_erp: 8 }, COEF, PARAMS)
-  // 10M e 8M — razão 1,25.
   assert.equal(r.modelos.length, 2)
+  assert.deepEqual([...r.familias].sort(), ['erp', 'headcount'])
   assert.equal(r.confianca, 'alta')
 })
 
@@ -125,10 +126,40 @@ test('um modelo só é média, nunca alta', () => {
   assert.equal(r.origem, 'modelo')
 })
 
-test('modelos divergentes derrubam a confiança para média', () => {
+test('famílias divergentes derrubam a confiança para média', () => {
   // 20 funcionários → 10M; 1 usuário de ERP → 1M. Razão 10×.
   const r = estimarFaturamento({ funcionarios: 20, qtd_usuarios_erp: 1 }, COEF, PARAMS)
   assert.equal(r.modelos.length, 2)
+  assert.equal(r.familias.length, 2)
+  assert.equal(r.confianca, 'media')
+})
+
+// ─── Famílias de sinal ──────────────────────────────────────────────────────
+
+test('MRR e usuários de ERP são a MESMA família — concordar entre si não promove', () => {
+  // Este é o caso das ~5.000 empresas da base: os dois sinais saem do mesmo
+  // `erp_detalhes` e concordam mecanicamente (MRR por usuário tem mediana de R$ 477).
+  // Contar isso como duas evidências daria selo de confiança alta a uma medição só.
+  const r = estimarFaturamento({ erp_mrr: 10_000, qtd_usuarios_erp: 12 }, COEF, PARAMS)
+  assert.equal(r.modelos.length, 2, 'os dois modelos entram no cálculo')
+  assert.deepEqual(r.familias, ['erp'], 'mas são uma família só')
+  assert.equal(r.confianca, 'media')
+})
+
+test('a família redundante não leva peso dobrado na combinação', () => {
+  // ERP rende dois modelos, equipe rende um. Se o peso fosse somado, o ERP dominaria
+  // por CONTAGEM e não por qualidade. Com dois modelos de ERP idênticos em valor, o
+  // resultado tem de ser igual ao de um único modelo de ERP com aquele valor.
+  const doisDeErp = estimarFaturamento({ funcionarios: 20, erp_mrr: 10_000, qtd_usuarios_erp: 12 }, COEF, PARAMS)
+  const umDeErp = estimarFaturamento({ funcionarios: 20, qtd_usuarios_erp: 12 }, COEF, PARAMS)
+  // mrr: 10k×12/0,01 = 12M; usuarios: 12×1M = 12M. A família de ERP vale 12M nos dois
+  // casos, e a de equipe vale 10M — logo o valor combinado tem de ser o mesmo.
+  assert.equal(doisDeErp.valor, umDeErp.valor)
+})
+
+test('uma família só, com um modelo só, continua sendo média', () => {
+  const r = estimarFaturamento({ erp_mrr: 10_000 }, COEF, PARAMS)
+  assert.deepEqual(r.familias, ['erp'])
   assert.equal(r.confianca, 'media')
 })
 

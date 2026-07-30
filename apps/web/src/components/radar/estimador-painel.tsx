@@ -185,6 +185,13 @@ export function EstimadorPainel() {
                 Medido contra os próprios clientes declarados. O peso de cada modelo na
                 combinação é o inverso disto — quem erra mais, pesa menos.
               </p>
+              <p className="text-xs text-muted-foreground">
+                <strong>MRR e usuários de ERP são a mesma família de sinal</strong>: saem do
+                mesmo dado e concordam mecanicamente. Confiança <em>alta</em> exige duas
+                famílias independentes — ERP <strong>e</strong> equipe. Enquanto não houver
+                headcount na base, nenhuma estimativa passa de <em>média</em>, e isso está
+                certo.
+              </p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {MODELOS.map((m: ModeloId) => (
                   <div key={m} className="rounded-lg border p-3">

@@ -109,11 +109,33 @@ pirâmide. Sem isso é impossível responder "por que a estimativa desta empresa
      fatura menos que ele);
    - `regime_tributario = 'presumido'` → cap no teto do presumido. O regime **limita**, não
      informa: diz que a empresa está abaixo do teto, não onde.
-4. Confiança: **alta** = 2+ modelos concordando dentro de 2×; **média** = 1 modelo ou
-   modelos divergentes; **baixa** = só bracket.
+4. Confiança: **alta** = duas **famílias de sinal** concordando dentro de 2×; **média** =
+   uma família só, ou famílias divergentes; **baixa** = só bracket.
 5. Snapshot só é gravado se variou mais que `variacao_minima_snapshot` (10%) contra o
    último snapshot **de modelo** — não contra o valor vigente, senão o job regravaria todo
    mês só porque a estimativa nunca bate com a declaração.
+
+### Famílias de sinal: concordar não é o mesmo que confirmar
+
+`mrr` e `usuarios_erp` **não são evidências independentes** — saem do mesmo
+`erp_detalhes`. Medido na base: o MRR por usuário tem mediana de R$ 477, com quartis em
+R$ 366 e R$ 572. É a mesma medida vezes uma constante, então os dois modelos concordam
+**mecanicamente**, sempre.
+
+Tratá-los como independentes tinha duas consequências:
+
+- **A confiança saía `alta` apoiada numa medição só.** São ~5.000 empresas na base com os
+  dois sinais — todas receberiam o rótulo que faz ninguém questionar o número.
+- **A família de ERP levava peso dobrado na combinação**, por contagem de modelos e não
+  por qualidade.
+
+Agora cada família é **colapsada num valor só** antes de combinar, com peso igual à
+**média** (não à soma) dos pesos dos seus modelos. Só a concordância entre famílias
+diferentes — ERP × equipe — promove para `alta`.
+
+Efeito prático hoje: **o valor não muda** (com uma família só, o representante dela é
+exatamente a média geométrica ponderada de antes), e nenhuma estimativa passa de `média`
+enquanto não houver headcount na base. Que é o rótulo correto.
 
 **A restrição vem depois da combinação, e isso é o ponto.** Aplicar o cap do Simples antes
 faria dois modelos discordantes virarem dois valores idênticos no teto, e a confiança

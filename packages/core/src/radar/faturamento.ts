@@ -74,6 +74,32 @@ export const MODELO_LABELS: Record<ModeloId, string> = {
   usuarios_erp: 'Usuários do ERP × faturamento por usuário',
 }
 
+export const FAMILIAS_SINAL = ['erp', 'headcount'] as const
+export type FamiliaSinal = (typeof FAMILIAS_SINAL)[number]
+
+/**
+ * A que MEDIÇÃO cada modelo pertence — e não é detalhe de organização.
+ *
+ * `mrr` e `usuarios_erp` saem do mesmo `erp_detalhes`: são a mesma medida vezes uma
+ * constante. Medido na base real, o MRR por usuário tem mediana de R$ 477 com quartis
+ * em R$ 366 e R$ 572 — os dois modelos concordam MECANICAMENTE, sempre.
+ *
+ * Tratá-los como evidências independentes tinha duas consequências, as duas ruins:
+ * a confiança saía 'alta' apoiada numa medição só (e 'alta' é o rótulo que faz
+ * ninguém questionar o número), e a família de ERP levava peso dobrado na combinação
+ * só por ter dois modelos.
+ */
+export const FAMILIA_DO_MODELO: Record<ModeloId, FamiliaSinal> = {
+  funcionarios: 'headcount',
+  mrr: 'erp',
+  usuarios_erp: 'erp',
+}
+
+export const FAMILIA_LABELS: Record<FamiliaSinal, string> = {
+  erp: 'ERP',
+  headcount: 'Equipe',
+}
+
 export interface CoeficientesTipo {
   /** Mediana de faturamento_declarado / funcionarios. */
   ratio_fat_por_funcionario: number | null
@@ -129,12 +155,51 @@ export interface Estimativa {
   origem: 'modelo' | 'bracket_simples' | null
   confianca: ConfiancaMetrica | null
   modelos: ModeloAplicado[]
+  /** Famílias de sinal INDEPENDENTES que entraram. É isto que sustenta a confiança. */
+  familias: FamiliaSinal[]
   /** O que foi aplicado depois da combinação, na ordem. Alimenta a explicação na tela. */
   restricoes: string[]
 }
 
 /** Fator máximo entre o maior e o menor modelo para dizer que "concordam" (§6.2.4). */
 const FATOR_CONCORDANCIA = 2
+
+interface FamiliaAplicada {
+  familia: FamiliaSinal
+  valor: number
+  peso: number
+}
+
+/**
+ * Colapsa cada família num valor só, antes de combinar.
+ *
+ * O peso da família é a MÉDIA dos pesos dos seus modelos, não a soma. Somar faria a
+ * família com mais modelos redundantes dominar a combinação por contagem, e não por
+ * qualidade — hoje isso daria à família de ERP o dobro do peso do headcount só
+ * porque `erp_detalhes` rende dois modelos e o Apollo rende um.
+ *
+ * Com uma família só (a situação de hoje, sem headcount na base) o resultado é
+ * idêntico ao de antes: a média geométrica ponderada dos modelos da família É o
+ * representante dela.
+ */
+function colapsarFamilias(modelos: ModeloAplicado[]): FamiliaAplicada[] {
+  const grupos = new Map<FamiliaSinal, ModeloAplicado[]>()
+  for (const m of modelos) {
+    const f = FAMILIA_DO_MODELO[m.id]
+    const lista = grupos.get(f)
+    if (lista) lista.push(m)
+    else grupos.set(f, [m])
+  }
+
+  const saida: FamiliaAplicada[] = []
+  for (const [familia, lista] of grupos) {
+    const valor = mediaGeometricaPonderada(lista)
+    if (valor === null) continue
+    const peso = lista.reduce((s, m) => s + m.peso, 0) / lista.length
+    saida.push({ familia, valor, peso })
+  }
+  return saida
+}
 
 function coeficientesDe(coef: Coeficientes, tipo: string | null | undefined): CoeficientesTipo {
   const t = tipo ? coef.porTipo[tipo] : undefined
@@ -181,10 +246,18 @@ export function aplicarModelos(sinais: SinaisEmpresa, coef: Coeficientes): Model
   return saida.filter((m) => Number.isFinite(m.valor) && m.valor > 0)
 }
 
-function confiancaDe(modelos: ModeloAplicado[]): ConfiancaMetrica {
-  if (modelos.length === 0) return 'baixa'
-  if (modelos.length === 1) return 'media'
-  const valores = modelos.map((m) => m.valor)
+/**
+ * Confiança pela concordância entre FAMÍLIAS, não entre modelos.
+ *
+ * Dois modelos da mesma família concordando não é evidência — é a mesma medida dita
+ * duas vezes. Só a concordância entre medições independentes (ERP × equipe) promove
+ * para 'alta'. Sem isso, as ~5.000 empresas que têm MRR e usuários de ERP receberiam
+ * selo de confiança alta apoiadas num único dado.
+ */
+function confiancaDe(familias: FamiliaAplicada[]): ConfiancaMetrica {
+  if (familias.length === 0) return 'baixa'
+  if (familias.length === 1) return 'media'
+  const valores = familias.map((f) => f.valor)
   const razao = Math.max(...valores) / Math.min(...valores)
   return razao <= FATOR_CONCORDANCIA ? 'alta' : 'media'
 }
@@ -203,9 +276,11 @@ export function estimarFaturamento(
   params: ParametrosFaturamento = PARAMETROS_FATURAMENTO_PADRAO,
 ): Estimativa {
   const modelos = aplicarModelos(sinais, coef)
+  const familias = colapsarFamilias(modelos)
   const restricoes: string[] = []
-  let valor = mediaGeometricaPonderada(modelos)
-  const confianca = confiancaDe(modelos)
+  // Combina FAMÍLIAS, não modelos: cada medição independente entra uma vez só.
+  let valor = mediaGeometricaPonderada(familias)
+  const confianca = confiancaDe(familias)
 
   const optante = sinais.opcao_simples === true
 
@@ -219,6 +294,7 @@ export function estimarFaturamento(
         origem: 'bracket_simples',
         confianca: 'baixa',
         modelos: [],
+        familias: [],
         restricoes: ['bracket_simples'],
       }
     }
@@ -235,6 +311,7 @@ export function estimarFaturamento(
         origem: 'bracket_simples',
         confianca: 'baixa',
         modelos: [],
+        familias: [],
         restricoes: ['piso_saiu_simples'],
       }
     }
@@ -252,7 +329,7 @@ export function estimarFaturamento(
   }
 
   if (valor === null) {
-    return { valor: null, origem: null, confianca: null, modelos: [], restricoes: [] }
+    return { valor: null, origem: null, confianca: null, modelos: [], familias: [], restricoes: [] }
   }
 
   return {
@@ -260,6 +337,7 @@ export function estimarFaturamento(
     origem: 'modelo',
     confianca,
     modelos,
+    familias: familias.map((f) => f.familia),
     restricoes,
   }
 }

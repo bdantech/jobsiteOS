@@ -264,6 +264,10 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
       detalhes: {
         versao_estimador: versaoAtiva.versao,
         modelos: r.modelos.map((m) => ({ id: m.id, valor: Math.round(m.valor), peso: Number(m.peso.toFixed(3)) })),
+        // As famílias INDEPENDENTES que sustentaram a confiança. Sem isto, uma
+        // estimativa 'media' de dois modelos e uma de um modelo ficam
+        // indistinguíveis na explicação — e elas não são a mesma coisa.
+        familias: r.familias,
         restricoes: r.restricoes,
       },
     })
