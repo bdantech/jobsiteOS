@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ShieldCheck } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { sincronizarOnepayAction } from '@/actions/radar'
 import { Button } from '@/components/ui/button'
@@ -64,9 +65,18 @@ export function ClientesOnepay() {
           <h1 className="text-2xl font-semibold">Clientes Onepay</h1>
           <p className="text-muted-foreground">Sync diário: limites, dias sem antecipar e sinais.</p>
         </div>
-        <Button onClick={sincronizar} disabled={sincronizando}>
-          {sincronizando ? 'Sincronizando…' : 'Sincronizar agora'}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Rota própria (04b §4): o grid matriz × SPEs não cabe dentro de uma aba. */}
+          <Button variant="outline" asChild>
+            <Link href="/empresas/certificados">
+              <ShieldCheck className="mr-1 h-4 w-4" aria-hidden />
+              Gestão de certificados
+            </Link>
+          </Button>
+          <Button onClick={sincronizar} disabled={sincronizando}>
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar agora'}
+          </Button>
+        </div>
       </div>
 
       {clientes.isPending ? (

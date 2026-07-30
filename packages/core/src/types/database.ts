@@ -143,6 +143,54 @@ export type Database = {
           },
         ]
       }
+      certificados: {
+        Row: {
+          cnpj: string
+          company_name: string | null
+          expires_at: string | null
+          status: string | null
+          expires_at_anterior: string | null
+          ultimo_alerta: string | null
+          sincronizado_em: string
+        }
+        Insert: {
+          cnpj: string
+          company_name?: string | null
+          expires_at?: string | null
+          status?: string | null
+          expires_at_anterior?: string | null
+          ultimo_alerta?: string | null
+          sincronizado_em?: string
+        }
+        Update: {
+          cnpj?: string
+          company_name?: string | null
+          expires_at?: string | null
+          status?: string | null
+          expires_at_anterior?: string | null
+          ultimo_alerta?: string | null
+          sincronizado_em?: string
+        }
+        Relationships: []
+      }
+      certificados_spe_ocultas: {
+        Row: {
+          cnpj: string
+          oculto_por: string | null
+          oculto_em: string
+        }
+        Insert: {
+          cnpj: string
+          oculto_por?: string | null
+          oculto_em?: string
+        }
+        Update: {
+          cnpj?: string
+          oculto_por?: string | null
+          oculto_em?: string
+        }
+        Relationships: []
+      }
       clientes_onepay: {
         Row: {
           anticipations_last_2m: number | null

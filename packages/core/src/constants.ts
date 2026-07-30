@@ -61,6 +61,11 @@ export const EVENTO_TIPOS = {
   TOQUE_MANUAL: 'toque.manual',
   CONTATO_PONTO_FOCAL_DEFINIDO: 'contato.ponto_focal_definido',
   CNPJ_LOOKUP_NAO_ENCONTRADO: 'cnpj.lookup_nao_encontrado',
+
+  // Certificados digitais (04b)
+  CERTIFICADO_VENCENDO: 'certificado.vencendo',
+  CERTIFICADO_VENCIDO: 'certificado.vencido',
+  CERTIFICADO_RENOVADO: 'certificado.renovado',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -110,6 +115,9 @@ export const EVENTO_LABELS: Record<string, string> = {
   'toque.manual': 'Toque manual',
   'contato.ponto_focal_definido': 'Ponto focal definido',
   'cnpj.lookup_nao_encontrado': 'CNPJ não encontrado no lookup cadastral',
+  'certificado.vencendo': 'Certificado digital vencendo',
+  'certificado.vencido': 'Certificado digital vencido',
+  'certificado.renovado': 'Certificado digital renovado',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

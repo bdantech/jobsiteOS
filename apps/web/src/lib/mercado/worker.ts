@@ -227,6 +227,11 @@ export async function dispararProtestosEmpresa(input: {
  * contato revelado. O TTL de contatos vale, então clicar de novo dentro da janela
  * não cobra outra vez (o item volta `pulado`).
  */
+/** Radar (04b §3): sync diário dos certificados digitais. Enqueue-only. */
+export async function dispararSincronizarCertificados(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/certificados', {}, 'radar-certificados')
+}
+
 export async function dispararContatosEmpresa(input: {
   empresaId: string
   revelarTelefone?: boolean

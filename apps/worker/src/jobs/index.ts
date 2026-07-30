@@ -18,6 +18,7 @@ import { promoverElegiveis } from '../derivadas/promover.js'
 import { ingerirReceita, type OpcoesReceita } from './receita.js'
 import { ingerirCno, type OpcoesCno } from './cno.js'
 import { sincronizarOnepay } from './radar/onepay.js'
+import { sincronizarCertificados } from './radar/certificados.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
@@ -47,6 +48,7 @@ export type TipoJob =
   | 'protestos-mensal'
   | 'protestos-empresa'
   | 'contatos-empresa'
+  | 'certificados'
   | 'antecipacao-sync-nfs'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
@@ -303,6 +305,38 @@ export function dispararSincronizarOnepay(): string {
     logger.info('Sync de clientes Onepay.')
     return sincronizarOnepay()
   })
+}
+
+/**
+ * Sync diário dos certificados digitais (04b §3).
+ *
+ * Registra em `mercado_ingestoes` (fonte `onepay_certificados`) — e não só no log de
+ * jobs avulsos — porque a página de Ingestões é onde alguém vai perguntar "por que o
+ * grid está com data de ontem?". Falha aqui é a mesma política das outras fontes: a
+ * ingestão fica `falhou` e os admins são notificados.
+ */
+export async function dispararSincronizarCertificados(): Promise<string> {
+  const id = await abrirIngestao('onepay_certificados')
+  reservar('certificados', id)
+
+  void (async () => {
+    try {
+      const r = await sincronizarCertificados()
+      await concluirIngestao(
+        id,
+        'onepay_certificados',
+        { linhas_processadas: r.itens, linhas_novas: r.novos, linhas_atualizadas: r.atualizados },
+        { certificados: r },
+      )
+    } catch (erro) {
+      logger.error({ id, erro: String(erro) }, 'Sync de certificados falhou.')
+      await falharIngestao(id, 'onepay_certificados', erro)
+    } finally {
+      emExecucao.delete('certificados')
+    }
+  })()
+
+  return id
 }
 
 /** O processador de item por tipo de lote. Domínio implementado; contatos/protestos vêm nas 3c/3d. */

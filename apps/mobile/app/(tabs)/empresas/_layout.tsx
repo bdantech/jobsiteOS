@@ -9,6 +9,7 @@ export default function EmpresasLayout() {
     <ModuleStack>
       <Stack.Screen name="index" options={{ title: 'Empresas' }} />
       <Stack.Screen name="[id]" options={{ title: 'Empresa' }} />
+      <Stack.Screen name="certificados" options={{ title: 'Certificados' }} />
     </ModuleStack>
   )
 }

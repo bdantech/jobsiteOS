@@ -15,6 +15,7 @@ import {
   dispararReceita,
   dispararReclassificacao,
   dispararSincronizarOnepay,
+  dispararSincronizarCertificados,
   dispararLoteRadar,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
@@ -184,6 +185,19 @@ app.post('/jobs/radar/protestos-empresa', (req: Request, res: Response, next: Ne
     const { empresa_id, incluir_spes, ano_min } = protestosEmpresaSchema.parse(req.body ?? {})
     const id = dispararProtestosEmpresa({ empresaId: empresa_id, incluirSpes: incluir_spes, anoMin: ano_min })
     res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Sync de certificados digitais (04b §3). 202 e segue: o caller acompanha por
+ * `mercado_ingestoes` (fonte `onepay_certificados`), como as demais ingestões.
+ */
+app.post('/jobs/radar/certificados', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = await dispararSincronizarCertificados()
+    res.status(202).json({ ingestao_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -1,11 +1,12 @@
 import type { Estagio } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { Search } from 'lucide-react-native'
+import { Search, ShieldCheck } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Input } from '@/components/ui/input'
+import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import {
   EmpresaCard,
@@ -74,6 +75,17 @@ export default function EmpresasScreen() {
       </View>
 
       <EstagioFiltro value={estagio} onChange={setEstagio} />
+
+      {/* Certificados (04b §5): consulta do mesmo módulo, empilha sobre a lista. */}
+      <Pressable
+        onPress={() => router.push('/empresas/certificados')}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir certificados digitais"
+        className="mx-4 flex-row items-center gap-2 rounded-md border border-border px-3 py-2 active:opacity-70"
+      >
+        <ShieldCheck size={16} color={colors.mutedForeground} />
+        <Text className="text-sm">Certificados digitais</Text>
+      </Pressable>
     </View>
   )
 
