@@ -46,6 +46,12 @@ export const EVENTO_TIPOS = {
   CLIENTE_STATUS_OPERACIONAL_ALTERADO: 'cliente.status_operacional_alterado',
   CLIENTE_REATIVADO: 'cliente.reativado',
 
+  // Faturamento & funcionários (04c)
+  METRICA_DECLARADA: 'metrica.declarada',
+  FUNCIONARIOS_ATUALIZADO: 'funcionarios.atualizado',
+  FATURAMENTO_REESTIMADO: 'faturamento.reestimado',
+  ESTIMADOR_RECALIBRADO: 'estimador.recalibrado',
+
   // Antecipação (funil de NFs)
   NF_SINCRONIZADA: 'nf.sincronizada',
   NF_FAIXA_ALTERADA: 'nf.faixa_alterada',
@@ -101,6 +107,10 @@ export const EVENTO_LABELS: Record<string, string> = {
   'cliente.limite_quase_esgotado': 'Limite quase esgotado',
   'cliente.status_operacional_alterado': 'Status operacional alterado',
   'cliente.reativado': 'Cliente reativado',
+  'metrica.declarada': 'Métrica declarada pelo cliente',
+  'funcionarios.atualizado': 'Funcionários atualizados',
+  'faturamento.reestimado': 'Faturamento reestimado',
+  'estimador.recalibrado': 'Estimador recalibrado',
   'nf.sincronizada': 'Nota fiscal sincronizada',
   'nf.faixa_alterada': 'Faixa da nota alterada',
   'nf.expirada': 'Nota expirada',

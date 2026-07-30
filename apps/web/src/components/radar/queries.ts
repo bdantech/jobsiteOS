@@ -52,6 +52,9 @@ export interface CoberturaCamada {
   com_dominio: number
   com_contato: number
   com_protesto: number
+  /** 04c: cobertura do cache em `empresas` — é ele que o filtro do Explorador lê. */
+  com_funcionarios: number
+  com_faturamento: number
 }
 
 export async function buscarCobertura(): Promise<CoberturaCamada[]> {

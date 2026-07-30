@@ -1,12 +1,22 @@
 import { formatCnpj, normalizeCnpj } from '../../schemas/cnpj.js'
 import { criarLote, suprimir } from '../../radar/mutations.js'
 import {
+  ORIGEM_METRICA_LABELS,
+  MODELO_LABELS,
+  type ModeloId,
+  type OrigemMetrica,
+} from '../../radar/faturamento.js'
+import {
+  atualizarFuncionariosSchema,
   buscarContatosEmpresaSchema,
   criarLoteSchema,
+  faturamentoEmpresaSchema,
   protestosEmpresaSchema,
   statusEnriquecimentoSchema,
   suprimirSchema,
+  type AtualizarFuncionariosInput,
   type BuscarContatosEmpresaInput,
+  type FaturamentoEmpresaInput,
   type CriarLoteInput,
   type ProtestosEmpresaInput,
   type StatusEnriquecimentoInput,
@@ -102,6 +112,130 @@ async function protestosEmpresa(input: ProtestosEmpresaInput, ctx: ToolContext) 
 
 // ─── Módulo ─────────────────────────────────────────────────────────────────
 
+
+// ─── radar.faturamento_empresa (04c §9) ─────────────────────────────────────
+
+/**
+ * O valor vigente E como se chegou nele.
+ *
+ * A explicação não é enfeite: uma estimativa sem procedência não sobrevive à
+ * primeira pergunta numa reunião. Por isso a resposta carrega os modelos usados, os
+ * pesos, as restrições aplicadas e a versão dos coeficientes — e diz explicitamente
+ * quando o número é declarado, que é o único caso em que não é estimativa.
+ */
+async function faturamentoEmpresa(input: FaturamentoEmpresaInput, ctx: ToolContext) {
+  const cnpj = normalizeCnpj(input.cnpj)
+
+  const { data: empresa } = await ctx.supabase
+    .from('empresas')
+    // Literal numa linha só, e não concatenação: o supabase-js infere o tipo do
+    // retorno a partir do texto do select, e `'a' + 'b'` não é um literal para o
+    // compilador — o resultado vira GenericStringError e o tipo se perde inteiro.
+    .select('id, razao_social, tipo, faturamento_anual, faturamento_origem, faturamento_confianca, faturamento_atualizado_em, funcionarios, funcionarios_origem, funcionarios_atualizado_em, funcionarios_crescimento_12m, regime_tributario')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  if (!empresa) {
+    return {
+      encontrada: false,
+      cnpj: formatCnpj(cnpj),
+      resumo: 'Esta empresa não está na base — só CNPJs promovidos têm faturamento estimado.',
+    }
+  }
+
+  const { data: serie } = await ctx.supabase
+    .from('empresa_metricas')
+    .select('metrica, valor, origem, confianca, detalhes, capturado_em')
+    .eq('cnpj', cnpj)
+    .order('capturado_em', { ascending: false })
+    .limit(20)
+
+  const ultimoModelo = (serie ?? []).find(
+    (m) => m.metrica === 'faturamento_anual' && (m.origem === 'modelo' || m.origem === 'bracket_simples'),
+  )
+  const detalhes = (ultimoModelo?.detalhes ?? {}) as {
+    versao_estimador?: number
+    modelos?: Array<{ id: ModeloId; valor: number; peso: number }>
+    restricoes?: string[]
+  }
+
+  const declarado = empresa.faturamento_origem === 'declarado_cliente'
+
+  return {
+    encontrada: true,
+    cnpj: formatCnpj(cnpj),
+    razao_social: empresa.razao_social,
+    tipo: empresa.tipo,
+    faturamento: {
+      valor: empresa.faturamento_anual,
+      origem: empresa.faturamento_origem,
+      origem_label: empresa.faturamento_origem
+        ? (ORIGEM_METRICA_LABELS[empresa.faturamento_origem as OrigemMetrica] ?? empresa.faturamento_origem)
+        : null,
+      confianca: empresa.faturamento_confianca,
+      atualizado_em: empresa.faturamento_atualizado_em,
+      declarado_pelo_cliente: declarado,
+    },
+    funcionarios: {
+      valor: empresa.funcionarios,
+      origem: empresa.funcionarios_origem,
+      crescimento_12m: empresa.funcionarios_crescimento_12m,
+      atualizado_em: empresa.funcionarios_atualizado_em,
+    },
+    regime_tributario: empresa.regime_tributario,
+    como_foi_estimado: declarado
+      ? 'Não foi estimado: este valor foi DECLARADO pelo cliente e nenhuma estimativa o sobrescreve.'
+      : {
+          versao_estimador: detalhes.versao_estimador ?? null,
+          modelos: (detalhes.modelos ?? []).map((m) => ({
+            modelo: MODELO_LABELS[m.id] ?? m.id,
+            valor: m.valor,
+            peso: m.peso,
+          })),
+          restricoes: detalhes.restricoes ?? [],
+        },
+    historico: (serie ?? []).map((m) => ({
+      metrica: m.metrica,
+      valor: m.valor,
+      origem: m.origem,
+      em: m.capturado_em,
+    })),
+    aviso:
+      'Headcount de fontes como o Apollo SUBCONTA mão de obra de canteiro. Serve para comparar ' +
+      'empresas sob a mesma régua, não como quadro real.',
+    route: `/empresas/${empresa.id}`,
+  }
+}
+
+// ─── radar.atualizar_funcionarios ───────────────────────────────────────────
+
+async function atualizarFuncionarios(input: AtualizarFuncionariosInput, ctx: ToolContext) {
+  const cnpj = normalizeCnpj(input.cnpj)
+  const { data: empresa } = await ctx.supabase
+    .from('empresas')
+    .select('id, razao_social, dominio')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  if (!empresa) throw new Error('Empresa não encontrada na base.')
+  // Sem domínio a consulta não tem como acontecer. Dizer isso agora é melhor que
+  // enfileirar um job que vai falhar com `sem_dominio` daqui a um minuto.
+  if (!empresa.dominio) {
+    throw new Error('Esta empresa ainda não tem domínio resolvido — rode a cascata de domínio antes.')
+  }
+
+  return {
+    empresa_id: empresa.id,
+    razao_social: empresa.razao_social,
+    dominio: empresa.dominio,
+    enfileirado: true,
+    aviso:
+      'A consulta é assíncrona e não consome crédito de revelação. O resultado aparece na ' +
+      'Company 360 em alguns instantes.',
+    route: `/empresas/${empresa.id}`,
+  }
+}
+
 export const radarModule: AppModule = {
   id: 'radar',
   name: 'Radar',
@@ -160,6 +294,30 @@ export const radarModule: AppModule = {
           route: `/radar/lotes/${lote.id}`,
         }
       },
+    },
+    {
+      id: 'radar.faturamento_empresa',
+      name: 'Faturamento da empresa',
+      description:
+        'Faturamento anual e headcount vigentes de um CNPJ, com a ORIGEM de cada um (declarado ' +
+        'pelo cliente vs. estimado), a confiança, e como a estimativa foi feita: quais modelos ' +
+        'entraram, com que peso, que restrições foram aplicadas e qual versão dos coeficientes. ' +
+        'Inclui o histórico resumido. Use para responder "quanto essa empresa fatura?" sem ' +
+        'apresentar estimativa como fato.',
+      inputSchema: faturamentoEmpresaSchema,
+      mutates: false,
+      execute: (input, ctx) => faturamentoEmpresa(input as FaturamentoEmpresaInput, ctx),
+    },
+    {
+      id: 'radar.atualizar_funcionarios',
+      name: 'Atualizar funcionários',
+      description:
+        'Dispara a consulta de headcount no Apollo para uma empresa (por CNPJ). Exige domínio ' +
+        'resolvido. Não consome crédito de revelação, mas grava um snapshot novo na série — ' +
+        'como altera dados, exige confirmação explícita.',
+      inputSchema: atualizarFuncionariosSchema,
+      mutates: true,
+      execute: (input, ctx) => atualizarFuncionarios(input as AtualizarFuncionariosInput, ctx),
     },
     {
       id: 'radar.suprimir',

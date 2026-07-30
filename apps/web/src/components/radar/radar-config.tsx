@@ -17,6 +17,10 @@ const TITULOS: Record<string, string> = {
   apollo: 'Parâmetros Apollo',
   protestos: 'Parâmetros de protestos',
   onepay: 'Onepay (limiar de dormência)',
+  // Os tetos do Simples e do presumido mudam por LEI. Estão em config exatamente
+  // porque vão mudar, e no dia em que mudarem ninguém vai procurá-los no código.
+  faturamento: 'Faturamento (tetos legais e limiares do estimador)',
+  funcionarios: 'Funcionários (TTL e custo unitário)',
 }
 
 function ConfigItem({ chave, valorInicial }: { chave: string; valorInicial: unknown }) {

@@ -7,6 +7,7 @@ import {
   canAccessRoute,
   criarEmpresa,
   criarContatoSchema,
+  declararMetrica,
   criarNota,
   excluirContatoSchema,
   type FieldErrors,
@@ -150,6 +151,28 @@ export async function criarContatoAction(input: unknown): Promise<ActionResult<T
     if (error) throw new MutationError(error.message, 'unknown')
     revalidatePath(`/empresas/${dados.empresa_id}`)
     return { ok: true, data: data as Tables<'contatos'> }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Declara faturamento ou headcount informado pelo cliente (04c §5).
+ *
+ * Topo da hierarquia de origens: o que entra aqui não é sobrescrito por estimativa
+ * nenhuma, e é o que calibra o modelo para o resto da base. Por isso passa por RPC
+ * (snapshot + cache + evento + audit numa transação) e não por insert direto.
+ */
+export async function declararMetricaAction(
+  input: unknown,
+): Promise<ActionResult<Tables<'empresa_metricas'>>> {
+  const auth = await autorizar()
+  if (auth.erro) return auth.erro
+
+  try {
+    const linha = await declararMetrica(auth.supabase, input)
+    revalidatePath(`/empresas/${linha.empresa_id}`)
+    return { ok: true, data: linha }
   } catch (error) {
     return falha(error)
   }

@@ -37,6 +37,10 @@ export type ProcessarItem = (item: Tables<'lote_itens'>) => Promise<ResultadoIte
 function janelaTtl(tipo: string, ttl: TtlDias): { sucesso: number; semDados: number } {
   if (tipo === 'dominio') return { sucesso: ttl.dominio, semDados: ttl.dominio_sem_dados }
   if (tipo === 'contatos') return { sucesso: ttl.contatos, semDados: ttl.contatos_sem_dados }
+  // Headcount não custa crédito de revelação, mas custa rate limit e ruído na série:
+  // reconsultar toda semana encheria `empresa_metricas` de pontos idênticos e
+  // arruinaria a leitura de crescimento, que é o que a série existe para dar.
+  if (tipo === 'funcionarios') return { sucesso: ttl.funcionarios, semDados: ttl.funcionarios }
   // protestos de prospecção (o mensal de clientes tem sua própria rotina, §5)
   return { sucesso: ttl.protestos_prospeccao, semDados: ttl.protestos_prospeccao }
 }

@@ -432,6 +432,80 @@ export type Database = {
         }
         Relationships: []
       }
+      empresa_metricas: {
+        Row: {
+          capturado_em: string
+          cnpj: string
+          confianca: string | null
+          detalhes: Json
+          empresa_id: string | null
+          id: string
+          metrica: string
+          origem: string
+          valor: number
+        }
+        Insert: {
+          capturado_em?: string
+          cnpj: string
+          confianca?: string | null
+          detalhes?: Json
+          empresa_id?: string | null
+          id?: string
+          metrica: string
+          origem: string
+          valor: number
+        }
+        Update: {
+          capturado_em?: string
+          cnpj?: string
+          confianca?: string | null
+          detalhes?: Json
+          empresa_id?: string | null
+          id?: string
+          metrica?: string
+          origem?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_metricas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimador_versoes: {
+        Row: {
+          ativa: boolean
+          calibrado_em: string
+          coeficientes: Json
+          erro_mediano_por_modelo: Json
+          id: string
+          n_amostras_por_tipo: Json
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes: Json
+          erro_mediano_por_modelo?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes?: Json
+          erro_mediano_por_modelo?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao?: number
+        }
+        Relationships: []
+      }
       empresa_eventos: {
         Row: {
           ator_usuario_id: string | null
@@ -518,6 +592,14 @@ export type Database = {
           erp_detalhes: Json
           erp_mrr: number | null
           estagio: string
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
           grafo_sefaz: boolean
           grupo_id: string | null
           id: string
@@ -527,6 +609,7 @@ export type Database = {
           origem: string | null
           porte: string | null
           razao_social: string | null
+          regime_tributario: string | null
           tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
@@ -550,6 +633,14 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
+          faturamento_anual?: number | null
+          faturamento_atualizado_em?: string | null
+          faturamento_confianca?: string | null
+          faturamento_origem?: string | null
+          funcionarios?: number | null
+          funcionarios_atualizado_em?: string | null
+          funcionarios_crescimento_12m?: number | null
+          funcionarios_origem?: string | null
           grafo_sefaz?: boolean
           grupo_id?: string | null
           id?: string
@@ -559,6 +650,7 @@ export type Database = {
           origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          regime_tributario?: string | null
           tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
@@ -582,6 +674,14 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
+          faturamento_anual?: number | null
+          faturamento_atualizado_em?: string | null
+          faturamento_confianca?: string | null
+          faturamento_origem?: string | null
+          funcionarios?: number | null
+          funcionarios_atualizado_em?: string | null
+          funcionarios_crescimento_12m?: number | null
+          funcionarios_origem?: string | null
           grafo_sefaz?: boolean
           grupo_id?: string | null
           id?: string
@@ -591,6 +691,7 @@ export type Database = {
           origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          regime_tributario?: string | null
           tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
@@ -2128,7 +2229,13 @@ export type Database = {
           erp_detalhes: Json | null
           erp_mrr: number | null
           estagio: string | null
+          faturamento_confianca: string | null
+          faturamento_estimado: number | null
+          faturamento_origem: string | null
           fora_recorte_cnae: boolean | null
+          funcionarios: number | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
           grafo_sefaz: boolean | null
           grupo_id: string | null
           grupo_spes_24m: number | null
@@ -2149,6 +2256,7 @@ export type Database = {
           qtd_filiais: number | null
           qtd_usuarios_erp: number | null
           ratio_usuarios_ativos: number | null
+          regime_tributario: string | null
           razao_social: string | null
           situacao_cadastral: string | null
           tem_contato: boolean | null
@@ -2346,38 +2454,7 @@ export type Database = {
       }
       app_atualizar_empresa: {
         Args: { p: Json }
-        Returns: {
-          atualizado_em: string
-          camada: string | null
-          churn_erp_concorrente: boolean
-          cnae_principal: string | null
-          cnpj: string
-          criado_em: string
-          dados_apollo: Json | null
-          dominio: string | null
-          dominio_confianca: string | null
-          dominio_evidencia: string | null
-          dominio_origem: string | null
-          dominio_validado_em: string | null
-          erp_atual: string | null
-          erp_canal_venda: string | null
-          erp_detalhes: Json
-          erp_mrr: number | null
-          estagio: string
-          grafo_sefaz: boolean
-          grupo_id: string | null
-          id: string
-          is_spe: boolean
-          municipio: string | null
-          nome_fantasia: string | null
-          origem: string | null
-          porte: string | null
-          razao_social: string | null
-          tipagem_antecipacao: string | null
-          tipo: string
-          uf: string | null
-          ultima_antecipacao: string | null
-        }
+        Returns: Database["public"]["Tables"]["empresas"]["Row"]
         SetofOptions: {
           from: "*"
           to: "empresas"
@@ -2414,38 +2491,7 @@ export type Database = {
       }
       app_criar_empresa: {
         Args: { p: Json }
-        Returns: {
-          atualizado_em: string
-          camada: string | null
-          churn_erp_concorrente: boolean
-          cnae_principal: string | null
-          cnpj: string
-          criado_em: string
-          dados_apollo: Json | null
-          dominio: string | null
-          dominio_confianca: string | null
-          dominio_evidencia: string | null
-          dominio_origem: string | null
-          dominio_validado_em: string | null
-          erp_atual: string | null
-          erp_canal_venda: string | null
-          erp_detalhes: Json
-          erp_mrr: number | null
-          estagio: string
-          grafo_sefaz: boolean
-          grupo_id: string | null
-          id: string
-          is_spe: boolean
-          municipio: string | null
-          nome_fantasia: string | null
-          origem: string | null
-          porte: string | null
-          razao_social: string | null
-          tipagem_antecipacao: string | null
-          tipo: string
-          uf: string | null
-          ultima_antecipacao: string | null
-        }
+        Returns: Database["public"]["Tables"]["empresas"]["Row"]
         SetofOptions: {
           from: "*"
           to: "empresas"
@@ -2674,41 +2720,20 @@ export type Database = {
       }
       app_promover_empresa: {
         Args: { p: Json }
-        Returns: {
-          atualizado_em: string
-          camada: string | null
-          churn_erp_concorrente: boolean
-          cnae_principal: string | null
-          cnpj: string
-          criado_em: string
-          dados_apollo: Json | null
-          dominio: string | null
-          dominio_confianca: string | null
-          dominio_evidencia: string | null
-          dominio_origem: string | null
-          dominio_validado_em: string | null
-          erp_atual: string | null
-          erp_canal_venda: string | null
-          erp_detalhes: Json
-          erp_mrr: number | null
-          estagio: string
-          grafo_sefaz: boolean
-          grupo_id: string | null
-          id: string
-          is_spe: boolean
-          municipio: string | null
-          nome_fantasia: string | null
-          origem: string | null
-          porte: string | null
-          razao_social: string | null
-          tipagem_antecipacao: string | null
-          tipo: string
-          uf: string | null
-          ultima_antecipacao: string | null
-        }
+        Returns: Database["public"]["Tables"]["empresas"]["Row"]
         SetofOptions: {
           from: "*"
           to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_declarar_metrica: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "empresa_metricas"
           isOneToOne: true
           isSetofReturn: false
         }

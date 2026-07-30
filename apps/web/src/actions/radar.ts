@@ -16,9 +16,14 @@ import {
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
+  dispararBackfillFuncionarios,
+  dispararContatosEmpresa,
+  dispararEstimadorMensal,
+  dispararFuncionariosEmpresa,
+  dispararFuncionariosLote,
   dispararLoteRadar,
   dispararProtestosEmpresa,
-  dispararContatosEmpresa,
+  dispararReestimarFaturamento,
   dispararSincronizarOnepay,
 } from '@/lib/mercado/worker'
 
@@ -140,6 +145,61 @@ export async function rodarContatosEmpresaAction(input: {
   const { erro } = await autorizar()
   if (erro) return erro
   const r = await dispararContatosEmpresa(input)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Atualiza o headcount de UMA empresa (04c §4.3).
+ *
+ * Sem confirmação de custo, ao contrário de protestos: `organizations/enrich` não
+ * consome crédito de revelação. Se um dia o plano passar a cobrar, o valor está em
+ * `radar_config.funcionarios.custo_unitario` e este botão precisa ganhar um diálogo.
+ */
+export async function atualizarFuncionariosAction(
+  empresaId: string,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararFuncionariosEmpresa(empresaId)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+export async function rodarFuncionariosLoteAction(
+  loteId: string,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararFuncionariosLote(loteId)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/** Backfill retroativo do headcount que já foi pago e nunca lido. Custo zero. */
+export async function rodarBackfillFuncionariosAction(): Promise<
+  ActionResult<{ enfileirado: boolean; aviso?: string }>
+> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararBackfillFuncionarios()
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/** "Recalibrar agora": recalibra nos declarantes e reestima todo mundo em seguida. */
+export async function recalibrarEstimadorAction(): Promise<
+  ActionResult<{ enfileirado: boolean; aviso?: string }>
+> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararEstimadorMensal()
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/** Reaplica a versão vigente dos coeficientes, sem recalibrar. */
+export async function reestimarFaturamentoAction(): Promise<
+  ActionResult<{ enfileirado: boolean; aviso?: string }>
+> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararReestimarFaturamento()
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

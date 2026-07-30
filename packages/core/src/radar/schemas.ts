@@ -135,3 +135,15 @@ export const protestosEmpresaSchema = z.object({
   cnpj: cnpjSchema.describe('CNPJ da empresa (14 dígitos, com ou sem pontuação).'),
 })
 export type ProtestosEmpresaInput = z.infer<typeof protestosEmpresaSchema>
+
+// ─── Faturamento & funcionários (04c §9) ────────────────────────────────────
+
+export const faturamentoEmpresaSchema = z.object({
+  cnpj: z.string().describe('CNPJ da empresa (14 dígitos, com ou sem pontuação).'),
+})
+export type FaturamentoEmpresaInput = z.infer<typeof faturamentoEmpresaSchema>
+
+export const atualizarFuncionariosSchema = z.object({
+  cnpj: z.string().describe('CNPJ da empresa cujo headcount deve ser consultado no Apollo.'),
+})
+export type AtualizarFuncionariosInput = z.infer<typeof atualizarFuncionariosSchema>

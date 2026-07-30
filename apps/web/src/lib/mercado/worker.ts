@@ -243,6 +243,33 @@ export async function dispararContatosEmpresa(input: {
   )
 }
 
+/**
+ * Headcount de uma empresa (04c §4.3). NÃO tem confirmação de custo porque
+ * `organizations/enrich` não consome crédito de revelação — ao contrário de protestos.
+ */
+export async function dispararFuncionariosEmpresa(empresaId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/funcionarios-empresa', { empresa_id: empresaId }, 'funcionarios-empresa')
+}
+
+export async function dispararFuncionariosLote(loteId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/funcionarios-lote', { lote_id: loteId }, 'funcionarios-lote')
+}
+
+/** Backfill retroativo de headcount: relê o payload dos enriquecimentos já pagos. */
+export async function dispararBackfillFuncionarios(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/backfill-funcionarios', {}, 'funcionarios-backfill')
+}
+
+/** Mensal: calibra nos declarantes e reestima todo mundo, nesta ordem. */
+export async function dispararEstimadorMensal(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/estimar-faturamento', {}, 'estimador-calibrar')
+}
+
+/** Só reaplica a versão vigente dos coeficientes, sem recalibrar. */
+export async function dispararReestimarFaturamento(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/reestimar', {}, 'estimador-estimar')
+}
+
 // ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
 
 /**

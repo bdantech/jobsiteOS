@@ -14,18 +14,22 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { buscarCustos, estimarItens, radarKeys, type CustosConfig } from './queries'
 
-type Tipo = 'dominio' | 'contatos' | 'protestos'
+type Tipo = 'dominio' | 'contatos' | 'protestos' | 'funcionarios'
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 interface Params {
   incluir_claude?: boolean
   revelar_telefone?: boolean
   incluir_fora_sp?: boolean
+  forcar_ttl?: boolean
 }
 
 function custoEstimado(tipo: Tipo, total: number, params: Params, custos: CustosConfig): number {
   if (tipo === 'dominio') return total * (params.incluir_claude ? custos.dominio_claude : 0)
   if (tipo === 'contatos') return total * custos.contato_apollo * 4 // pessimista: até 4 contatos/empresa
+  // `organizations/enrich` não consome crédito de revelação. Zero é o custo REAL, e
+  // mostrar zero é o ponto: este lote não precisa da mesma cerimônia dos pagos.
+  if (tipo === 'funcionarios') return 0
   return total * (params.incluir_fora_sp ? custos.protesto_nacional : custos.protesto_sp)
 }
 
@@ -116,6 +120,7 @@ export function NovoLote() {
                   <SelectItem value="dominio">Domínio</SelectItem>
                   <SelectItem value="contatos">Contatos (Apollo)</SelectItem>
                   <SelectItem value="protestos">Protestos (DirectD)</SelectItem>
+                  <SelectItem value="funcionarios">Funcionários (Apollo)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -146,6 +151,14 @@ export function NovoLote() {
                 checked={!!params.incluir_fora_sp}
                 onChange={(v) => setParams((p) => ({ ...p, incluir_fora_sp: v }))}
               />
+            )}
+            {tipo === 'funcionarios' && (
+              <p className="text-sm text-muted-foreground">
+                Exige <strong>domínio resolvido</strong> — sem ele o item falha com{' '}
+                <code>sem_dominio</code>. Não consome crédito de revelação, mas respeita o TTL
+                de 180 dias: reconsultar cedo só enche a série de pontos iguais e estraga a
+                leitura de crescimento.
+              </p>
             )}
           </div>
         </CardContent>

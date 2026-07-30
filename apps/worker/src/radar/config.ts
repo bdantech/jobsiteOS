@@ -20,6 +20,22 @@ export interface TtlDias {
   contatos_sem_dados: number
   protestos_cliente: number
   protestos_prospeccao: number
+  /** 04c §3: headcount muda devagar, e reconsultar cedo só polui a série. */
+  funcionarios: number
+}
+
+export interface ConfigFaturamento {
+  teto_simples: number
+  teto_presumido: number
+  pct_teto_simples_default: number
+  variacao_minima_snapshot: number
+  n_minimo_calibracao_por_tipo: number
+}
+
+export interface ConfigFuncionarios {
+  ttl_dias: number
+  /** `organizations/enrich` não consome crédito de revelação. Config caso o plano mude. */
+  custo_unitario: number
 }
 
 export interface OrcamentoRadar {
@@ -41,15 +57,38 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 export const lerCustos = (): Promise<CustosRadar> =>
   ler('custos', { dominio_claude: 0.1, contato_apollo: 1.2, protesto_sp: 0.36, protesto_nacional: 3.5 })
 
-export const lerTtl = (): Promise<TtlDias> =>
-  ler('ttl_dias', {
-    dominio: 180,
-    dominio_sem_dados: 360,
-    contatos: 180,
-    contatos_sem_dados: 360,
-    protestos_cliente: 30,
-    protestos_prospeccao: 90,
+/**
+ * O TTL de funcionários mora na chave `funcionarios` (04c §3), não em `ttl_dias`, e
+ * é reconciliado aqui: a spec pediu a chave separada, mas o harness de lote lê tudo
+ * de `TtlDias`. Ler nos dois lugares faria a tela de settings editar um valor que o
+ * job ignora.
+ */
+export const lerTtl = async (): Promise<TtlDias> => {
+  const [base, func] = await Promise.all([
+    ler('ttl_dias', {
+      dominio: 180,
+      dominio_sem_dados: 360,
+      contatos: 180,
+      contatos_sem_dados: 360,
+      protestos_cliente: 30,
+      protestos_prospeccao: 90,
+    }),
+    lerConfigFuncionarios(),
+  ])
+  return { ...base, funcionarios: func.ttl_dias }
+}
+
+export const lerConfigFaturamento = (): Promise<ConfigFaturamento> =>
+  ler('faturamento', {
+    teto_simples: 4_800_000,
+    teto_presumido: 78_000_000,
+    pct_teto_simples_default: 0.5,
+    variacao_minima_snapshot: 0.1,
+    n_minimo_calibracao_por_tipo: 5,
   })
+
+export const lerConfigFuncionarios = (): Promise<ConfigFuncionarios> =>
+  ler('funcionarios', { ttl_dias: 180, custo_unitario: 0 })
 
 export const lerOrcamento = (): Promise<OrcamentoRadar> =>
   ler('orcamento', { teto_mensal_total: 5000, alerta_percentual: 0.8, max_itens_por_lote: 2000 })

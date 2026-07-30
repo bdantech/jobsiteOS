@@ -2,9 +2,11 @@ import {
   atualizarEmpresaSchema,
   criarEmpresaSchema,
   criarNotaSchema,
+  declararMetricaSchema,
   type AtualizarEmpresaInput,
   type CriarEmpresaInput,
   type CriarNotaInput,
+  type DeclararMetricaInput,
 } from '../schemas/index.js'
 import { parseOuFalhar, traduzirErro } from './shared.js'
 
@@ -59,3 +61,20 @@ export async function criarNota(
 
 // Re-exported so existing imports from '@jobsiteos/core' keep working.
 export { MutationError, type FieldErrors } from './shared.js'
+
+/**
+ * Declara faturamento ou headcount informado pelo cliente (04c §5).
+ *
+ * O RPC (0069) grava snapshot + cache + evento + audit numa transação, e `empresa_metricas`
+ * NÃO tem grant de insert para `authenticated` — este é o único caminho de escrita humana.
+ * "Gravar métrica sem passar pela hierarquia de origem" fica inexprimível.
+ */
+export async function declararMetrica(
+  supabase: Supabase,
+  input: DeclararMetricaInput | unknown,
+): Promise<Tables<'empresa_metricas'>> {
+  const dados = parseOuFalhar(declararMetricaSchema, input)
+  const { data, error } = await supabase.rpc('app_declarar_metrica', { p: dados as unknown as Json })
+  if (error) throw traduzirErro(error)
+  return data
+}

@@ -25,6 +25,11 @@ import {
   dispararReclassificacaoFunil,
   dispararOutbox,
   dispararContatosNf,
+  dispararBackfillFuncionarios,
+  dispararEstimadorMensal,
+  dispararEstimativaFaturamento,
+  dispararFuncionariosEmpresa,
+  dispararFuncionariosLote,
   dispararLookupCadastral,
   dispararProtestoFornecedor,
   statusJob,
@@ -255,6 +260,58 @@ app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next:
 app.post('/jobs/antecipacao/outbox', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararOutbox(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const funcionariosEmpresaSchema = z.object({ empresa_id: z.string().uuid() })
+const funcionariosLoteSchema = z.object({ lote_id: z.string().uuid() })
+
+/**
+ * Headcount de UMA empresa (04c §4.3). `organizations/enrich` não consome crédito de
+ * revelação, então não há confirmação de custo — ao contrário de protestos.
+ */
+app.post('/jobs/radar/funcionarios-empresa', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { empresa_id } = funcionariosEmpresaSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararFuncionariosEmpresa(empresa_id), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/radar/funcionarios-lote', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { lote_id } = funcionariosLoteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararFuncionariosLote(lote_id), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Backfill retroativo de headcount. Custo zero: relê payload já pago. */
+app.post('/jobs/radar/backfill-funcionarios', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararBackfillFuncionarios(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Mensal: calibra nos declarantes e reestima todo mundo, nesta ordem. */
+app.post('/jobs/radar/estimar-faturamento', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEstimadorMensal(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Só a estimativa, sem recalibrar — para reaplicar a versão vigente. */
+app.post('/jobs/radar/reestimar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEstimativaFaturamento(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

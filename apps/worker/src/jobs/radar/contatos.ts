@@ -7,6 +7,7 @@ import { logger } from '../../logger.js'
 import { criarPacer, requisitarJson } from '../../net/http.js'
 import { lerApolloCfg, lerCargosAlvo, lerCustos, lerTtl } from '../../radar/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
+import { gravarMetrica, type OrgApollo } from './funcionarios.js'
 import { executarLote } from './lote.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
@@ -48,12 +49,20 @@ function cabecalhos(): Record<string, string> {
   return { 'x-api-key': env.APOLLO_API_KEY ?? '', 'cache-control': 'no-cache' }
 }
 
-async function enriquecerOrg(dominio: string): Promise<string | null> {
-  const resp = await requisitarJson<{ organization?: { id?: string } }>(
+/**
+ * Devolve a organização inteira, não só o id.
+ *
+ * O `estimated_num_employees` sempre esteve nesta resposta — foi pago, guardado no
+ * payload e nunca lido. A CARONA (04c §4.2) é isto: o headcount vira snapshot sem
+ * uma chamada nem um centavo a mais. Só o id era retornado antes, e por isso o dado
+ * ficou dois Prompts invisível dentro do próprio banco.
+ */
+async function enriquecerOrg(dominio: string): Promise<OrgApollo | null> {
+  const resp = await requisitarJson<{ organization?: OrgApollo }>(
     `${APOLLO}/organizations/enrich?domain=${encodeURIComponent(dominio)}`,
     { method: 'POST', headers: cabecalhos(), tentativas: 2 },
   )
-  return resp.organization?.id ?? null
+  return resp.organization ?? null
 }
 
 const POR_PAGINA = 100 // teto da API
@@ -234,15 +243,32 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
     }
     const revelarTelefone = querTelefone && !!webhookUrl
 
-    let orgId: string | null
+    let org: OrgApollo | null
     try {
-      orgId = await enriquecerOrg(dominio)
+      org = await enriquecerOrg(dominio)
     } catch (e) {
       return { status: 'erro', fonte: 'apollo', erro: `enrich: ${String(e)}` }
     }
-    if (!orgId) {
+    if (!org?.id) {
       dominiosFeitos.add(dominio)
       return { status: 'sem_dados', fonte: 'apollo', resultado: { motivo: 'organização não encontrada no Apollo' } }
+    }
+    const orgId = org.id
+
+    // A carona (04c §4.2): o headcount veio junto, de graça. Gravado ANTES da
+    // revelação de propósito — se o bulk_match falhar no meio, o snapshot que já
+    // custou zero não é perdido junto.
+    const headcount = Number(org.estimated_num_employees ?? 0)
+    if (item.cnpj && Number.isFinite(headcount) && headcount > 0) {
+      await gravarMetrica({
+        cnpj: item.cnpj,
+        empresaId,
+        metrica: 'funcionarios',
+        valor: headcount,
+        origem: 'apollo',
+        confianca: 'media',
+        detalhes: { dominio, carona: 'enriquecimento_contatos' },
+      })
     }
 
     // Busca todo mundo (grátis) → seleciona pelos cargos-alvo (local) → corta no
@@ -301,7 +327,9 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       fonte: 'apollo',
       custo: revelados * contato_apollo,
       unidades: revelados,
-      resultado: { creditos, revelados },
+      // `organizacao` no payload é o que o backfill de headcount lê depois. Guardar a
+      // resposta inteira custa bytes; não guardar custou dois Prompts de dado invisível.
+      resultado: { creditos, revelados, organizacao: org },
     }
   }
 }

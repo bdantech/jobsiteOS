@@ -29,6 +29,7 @@ import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
 import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
+import { FaturamentoEquipe } from './faturamento-equipe'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
@@ -218,6 +219,23 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                */}
               <TabsContent value="dados" className="mt-0 space-y-4">
                 <CadastroRfb cnpj={data.cnpj} />
+                {/*
+                 * Faturamento & Equipe entre o cadastro da Receita e o formulário: é a
+                 * ordem da leitura comercial. "Quem é essa empresa" → "de que tamanho
+                 * ela é" → "o que a gente sabe/decide sobre ela".
+                 */}
+                <FaturamentoEquipe
+                  empresaId={data.id}
+                  cnpj={data.cnpj}
+                  faturamento={data.faturamento_anual}
+                  faturamentoOrigem={data.faturamento_origem}
+                  faturamentoConfianca={data.faturamento_confianca}
+                  faturamentoEm={data.faturamento_atualizado_em}
+                  funcionarios={data.funcionarios}
+                  funcionariosOrigem={data.funcionarios_origem}
+                  funcionariosEm={data.funcionarios_atualizado_em}
+                  eCliente={data.estagio === 'cliente'}
+                />
                 <EmpresaForm empresa={data} />
               </TabsContent>
 

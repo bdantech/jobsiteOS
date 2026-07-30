@@ -28,6 +28,12 @@ import {
   protestosClientesMensal,
   protestosEmpresa,
 } from './radar/protestos.js'
+import {
+  backfillFuncionarios,
+  criarProcessadorFuncionarios,
+  funcionariosEmpresa,
+} from './radar/funcionarios.js'
+import { calibrarEstimadorJob, estimarFaturamentoJob } from './radar/estimador.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
@@ -61,6 +67,11 @@ export type TipoJob =
   | 'antecipacao-contatos'
   | 'antecipacao-protesto-fornecedor'
   | 'antecipacao-diario'
+  | 'funcionarios-backfill'
+  | 'funcionarios-empresa'
+  | 'funcionarios-lote'
+  | 'estimador-calibrar'
+  | 'estimador-estimar'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -350,6 +361,7 @@ function escolherProcessador(lote: Tables<'lotes_enriquecimento'>) {
   if (lote.tipo === 'dominio') return criarProcessadorDominio(lote)
   if (lote.tipo === 'contatos') return criarProcessadorContatos(lote)
   if (lote.tipo === 'protestos') return criarProcessadorProtestos(lote)
+  if (lote.tipo === 'funcionarios') return criarProcessadorFuncionarios(lote)
   throw new Error(`Execução de lote do tipo "${lote.tipo}" ainda não implementada.`)
 }
 
@@ -502,6 +514,50 @@ export function dispararProtestoFornecedor(opts: { cnpj: string }): string {
     const reclassificacao = await reclassificarFunil(client)
     return { protesto, reclassificacao }
   })
+}
+
+/**
+ * Backfill de headcount (04c §4.1). Roda UMA vez e custa zero: só relê o payload dos
+ * enriquecimentos de contatos que já foram pagos.
+ */
+export function dispararBackfillFuncionarios(): string {
+  return dispararAvulso('funcionarios-backfill', async () => backfillFuncionarios())
+}
+
+/** O botão "Atualizar funcionários" da ficha. Uma empresa, uma chamada ao Apollo. */
+export function dispararFuncionariosEmpresa(empresaId: string): string {
+  return dispararAvulso('funcionarios-empresa', async () => {
+    logger.info({ empresaId }, 'Funcionários sob demanda.')
+    return funcionariosEmpresa(empresaId)
+  })
+}
+
+/** Lote de funcionários pelo fluxo padrão do Radar (seleção → estimativa → aprovação). */
+export function dispararFuncionariosLote(loteId: string): string {
+  return dispararAvulso('funcionarios-lote', async () => {
+    const lote = { id: loteId, tipo: 'funcionarios', parametros: {} } as unknown as Tables<'lotes_enriquecimento'>
+    return executarLote(loteId, criarProcessadorFuncionarios(lote))
+  })
+}
+
+/**
+ * Calibrar e estimar, nesta ordem e na MESMA corrida (04c §10).
+ *
+ * Encadeados de propósito: estimar com os coeficientes do mês passado logo depois de
+ * recalibrar produziria uma rodada inteira de números que já nascem desatualizados —
+ * e, pior, gravados como snapshot, virando história.
+ */
+export function dispararEstimadorMensal(): string {
+  return dispararAvulso('estimador-calibrar', async () => {
+    const calibracao = await calibrarEstimadorJob()
+    const estimativa = await estimarFaturamentoJob()
+    return { calibracao, estimativa }
+  })
+}
+
+/** Só a estimativa — o que o botão "Recalibrar agora" NÃO faz sozinho. */
+export function dispararEstimativaFaturamento(): string {
+  return dispararAvulso('estimador-estimar', async () => estimarFaturamentoJob())
 }
 
 /** Reclassificação sob demanda — o que a ativação de uma regra de faixa dispara. */

@@ -8,7 +8,13 @@ export * from './cnpj.js'
 // the last line of defence, zod is the one that produces a readable pt-BR error.
 
 export const ESTAGIOS = ['mercado', 'lead', 'prospect', 'cliente', 'ex_cliente'] as const
-export const TIPOS_EMPRESA = ['construtora', 'fornecedor'] as const
+/**
+ * Quatro tipos desde o Prompt 04c. `construtora` continua sendo o default e NADA foi
+ * reclassificado: a distinção incorporadora/subempreiteiro é refinada à mão, porque
+ * inferir por CNAE erraria justamente nas empresas que fazem as duas coisas — que são
+ * as maiores e as que mais importam.
+ */
+export const TIPOS_EMPRESA = ['construtora', 'incorporadora', 'fornecedor', 'subempreiteiro'] as const
 
 export const estagioSchema = z.enum(ESTAGIOS)
 export const tipoEmpresaSchema = z.enum(TIPOS_EMPRESA)
@@ -26,7 +32,19 @@ export const ESTAGIO_LABELS: Record<Estagio, string> = {
 
 export const TIPO_EMPRESA_LABELS: Record<TipoEmpresa, string> = {
   construtora: 'Construtora',
+  incorporadora: 'Incorporadora',
   fornecedor: 'Fornecedor',
+  subempreiteiro: 'Subempreiteiro',
+}
+
+export const REGIMES_TRIBUTARIOS = ['simples', 'presumido', 'real'] as const
+export const regimeTributarioSchema = z.enum(REGIMES_TRIBUTARIOS)
+export type RegimeTributario = z.infer<typeof regimeTributarioSchema>
+
+export const REGIME_TRIBUTARIO_LABELS: Record<RegimeTributario, string> = {
+  simples: 'Simples Nacional',
+  presumido: 'Lucro Presumido',
+  real: 'Lucro Real',
 }
 
 // ─── Shared field schemas ───────────────────────────────────────────────────
@@ -81,6 +99,16 @@ export const criarEmpresaSchema = z.object({
     .optional()
     .nullable()
     .describe('Canal por onde a empresa comprou o ERP atual (inbound, outbound, parceiro, onepay-cross).'),
+  // Só LIMITA a estimativa de faturamento (04c §6.2), nunca a determina: presumido
+  // diz que a empresa está abaixo do teto, não onde. Aceita '' para limpar.
+  regime_tributario: z
+    .union([regimeTributarioSchema, z.literal('')])
+    .optional()
+    .nullable()
+    .describe(
+      'Regime tributário: simples, presumido ou real. Preenchido à mão — não é inferido. ' +
+        'Serve para LIMITAR a estimativa de faturamento, não para calculá-la.',
+    ),
 })
 export type CriarEmpresaInput = z.infer<typeof criarEmpresaSchema>
 
@@ -100,6 +128,29 @@ export const atualizarEmpresaSchema = criarEmpresaSchema.omit({ cnpj: true }).pa
     .optional(),
 })
 export type AtualizarEmpresaInput = z.infer<typeof atualizarEmpresaSchema>
+
+/**
+ * Declaração de métrica pelo cliente (04c §5). Topo da hierarquia de origens: o que
+ * entra por aqui nunca é sobrescrito por estimativa, e é o que calibra o modelo para
+ * o resto da base — por isso vale mais que qualquer outro dado deste sistema.
+ */
+export const declararMetricaSchema = z.object({
+  empresa_id: z.string().uuid(),
+  metrica: z.enum(['faturamento_anual', 'funcionarios']),
+  valor: z.coerce
+    .number()
+    .nonnegative('O valor não pode ser negativo.')
+    .describe('Faturamento anual em reais, ou número de funcionários.'),
+  ano: z.coerce
+    .number()
+    .int()
+    .min(2000)
+    .max(2100)
+    .optional()
+    .nullable()
+    .describe('Ano de referência do faturamento declarado.'),
+})
+export type DeclararMetricaInput = z.infer<typeof declararMetricaSchema>
 
 export const buscarEmpresasSchema = z.object({
   termo: z

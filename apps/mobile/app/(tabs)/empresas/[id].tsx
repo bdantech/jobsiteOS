@@ -8,6 +8,7 @@ import {
   Empresa360Skeleton,
   EmpresaHeader,
   ErpBlock,
+  FaturamentoEquipeBlock,
   NotasSection,
   TimelineSection,
   empresaTitulo,
@@ -88,6 +89,7 @@ export default function EmpresaDetalheScreen() {
             preencheu. `empresas` não guarda dado cadastral de propósito — a fonte
             é `mercado_universo`, e duplicar criaria duas verdades. */}
         <CadastroRfbCard cnpj={empresa.cnpj} />
+        <FaturamentoEquipeBlock empresa={empresa} />
         <ErpBlock empresa={empresa} />
         {/* Renders itself away when the company has no grupo_id (most of them) or
             when the perfil doesn't grant `mercado`. Taps through to the group. */}

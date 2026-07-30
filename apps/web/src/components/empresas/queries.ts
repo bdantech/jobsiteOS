@@ -75,6 +75,7 @@ export const empresasKeys = {
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+  metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
   onepayClientesFiltrados: (dimensao: string, valor: string) =>
     ['empresas', 'onepay-clientes', dimensao, valor] as const,
 }
@@ -335,6 +336,24 @@ export async function buscarNotas(empresaId: string): Promise<NotaComAutor[]> {
  * → melhor contato disponível". A lista mostrar a mesma ordem que o código usa é o
  * que faz alguém entender por que uma mensagem foi para quem foi.
  */
+/**
+ * A série de métricas de um CNPJ (04c §2). Chaveada por CNPJ, não por empresa_id:
+ * o snapshot pode ter nascido antes de a empresa existir (backfill do universo), e
+ * filtrar por empresa perderia justamente os pontos mais antigos da série — os que
+ * dão o crescimento.
+ */
+export async function buscarMetricas(cnpj: string): Promise<Tables<'empresa_metricas'>[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('empresa_metricas')
+    .select('*')
+    .eq('cnpj', cnpj)
+    .order('capturado_em', { ascending: false })
+    .limit(200)
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
 export async function buscarContatos(empresaId: string): Promise<Tables<'contatos'>[]> {
   const supabase = createClient()
   const { data, error } = await supabase

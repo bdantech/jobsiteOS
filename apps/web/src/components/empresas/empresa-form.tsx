@@ -6,6 +6,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import {
+  REGIMES_TRIBUTARIOS,
+  REGIME_TRIBUTARIO_LABELS,
   TIPOS_EMPRESA,
   TIPO_EMPRESA_LABELS,
   atualizarEmpresaSchema,
@@ -48,6 +50,7 @@ interface EmpresaFormValues {
   erp_atual: string
   erp_mrr: string
   erp_canal_venda: string
+  regime_tributario: string
 }
 
 const CAMPOS = [
@@ -62,6 +65,7 @@ const CAMPOS = [
   'erp_atual',
   'erp_mrr',
   'erp_canal_venda',
+  'regime_tributario',
 ] as const
 
 // O "site" É empresas.dominio (Radar §3). A procedência conta de onde veio: editar à
@@ -84,6 +88,7 @@ function paraFormValues(empresa: Tables<'empresas'>): EmpresaFormValues {
     razao_social: empresa.razao_social ?? '',
     nome_fantasia: empresa.nome_fantasia ?? '',
     tipo: isTipoEmpresa(empresa.tipo) ? empresa.tipo : 'construtora',
+    regime_tributario: empresa.regime_tributario ?? '',
     uf: empresa.uf ?? '',
     municipio: empresa.municipio ?? '',
     cnae_principal: empresa.cnae_principal ?? '',
@@ -136,6 +141,9 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
       razao_social: trim(values.razao_social),
       nome_fantasia: trim(values.nome_fantasia),
       tipo: values.tipo,
+      // '' LIMPA o regime, e é por isso que ele não passa por `coalesce` no RPC
+      // (0070): sem isso não haveria como desfazer uma classificação errada.
+      regime_tributario: values.regime_tributario,
       // uf can never be sent empty: ufSchema demands 2 letters, and the select
       // below offers no "clear" option precisely because the write helper cannot
       // set a column back to null.
@@ -233,6 +241,38 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                       {TIPOS_EMPRESA.map((tipo) => (
                         <SelectItem key={tipo} value={tipo}>
                           {TIPO_EMPRESA_LABELS[tipo]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/*
+             * Regime tributário é MANUAL e só LIMITA a estimativa de faturamento
+             * (04c §6.2): presumido diz que a empresa está abaixo do teto, não onde.
+             * Não é inferido do Simples da Receita — aquele é outro dado, e misturar
+             * os dois faria a estimativa afirmar mais do que sabe.
+             */}
+            <FormField
+              control={form.control}
+              name="regime_tributario"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Regime tributário</FormLabel>
+                  <Select value={field.value || 'nenhum'} onValueChange={(v) => field.onChange(v === 'nenhum' ? '' : v)}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Não informado" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="nenhum">Não informado</SelectItem>
+                      {REGIMES_TRIBUTARIOS.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {REGIME_TRIBUTARIO_LABELS[r]}
                         </SelectItem>
                       ))}
                     </SelectContent>

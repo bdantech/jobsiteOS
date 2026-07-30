@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Ban, LayoutDashboard, Layers, Settings } from 'lucide-react'
+import { Ban, LayoutDashboard, Layers, Settings, Sigma } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -22,6 +22,7 @@ const ITENS: readonly ItemNav[] = [
   { href: '/radar', label: 'Painel', icon: LayoutDashboard },
   { href: '/radar/lotes', label: 'Lotes', icon: Layers },
   { href: '/radar/supressao', label: 'Supressão', icon: Ban },
+  { href: '/radar/estimador', label: 'Estimador', icon: Sigma },
   { href: '/radar/config', label: 'Configurações', icon: Settings, somenteAdmin: true },
 ]
 

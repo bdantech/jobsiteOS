@@ -338,7 +338,71 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     label: 'Tipo',
     tipo: 'enum',
     coluna: 'tipo',
-    opcoes: ['construtora', 'fornecedor'],
+    opcoes: ['construtora', 'incorporadora', 'fornecedor', 'subempreiteiro'],
+    descricao:
+      'Quatro valores desde o 04c. Nada foi reclassificado: construtora segue sendo o default, ' +
+      'e incorporadora/subempreiteiro são refinados à mão.',
+  },
+
+  // Faturamento & equipe (04c) — colunas em mercado_explorador via migration 0069
+  {
+    id: 'faturamento_estimado',
+    label: 'Faturamento estimado',
+    tipo: 'numero',
+    coluna: 'faturamento_estimado',
+    descricao:
+      'Valor VIGENTE, que pode ser declarado pelo cliente ou estimado pelo modelo. ' +
+      'Filtre junto com faturamento_origem quando a procedência importar.',
+  },
+  {
+    id: 'faturamento_origem',
+    label: 'Origem do faturamento',
+    tipo: 'enum',
+    coluna: 'faturamento_origem',
+    opcoes: ['declarado_cliente', 'apollo', 'apollo_search', 'lista', 'modelo', 'bracket_simples'],
+    descricao: 'De onde veio o número. `declarado_cliente` é o único que não é estimativa.',
+  },
+  {
+    id: 'faturamento_confianca',
+    label: 'Confiança do faturamento',
+    tipo: 'enum',
+    coluna: 'faturamento_confianca',
+    opcoes: ['alta', 'media', 'baixa'],
+    descricao: 'Alta = dois ou mais modelos concordando. Baixa = só a faixa do Simples.',
+  },
+  {
+    id: 'funcionarios',
+    label: 'Funcionários',
+    tipo: 'numero',
+    coluna: 'funcionarios',
+    descricao:
+      'Headcount vigente. Fontes tipo Apollo SUBCONTAM mão de obra de canteiro — o número ' +
+      'serve para comparar empresas entre si, não como quadro real.',
+  },
+  {
+    id: 'funcionarios_origem',
+    label: 'Origem dos funcionários',
+    tipo: 'enum',
+    coluna: 'funcionarios_origem',
+    opcoes: ['declarado_cliente', 'apollo', 'apollo_search', 'lista'],
+    descricao: '`apollo_search` conta perfis indexados e subconta mais ainda que `apollo`.',
+  },
+  {
+    id: 'funcionarios_crescimento_12m',
+    label: 'Crescimento de equipe (12m)',
+    tipo: 'numero',
+    coluna: 'funcionarios_crescimento_12m',
+    descricao:
+      'Variação do headcount em 12 meses, como fração (0,25 = +25%). Nulo com menos de ' +
+      'dois pontos na série — e nulo NÃO é zero.',
+  },
+  {
+    id: 'regime_tributario',
+    label: 'Regime tributário',
+    tipo: 'enum',
+    coluna: 'regime_tributario',
+    opcoes: ['simples', 'presumido', 'real'],
+    descricao: 'Preenchido à mão. Não é inferido a partir do Simples da Receita.',
   },
 
   // Radar (enriquecimento) — colunas em mercado_explorador via migration 0031

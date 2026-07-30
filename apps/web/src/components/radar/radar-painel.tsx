@@ -40,7 +40,7 @@ function CoberturaCards({ dados }: { dados: CoberturaCamada[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {ordem.map((camada) => {
-        const d = porCamada.get(camada) ?? { camada, total: 0, com_dominio: 0, com_contato: 0, com_protesto: 0 }
+        const d = porCamada.get(camada) ?? { camada, total: 0, com_dominio: 0, com_contato: 0, com_protesto: 0, com_funcionarios: 0, com_faturamento: 0 }
         return (
           <Card key={camada}>
             <CardHeader className="pb-3">
@@ -51,6 +51,9 @@ function CoberturaCards({ dados }: { dados: CoberturaCamada[] }) {
               <Barra label="Domínio" parte={d.com_dominio} total={d.total} />
               <Barra label="Contato" parte={d.com_contato} total={d.total} />
               <Barra label="Protesto" parte={d.com_protesto} total={d.total} />
+              {/* Headcount é o sinal que mais alimenta o estimador de faturamento (04c). */}
+              <Barra label="Funcionários" parte={d.com_funcionarios} total={d.total} />
+              <Barra label="Faturamento" parte={d.com_faturamento} total={d.total} />
             </CardContent>
           </Card>
         )
