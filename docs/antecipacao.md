@@ -257,6 +257,32 @@ rua. Enxugar os dois igualmente deixaria o card do celular bonito e mudo.
 Em ambos, **clicar/tocar abre a nota**. O caminho para o fornecedor não se perdeu: no
 web o nome é link e o "+N notas" é link; no mobile o "Ver fornecedor" é explícito.
 
+## Tabelas ordenáveis: a convenção
+
+Duas telas usam (`components/antecipacao/tabela-ordenavel.tsx`): **capacidade por sacado**
+e **sacados a prospectar**. O cabeçalho, o primeiro clique e a persistência vivem lá, e
+não em cada tela, porque "clicou no cabeçalho, ordenou" tem de se comportar igual em toda
+a Antecipação — duas implementações viram duas convenções em uma semana.
+
+Três decisões que valem para as duas:
+
+- **O ícone da coluna inativa é invisível até o hover.** Sete setas acesas ao mesmo tempo
+  escondem qual é a ordem em vigor, que é a única coisa que o cabeçalho precisa dizer de
+  relance.
+- **O primeiro clique já vem na direção útil**: `desc` em coluna de número e de data (o
+  topo é o que se procura), `asc` em texto.
+- **O desempate é sempre por nome, ascendente**, mesmo com a coluna em `desc`. Sem ele,
+  empates grandes — 108 sacados sem análise de crédito, 149 construtoras em `universo` —
+  trocam de lugar entre dois carregamentos e a mesma tela parece outra lista.
+
+A preferência é salva em `localStorage`, uma chave por tela. É do **navegador, não da
+URL**: um link colado no grupo tem de abrir a lista inteira para quem recebe. O estado
+inicial é sempre o padrão, nunca o storage — ler no render divergiria do HTML do servidor
+e quebraria a hidratação; a leitura acontece no efeito. E o que volta do storage passa
+por `sanear()` obrigatório: é texto editável pelo usuário que sobrevive a refatoração, e
+uma coluna que saiu do catálogo viraria um `sort` por campo inexistente, com tabela em
+ordem aleatória e nenhum erro na tela.
+
 ## Capacidade por sacado: ordenação e filtro
 
 As sete colunas da tabela ordenam por clique no cabeçalho. **A ordenação é feita no
@@ -268,21 +294,13 @@ O preço disso está declarado na tela: se a leitura bater no teto, um rodapé a
 ordem vale sobre o recorte. Sem esse aviso, "ordenar por receita" devolveria *as maiores
 receitas entre as 300 maiores demandas* — um resultado errado com cara de certo.
 
-Três detalhes que não são gosto:
+**Crédito ordena por proximidade de operar**, não por alfabeto: aprovado, em análise,
+pendente, expirado, recusado, bloqueado, sem análise. Por texto, "Aprovado, Bloqueado, Em
+análise" juntaria quem opera hoje com quem nunca vai operar.
 
-- **Crédito ordena por proximidade de operar**, não por alfabeto: aprovado, em análise,
-  pendente, expirado, recusado, bloqueado, sem análise. Por texto, "Aprovado, Bloqueado,
-  Em análise" juntaria quem opera hoje com quem nunca vai operar.
-- **O primeiro clique já vem na direção útil** — desc em coluna de número (o topo é o
-  que se procura), asc em nome.
-- **O desempate é sempre por nome, ascendente**, mesmo com a coluna em `desc`. Sem ele os
-  108 sacados sem análise trocariam de lugar entre dois carregamentos.
-
-O **filtro por status de crédito** fica salvo em `localStorage`
-(`jobsiteos.antecipacao.sacados.v1`), junto da ordenação — quem trabalha essa tela
-trabalha um recorte só, e refazer a escolha toda visita é o atrito que faz a pessoa
-parar de usar o filtro. É preferência do **navegador, não da URL**: um link colado no
-grupo tem de abrir a lista inteira para quem recebe.
+O **filtro por status de crédito** fica salvo em `jobsiteos.antecipacao.sacados.v1`,
+junto da ordenação — quem trabalha essa tela trabalha um recorte só, e refazer a escolha
+toda visita é o atrito que faz a pessoa parar de usar o filtro.
 
 Duas defesas contra "a tela está vazia e eu não sei por quê": com filtro ativo, o
 cabeçalho diz *mostrando X de Y* e a contagem de sacados estourando o limite conta só as
@@ -319,9 +337,40 @@ janela entre a nota chegar e o lookup responder. A tela mostra quantos estão pe
 sem isso, uma lista curta pareceria "não há oportunidade" quando na verdade é "ainda não
 sabemos".
 
-O ranking é por **valor agregado**, sem janela de tempo: um relacionamento grande e
-antigo ainda supera um menor e atual. `ultima_nota_em` e `primeira_nota_em` estão na tela
-para você notar, mas não entram na ordenação.
+O ranking **padrão** é por valor agregado, sem janela de tempo: um relacionamento grande
+e antigo ainda supera um menor e atual. Todas as colunas ordenam por clique — inclusive
+`ultima_nota_em`, que antes estava na tela só para você notar.
+
+### A camada do sacado (0065)
+
+A lista responde "quem recebe nota e não está na plataforma". O que ela não dizia é se
+aquele CNPJ **já é alvo de Mercado** — e são perguntas que se respondem juntas. Uma
+construtora em **SOM** tem sinal de compra hoje e a abordagem é outra; uma em `universo`
+recebe nota e não passou em nenhuma regra, e vale entender por quê antes de gastar uma
+ligação.
+
+Na base atual, das 279: **149 universo, 81 SAM, 38 TAM, 11 SOM**. Nenhuma fora de
+`mercado_universo` — o recorte por CNAE já garante isso, porque é de lá que o CNAE vem.
+
+O badge é o **mesmo componente de Mercado** (`CamadaBadge`), com a rampa ordinal da
+pirâmide e do Mapa. Recolorir aqui faria a mesma palavra significar duas coisas
+dependendo da tela em que você a lê.
+
+`sacado_camada` sai só de `mercado_universo`, **sem coalesce com `empresas`**: camada é
+decisão das regras de Mercado, não atributo do cadastro. `NULL` quer dizer "fora do
+universo", que é diferente de `universo` — este passou pelas regras e não subiu em
+nenhuma. Ordenar por camada usa **proximidade de virar cliente** (SOM, SAM, TAM,
+universo), não alfabeto: por texto sairia "sam, som, tam, universo", que não quer dizer
+nada.
+
+**RLS não mudou.** `notas_funil` é `security_invoker` e a policy de 0060 já libera, para
+quem tem `antecipacao`, as linhas de `mercado_universo` cujo CNPJ aparece numa nota que a
+pessoa pode ler. Camada é mais uma coluna **dessas mesmas linhas**; o recorte de 0060 é
+por linha e continua valendo inteiro.
+
+**Um bug que apareceu no caminho:** a leitura tinha `limit(200)` e a lista já tem 279 —
+79 construtoras eram cortadas em silêncio, e nada na tela dizia isso. O teto virou 500 e,
+se um dia encostar, aparece o aviso de que a ordem vale sobre o recorte.
 
 Clicar num sacado abre `/antecipacao/sacados/{cnpj}` com **as notas que ele recebeu** —
 a mesma tela que a aba de capacidade usa, porque a pergunta ("quem emite para ele, e
@@ -329,7 +378,7 @@ quanto?") é a mesma nos dois caminhos.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0060`.
+- **Banco**: migrations `0045`–`0061`, `0065`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
@@ -339,6 +388,7 @@ quanto?") é a mesma nos dois caminhos.
   - `0060`: Antecipação lê o cadastro dos CNPJs que aparecem nas suas notas
   - views: `notas_funil` (a superfície única), `antecipacao_fornecedores`,
     `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
+  - `0065`: `sacado_camada` em `notas_funil` e na lista a prospectar
   - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
     `app_ativar_faixa_regra`, `app_salvar_faixa_disparo`, `app_salvar_whatsapp_conta`,
     `app_descartar_mensagem`, `app_definir_ponto_focal`, `app_registrar_toque_manual`,

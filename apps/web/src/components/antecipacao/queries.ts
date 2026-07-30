@@ -232,13 +232,22 @@ export async function buscarSacados(): Promise<SacadoFunil[]> {
   return (data ?? []) as SacadoFunil[]
 }
 
+/**
+ * Mesma lógica do teto por sacado: a ordenação da tela roda sobre o que veio.
+ *
+ * Era 200, e a lista já tem 279 construtoras — 79 estavam sendo cortadas em
+ * silêncio, e nada na tela dizia isso. 500 dá folga real; se um dia encostar, a
+ * tela avisa que a ordem vale sobre o recorte.
+ */
+export const LIMITE_PROSPECTAR = 500
+
 export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('antecipacao_sacados_a_prospectar')
     .select('*')
     .order('valor_agregado', { ascending: false, nullsFirst: false })
-    .limit(200)
+    .limit(LIMITE_PROSPECTAR)
   if (error) throw error
   return (data ?? []) as SacadoProspectar[]
 }

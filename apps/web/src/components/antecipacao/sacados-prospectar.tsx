@@ -12,14 +12,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { promoverEmpresaAction } from '@/actions/mercado'
+// O badge de camada vem de Mercado de propósito: é a MESMA escala ordinal
+// (universo → TAM → SAM → SOM) da pirâmide e do Mapa. Recolorir aqui faria a mesma
+// palavra significar duas coisas dependendo da tela em que você a lê.
+import { CamadaBadge } from '@/components/mercado/grupos/camada-badge'
 import { cn } from '@/lib/utils'
 import { formatarData, formatarInteiro, formatarMoeda } from './format'
 import {
+  LIMITE_PROSPECTAR,
   antecipacaoKeys,
   buscarSacadosAProspectar,
   contarSacadosSemCnae,
   type SacadoProspectar,
 } from './queries'
+import { localDe, ordenarProspectar, usePreferenciasProspectar } from './prospectar-tabela'
+import { CabecalhoOrdenavel } from './tabela-ordenavel'
 
 /**
  * Sacados a prospectar — construtoras que recebem NF e não estão na plataforma.
@@ -49,6 +56,13 @@ export function SacadosProspectar() {
     queryKey: antecipacaoKeys.prospectarPendentes(),
     queryFn: contarSacadosSemCnae,
   })
+
+  const { prefs, ordenarPor } = usePreferenciasProspectar()
+
+  const linhas = React.useMemo(
+    () => (data ? ordenarProspectar(data, prefs.coluna, prefs.dir) : []),
+    [data, prefs.coluna, prefs.dir],
+  )
 
   async function promover(cnpj: string) {
     setPromovendo(cnpj)
@@ -126,7 +140,8 @@ export function SacadosProspectar() {
           </div>
           <CardDescription>
             Construtoras (CNAE 41, 42 ou 43) que recebem notas fiscais e <strong>não estão</strong>{' '}
-            na plataforma, ranqueadas por valor recebido.
+            na plataforma. A <strong>camada</strong> diz se o CNPJ já é alvo de Mercado — clique em
+            qualquer cabeçalho para reordenar.
             {data.length > 0 ? (
               <>
                 {' '}
@@ -141,21 +156,76 @@ export function SacadosProspectar() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Construtora</TableHead>
-                  <TableHead>CNAE</TableHead>
-                  <TableHead>Local</TableHead>
-                  <TableHead className="text-right">Notas</TableHead>
-                  <TableHead className="text-right">Fornecedores</TableHead>
-                  <TableHead className="text-right">De quem já antecipa</TableHead>
-                  <TableHead className="text-right">Valor recebido</TableHead>
-                  <TableHead>Última nota</TableHead>
+                  <CabecalhoOrdenavel coluna="nome" ativa={prefs.coluna} dir={prefs.dir} onClick={ordenarPor}>
+                    Construtora
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel coluna="cnae" ativa={prefs.coluna} dir={prefs.dir} onClick={ordenarPor}>
+                    CNAE
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="camada"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                    title="Camada de Mercado do CNPJ. Ordena por proximidade de virar cliente: SOM, SAM, TAM, universo."
+                  >
+                    Camada
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel coluna="local" ativa={prefs.coluna} dir={prefs.dir} onClick={ordenarPor}>
+                    Local
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="notas"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                    className="text-right"
+                  >
+                    Notas
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="fornecedores"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                    className="text-right"
+                  >
+                    Fornecedores
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="jaAntecipa"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                    className="text-right"
+                    title="Notas emitidas por fornecedores que já antecipam com a gente — cada uma é uma porta de entrada."
+                  >
+                    De quem já antecipa
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="valor"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                    className="text-right"
+                  >
+                    Valor recebido
+                  </CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel
+                    coluna="ultimaNota"
+                    ativa={prefs.coluna}
+                    dir={prefs.dir}
+                    onClick={ordenarPor}
+                  >
+                    Última nota
+                  </CabecalhoOrdenavel>
                   <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.length === 0 && (
+                {linhas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-12 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={10} className="py-12 text-center text-sm text-muted-foreground">
                       Nenhuma construtora nesta condição ainda. A lista se enche quando o sync
                       trouxer notas cujo destinatário tenha CNAE de construção e não esteja na
                       plataforma.
@@ -163,7 +233,7 @@ export function SacadosProspectar() {
                   </TableRow>
                 )}
 
-                {data.map((s: SacadoProspectar) => (
+                {linhas.map((s: SacadoProspectar) => (
                   <TableRow key={s.sacado_cnpj}>
                     <TableCell className="max-w-[18rem]">
                       <Link
@@ -181,8 +251,11 @@ export function SacadosProspectar() {
                         {s.sacado_cnae_principal ?? '—'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <CamadaBadge camada={s.sacado_camada} />
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {[s.sacado_municipio, s.sacado_uf].filter(Boolean).join(' / ') || '—'}
+                      {localDe(s) || '—'}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatarInteiro(s.notas)}
@@ -230,6 +303,16 @@ export function SacadosProspectar() {
               </TableBody>
             </Table>
           </div>
+
+          {data.length >= LIMITE_PROSPECTAR && (
+            // A ordenação roda sobre o que veio. Se a leitura bateu no teto, ordenar
+            // por "última nota" mostraria as mais recentes ENTRE as de maior valor —
+            // um resultado errado com cara de certo.
+            <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+              Mostrando as {formatarInteiro(LIMITE_PROSPECTAR)} construtoras de maior valor
+              recebido. A ordenação vale sobre esse recorte, não sobre a lista inteira.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

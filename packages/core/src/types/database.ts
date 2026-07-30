@@ -2097,6 +2097,7 @@ export type Database = {
           sacado_empresa_id: string | null
           sacado_municipio: string | null
           sacado_nome: string | null
+          sacado_camada: string | null
           sacado_uf: string | null
           ultima_nota_em: string | null
           valor_agregado: number | null
@@ -2231,6 +2232,7 @@ export type Database = {
           natureza_operacao: string | null
           operavel: boolean
           nao_operavel_motivo: string | null
+          sacado_camada: string | null
         }
         Relationships: [
           {

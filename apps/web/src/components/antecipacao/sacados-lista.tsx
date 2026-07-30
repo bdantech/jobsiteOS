@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronsUpDown, ExternalLink, FilterX } from 'lucide-react'
+import { AlertTriangle, ExternalLink, FilterX } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,8 +27,8 @@ import {
   ordenarSacados,
   passaNoFiltro,
   usePreferenciasSacados,
-  type ColunaSacado,
 } from './sacados-tabela'
+import { CabecalhoOrdenavel } from './tabela-ordenavel'
 
 /**
  * Visão por sacado (§5): limite disponível vs. DEMANDA DO PIPELINE.
@@ -66,51 +66,6 @@ function BarraContencao({ demanda, disponivel }: { demanda: number; disponivel: 
         {formatarMoeda(demanda)} de {formatarMoeda(disponivel)}
       </p>
     </div>
-  )
-}
-
-interface CabecalhoProps {
-  coluna: ColunaSacado
-  ativa: ColunaSacado
-  dir: 'asc' | 'desc'
-  onClick: (coluna: ColunaSacado) => void
-  className?: string
-  children: React.ReactNode
-}
-
-/**
- * Cabeçalho ordenável. O ícone da coluna inativa fica quase invisível até o hover:
- * sete setas acesas ao mesmo tempo escondem qual é a ordem em vigor, que é
- * justamente a única informação que o cabeçalho precisa passar de relance.
- */
-function CabecalhoOrdenavel({ coluna, ativa, dir, onClick, className, children }: CabecalhoProps) {
-  const eAtiva = ativa === coluna
-  const Icone = !eAtiva ? ChevronsUpDown : dir === 'asc' ? ArrowUp : ArrowDown
-
-  return (
-    <TableHead
-      className={cn('p-0', className)}
-      aria-sort={eAtiva ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      <button
-        type="button"
-        onClick={() => onClick(coluna)}
-        className={cn(
-          'group inline-flex h-12 w-full items-center gap-1 px-4 font-medium transition-colors hover:text-foreground',
-          className?.includes('text-right') && 'justify-end',
-          eAtiva && 'text-foreground',
-        )}
-      >
-        {children}
-        <Icone
-          className={cn(
-            'h-3.5 w-3.5 shrink-0 transition-opacity',
-            eAtiva ? 'opacity-100' : 'opacity-0 group-hover:opacity-60',
-          )}
-          aria-hidden
-        />
-      </button>
-    </TableHead>
   )
 }
 

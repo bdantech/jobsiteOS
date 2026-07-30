@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import type { SacadoFunil } from './queries'
+import { proximaOrdenacao, usePreferenciasTabela, type Direcao } from './tabela-ordenavel'
 
 /**
  * Ordenação e filtro da tabela "por sacado" — a parte sem JSX.
@@ -21,8 +22,6 @@ export type ColunaSacado =
   | 'demanda'
   | 'excedente'
   | 'receita'
-
-export type Direcao = 'asc' | 'desc'
 
 /**
  * A direção do PRIMEIRO clique. Em coluna de número o que se procura é o topo
@@ -123,34 +122,14 @@ const PADRAO: PreferenciasSacados = { credito: CREDITO_TODOS, coluna: 'demanda',
 
 const CHAVE_STORAGE = 'jobsiteos.antecipacao.sacados.v1'
 
-function ler(): PreferenciasSacados | null {
-  try {
-    const bruto = window.localStorage.getItem(CHAVE_STORAGE)
-    if (!bruto) return null
-
-    const p: unknown = JSON.parse(bruto)
-    if (typeof p !== 'object' || p === null) return null
-    const o = p as Record<string, unknown>
-
-    // localStorage é editável pelo usuário e sobrevive a refatoração: uma coluna
-    // que saiu do catálogo viraria um `sort` por campo inexistente, com a tabela
-    // em ordem aleatória e nenhum erro na tela.
-    const coluna = typeof o.coluna === 'string' && COLUNAS_VALIDAS.has(o.coluna) ? (o.coluna as ColunaSacado) : PADRAO.coluna
-    const dir = o.dir === 'asc' || o.dir === 'desc' ? o.dir : PADRAO.dir
-    const credito = typeof o.credito === 'string' && o.credito !== '' ? o.credito : PADRAO.credito
-    return { credito, coluna, dir }
-  } catch {
-    // Storage bloqueado (aba anônima, política de cookies) significa "sem
-    // preferência salva", não página quebrada.
-    return null
-  }
-}
-
-function gravar(p: PreferenciasSacados): void {
-  try {
-    window.localStorage.setItem(CHAVE_STORAGE, JSON.stringify(p))
-  } catch {
-    /* sem persistência: a sessão atual continua funcionando */
+function sanear(o: Record<string, unknown>): PreferenciasSacados {
+  return {
+    coluna:
+      typeof o.coluna === 'string' && COLUNAS_VALIDAS.has(o.coluna)
+        ? (o.coluna as ColunaSacado)
+        : PADRAO.coluna,
+    dir: o.dir === 'asc' || o.dir === 'desc' ? o.dir : PADRAO.dir,
+    credito: typeof o.credito === 'string' && o.credito !== '' ? o.credito : PADRAO.credito,
   }
 }
 
@@ -159,42 +138,14 @@ function gravar(p: PreferenciasSacados): void {
  * recorte só ("só aprovados"), e refazer a escolha toda vez é o tipo de atrito que
  * faz a pessoa parar de usar o filtro. É preferência do NAVEGADOR, não da URL: um
  * link colado no WhatsApp tem de abrir a lista inteira para quem receber.
- *
- * O estado inicial é sempre o padrão, nunca o storage — ler no render divergiria do
- * HTML do servidor e quebraria a hidratação. A leitura acontece no efeito.
  */
 export function usePreferenciasSacados() {
-  const [prefs, setPrefs] = React.useState<PreferenciasSacados>(PADRAO)
-  const [carregado, setCarregado] = React.useState(false)
+  const { prefs, atualizar } = usePreferenciasTabela(CHAVE_STORAGE, PADRAO, sanear)
 
-  React.useEffect(() => {
-    const salvas = ler()
-    if (salvas) setPrefs(salvas)
-    setCarregado(true)
-  }, [])
-
-  const atualizar = React.useCallback((mudanca: Partial<PreferenciasSacados>) => {
-    setPrefs((atuais) => {
-      const proximas = { ...atuais, ...mudanca }
-      gravar(proximas)
-      return proximas
-    })
-  }, [])
-
-  /** Mesma coluna inverte; coluna nova começa na direção que interessa. */
   const ordenarPor = React.useCallback(
-    (coluna: ColunaSacado) => {
-      setPrefs((atuais) => {
-        const proximas: PreferenciasSacados =
-          atuais.coluna === coluna
-            ? { ...atuais, dir: atuais.dir === 'asc' ? 'desc' : 'asc' }
-            : { ...atuais, coluna, dir: PRIMEIRA_DIRECAO[coluna] }
-        gravar(proximas)
-        return proximas
-      })
-    },
-    [],
+    (coluna: ColunaSacado) => atualizar(proximaOrdenacao(prefs, coluna, PRIMEIRA_DIRECAO)),
+    [prefs, atualizar],
   )
 
-  return { prefs, carregado, atualizar, ordenarPor }
+  return { prefs, atualizar, ordenarPor }
 }
