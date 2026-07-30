@@ -6,7 +6,9 @@ import {
   atualizarEmpresa,
   canAccessRoute,
   criarEmpresa,
+  criarContatoSchema,
   criarNota,
+  excluirContatoSchema,
   type FieldErrors,
   type Tables,
 } from '@jobsiteos/core'
@@ -115,6 +117,67 @@ export async function atualizarEmpresaAction(
     revalidatePath('/empresas')
     revalidatePath(`/empresas/${empresa.id}`)
     return { ok: true, data: empresa }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Contato criado à mão na ficha da empresa.
+ *
+ * Escreve direto em `contatos` (com o client DO USUÁRIO), e não por RPC como as
+ * outras mutations deste arquivo: a tabela tem policy de write própria
+ * (`app_tem_modulo('empresas')`) e grant para `authenticated`, então a RLS já decide
+ * o que pode ser tocado. Não há evento nem audit_log a compor numa transação, que é
+ * o que justifica os RPCs em `empresas` e `empresa_notas`.
+ *
+ * `origem: 'manual'` é fixada AQUI, nunca vem do cliente: é o que distingue o que
+ * um humano digitou do que o Apollo trouxe. O upsert do enriquecimento casa por
+ * `apollo_person_id`, que num contato manual é nulo — então o Apollo nunca
+ * sobrescreve nem duplica estes.
+ */
+export async function criarContatoAction(input: unknown): Promise<ActionResult<Tables<'contatos'>>> {
+  const auth = await autorizar()
+  if (auth.erro) return auth.erro
+
+  try {
+    const dados = criarContatoSchema.parse(input)
+    const { data, error } = await auth.supabase
+      .from('contatos')
+      .insert({ ...dados, origem: 'manual' })
+      .select('*')
+      .single()
+    if (error) throw new MutationError(error.message, 'unknown')
+    revalidatePath(`/empresas/${dados.empresa_id}`)
+    return { ok: true, data: data as Tables<'contatos'> }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/** Só contatos manuais podem ser excluídos: o que veio do Apollo volta no próximo lote. */
+export async function excluirContatoAction(
+  input: unknown,
+): Promise<ActionResult<{ excluido: boolean }>> {
+  const auth = await autorizar()
+  if (auth.erro) return auth.erro
+
+  try {
+    const { id } = excluirContatoSchema.parse(input)
+    const { error, count } = await auth.supabase
+      .from('contatos')
+      .delete({ count: 'exact' })
+      .eq('id', id)
+      .eq('origem', 'manual')
+    if (error) throw new MutationError(error.message, 'unknown')
+    if (!count) {
+      return {
+        ok: false,
+        message: 'Só contatos adicionados à mão podem ser excluídos. Os do Apollo voltam no próximo enriquecimento.',
+        code: 'forbidden',
+      }
+    }
+    return { ok: true, data: { excluido: true } }
   } catch (error) {
     return falha(error)
   }

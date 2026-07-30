@@ -18,6 +18,7 @@ import {
   dispararLoteRadar,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
+  dispararContatosEmpresa,
   dispararSyncNfs,
   dispararAntecipacaoDiario,
   dispararReclassificacaoFunil,
@@ -182,6 +183,22 @@ app.post('/jobs/radar/protestos-empresa', (req: Request, res: Response, next: Ne
   try {
     const { empresa_id, incluir_spes, ano_min } = protestosEmpresaSchema.parse(req.body ?? {})
     const id = dispararProtestosEmpresa({ empresaId: empresa_id, incluirSpes: incluir_spes, anoMin: ano_min })
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const contatosEmpresaSchema = z.object({
+  empresa_id: z.string().uuid(),
+  revelar_telefone: z.boolean().optional(),
+})
+
+/** Contatos (Apollo) sob demanda de UMA empresa — o botão na ficha. Ação PAGA. */
+app.post('/jobs/radar/contatos-empresa', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { empresa_id, revelar_telefone } = contatosEmpresaSchema.parse(req.body ?? {})
+    const id = dispararContatosEmpresa({ empresaId: empresa_id, revelarTelefone: revelar_telefone })
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)

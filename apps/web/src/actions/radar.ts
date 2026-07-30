@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   dispararLoteRadar,
   dispararProtestosEmpresa,
+  dispararContatosEmpresa,
   dispararSincronizarOnepay,
 } from '@/lib/mercado/worker'
 
@@ -121,6 +122,24 @@ export async function rodarProtestosEmpresaAction(input: {
   const { erro } = await autorizar()
   if (erro) return erro
   const r = await dispararProtestosEmpresa(input)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Dispara contatos do Apollo (ação PAGA) de uma empresa. Autoriza pelo módulo Radar,
+ * dono do dado e do orçamento — a ficha da empresa é só de onde o clique parte.
+ *
+ * O TTL de contatos vale: se o domínio foi enriquecido dentro da janela, o item volta
+ * `pulado` e nada é cobrado. Por isso o botão não precisa de confirmação de custo a
+ * cada clique, ao contrário de protestos.
+ */
+export async function rodarContatosEmpresaAction(input: {
+  empresaId: string
+  revelarTelefone?: boolean
+}): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararContatosEmpresa(input)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

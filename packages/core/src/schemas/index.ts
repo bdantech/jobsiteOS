@@ -123,6 +123,57 @@ export const criarNotaSchema = z.object({
 })
 export type CriarNotaInput = z.infer<typeof criarNotaSchema>
 
+// ─── contatos ───────────────────────────────────────────────────────────────
+
+/** Campo de texto opcional: '' do formulário vira null, e não string vazia no banco. */
+const textoOpcional = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((v) => (v === '' || v === undefined ? null : v))
+    .nullable()
+
+/**
+ * Contato criado à mão. Só `empresa_id` é obrigatório junto de UMA forma de falar
+ * com a pessoa — um contato sem nome, e-mail nem telefone não é contato, é uma linha
+ * vazia que ainda concorre a ponto focal.
+ *
+ * `origem` é fixada em 'manual' pelo servidor, nunca pelo cliente: é o que distingue
+ * o que um humano digitou do que o Apollo trouxe, e o enriquecimento não pode
+ * sobrescrever o primeiro (o upsert do Apollo casa por `apollo_person_id`, que aqui
+ * é nulo).
+ */
+export const criarContatoSchema = z
+  .object({
+    empresa_id: z.string().uuid(),
+    nome: textoOpcional(160),
+    cargo: textoOpcional(160),
+    email: z
+      .string()
+      .trim()
+      .email('E-mail inválido.')
+      .max(200)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => (v === '' || v === undefined ? null : v))
+      .nullable(),
+    telefone: textoOpcional(40),
+    whatsapp: textoOpcional(40),
+    linkedin_url: textoOpcional(300),
+    senioridade: textoOpcional(40),
+    departamento: textoOpcional(60),
+  })
+  .refine((v) => Boolean(v.nome || v.email || v.telefone || v.whatsapp), {
+    message: 'Informe ao menos nome, e-mail, telefone ou WhatsApp.',
+    path: ['nome'],
+  })
+export type CriarContatoInput = z.infer<typeof criarContatoSchema>
+
+export const excluirContatoSchema = z.object({ id: z.string().uuid() })
+export type ExcluirContatoInput = z.infer<typeof excluirContatoSchema>
+
 // ─── auth / usuarios ────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({

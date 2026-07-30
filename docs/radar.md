@@ -104,6 +104,24 @@ O telefone fica de fora do upsert de contatos de propósito: ele só é escrito 
 webhook, e um reprocessamento (TTL vencido) sobrescreveria com `null` o número já
 recebido. Pelo mesmo motivo, `indisponivel` nunca sobrepõe um número existente.
 
+## Contatos sob demanda (botão na ficha da empresa)
+
+`POST /jobs/radar/contatos-empresa` — abre um lote de `contatos` já `aprovado` com um
+item só e roda na hora. Passa pelo lote, e não direto pelo processador, porque é o
+lote que registra custo, respeita o teto de orçamento e grava `enriquecimentos`; um
+caminho paralelo gastaria crédito do Apollo sem aparecer em nenhuma dessas contas.
+
+- Exige **domínio resolvido** na empresa (a busca do Apollo é por organização, e a
+  organização se resolve pelo domínio). Sem ele, falha explícita em vez de lote vazio.
+- O **TTL de contatos vale**: clicar duas vezes dentro da janela não cobra de novo — o
+  item volta `pulado`.
+- É assíncrono (202). A tela não promete contato na hora; o telefone, então, chega
+  minutos depois pelo webhook.
+
+Contatos digitados à mão gravam `origem = 'manual'`, fixada no servidor. O Apollo
+nunca os sobrescreve: o upsert casa por `apollo_person_id`, que num contato manual é
+nulo. E só o manual pode ser excluído — o do Apollo voltaria no lote seguinte.
+
 ## Cargos-alvo (settings `cargos_alvo`)
 
 **A seleção é local, não da API.** A busca (`mixed_people/api_search`) é gratuita e

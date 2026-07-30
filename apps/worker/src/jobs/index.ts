@@ -20,7 +20,7 @@ import { ingerirCno, type OpcoesCno } from './cno.js'
 import { sincronizarOnepay } from './radar/onepay.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio } from './radar/dominios.js'
-import { criarProcessadorContatos } from './radar/contatos.js'
+import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import { criarProcessadorProtestos, protestosClientesMensal, protestosEmpresa } from './radar/protestos.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
@@ -46,6 +46,7 @@ export type TipoJob =
   | 'radar-lote'
   | 'protestos-mensal'
   | 'protestos-empresa'
+  | 'contatos-empresa'
   | 'antecipacao-sync-nfs'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
@@ -336,6 +337,17 @@ export function dispararProtestosEmpresa(opts: {
   return dispararAvulso('protestos-empresa', async () => {
     logger.info({ empresaId: opts.empresaId, incluirSpes: opts.incluirSpes, anoMin: opts.anoMin }, 'Protestos sob demanda.')
     return protestosEmpresa(opts)
+  })
+}
+
+/**
+ * Contatos sob demanda de uma empresa, do botão na ficha. Mesmo desenho do
+ * `dispararProtestosEmpresa`: avulso, service role, single-flight por tipo.
+ */
+export function dispararContatosEmpresa(opts: { empresaId: string; revelarTelefone?: boolean }): string {
+  return dispararAvulso('contatos-empresa', async () => {
+    logger.info({ empresaId: opts.empresaId }, 'Contatos sob demanda.')
+    return contatosEmpresa(opts)
   })
 }
 

@@ -7,6 +7,7 @@ import { logger } from '../../logger.js'
 import { criarPacer, requisitarJson } from '../../net/http.js'
 import { lerApolloCfg, lerCargosAlvo, lerCustos, lerTtl } from '../../radar/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
+import { executarLote } from './lote.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
 /**
@@ -303,4 +304,62 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
       resultado: { creditos, revelados },
     }
   }
+}
+
+/**
+ * Contatos sob demanda de UMA empresa, disparado do botão na ficha.
+ *
+ * Mesma forma do `protestosEmpresa`: abre um lote já `aprovado` (o clique É a
+ * aprovação), com um item só, e roda na hora. Passa pelo lote em vez de chamar o
+ * processador direto porque é o lote que registra custo, respeita o teto de
+ * orçamento e grava `enriquecimentos` — um caminho paralelo gastaria crédito do
+ * Apollo sem aparecer em nenhuma dessas contas.
+ *
+ * O TTL vale aqui também, de propósito: clicar duas vezes no botão não cobra duas
+ * vezes pelo mesmo domínio. O retorno diz `pulado` quando foi isso.
+ */
+export async function contatosEmpresa(opts: {
+  empresaId: string
+  revelarTelefone?: boolean
+}): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
+  if (!env.APOLLO_API_KEY) throw new Error('APOLLO_API_KEY não configurada.')
+
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('cnpj, dominio, razao_social')
+    .eq('id', opts.empresaId)
+    .maybeSingle()
+  if (!emp?.cnpj) throw new Error('Empresa não encontrada ou sem CNPJ.')
+  // Sem domínio o Apollo não tem por onde começar (a busca é por organização, e a
+  // organização é resolvida pelo domínio). Falha explícita em vez de lote vazio.
+  if (!emp.dominio) {
+    throw new Error('Esta empresa não tem domínio resolvido — rode a cascata de domínio antes.')
+  }
+
+  const parametros = { motivo: 'sob_demanda', empresa_id: opts.empresaId, revelar_telefone: opts.revelarTelefone }
+
+  const { data: lote, error } = await supabaseAdmin
+    .from('lotes_enriquecimento')
+    .insert({
+      tipo: 'contatos',
+      nome: `Contatos — ${emp.razao_social ?? emp.cnpj}`,
+      definicao_filtro: {} as never,
+      parametros: parametros as never,
+      status: 'aprovado',
+      criado_por: null,
+    })
+    .select('id')
+    .single()
+  if (error || !lote) throw new Error(`Falha ao abrir lote de contatos: ${error?.message}`)
+
+  const { error: erroItem } = await supabaseAdmin
+    .from('lote_itens')
+    .insert({ lote_id: lote.id, cnpj: emp.cnpj, empresa_id: opts.empresaId, dominio: emp.dominio })
+  if (erroItem) throw new Error(`Falha ao inserir item do lote: ${erroItem.message}`)
+
+  await supabaseAdmin.from('lotes_enriquecimento').update({ total_itens: 1 }).eq('id', lote.id)
+
+  const loteMin = { id: lote.id, tipo: 'contatos', parametros } as unknown as Tables<'lotes_enriquecimento'>
+  const r = await executarLote(lote.id, criarProcessadorContatos(loteMin))
+  return { lote_id: lote.id, itens: 1, ...r }
 }

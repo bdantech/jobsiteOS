@@ -222,6 +222,22 @@ export async function dispararProtestosEmpresa(input: {
   )
 }
 
+/**
+ * Radar (§4): contatos do Apollo sob demanda de uma empresa. Ação PAGA — cobra por
+ * contato revelado. O TTL de contatos vale, então clicar de novo dentro da janela
+ * não cobra outra vez (o item volta `pulado`).
+ */
+export async function dispararContatosEmpresa(input: {
+  empresaId: string
+  revelarTelefone?: boolean
+}): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/radar/contatos-empresa',
+    { empresa_id: input.empresaId, revelar_telefone: input.revelarTelefone },
+    'radar-contatos-empresa',
+  )
+}
+
 // ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
 
 /**
