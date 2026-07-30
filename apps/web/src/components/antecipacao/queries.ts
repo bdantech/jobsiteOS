@@ -212,13 +212,22 @@ export async function buscarDetalheFornecedor(cnpj: string): Promise<DetalheForn
   return { fornecedor: (agregado.data as FornecedorFunil | null) ?? null, notas: (notas.data ?? []) as NotaFunil[], toques }
 }
 
+/**
+ * Teto da leitura por sacado. A ordenação da tela é feita no cliente sobre o que
+ * veio: são 154 linhas hoje, e refazer a consulta a cada clique de cabeçalho
+ * trocaria um `sort` instantâneo por um round-trip. Se um dia a lista bater neste
+ * número, a tela avisa que a ordem vale sobre o recorte — ordenar 300 de 400 sem
+ * dizer nada é um resultado errado com cara de certo.
+ */
+export const LIMITE_SACADOS = 300
+
 export async function buscarSacados(): Promise<SacadoFunil[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('antecipacao_sacados')
     .select('*')
     .order('demanda_pipeline', { ascending: false, nullsFirst: false })
-    .limit(300)
+    .limit(LIMITE_SACADOS)
   if (error) throw error
   return (data ?? []) as SacadoFunil[]
 }

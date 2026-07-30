@@ -257,6 +257,39 @@ rua. Enxugar os dois igualmente deixaria o card do celular bonito e mudo.
 Em ambos, **clicar/tocar abre a nota**. O caminho para o fornecedor não se perdeu: no
 web o nome é link e o "+N notas" é link; no mobile o "Ver fornecedor" é explícito.
 
+## Capacidade por sacado: ordenação e filtro
+
+As sete colunas da tabela ordenam por clique no cabeçalho. **A ordenação é feita no
+cliente**, sobre as até `LIMITE_SACADOS` (300) linhas que a leitura já trouxe — são 154
+hoje. Refazer a consulta a cada clique trocaria um `sort` instantâneo por um round-trip
+com skeleton, e não há ganho nenhum nessa escala.
+
+O preço disso está declarado na tela: se a leitura bater no teto, um rodapé avisa que a
+ordem vale sobre o recorte. Sem esse aviso, "ordenar por receita" devolveria *as maiores
+receitas entre as 300 maiores demandas* — um resultado errado com cara de certo.
+
+Três detalhes que não são gosto:
+
+- **Crédito ordena por proximidade de operar**, não por alfabeto: aprovado, em análise,
+  pendente, expirado, recusado, bloqueado, sem análise. Por texto, "Aprovado, Bloqueado,
+  Em análise" juntaria quem opera hoje com quem nunca vai operar.
+- **O primeiro clique já vem na direção útil** — desc em coluna de número (o topo é o
+  que se procura), asc em nome.
+- **O desempate é sempre por nome, ascendente**, mesmo com a coluna em `desc`. Sem ele os
+  108 sacados sem análise trocariam de lugar entre dois carregamentos.
+
+O **filtro por status de crédito** fica salvo em `localStorage`
+(`jobsiteos.antecipacao.sacados.v1`), junto da ordenação — quem trabalha essa tela
+trabalha um recorte só, e refazer a escolha toda visita é o atrito que faz a pessoa
+parar de usar o filtro. É preferência do **navegador, não da URL**: um link colado no
+grupo tem de abrir a lista inteira para quem recebe.
+
+Duas defesas contra "a tela está vazia e eu não sei por quê": com filtro ativo, o
+cabeçalho diz *mostrando X de Y* e a contagem de sacados estourando o limite conta só as
+linhas visíveis — um número que conta a base inteira não bate com nenhuma linha da
+tabela. As opções do Select saem **dos dados**, não de uma lista fixa: `credito_status`
+vem cru da Onepay, e um status novo apareceria no badge da linha sem existir no filtro.
+
 ## Sacados a prospectar: o recorte é por CNAE
 
 Construtoras que **recebem NF** e **não estão na plataforma**. Duas condições, e só:
