@@ -1,5 +1,6 @@
+// Caminhos específicos, nunca o barrel: ver a nota em funcionarios.ts.
+import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
-  EVENTO_TIPOS,
   MODELOS,
   calibrarEstimador,
   estimarFaturamento,
@@ -7,7 +8,7 @@ import {
   variouOSuficiente,
   type AmostraCalibracao,
   type Coeficientes,
-} from '../../../../../packages/core/src/index.js'
+} from '../../../../../packages/core/src/radar/faturamento.js'
 import type { Json } from '../../../../../packages/core/src/types/database.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'

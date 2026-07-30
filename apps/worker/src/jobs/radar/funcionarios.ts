@@ -1,9 +1,13 @@
+// Caminhos ESPECÍFICOS, nunca o barrel do core: `src/index.js` reexporta o registry,
+// que importa `zod-to-json-schema` — dependência que o worker não tem e não deveria
+// ter (ela existe para montar o JSON Schema das tools da IA, que é coisa da web).
+// O import do barrel compila, passa no typecheck e só quebra no Railway, em runtime.
+import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
-  EVENTO_TIPOS,
   crescimento12m,
   origemVence,
   type OrigemMetrica,
-} from '../../../../../packages/core/src/index.js'
+} from '../../../../../packages/core/src/radar/faturamento.js'
 import type { Json, Tables } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
