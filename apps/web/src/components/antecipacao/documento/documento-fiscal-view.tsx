@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { FileWarning } from 'lucide-react'
 import {
+  avaliarNatureza,
   enderecoEmLinha,
   formatarCep,
   formatarChave,
@@ -31,6 +32,25 @@ import { cn } from '@/lib/utils'
  */
 
 // ─── Peças ──────────────────────────────────────────────────────────────────
+
+/**
+ * Remessa, devolução e afins somem do funil automaticamente. Sem este aviso, a
+ * pergunta "por que esta nota não aparece no Kanban?" não tem resposta na tela em
+ * que a pessoa está olhando — e a resposta é a natureza, que fica logo acima.
+ */
+function AvisoNaturezaNaoOperavel({ natureza }: { natureza: string | null }) {
+  const { operavel } = avaliarNatureza(natureza)
+  if (operavel) return null
+  return (
+    <div className="flex items-start gap-2 border-x border-b border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200">
+      <FileWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+      <p>
+        <span className="font-semibold">Nota não operável.</span> A natureza da operação não gera
+        crédito a receber, então ela fica fora do funil de antecipação.
+      </p>
+    </div>
+  )
+}
 
 function Campo({
   rotulo,
@@ -150,8 +170,18 @@ function ViewNfe({ doc }: { doc: DocumentoNfe }) {
             {doc.tipoOperacao === 'entrada' ? 'ENTRADA' : 'SAÍDA'} · modelo {doc.modelo ?? '55'}
             {doc.ambiente === 'homologacao' ? ' · HOMOLOGAÇÃO' : ''}
           </p>
+          {/* A natureza também aparece no bloco de autorização, mas ali fica no meio
+              do documento. É ela que decide se a nota é operável, então sobe para
+              onde o olho chega primeiro. */}
+          {doc.naturezaOperacao ? (
+            <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wide">
+              {doc.naturezaOperacao}
+            </p>
+          ) : null}
         </div>
       </header>
+
+      <AvisoNaturezaNaoOperavel natureza={doc.naturezaOperacao} />
 
       <Secao titulo="Chave de acesso e autorização">
         <Linha cols="grid-cols-1 sm:grid-cols-[3fr_1fr_1fr]">

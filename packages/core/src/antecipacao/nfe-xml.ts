@@ -46,6 +46,14 @@ export interface NfeParseado {
   destinatario_cnpj: string | null
   parcelas: ParcelaXml[]
   itens: NotaItemXml[]
+  /** `natOp` da NFe. Decide se a nota é operável (remessa/devolução não são). */
+  natureza_operacao: string | null
+  /**
+   * Todo o texto livre onde um vencimento pode estar escrito em prosa: `infCpl` da
+   * NFe e `xDescServ`/`xInfComp` da NFS-e. Concatenado porque quem lê procura a
+   * data, não se importa de qual tag ela veio.
+   */
+  texto_livre: string | null
   erro: string | null
 }
 
@@ -130,6 +138,8 @@ export function parseNfeXml(xml: string | null | undefined): NfeParseado {
     destinatario_cnpj: null,
     parcelas: [],
     itens: [],
+    natureza_operacao: null,
+    texto_livre: null,
     erro: null,
   }
 
@@ -168,6 +178,14 @@ export function parseNfeXml(xml: string | null | undefined): NfeParseado {
       }
     })
 
+    // Texto livre das duas famílias, na ordem em que costuma trazer o vencimento.
+    // A NFS-e nacional não tem bloco de cobrança: `xDescServ` é o único lugar onde
+    // a data aparece, e é por isso que 99,5% delas caíam em emissão + 30.
+    const textoLivre =
+      [texto(xml, 'infCpl'), texto(xml, 'xDescServ'), texto(xml, 'xInfComp')]
+        .filter((t): t is string => Boolean(t))
+        .join(' \n ') || null
+
     return {
       access_key: accessKey && accessKey.length === 44 ? accessKey : null,
       numero: texto(ide, 'nNF'),
@@ -178,6 +196,8 @@ export function parseNfeXml(xml: string | null | undefined): NfeParseado {
       destinatario_cnpj: somenteDigitos(texto(dest, 'CNPJ')),
       parcelas,
       itens,
+      natureza_operacao: texto(ide, 'natOp'),
+      texto_livre: textoLivre,
       erro: null,
     }
   } catch (erro) {

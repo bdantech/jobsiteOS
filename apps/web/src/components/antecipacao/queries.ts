@@ -43,6 +43,8 @@ export interface FiltrosFunil {
   valorMin?: number
   /** Uma coluna do Kanban por vez: cada coluna faz sua própria leitura paginada. */
   estagio?: EstagioFunil | 'encerradas'
+  /** Traz de volta o que a regra de natureza ocultou. Para auditoria, não para o dia a dia. */
+  incluirNaoOperaveis?: boolean
 }
 
 /**
@@ -51,7 +53,7 @@ export interface FiltrosFunil {
  * degrada em silêncio para `GenericStringError`.
  */
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
+  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
 
 export const PAGINA_FUNIL = 40
 
@@ -73,6 +75,13 @@ export async function buscarFunil(
     // única ordenação que o Prompt fixa (§5) — e não é por acaso.
     .order('receita_esperada', { ascending: false, nullsFirst: false })
     .range(pagina * limite, pagina * limite + limite - 1)
+
+  // Notas não operáveis (remessa, devolução, retorno, transferência, comodato) ficam
+  // FORA do funil por padrão: não são crédito a receber, e no topo da fila por
+  // receita esperada eram as maiores — uma remessa de demonstração de R$ 1,6 milhão
+  // ganha de qualquer venda real. `incluirNaoOperaveis` existe para auditar o que a
+  // regra escondeu, já que ela lê natureza em texto livre e erra às vezes.
+  if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
 
   if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
   else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)

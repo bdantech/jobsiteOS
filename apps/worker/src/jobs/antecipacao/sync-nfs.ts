@@ -298,6 +298,11 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     emitida_em: nota.emitida_em,
     vencimento: nota.vencimento,
     vencimento_origem: nota.vencimento_origem,
+    natureza_operacao: nota.natureza_operacao,
+    // `operavel_manual` NÃO é tocado aqui de propósito: se um operador recuperou uma
+    // nota que a regra ocultou, o sync seguinte não pode desfazer isso.
+    operavel: nota.operavel,
+    nao_operavel_motivo: nota.nao_operavel_motivo,
     parcelas: nota.parcelas.length > 0 ? (nota.parcelas as never) : null,
     status_sync: nota.status_sync,
     sacado_cnpj: sacadoCnpj,

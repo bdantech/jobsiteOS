@@ -40,12 +40,19 @@ export const FAIXA_ORDEM: Record<Faixa, number> = { alta: 1, boa: 2, media: 3 }
  * Por que a nota está (ou saiu) da faixa. Gravado em `faixa_motivo` para que
  * "sumiu do Kanban" tenha sempre uma explicação legível.
  */
-export const MOTIVOS_FAIXA = ['regra', 'expirada', 'suprimido', 'fora_das_faixas'] as const
+export const MOTIVOS_FAIXA = [
+  'regra',
+  'expirada',
+  'suprimido',
+  'nao_operavel',
+  'fora_das_faixas',
+] as const
 export type MotivoFaixa = (typeof MOTIVOS_FAIXA)[number]
 export const MOTIVO_FAIXA_LABELS: Record<MotivoFaixa, string> = {
   regra: 'Classificada pela regra ativa',
   expirada: 'Vencimento perto demais para operar',
   suprimido: 'Fornecedor suprimido',
+  nao_operavel: 'Natureza da operação não gera crédito',
   fora_das_faixas: 'Nenhuma regra de faixa casou',
 }
 

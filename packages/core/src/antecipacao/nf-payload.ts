@@ -1,5 +1,7 @@
 import { normalizeCnpj } from '../schemas/cnpj.js'
+import { avaliarNatureza, motivoNaoOperavel } from './natureza-operacao.js'
 import { parseNfeXml, vencimentoDasParcelas, type ParcelaXml } from './nfe-xml.js'
+import { vencimentoDeTextoLivre } from './vencimento-texto.js'
 
 /**
  * O CONTRATO do payload de NFs, e a normalização dele.
@@ -124,7 +126,16 @@ export interface NotaNormalizada {
   valor: number
   emitida_em: string | null
   vencimento: string | null
-  vencimento_origem: 'xml' | 'endpoint' | 'estimado' | null
+  /**
+   * `xml` = duplicata/fatura; `endpoint` = o que o Onepay mandou; `xml_texto` = lido
+   * da prosa da nota (infCpl / discriminação do serviço); `estimado` = emissão + 30,
+   * que é palpite e não pode se passar por dado.
+   */
+  vencimento_origem: 'xml' | 'endpoint' | 'xml_texto' | 'estimado' | null
+  natureza_operacao: string | null
+  /** Remessa, devolução, retorno e afins não geram crédito — saem do funil. */
+  operavel: boolean
+  nao_operavel_motivo: string | null
   parcelas: ParcelaXml[]
   status_sync: string | null
   sincronizada_em: string
@@ -178,7 +189,12 @@ export function normalizarNfPayload(
 
   const emitidaEm = texto(item.issueDate) ?? texto(item.issuedAt) ?? parsed.emitida_em
 
-  // XML → endpoint → estimado.
+  // Duplicata → endpoint → texto livre da nota → emissão + 30.
+  //
+  // O texto livre entra DEPOIS do endpoint de propósito: é heurística sobre prosa, e
+  // dado estruturado, quando existe, ganha. Mas entra ANTES do estimado, e é aí que
+  // está o ganho — 70% da base caía direto no palpite de 30 dias, sendo que a data
+  // estava escrita na nota.
   const doXml = vencimentoDasParcelas(parsed.parcelas, hoje)
   const doEndpoint = data(item.dueDate)
   let vencimento = doXml ?? doEndpoint
@@ -188,6 +204,14 @@ export function normalizarNfPayload(
       ? 'endpoint'
       : null
 
+  if (!vencimento) {
+    const doTexto = vencimentoDeTextoLivre(parsed.texto_livre, emitidaEm, hoje)
+    if (doTexto) {
+      vencimento = doTexto.vencimento
+      vencimentoOrigem = 'xml_texto'
+    }
+  }
+
   if (!vencimento && emitidaEm) {
     const base = new Date(emitidaEm)
     if (!Number.isNaN(base.getTime())) {
@@ -195,6 +219,8 @@ export function normalizarNfPayload(
       vencimentoOrigem = 'estimado'
     }
   }
+
+  const natureza = avaliarNatureza(parsed.natureza_operacao)
 
   return {
     ok: true,
@@ -209,6 +235,9 @@ export function normalizarNfPayload(
       emitida_em: emitidaEm,
       vencimento,
       vencimento_origem: vencimentoOrigem,
+      natureza_operacao: parsed.natureza_operacao,
+      operavel: natureza.operavel,
+      nao_operavel_motivo: motivoNaoOperavel(natureza.termo),
       parcelas: parsed.parcelas,
       status_sync: texto(item.status),
       // `syncedAt` é o carimbo do LADO DE LÁ. Preferi-lo a now() é o que torna

@@ -1466,6 +1466,10 @@ export type Database = {
           valor: number
           vencimento: string | null
           vencimento_origem: string | null
+          natureza_operacao: string | null
+          operavel: boolean
+          operavel_manual: boolean | null
+          nao_operavel_motivo: string | null
           xml_parse_erro: string | null
         }
         Insert: {
@@ -1510,6 +1514,10 @@ export type Database = {
           valor: number
           vencimento?: string | null
           vencimento_origem?: string | null
+          natureza_operacao?: string | null
+          operavel?: boolean
+          operavel_manual?: boolean | null
+          nao_operavel_motivo?: string | null
           xml_parse_erro?: string | null
         }
         Update: {
@@ -1554,6 +1562,10 @@ export type Database = {
           valor?: number
           vencimento?: string | null
           vencimento_origem?: string | null
+          natureza_operacao?: string | null
+          operavel?: boolean
+          operavel_manual?: boolean | null
+          nao_operavel_motivo?: string | null
           xml_parse_erro?: string | null
         }
         Relationships: [
@@ -2168,6 +2180,9 @@ export type Database = {
           valor: number | null
           vencimento: string | null
           vencimento_origem: string | null
+          natureza_operacao: string | null
+          operavel: boolean
+          nao_operavel_motivo: string | null
         }
         Relationships: [
           {
@@ -2592,6 +2607,10 @@ export type Database = {
           valor: number
           vencimento: string | null
           vencimento_origem: string | null
+          natureza_operacao: string | null
+          operavel: boolean
+          operavel_manual: boolean | null
+          nao_operavel_motivo: string | null
           xml_parse_erro: string | null
         }
         SetofOptions: {
