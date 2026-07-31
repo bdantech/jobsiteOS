@@ -72,6 +72,21 @@ export const EVENTO_TIPOS = {
   CERTIFICADO_VENCENDO: 'certificado.vencendo',
   CERTIFICADO_VENCIDO: 'certificado.vencido',
   CERTIFICADO_RENOVADO: 'certificado.renovado',
+
+  // Crédito: potencial, scorecard e esteira (04d)
+  ANALISE_SOLICITADA: 'analise.solicitada',
+  ANALISE_MOVIDA: 'analise.movida',
+  ANALISE_ENVIADA: 'analise.enviada',
+  ANALISE_APROVADA: 'analise.aprovada',
+  ANALISE_APROVADA_PARCIAL: 'analise.aprovada_parcial',
+  ANALISE_NEGADA: 'analise.negada',
+  ANALISE_EXPIRADA: 'analise.expirada',
+  // Sinal de risco de primeira grandeza: a seguradora CORTOU um limite que já tinha
+  // dado. Notifica Admin além de Crédito, e por isso é um evento próprio em vez de um
+  // caso dentro de "análise atualizada".
+  ANALISE_LIMITE_REDUZIDO: 'analise.limite_reduzido',
+  SCORE_RECALCULADO: 'score.recalculado',
+  CREDITO_POTENCIAL_ATUALIZADO: 'credito.potencial_atualizado',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -128,6 +143,16 @@ export const EVENTO_LABELS: Record<string, string> = {
   'certificado.vencendo': 'Certificado digital vencendo',
   'certificado.vencido': 'Certificado digital vencido',
   'certificado.renovado': 'Certificado digital renovado',
+  'analise.solicitada': 'Análise de crédito solicitada',
+  'analise.movida': 'Análise de crédito movida',
+  'analise.enviada': 'Análise enviada à seguradora',
+  'analise.aprovada': 'Análise de crédito aprovada',
+  'analise.aprovada_parcial': 'Análise aprovada parcialmente',
+  'analise.negada': 'Análise de crédito negada',
+  'analise.expirada': 'Análise de crédito expirada',
+  'analise.limite_reduzido': 'Limite reduzido pela seguradora',
+  'score.recalculado': 'Score de crédito recalculado',
+  'credito.potencial_atualizado': 'Potencial de crédito atualizado',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

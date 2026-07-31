@@ -381,6 +381,243 @@ export type Database = {
           },
         ]
       }
+      analises_credito: {
+        Row: {
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          criada_em: string
+          decidida_em: string | null
+          empresa_id: string | null
+          estagio: string
+          expira_em: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+        }
+        Insert: {
+          atradius_buyer_id?: string | null
+          atradius_case_id?: string | null
+          atualizada_em?: string
+          cnpj: string
+          criada_em?: string
+          decidida_em?: string | null
+          empresa_id?: string | null
+          estagio?: string
+          expira_em?: string | null
+          id?: string
+          limite_aprovado?: number | null
+          limite_solicitado?: number | null
+          moeda?: string
+          motivo?: string | null
+          observacoes?: string | null
+          origem?: string
+          rating_seguradora?: string | null
+          seguradora?: string
+          solicitada_por?: string | null
+        }
+        Update: {
+          atradius_buyer_id?: string | null
+          atradius_case_id?: string | null
+          atualizada_em?: string
+          cnpj?: string
+          criada_em?: string
+          decidida_em?: string | null
+          empresa_id?: string | null
+          estagio?: string
+          expira_em?: string | null
+          id?: string
+          limite_aprovado?: number | null
+          limite_solicitado?: number | null
+          moeda?: string
+          motivo?: string | null
+          observacoes?: string | null
+          origem?: string
+          rating_seguradora?: string | null
+          seguradora?: string
+          solicitada_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analise_docs: {
+        Row: {
+          analise_id: string
+          arquivo_url: string
+          enviado_em: string
+          enviado_por: string | null
+          id: string
+          nome_arquivo: string | null
+          tipo: string
+        }
+        Insert: {
+          analise_id: string
+          arquivo_url: string
+          enviado_em?: string
+          enviado_por?: string | null
+          id?: string
+          nome_arquivo?: string | null
+          tipo: string
+        }
+        Update: {
+          analise_id?: string
+          arquivo_url?: string
+          enviado_em?: string
+          enviado_por?: string | null
+          id?: string
+          nome_arquivo?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_docs_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credito_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: []
+      }
+      credito_versoes: {
+        Row: {
+          ativa: boolean
+          calibrado_em: string
+          coeficientes: Json
+          id: string
+          n_amostras_por_tipo: Json
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao?: number
+        }
+        Relationships: []
+      }
+      scorecard_versoes: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          id: string
+          nome: string | null
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          id?: string
+          nome?: string | null
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          id?: string
+          nome?: string | null
+          versao?: number
+        }
+        Relationships: []
+      }
+      empresa_scores: {
+        Row: {
+          breakdown: Json
+          calculado_em: string
+          cnpj: string
+          completude: number
+          empresa_id: string | null
+          faixa: string
+          id: string
+          knockout: string | null
+          score: number | null
+          scorecard_versao: number | null
+        }
+        Insert: {
+          breakdown?: Json
+          calculado_em?: string
+          cnpj: string
+          completude: number
+          empresa_id?: string | null
+          faixa: string
+          id?: string
+          knockout?: string | null
+          score?: number | null
+          scorecard_versao?: number | null
+        }
+        Update: {
+          breakdown?: Json
+          calculado_em?: string
+          cnpj?: string
+          completude?: number
+          empresa_id?: string | null
+          faixa?: string
+          id?: string
+          knockout?: string | null
+          score?: number | null
+          scorecard_versao?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credito_snapshots: {
         Row: {
           analisado_cnpj: string | null
@@ -581,6 +818,17 @@ export type Database = {
           cnae_principal: string | null
           cnpj: string
           criado_em: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          chance_concessao: number | null
+          limite_confianca: string | null
+          limite_potencial: number | null
+          receita_mensal_prevista: number | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          valor_esperado_mensal: number | null
           dados_apollo: Json | null
           dominio: string | null
           dominio_confianca: string | null
@@ -622,6 +870,17 @@ export type Database = {
           cnae_principal?: string | null
           cnpj: string
           criado_em?: string
+          credito_calculado_em?: string | null
+          credito_versao?: number | null
+          chance_concessao?: number | null
+          limite_confianca?: string | null
+          limite_potencial?: number | null
+          receita_mensal_prevista?: number | null
+          score_calculado_em?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          score_faixa?: string | null
+          valor_esperado_mensal?: number | null
           dados_apollo?: Json | null
           dominio?: string | null
           dominio_confianca?: string | null
@@ -663,6 +922,17 @@ export type Database = {
           cnae_principal?: string | null
           cnpj?: string
           criado_em?: string
+          credito_calculado_em?: string | null
+          credito_versao?: number | null
+          chance_concessao?: number | null
+          limite_confianca?: string | null
+          limite_potencial?: number | null
+          receita_mensal_prevista?: number | null
+          score_calculado_em?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          score_faixa?: string | null
+          valor_esperado_mensal?: number | null
           dados_apollo?: Json | null
           dominio?: string | null
           dominio_confianca?: string | null
@@ -2157,6 +2427,18 @@ export type Database = {
       }
     }
     Views: {
+      analise_vigente: {
+        Row: {
+          analise_estagio: string | null
+          analise_id: string | null
+          cnpj: string | null
+          decidida_em: string | null
+          expira_em: string | null
+          limite_aprovado: number | null
+          tem_analise_vigente: boolean | null
+        }
+        Relationships: []
+      }
       antecipacao_fornecedores: {
         Row: {
           dias_para_vencimento_min: number | null
@@ -2229,6 +2511,14 @@ export type Database = {
           erp_detalhes: Json | null
           erp_mrr: number | null
           estagio: string | null
+          analise_estagio: string | null
+          chance_concessao: number | null
+          faixa_score: string | null
+          limite_potencial: number | null
+          receita_mensal_prevista: number | null
+          score_credito: number | null
+          tem_analise_vigente: boolean | null
+          valor_esperado_mensal: number | null
           faturamento_confianca: string | null
           faturamento_estimado: number | null
           faturamento_origem: string | null
@@ -2724,6 +3014,66 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_ativar_scorecard_versao: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["scorecard_versoes"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "scorecard_versoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_mover_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_registrar_doc_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analise_docs"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analise_docs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_credito_config: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["credito_config"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "credito_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_scorecard_versao: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["scorecard_versoes"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "scorecard_versoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_solicitar_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
           isOneToOne: true
           isSetofReturn: false
         }

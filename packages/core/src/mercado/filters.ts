@@ -405,6 +405,78 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     descricao: 'Preenchido à mão. Não é inferido a partir do Simples da Receita.',
   },
 
+  // Crédito (04d) — colunas em mercado_explorador via migration 0073
+  {
+    id: 'limite_potencial',
+    label: 'Limite potencial',
+    tipo: 'numero',
+    coluna: 'limite_potencial',
+    descricao:
+      'Quanto de limite esta empresa provavelmente sustentaria, a partir do faturamento ' +
+      'estimado e da proporção calibrada na carteira. NULO quando falta faturamento ou ' +
+      'calibração — e nulo não é zero.',
+  },
+  {
+    id: 'receita_mensal_prevista',
+    label: 'Receita mensal prevista',
+    tipo: 'numero',
+    coluna: 'receita_mensal_prevista',
+    descricao:
+      'Receita financeira + TAC que o limite potencial geraria por mês, no giro médio da ' +
+      'carteira. É receita da ONE OS, ao contrário do MRR do ERP.',
+  },
+  {
+    id: 'valor_esperado_mensal',
+    label: 'Valor esperado mensal',
+    tipo: 'numero',
+    coluna: 'valor_esperado_mensal',
+    descricao:
+      'Receita prevista × chance de concessão. É a régua de priorização: R$ esperados por ' +
+      'mês, que já desconta a probabilidade de o crédito não sair.',
+  },
+  {
+    id: 'score_credito',
+    label: 'Score de crédito',
+    tipo: 'numero',
+    coluna: 'score_credito',
+    descricao:
+      '0–100, renormalizado sobre os fatores AVALIÁVEIS. Nulo quando a completude dos ' +
+      'dados não alcança o mínimo — nesse caso a faixa é `dados_insuficientes`.',
+  },
+  {
+    id: 'faixa_score',
+    label: 'Faixa do score',
+    tipo: 'enum',
+    coluna: 'faixa_score',
+    opcoes: ['alta', 'media', 'improvavel', 'dados_insuficientes'],
+    descricao: 'Alta ≥ 65 · média ≥ corte de concessão · improvável abaixo dele.',
+  },
+  {
+    id: 'chance_concessao',
+    label: 'Chance de concessão',
+    tipo: 'numero',
+    coluna: 'chance_concessao',
+    descricao: 'Probabilidade derivada da faixa (alta 0,8 · média 0,5 · improvável 0,1).',
+  },
+  {
+    id: 'tem_analise_vigente',
+    label: 'Tem análise de crédito vigente',
+    tipo: 'booleano',
+    coluna: 'tem_analise_vigente',
+    descricao: 'Aprovada (total ou parcial) e ainda dentro da validade.',
+  },
+  {
+    id: 'analise_estagio',
+    label: 'Estágio da análise',
+    tipo: 'enum',
+    coluna: 'analise_estagio',
+    opcoes: [
+      'rascunho', 'solicitada', 'docs_pendentes', 'enviada_seguradora', 'em_analise',
+      'aprovada', 'aprovada_parcial', 'negada', 'expirada', 'cancelada',
+    ],
+    descricao: 'Estágio da análise mais recente deste CNPJ.',
+  },
+
   // Radar (enriquecimento) — colunas em mercado_explorador via migration 0031
   {
     id: 'tem_dominio',
