@@ -131,7 +131,7 @@ export async function calibrarEstimadorJob(): Promise<ResultadoCalibracaoJob> {
   await emitirEvento(null, EVENTO_TIPOS.ESTIMADOR_RECALIBRADO, {
     titulo: 'Estimador recalibrado',
     resumo: `Versão ${versao}, calibrada em ${amostras.length} cliente(s) com faturamento declarado.`,
-    url: '/settings/estimador',
+    url: '/radar/estimador',
     versao,
     amostras: amostras.length,
   })
