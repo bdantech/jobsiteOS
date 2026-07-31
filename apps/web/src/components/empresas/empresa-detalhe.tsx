@@ -31,6 +31,7 @@ import { EmpresaForm } from './empresa-form'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
 import { FaturamentoEquipe } from './faturamento-equipe'
+import { CreditoCard } from '@/components/credito/credito-card'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
@@ -241,6 +242,23 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                   funcionariosEm={data.funcionarios_atualizado_em}
                   dominio={data.dominio}
                   eCliente={data.estagio === 'cliente'}
+                />
+                {/*
+                 * Crédito depois de Faturamento & Equipe porque DEPENDE dele: o limite
+                 * potencial é uma proporção do faturamento estimado. Ler na ordem
+                 * inversa faria o número aparecer antes da grandeza que o gera.
+                 */}
+                <CreditoCard
+                  empresaId={data.id}
+                  cnpj={data.cnpj}
+                  tipo={data.tipo}
+                  limitePotencial={data.limite_potencial}
+                  limiteConfianca={data.limite_confianca}
+                  receitaMensalPrevista={data.receita_mensal_prevista}
+                  valorEsperadoMensal={data.valor_esperado_mensal}
+                  chanceConcessao={data.chance_concessao}
+                  faturamentoEstimado={data.faturamento_anual}
+                  creditoCalculadoEm={data.credito_calculado_em}
                 />
                 <EmpresaForm empresa={data} />
               </TabsContent>

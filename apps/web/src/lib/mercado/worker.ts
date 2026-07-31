@@ -457,3 +457,43 @@ export async function preverRegraNoWorker(
   }
   return { ok: true, previsao: corpo }
 }
+
+// ─── Crédito (Prompt 04d) ────────────────────────────────────────────────────
+
+/** Mensal: calibra na carteira, pontua a base e calcula o potencial, nesta ordem. */
+export async function dispararCreditoMensal(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/mensal', {}, 'credito-mensal')
+}
+
+/** Só os scores (+ potencial, que depende da chance). O que ativar um scorecard dispara. */
+export async function dispararRecalcularScores(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/scores', {}, 'credito-scores')
+}
+
+/** Só o potencial, reaplicando a versão vigente — depois de mexer em taxa, TAC ou caps. */
+export async function dispararEstimarPotencial(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/potencial', {}, 'credito-potencial')
+}
+
+/**
+ * Envio à seguradora. Ação PAGA e a ÚNICA que resolve buyer novo — por isso recebe ids
+ * explícitos, nunca "todas". A confirmação de custo fica no caller (a tela mostra
+ * quantas e o que isso significa antes de disparar).
+ */
+export async function dispararEnviarAnalises(analiseIds: string[]): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/enviar', { analise_ids: analiseIds }, 'credito-enviar')
+}
+
+export async function dispararPollDecisoes(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/poll', {}, 'credito-poll')
+}
+
+/** Backfill do histórico da apólice. Uma vez; não descobre buyer novo. */
+export async function dispararBackfillAtradius(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/backfill', {}, 'credito-backfill')
+}
+
+/** Diário: sync do que já está na apólice + poll + expiração. */
+export async function dispararSyncAtradius(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/sync', {}, 'credito-sync')
+}
