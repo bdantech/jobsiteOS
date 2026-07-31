@@ -533,9 +533,16 @@ async function resolverEmpresa(
     .maybeSingle()
   if (existente) return { empresaId: existente.id, conhecido: true }
 
+  // As DERIVADAS (camada, grupo_id, is_spe, grafo_sefaz) vêm junto, e não é detalhe: são
+  // cópias denormalizadas do universo, e a ficha só mostra a aba "Grupo econômico" quando
+  // `empresas.grupo_id` existe. Sem elas o universo sabia o grupo e a empresa não — a aba
+  // nunca aparecia, a camada sumia da leitura de pirâmide e a SPE não entrava na análise
+  // financeira do grupo. Foi o que a migração 0072 teve de reparar.
   const { data: universo } = await supabaseAdmin
     .from('mercado_universo')
-    .select('cnpj, empresa_id, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte_rfb')
+    .select(
+      'cnpj, empresa_id, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte_rfb, camada, grupo_id, is_spe, grafo_sefaz',
+    )
     .eq('cnpj', cnpj)
     .maybeSingle()
 
@@ -553,6 +560,10 @@ async function resolverEmpresa(
       municipio: universo?.municipio ?? null,
       cnae_principal: universo?.cnae_principal ?? null,
       porte: universo?.porte_rfb ?? null,
+      camada: universo?.camada ?? null,
+      grupo_id: universo?.grupo_id ?? null,
+      is_spe: universo?.is_spe ?? false,
+      grafo_sefaz: universo?.grafo_sefaz ?? false,
       tipo: 'fornecedor',
       estagio: 'mercado',
       origem: 'antecipacao',

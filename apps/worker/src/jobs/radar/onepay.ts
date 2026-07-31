@@ -211,9 +211,16 @@ async function resolverEmpresa(
   }
 
   // Não existe: cria já como cliente, enriquecendo do universo quando houver.
+  //
+  // As DERIVADAS (camada, grupo_id, is_spe, grafo_sefaz) vêm junto, e não é detalhe: são
+  // cópias denormalizadas do universo, e a ficha só mostra a aba "Grupo econômico" quando
+  // `empresas.grupo_id` existe. Sem elas o cliente Onepay nascia sem grupo e sem camada —
+  // justamente quem mais tem SPEs para agrupar. Reparado pela migração 0072.
   const { data: mu } = await supabaseAdmin
     .from('mercado_universo')
-    .select('razao_social, nome_fantasia, uf, municipio, cnae_principal, porte_rfb, empresa_id')
+    .select(
+      'razao_social, nome_fantasia, uf, municipio, cnae_principal, porte_rfb, empresa_id, camada, grupo_id, is_spe, grafo_sefaz',
+    )
     .eq('cnpj', cnpj)
     .maybeSingle()
 
@@ -227,6 +234,10 @@ async function resolverEmpresa(
       municipio: mu?.municipio ?? null,
       cnae_principal: mu?.cnae_principal ?? null,
       porte: mu?.porte_rfb ?? null,
+      camada: mu?.camada ?? null,
+      grupo_id: mu?.grupo_id ?? null,
+      is_spe: mu?.is_spe ?? false,
+      grafo_sefaz: mu?.grafo_sefaz ?? false,
       tipo: 'construtora',
       estagio: 'cliente',
       origem: 'onepay',
