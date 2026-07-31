@@ -107,6 +107,16 @@ const envSchema = z.object({
   /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // ─── Crédito (Prompt 04d): seguradora ─────────────────────────────────────
+  // Todas opcionais: sem elas a esteira funciona inteira até "enviada à seguradora",
+  // e o envio explica que falta credencial em vez de falhar com erro de rede. É a
+  // diferença entre "não configurado" e "quebrado", e ela importa na tela.
+  ATRADIUS_CLIENT_ID: z.string().optional(),
+  ATRADIUS_CLIENT_SECRET: z.string().optional(),
+  ATRADIUS_BASE_URL: z.string().url().optional(),
+  /** A apólice sobre a qual o portfólio e as decisões são lidos. */
+  ATRADIUS_POLICY_ID: z.string().optional(),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })
 

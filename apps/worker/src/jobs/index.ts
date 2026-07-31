@@ -34,6 +34,18 @@ import {
   funcionariosEmpresa,
 } from './radar/funcionarios.js'
 import { calibrarEstimadorJob, estimarFaturamentoJob } from './radar/estimador.js'
+import {
+  calibrarCreditoJob,
+  estimarPotencialJob,
+  recalcularScoresJob,
+} from './credito/potencial.js'
+import {
+  backfillAtradius,
+  enviarAnalises,
+  expirarAnalises,
+  pollDecisoes,
+  syncAtradius,
+} from './credito/esteira.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
@@ -73,6 +85,14 @@ export type TipoJob =
   | 'funcionarios-lote'
   | 'estimador-calibrar'
   | 'estimador-estimar'
+  | 'credito-calibrar'
+  | 'credito-scores'
+  | 'credito-potencial'
+  | 'credito-enviar'
+  | 'credito-poll'
+  | 'credito-backfill'
+  | 'credito-sync'
+  | 'credito-expirar'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -623,4 +643,77 @@ export function dispararLoteRadar(loteId: string): string {
     logger.info({ loteId, tipo: lote.tipo }, 'Executando lote do Radar.')
     return executarLote(loteId, escolherProcessador(lote))
   })
+}
+
+// ─── Crédito (Prompt 04d) ────────────────────────────────────────────────────
+
+/**
+ * O mensal do Crédito, encadeado e NESTA ordem, que é uma cadeia de dependências:
+ *
+ *   calibrar  → o ratio limite/faturamento e o giro saem da carteira real;
+ *   scores    → a chance de concessão é o multiplicador do valor esperado, então
+ *               precisa existir ANTES de o potencial ser calculado;
+ *   potencial → limite → receita → × chance = valor esperado.
+ *
+ * Rodar o potencial antes dos scores produziria uma rodada inteira de valores esperados
+ * multiplicados pela chance do mês passado — e gravados como snapshot, virando história.
+ */
+export function dispararCreditoMensal(): string {
+  return dispararAvulso('credito-calibrar', async () => {
+    const calibracao = await calibrarCreditoJob()
+    const scores = await recalcularScoresJob()
+    const potencial = await estimarPotencialJob()
+    return { calibracao, scores, potencial }
+  })
+}
+
+/** Só os scores — o que a ativação de uma versão de scorecard dispara. */
+export function dispararRecalcularScores(): string {
+  return dispararAvulso('credito-scores', async () => {
+    const scores = await recalcularScoresJob()
+    // O potencial vem junto porque a chance de concessão acabou de mudar: deixar o
+    // valor esperado com a chance antiga seria a mesma inconsistência que o mensal evita.
+    const potencial = await estimarPotencialJob()
+    return { scores, potencial }
+  })
+}
+
+/** Só o potencial, reaplicando a versão vigente (depois de mexer em taxa/TAC/caps). */
+export function dispararEstimarPotencial(): string {
+  return dispararAvulso('credito-potencial', async () => estimarPotencialJob())
+}
+
+/** Envia à seguradora as análises marcadas. Ação PAGA: resolve buyer novo. */
+export function dispararEnviarAnalises(analiseIds?: string[]): string {
+  return dispararAvulso('credito-enviar', async () => {
+    logger.info({ quantidade: analiseIds?.length ?? 'todas as solicitadas' }, 'Enviando análises à seguradora.')
+    return enviarAnalises(analiseIds)
+  })
+}
+
+/** Poll das decisões abertas. Roda no cron e sob demanda. */
+export function dispararPollDecisoes(): string {
+  return dispararAvulso('credito-poll', async () => pollDecisoes())
+}
+
+/**
+ * Backfill do histórico da apólice. Roda UMA vez — e nunca descobre buyer novo: lê o
+ * portfólio e as decisões que a apólice já tem.
+ */
+export function dispararBackfillAtradius(): string {
+  return dispararAvulso('credito-backfill', async () => backfillAtradius())
+}
+
+/** Sync incremental diário do que já está na apólice + expiração das aprovações vencidas. */
+export function dispararSyncAtradius(): string {
+  return dispararAvulso('credito-sync', async () => {
+    const sync = await syncAtradius()
+    const poll = await pollDecisoes()
+    const expiradas = await expirarAnalises()
+    return { sync, poll, expiradas }
+  })
+}
+
+export function dispararExpirarAnalises(): string {
+  return dispararAvulso('credito-expirar', async () => expirarAnalises())
 }

@@ -28,7 +28,15 @@ import {
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
   dispararEstimativaFaturamento,
+  dispararBackfillAtradius,
+  dispararCreditoMensal,
   dispararDominioEmpresa,
+  dispararEnviarAnalises,
+  dispararEstimarPotencial,
+  dispararExpirarAnalises,
+  dispararPollDecisoes,
+  dispararRecalcularScores,
+  dispararSyncAtradius,
   dispararFuncionariosEmpresa,
   dispararFuncionariosLote,
   dispararLookupCadastral,
@@ -327,6 +335,85 @@ app.post('/jobs/radar/estimar-faturamento', (_req: Request, res: Response, next:
 app.post('/jobs/radar/reestimar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararEstimativaFaturamento(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Crédito (Prompt 04d) ────────────────────────────────────────────────────
+
+const enviarAnalisesSchema = z.object({ analise_ids: z.array(z.string().uuid()).optional() })
+
+/** Mensal: calibra na carteira, pontua a base e calcula o potencial, NESTA ordem. */
+app.post('/jobs/credito/mensal', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCreditoMensal(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Só os scores (+ o potencial, que depende da chance). O que ativar um scorecard dispara. */
+app.post('/jobs/credito/scores', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararRecalcularScores(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Só o potencial, reaplicando a versão vigente (depois de mexer em taxa, TAC ou caps). */
+app.post('/jobs/credito/potencial', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEstimarPotencial(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Envio à seguradora. É a ÚNICA rota que pode resolver um buyer novo — e resolver buyer
+ * pode ser cobrado. Por isso ela recebe ids explícitos: um envio em massa acidental é
+ * uma fatura, não um incômodo.
+ */
+app.post('/jobs/credito/enviar', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { analise_ids } = enviarAnalisesSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararEnviarAnalises(analise_ids), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/credito/poll', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararPollDecisoes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Backfill do histórico da apólice. Roda uma vez; não descobre buyer novo. */
+app.post('/jobs/credito/backfill', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararBackfillAtradius(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Diário: sync do que já está na apólice + poll + expiração. */
+app.post('/jobs/credito/sync', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararSyncAtradius(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/credito/expirar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararExpirarAnalises(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

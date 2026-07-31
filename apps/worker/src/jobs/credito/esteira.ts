@@ -1,0 +1,458 @@
+import { EVENTO_TIPOS, type EventoTipo } from '../../../../../packages/core/src/constants.js'
+import { houveReducaoDeLimite } from '../../../../../packages/core/src/credito/seguradora.js'
+import type {
+  DecisaoSeguradora,
+  Seguradora,
+} from '../../../../../packages/core/src/credito/seguradora.js'
+import type { Json } from '../../../../../packages/core/src/types/database.js'
+import { supabaseAdmin } from '../../db.js'
+import { logger } from '../../logger.js'
+import { lerConfigCredito } from '../../credito/config.js'
+import { emitirEvento } from '../../radar/eventos.js'
+import { atradius } from './atradius.js'
+
+/**
+ * A esteira contra a seguradora (04d §4).
+ *
+ * Regras que valem para os cinco jobs deste arquivo:
+ *
+ * 1. **Buyer novo só entra pelo envio.** `resolverBuyer` pode ser cobrado, e por isso ele
+ *    aparece exatamente uma vez, dentro de `enviarAnalises`, sobre uma análise que um
+ *    humano marcou para enviar. Backfill e sync leem o que a apólice JÁ tem.
+ * 2. **Decisão nunca vem da tela.** Só estes jobs escrevem `aprovada`/`negada`/`expirada`,
+ *    com service role. A migração 0073 recusa esses estágios no RPC de mover.
+ * 3. **Toda decisão vira snapshot em `credito_snapshots` + evento.** Um limite que muda
+ *    sem deixar rastro é um limite que ninguém consegue explicar depois.
+ */
+
+const seguradora: Seguradora = atradius
+
+/** Meses → data ISO, para a validade default quando a seguradora não devolve uma. */
+function validadeDefault(meses: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + meses)
+  return d.toISOString().slice(0, 10)
+}
+
+// ─── §4.2 Envio ─────────────────────────────────────────────────────────────
+
+export async function enviarAnalises(analiseIds?: string[]): Promise<{
+  status: 'ok' | 'nao_configurada'
+  enviadas?: number
+  falharam?: number
+  detalhes?: Array<{ id: string; erro: string }>
+}> {
+  if (!seguradora.configurada()) {
+    logger.warn('Seguradora não configurada; envio não roda.')
+    return { status: 'nao_configurada' }
+  }
+
+  let q = supabaseAdmin
+    .from('analises_credito')
+    .select('id, cnpj, limite_solicitado, moeda, atradius_buyer_id')
+    .eq('estagio', 'solicitada')
+  if (analiseIds?.length) q = q.in('id', analiseIds)
+
+  const { data: pendentes } = await q
+  const acc = { enviadas: 0, falharam: 0 }
+  const detalhes: Array<{ id: string; erro: string }> = []
+
+  for (const a of pendentes ?? []) {
+    // Buyer já resolvido numa tentativa anterior não é resolvido de novo: a chamada
+    // pode ser cobrada, e um retry que recobra transforma uma instabilidade de rede em
+    // linha na fatura.
+    let buyerId = a.atradius_buyer_id
+    if (!buyerId) {
+      const r = await seguradora.resolverBuyer(a.cnpj)
+      if (!r.ok) {
+        acc.falharam++
+        detalhes.push({ id: a.id, erro: r.erro })
+        continue
+      }
+      if (!r.dados) {
+        acc.falharam++
+        detalhes.push({ id: a.id, erro: 'CNPJ não encontrado como buyer na seguradora.' })
+        continue
+      }
+      buyerId = r.dados.buyer_id
+      await supabaseAdmin
+        .from('analises_credito')
+        .update({ atradius_buyer_id: buyerId, rating_seguradora: r.dados.rating, atualizada_em: new Date().toISOString() })
+        .eq('id', a.id)
+    }
+
+    const pedido = await seguradora.pedirCobertura({
+      buyer_id: buyerId,
+      limite_solicitado: Number(a.limite_solicitado ?? 0),
+      moeda: a.moeda ?? 'BRL',
+      referencia_externa: a.id,
+    })
+    if (!pedido.ok) {
+      acc.falharam++
+      detalhes.push({ id: a.id, erro: pedido.erro })
+      continue
+    }
+
+    await supabaseAdmin
+      .from('analises_credito')
+      .update({
+        estagio: 'enviada_seguradora',
+        atradius_case_id: pedido.dados.case_id,
+        atualizada_em: new Date().toISOString(),
+      })
+      .eq('id', a.id)
+
+    await emitirEventoAnalise(a.id, EVENTO_TIPOS.ANALISE_ENVIADA, 'Análise enviada à seguradora', `Pedido ${pedido.dados.case_id} aberto na ${seguradora.nome}.`)
+    acc.enviadas++
+  }
+
+  logger.info(acc, 'Envio de análises concluído.')
+  return { status: 'ok', ...acc, detalhes }
+}
+
+// ─── §4.3 Aplicar uma decisão ───────────────────────────────────────────────
+
+/**
+ * O único lugar que escreve o desfecho de uma análise. Concentrado de propósito: poll,
+ * backfill e sync chegam à mesma decisão por caminhos diferentes, e três cópias desta
+ * função seriam três lugares onde "aprovada parcial" pode virar "aprovada".
+ */
+async function aplicarDecisao(
+  analiseId: string,
+  cnpj: string,
+  empresaId: string | null,
+  anterior: { estagio: string; limite_aprovado: number | null },
+  d: DecisaoSeguradora,
+  validadeMeses: number,
+): Promise<{ mudou: boolean; reduziu: boolean }> {
+  const expira = d.expira_em ?? (d.estagio === 'aprovada' || d.estagio === 'aprovada_parcial' ? validadeDefault(validadeMeses) : null)
+  const mudou = anterior.estagio !== d.estagio || Number(anterior.limite_aprovado ?? 0) !== Number(d.limite_aprovado ?? 0)
+  if (!mudou) return { mudou: false, reduziu: false }
+
+  await supabaseAdmin
+    .from('analises_credito')
+    .update({
+      estagio: d.estagio,
+      limite_aprovado: d.limite_aprovado,
+      moeda: d.moeda,
+      rating_seguradora: d.rating,
+      expira_em: expira,
+      decidida_em: d.decidida_em ?? new Date().toISOString(),
+      motivo: d.motivo,
+      atualizada_em: new Date().toISOString(),
+    })
+    .eq('id', analiseId)
+
+  // Snapshot em credito_snapshots: a decisão da seguradora entra na MESMA série que os
+  // limites da Onepay, com origem própria. É o que permite ler as duas juntas depois.
+  if (d.limite_aprovado !== null) {
+    await supabaseAdmin.from('credito_snapshots').insert({
+      cnpj,
+      origem: 'atradius',
+      credit_limit: d.limite_aprovado,
+      expiration_date: expira,
+      status: d.estagio,
+    })
+  }
+
+  const reduziu = houveReducaoDeLimite(anterior.limite_aprovado, d.limite_aprovado)
+
+  const tipo =
+    d.estagio === 'aprovada'
+      ? EVENTO_TIPOS.ANALISE_APROVADA
+      : d.estagio === 'aprovada_parcial'
+        ? EVENTO_TIPOS.ANALISE_APROVADA_PARCIAL
+        : d.estagio === 'negada'
+          ? EVENTO_TIPOS.ANALISE_NEGADA
+          : d.estagio === 'expirada'
+            ? EVENTO_TIPOS.ANALISE_EXPIRADA
+            : null
+
+  if (tipo) {
+    await emitirEvento(empresaId, tipo, {
+      titulo: `Análise de crédito: ${d.estagio.replace('_', ' ')}`,
+      resumo:
+        d.limite_aprovado !== null
+          ? `Limite aprovado: R$ ${Math.round(d.limite_aprovado).toLocaleString('pt-BR')}${expira ? ` (até ${expira})` : ''}.`
+          : (d.motivo ?? 'Sem limite aprovado.'),
+      url: `/credito/analises/${analiseId}`,
+      cnpj,
+      analise_id: analiseId,
+    })
+  }
+
+  // Evento próprio, e não um caso dentro de "atualizada": a seguradora CORTANDO
+  // cobertura que já tinha dado é o sinal de risco mais forte que este sistema recebe
+  // de fora, e ele vai para Admin além de Crédito.
+  if (reduziu) {
+    await emitirEvento(empresaId, EVENTO_TIPOS.ANALISE_LIMITE_REDUZIDO, {
+      titulo: 'Limite reduzido pela seguradora',
+      resumo:
+        `De R$ ${Math.round(Number(anterior.limite_aprovado)).toLocaleString('pt-BR')} para ` +
+        `R$ ${Math.round(Number(d.limite_aprovado ?? 0)).toLocaleString('pt-BR')}.`,
+      url: `/credito/analises/${analiseId}`,
+      cnpj,
+      analise_id: analiseId,
+      de: anterior.limite_aprovado,
+      para: d.limite_aprovado,
+    })
+  }
+
+  return { mudou: true, reduziu }
+}
+
+async function emitirEventoAnalise(
+  analiseId: string,
+  tipo: EventoTipo,
+  titulo: string,
+  resumo: string,
+): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('analises_credito')
+    .select('empresa_id, cnpj')
+    .eq('id', analiseId)
+    .maybeSingle()
+  await emitirEvento(data?.empresa_id ?? null, tipo, {
+    titulo,
+    resumo,
+    url: `/credito/analises/${analiseId}`,
+    cnpj: data?.cnpj,
+    analise_id: analiseId,
+  })
+}
+
+// ─── §4.3 Poll das decisões ─────────────────────────────────────────────────
+
+export async function pollDecisoes(): Promise<{
+  status: 'ok' | 'nao_configurada'
+  consultadas?: number
+  decididas?: number
+}> {
+  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+
+  const cfg = await lerConfigCredito()
+  const { data: abertas } = await supabaseAdmin
+    .from('analises_credito')
+    .select('id, cnpj, empresa_id, estagio, limite_aprovado, atradius_case_id')
+    .in('estagio', ['enviada_seguradora', 'em_analise'])
+    .not('atradius_case_id', 'is', null)
+
+  const acc = { consultadas: 0, decididas: 0 }
+
+  for (const a of abertas ?? []) {
+    acc.consultadas++
+    const r = await seguradora.consultarDecisao(a.atradius_case_id as string)
+    if (!r.ok || !r.dados) continue
+
+    const { mudou } = await aplicarDecisao(
+      a.id,
+      a.cnpj,
+      a.empresa_id,
+      { estagio: a.estagio, limite_aprovado: a.limite_aprovado },
+      r.dados,
+      cfg.validade_padrao_meses,
+    )
+    if (mudou) acc.decididas++
+  }
+
+  logger.info(acc, 'Poll de decisões concluído.')
+  return { status: 'ok', ...acc }
+}
+
+// ─── §4.3 Backfill do histórico da apólice ──────────────────────────────────
+
+/**
+ * Recupera o que JÁ EXISTE na apólice: limites vigentes, decisões pendentes e o
+ * histórico. **Nunca descobre buyer novo** — `resolverBuyer` não é chamado aqui, e o
+ * `detalharBuyer` só age sobre buyers que vieram nas listagens, para traduzir
+ * buyer_id → CNPJ.
+ *
+ * Buyer sem CNPJ nos 14 dígitos vai para revisão manual (fica sem `empresa_id` e com o
+ * motivo preenchido) em vez de ser casado por nome — dois homônimos viram uma empresa
+ * só, e o erro só aparece quando alguém aprova o limite errado.
+ */
+export async function backfillAtradius(): Promise<{
+  status: 'ok' | 'nao_configurada'
+  lidos?: number
+  inseridos?: number
+  atualizados?: number
+  sem_cnpj?: number
+}> {
+  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+
+  const cfg = await lerConfigCredito()
+  const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0 }
+  const cnpjPorBuyer = new Map<string, string | null>()
+
+  async function cnpjDoBuyer(buyerId: string): Promise<string | null> {
+    if (cnpjPorBuyer.has(buyerId)) return cnpjPorBuyer.get(buyerId) ?? null
+    const r = await seguradora.detalharBuyer(buyerId)
+    const cnpj = r.ok ? (r.dados?.identificador_nacional ?? null) : null
+    cnpjPorBuyer.set(buyerId, cnpj)
+    return cnpj
+  }
+
+  async function consumir(
+    ler: (cursor?: string) => Promise<
+      | { ok: true; dados: { itens: DecisaoSeguradora[]; proximoCursor: string | null } }
+      | { ok: false; erro: string; recuperavel: boolean }
+    >,
+  ): Promise<void> {
+    let cursor: string | undefined
+    // Teto de páginas: uma paginação que não devolve `proximoCursor: null` por um bug
+    // do outro lado giraria para sempre gastando chamadas.
+    for (let pagina = 0; pagina < 200; pagina++) {
+      const r = await ler(cursor)
+      if (!r.ok) {
+        logger.error({ erro: r.erro }, 'Backfill interrompido pela seguradora.')
+        return
+      }
+      for (const d of r.dados.itens) {
+        acc.lidos++
+        const cnpj = await cnpjDoBuyer(d.buyer_id)
+        if (!cnpj) {
+          acc.sem_cnpj++
+          continue
+        }
+
+        const { data: empresa } = await supabaseAdmin
+          .from('empresas')
+          .select('id')
+          .eq('cnpj', cnpj)
+          .maybeSingle()
+
+        const { data: existente } = await supabaseAdmin
+          .from('analises_credito')
+          .select('id, estagio, limite_aprovado')
+          .eq('atradius_case_id', d.case_id)
+          .maybeSingle()
+
+        if (existente) {
+          const { mudou } = await aplicarDecisao(
+            existente.id,
+            cnpj,
+            empresa?.id ?? null,
+            { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
+            d,
+            cfg.validade_padrao_meses,
+          )
+          if (mudou) acc.atualizados++
+          continue
+        }
+
+        await supabaseAdmin.from('analises_credito').insert({
+          empresa_id: empresa?.id ?? null,
+          cnpj,
+          estagio: d.estagio,
+          limite_aprovado: d.limite_aprovado,
+          moeda: d.moeda,
+          seguradora: seguradora.id,
+          atradius_buyer_id: d.buyer_id,
+          atradius_case_id: d.case_id,
+          rating_seguradora: d.rating,
+          expira_em: d.expira_em,
+          decidida_em: d.decidida_em,
+          motivo: d.motivo,
+          // A marca que impede a esteira de levar crédito por decisões que ela não tomou.
+          origem: 'atradius_backfill',
+        })
+        acc.inseridos++
+      }
+      if (!r.dados.proximoCursor) return
+      cursor = r.dados.proximoCursor
+    }
+    logger.warn('Backfill parou no teto de 200 páginas.')
+  }
+
+  await consumir((c) => seguradora.listarPortfolio(c))
+  await consumir((c) => seguradora.listarDecisoes(undefined, c))
+
+  logger.info(acc, 'Backfill da Atradius concluído.')
+  return { status: 'ok', ...acc }
+}
+
+/**
+ * Sync incremental diário. Mesma restrição do backfill: só o que já está na apólice.
+ * A janela de 30 dias existe para a listagem não crescer para sempre — decisões mais
+ * antigas que isso já foram vistas, e o backfill é quem recupera história.
+ */
+export async function syncAtradius(): Promise<{
+  status: 'ok' | 'nao_configurada'
+  lidos?: number
+  atualizados?: number
+}> {
+  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+
+  const desde = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+  const cfg = await lerConfigCredito()
+  const acc = { lidos: 0, atualizados: 0 }
+
+  let cursor: string | undefined
+  for (let pagina = 0; pagina < 200; pagina++) {
+    const r = await seguradora.listarDecisoes(desde, cursor)
+    if (!r.ok) {
+      logger.error({ erro: r.erro }, 'Sync da Atradius interrompido.')
+      break
+    }
+    for (const d of r.dados.itens) {
+      acc.lidos++
+      const { data: existente } = await supabaseAdmin
+        .from('analises_credito')
+        .select('id, cnpj, empresa_id, estagio, limite_aprovado')
+        .eq('atradius_case_id', d.case_id)
+        .maybeSingle()
+      if (!existente) continue // buyer que não passou por aqui: backfill resolve, sync não descobre
+
+      const { mudou } = await aplicarDecisao(
+        existente.id,
+        existente.cnpj,
+        existente.empresa_id,
+        { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
+        d,
+        cfg.validade_padrao_meses,
+      )
+      if (mudou) acc.atualizados++
+    }
+    if (!r.dados.proximoCursor) break
+    cursor = r.dados.proximoCursor
+  }
+
+  logger.info(acc, 'Sync da Atradius concluído.')
+  return { status: 'ok', ...acc }
+}
+
+// ─── §4.4 Expiração ─────────────────────────────────────────────────────────
+
+/**
+ * Marca como expirada a aprovação cuja validade passou. Roda mesmo sem seguradora
+ * configurada: a data de validade é NOSSA, e uma aprovação vencida contando como
+ * vigente no scorecard valeria pontos que ela não tem mais.
+ */
+export async function expirarAnalises(): Promise<{ expiradas: number }> {
+  const hoje = new Date().toISOString().slice(0, 10)
+  const { data: vencidas } = await supabaseAdmin
+    .from('analises_credito')
+    .select('id, cnpj, empresa_id, expira_em')
+    .in('estagio', ['aprovada', 'aprovada_parcial'])
+    .not('expira_em', 'is', null)
+    .lt('expira_em', hoje)
+
+  for (const a of vencidas ?? []) {
+    await supabaseAdmin
+      .from('analises_credito')
+      .update({ estagio: 'expirada', atualizada_em: new Date().toISOString() })
+      .eq('id', a.id)
+
+    await emitirEvento(a.empresa_id, EVENTO_TIPOS.ANALISE_EXPIRADA, {
+      titulo: 'Análise de crédito expirada',
+      resumo: `A aprovação venceu em ${a.expira_em}. Candidata a renovação.`,
+      url: `/credito/analises/${a.id}`,
+      cnpj: a.cnpj,
+      analise_id: a.id,
+    })
+  }
+
+  const expiradas = (vencidas ?? []).length
+  if (expiradas > 0) logger.info({ expiradas }, 'Análises expiradas.')
+  return { expiradas }
+}
