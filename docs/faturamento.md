@@ -62,7 +62,10 @@ Misturar as duas esconderia por que uma construtora de 800 pessoas aparece com 4
    junto.
 3. **Sob demanda e em lote** — botão na Company 360 e `tipo = 'funcionarios'` no
    construtor de lotes. Exige **domínio resolvido**; sem ele o item falha com
-   `sem_dominio`, declaradamente, em vez de sumir.
+   `sem_dominio`, declaradamente, em vez de sumir. Na ficha o botão fica desabilitado
+   nesse caso e dá lugar a **Resolver domínio** — antes ele disparava, o worker
+   respondia 202 e a tela dizia "Consultando o Apollo" para uma consulta que nunca
+   existiu.
 
 TTL de 180 dias. Headcount não custa crédito, mas reconsultar toda semana encheria a série
 de pontos idênticos e arruinaria a leitura de crescimento — que é a razão de a série

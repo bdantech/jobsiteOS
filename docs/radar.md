@@ -40,6 +40,53 @@ Ordem obrigatória — só avança quando a etapa anterior não resolve:
 Etapas 1–4 são gratuitas; a 5 só roda se o lote pedir. Tudo grava em
 `enriquecimentos` (tipo `dominio`), inclusive `sem_dados`.
 
+Três caminhos usam a MESMA função (`resolverDominio`): o lote, o botão **Resolver
+domínio** da ficha e — indiretamente — a tela de Domínios. Duas implementações da cascata
+seriam dois lugares onde a ordem das etapas pode divergir, e a ordem É a regra.
+
+O botão da ficha inclui a etapa 5, ao contrário do lote: é um clique deliberado sobre uma
+empresa a R$ 0,10, e um botão que responde "não achei" sem ter tentado tudo é um botão
+que a pessoa clica de novo achando que falhou.
+
+**A cascata não sobrescreve `dominio_origem = 'manual'`.** Sem essa guarda, uma correção
+feita à mão volta ao valor antigo no próximo lote — sem rastro, e a pessoa refaz o mesmo
+trabalho no mês seguinte. O universo continua sendo atualizado: lá não há curadoria.
+
+### `www.` não é detalhe cosmético
+
+`organizations/enrich?domain=www.acme.com.br` não acha nada no Apollo, e o job devolve
+`sem_dados` — indistinguível de uma empresa que o Apollo realmente não conhece. Três
+letras viram "esta empresa não tem headcount", para sempre. Por isso `normalizarDominio`
+(core, `radar/dominio.ts`) tira esquema, caminho, porta e `www.`, e a edição manual na
+ficha passa por ela.
+
+## Domínios pelos contatos (`/radar/dominios`)
+
+O que os e-mails dos contatos dizem sobre o domínio salvo. Três casos:
+
+| caso | o que é | medido na base |
+|---|---|---|
+| `ausente` | não há domínio salvo e os contatos sabem qual é | ~174 empresas |
+| `malformado` | o salvo aponta para o mesmo lugar, escrito de um jeito que quebra a consulta | 1 |
+| `divergente` | são domínios diferentes de verdade | 4 |
+
+O volume está no `ausente` — o e-mail já estava gravado, ninguém tinha lido. É o que
+destrava contatos e headcount, que só sabem consultar por domínio.
+
+**Adotar é manual de propósito.** Das quatro divergências reais, uma é uma construtora
+cujo contato escreve pelo domínio da marca de vendas: os dois estão certos, cada um para
+uma coisa. Uma rotina que equalizasse tudo acertaria três e estragaria a quarta em
+silêncio. O que é adotado vira `origem = manual`, que a cascata não sobrescreve.
+
+Não é um tipo de lote, embora a ideia tenha nascido assim. Lote é o fluxo de **gasto**
+(seleção → estimativa → aprovação → teto de orçamento); isto não chama API, não custa nada
+e não tem o que aprovar. Passá-lo pela cerimônia acrescentaria três telas entre a pessoa e
+uma correção de um clique — e o deixaria com data de validade, porque um lote é uma foto.
+
+A tela exige o módulo **Empresas** além de Radar: `contatos` é gated por
+`app_tem_modulo('empresas')` e devolveria zero linhas, que a tela leria como "nenhuma
+divergência" — a mensagem mais enganosa possível.
+
 ## Política de TTL
 
 Configurável em `radar_config.ttl_dias`. A seleção do lote exclui itens
@@ -113,6 +160,10 @@ caminho paralelo gastaria crédito do Apollo sem aparecer em nenhuma dessas cont
 
 - Exige **domínio resolvido** na empresa (a busca do Apollo é por organização, e a
   organização se resolve pelo domínio). Sem ele, falha explícita em vez de lote vazio.
+  Na ficha, o botão de headcount fica **desabilitado** enquanto não houver domínio e dá
+  lugar a **Resolver domínio**: o worker responde 202 antes de descobrir que não tinha o
+  que consultar, então a tela exibia "Consultando o Apollo" para algo que já tinha
+  terminado em `sem_dominio`.
 - O **TTL de contatos vale**: clicar duas vezes dentro da janela não cobra de novo — o
   item volta `pulado`.
 - É assíncrono (202). A tela não promete contato na hora; o telefone, então, chega

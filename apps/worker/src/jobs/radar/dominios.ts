@@ -1,6 +1,9 @@
 import dns from 'node:dns/promises'
 import { fetch } from 'undici'
+// Caminhos ESPECÍFICOS, nunca o barrel do core: `src/index.js` reexporta o registry,
+// que importa `zod-to-json-schema` — dependência que o worker não tem.
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
+import { dominioDeEmail } from '../../../../../packages/core/src/radar/dominio.js'
 import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
 import type { Tables } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
@@ -26,19 +29,6 @@ interface Achado {
   origem: Origem
   confianca: Confianca
   evidencia: string
-}
-
-const PROVEDORES_GENERICOS = new Set([
-  'gmail', 'hotmail', 'outlook', 'live', 'yahoo', 'uol', 'terra', 'bol', 'ig', 'globo', 'r7', 'msn', 'icloud',
-])
-
-function dominioDeEmail(email: string | null | undefined): string | null {
-  if (!email) return null
-  const m = email.trim().toLowerCase().match(/@([a-z0-9.-]+\.[a-z]{2,})$/)
-  const dom = m?.[1]
-  if (!dom) return null
-  const raiz = dom.split('.')[0] ?? ''
-  return PROVEDORES_GENERICOS.has(raiz) ? null : dom
 }
 
 /** 4-8 candidatos a partir de razão social / nome fantasia. */
@@ -149,24 +139,181 @@ async function buscaClaude(cnpj: string, dados: DadosEmpresa): Promise<Achado | 
   return { ...v, origem: 'claude_busca', evidencia: json.evidencia || v.evidencia }
 }
 
+/**
+ * Grava o domínio no universo e na empresa.
+ *
+ * A cascata NÃO sobrescreve um domínio `manual`. Sem essa guarda, alguém corrige o
+ * domínio à mão (ou o adota pela tela de divergências) e o próximo lote devolve o valor
+ * antigo — a correção some sem deixar rastro, e a pessoa refaz o mesmo trabalho no mês
+ * seguinte. Uma decisão humana vale mais que uma heurística; o universo continua sendo
+ * atualizado porque lá não existe curadoria manual.
+ */
 async function gravarDominio(cnpj: string, empresaId: string | null, achado: Achado): Promise<void> {
   const agora = new Date().toISOString()
   await supabaseAdmin
     .from('mercado_universo')
     .update({ dominio: achado.dominio, dominio_origem: achado.origem, dominio_confianca: achado.confianca })
     .eq('cnpj', cnpj)
-  if (empresaId) {
-    await supabaseAdmin
-      .from('empresas')
-      .update({
-        dominio: achado.dominio,
-        dominio_origem: achado.origem,
-        dominio_confianca: achado.confianca,
-        dominio_validado_em: agora,
-        dominio_evidencia: achado.evidencia,
-      })
-      .eq('id', empresaId)
+  if (!empresaId) return
+
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('dominio, dominio_origem')
+    .eq('id', empresaId)
+    .maybeSingle()
+  if (emp?.dominio_origem === 'manual' && emp.dominio && emp.dominio !== achado.dominio) {
+    logger.info(
+      { empresaId, manual: emp.dominio, cascata: achado.dominio },
+      'Domínio manual preservado; a cascata não sobrescreve.',
+    )
+    return
   }
+
+  await supabaseAdmin
+    .from('empresas')
+    .update({
+      dominio: achado.dominio,
+      dominio_origem: achado.origem,
+      dominio_confianca: achado.confianca,
+      dominio_validado_em: agora,
+      dominio_evidencia: achado.evidencia,
+    })
+    .eq('id', empresaId)
+}
+
+/**
+ * A cascata inteira para UM CNPJ, sem tocar em lote nem em `enriquecimentos`. É o corpo
+ * compartilhado pelo processador de lote e pelo botão da ficha — duas cópias dela seriam
+ * dois lugares onde a ordem das etapas pode divergir, e a ordem É a regra.
+ */
+export async function resolverDominio(
+  cnpj: string,
+  empresaId: string | null,
+  opcoes: { incluirClaude?: boolean } = {},
+): Promise<{ achado: Achado | null; custo: number }> {
+  const { data: mu } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('razao_social, nome_fantasia, email_rfb')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  // Fora do universo (fornecedor de aquisição, empresa criada à mão) o nome ainda existe
+  // em `empresas` — e é dele que a heurística tira os candidatos.
+  let dados: DadosEmpresa = {
+    razao_social: mu?.razao_social ?? null,
+    nome_fantasia: mu?.nome_fantasia ?? null,
+    email_rfb: mu?.email_rfb ?? null,
+  }
+  if (!dados.razao_social && empresaId) {
+    const { data: emp } = await supabaseAdmin
+      .from('empresas')
+      .select('razao_social, nome_fantasia')
+      .eq('id', empresaId)
+      .maybeSingle()
+    dados = { ...dados, razao_social: emp?.razao_social ?? null, nome_fantasia: emp?.nome_fantasia ?? null }
+  }
+
+  let achado: Achado | null = null
+
+  // Etapa 1 — e-mail da Receita.
+  const d1 = dominioDeEmail(dados.email_rfb)
+  if (d1) {
+    const v = await validar(d1, cnpj)
+    if (v) achado = { ...v, origem: 'rfb' }
+  }
+
+  // Etapa 2 — e-mails de contatos existentes.
+  if (!achado && empresaId) {
+    const { data: cts } = await supabaseAdmin
+      .from('contatos')
+      .select('email')
+      .eq('empresa_id', empresaId)
+      .not('email', 'is', null)
+    for (const c of cts ?? []) {
+      const d = dominioDeEmail(c.email)
+      if (!d) continue
+      const v = await validar(d, cnpj)
+      if (v) {
+        achado = { ...v, origem: 'contato' }
+        break
+      }
+    }
+  }
+
+  // Etapa 3 — coluna de site de listas: placeholder (sem fonte estruturada hoje).
+
+  // Etapa 4 — heurística.
+  if (!achado) {
+    for (const cand of gerarCandidatos(dados.razao_social, dados.nome_fantasia)) {
+      const v = await validar(cand, cnpj)
+      if (v) {
+        achado = { ...v, origem: 'heuristica' }
+        break
+      }
+    }
+  }
+
+  // Etapa 5 — busca Claude (paga; só quando pedida e com a chave configurada).
+  let custo = 0
+  if (!achado && opcoes.incluirClaude) {
+    const { dominio_claude } = await lerCustos()
+    custo = dominio_claude
+    achado = await buscaClaude(cnpj, dados)
+  }
+
+  if (achado) {
+    await gravarDominio(cnpj, empresaId, achado)
+    await emitirEvento(empresaId, EVENTO_TIPOS.DOMINIO_RESOLVIDO, {
+      titulo: 'Domínio resolvido',
+      resumo: `${achado.dominio} (${achado.origem}, confiança ${achado.confianca}).`,
+      url: empresaId ? `/empresas/${empresaId}` : `/mercado/universo/${cnpj}`,
+      cnpj,
+      dominio: achado.dominio,
+    })
+  }
+
+  return { achado, custo }
+}
+
+/**
+ * O botão "Resolver domínio" da ficha. Uma empresa, a cascata inteira.
+ *
+ * Inclui a etapa do Claude, ao contrário do lote, cujo default é só as gratuitas: aqui é
+ * um clique deliberado sobre UMA empresa a R$ 0,10 — e um botão que devolve "não achei"
+ * sem ter tentado tudo é um botão que a pessoa clica de novo achando que falhou.
+ *
+ * Registra em `enriquecimentos` como qualquer outra tentativa: é de lá que sai o TTL, e um
+ * caminho que não registra é um caminho que reconsulta para sempre sem aparecer no custo.
+ */
+export async function dominioEmpresa(empresaId: string): Promise<{
+  dominio: string | null
+  origem: string | null
+  confianca: string | null
+  motivo?: string
+}> {
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('id, cnpj')
+    .eq('id', empresaId)
+    .maybeSingle()
+  if (!emp) throw new Error('Empresa não encontrada.')
+
+  const { achado, custo } = await resolverDominio(emp.cnpj, emp.id, { incluirClaude: true })
+
+  await supabaseAdmin.from('enriquecimentos').insert({
+    tipo: 'dominio',
+    fonte: achado?.origem ?? 'heuristica',
+    empresa_id: emp.id,
+    cnpj: emp.cnpj,
+    dominio: achado?.dominio ?? null,
+    status: achado ? 'sucesso' : 'sem_dados',
+    custo_real: custo,
+    unidades_retornadas: achado ? 1 : 0,
+    payload: (achado ?? null) as never,
+  })
+
+  if (!achado) return { dominio: null, origem: null, confianca: null, motivo: 'sem_dados' }
+  return { dominio: achado.dominio, origem: achado.origem, confianca: achado.confianca }
 }
 
 /** Fabrica o processador de item para um lote de domínio (captura os parâmetros do lote). */
@@ -177,77 +324,13 @@ export function criarProcessadorDominio(lote: Tables<'lotes_enriquecimento'>): P
     const cnpj = item.cnpj
     if (!cnpj) return { status: 'erro', fonte: 'heuristica', erro: 'Item sem CNPJ.' }
 
-    const { data: mu } = await supabaseAdmin
-      .from('mercado_universo')
-      .select('razao_social, nome_fantasia, email_rfb')
-      .eq('cnpj', cnpj)
-      .maybeSingle()
-    const dados: DadosEmpresa = {
-      razao_social: mu?.razao_social ?? null,
-      nome_fantasia: mu?.nome_fantasia ?? null,
-      email_rfb: mu?.email_rfb ?? null,
-    }
-
-    let achado: Achado | null = null
-
-    // Etapa 1 — e-mail da Receita.
-    const d1 = dominioDeEmail(dados.email_rfb)
-    if (d1) {
-      const v = await validar(d1, cnpj)
-      if (v) achado = { ...v, origem: 'rfb' }
-    }
-
-    // Etapa 2 — e-mails de contatos existentes.
-    if (!achado && item.empresa_id) {
-      const { data: cts } = await supabaseAdmin
-        .from('contatos')
-        .select('email')
-        .eq('empresa_id', item.empresa_id)
-        .not('email', 'is', null)
-      for (const c of cts ?? []) {
-        const d = dominioDeEmail(c.email)
-        if (!d) continue
-        const v = await validar(d, cnpj)
-        if (v) {
-          achado = { ...v, origem: 'contato' }
-          break
-        }
-      }
-    }
-
-    // Etapa 3 — coluna de site de listas: placeholder (sem fonte estruturada hoje).
-
-    // Etapa 4 — heurística.
-    if (!achado) {
-      for (const cand of gerarCandidatos(dados.razao_social, dados.nome_fantasia)) {
-        const v = await validar(cand, cnpj)
-        if (v) {
-          achado = { ...v, origem: 'heuristica' }
-          break
-        }
-      }
-    }
-
-    // Etapa 5 — busca Claude (paga; só se o lote pediu e a chave existe).
-    let custo = 0
-    if (!achado && params.incluir_claude) {
-      const { dominio_claude } = await lerCustos()
-      custo = dominio_claude
-      achado = await buscaClaude(cnpj, dados)
-    }
+    const { achado, custo } = await resolverDominio(cnpj, item.empresa_id, {
+      incluirClaude: params.incluir_claude,
+    })
 
     if (!achado) {
       return { status: 'sem_dados', fonte: params.incluir_claude ? 'claude_busca' : 'heuristica', custo }
     }
-
-    await gravarDominio(cnpj, item.empresa_id, achado)
-    await emitirEvento(item.empresa_id, EVENTO_TIPOS.DOMINIO_RESOLVIDO, {
-      titulo: 'Domínio resolvido',
-      resumo: `${achado.dominio} (${achado.origem}, confiança ${achado.confianca}).`,
-      url: item.empresa_id ? `/empresas/${item.empresa_id}` : `/mercado/universo/${cnpj}`,
-      cnpj,
-      dominio: achado.dominio,
-    })
     return { status: 'sucesso', fonte: achado.origem, custo, resultado: achado }
   }
 }

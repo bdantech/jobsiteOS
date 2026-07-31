@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Banknote, History, RefreshCw, TrendingDown, TrendingUp, Users } from 'lucide-react'
+import { Banknote, Globe, History, RefreshCw, TrendingDown, TrendingUp, Users } from 'lucide-react'
 import {
   ORIGEM_METRICA_LABELS,
   crescimento12m,
@@ -24,7 +24,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { atualizarFuncionariosAction } from '@/actions/radar'
+import { atualizarFuncionariosAction, resolverDominioEmpresaAction } from '@/actions/radar'
 import { declararMetricaAction } from '@/actions/empresas'
 import { cn } from '@/lib/utils'
 import { empresasKeys, buscarMetricas } from './queries'
@@ -260,13 +260,19 @@ export interface FaturamentoEquipeProps {
   funcionarios: number | null
   funcionariosOrigem: string | null
   funcionariosEm: string | null
+  /**
+   * Pré-requisito de "Atualizar funcionários": o Apollo é consultado POR DOMÍNIO. Sem
+   * ele o job devolve `sem_dominio` e a tela mostraria "disparado" para algo que nunca
+   * teve chance de acontecer.
+   */
+  dominio: string | null
   /** Só clientes ganham os campos de declaração (§5). */
   eCliente: boolean
 }
 
 export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
   const qc = useQueryClient()
-  const [atualizando, setAtualizando] = React.useState(false)
+  const [atualizando, setAtualizando] = React.useState<string | null>(null)
   const [historico, setHistorico] = React.useState<'faturamento_anual' | 'funcionarios' | null>(null)
   const [declarando, setDeclarando] = React.useState<'faturamento_anual' | 'funcionarios' | null>(null)
 
@@ -298,20 +304,24 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
     [porMetrica.funcionarios],
   )
 
-  async function atualizarFuncionarios() {
-    setAtualizando(true)
-    const r = await atualizarFuncionariosAction(props.empresaId)
-    setAtualizando(false)
+  async function disparar(
+    rotulo: string,
+    acao: () => Promise<{ ok: boolean; message?: string; data?: { enfileirado: boolean; aviso?: string } }>,
+    sucesso: string,
+  ) {
+    setAtualizando(rotulo)
+    const r = await acao()
+    setAtualizando(null)
     if (!r.ok) {
-      toast.error(r.message)
+      toast.error(r.message ?? 'Falhou.')
       return
     }
-    if (!r.data.enfileirado) {
+    if (r.data && !r.data.enfileirado) {
       toast.error(r.data.aviso ?? 'Não foi possível disparar a consulta.')
       return
     }
-    // Assíncrono: o worker devolve 202 e consulta o Apollo em segundo plano.
-    toast.success('Consultando o Apollo. Recarregue em alguns instantes.')
+    // Assíncrono: o worker devolve 202 e trabalha em segundo plano.
+    toast.success(sucesso)
   }
 
   const pontosEquipe = [...porMetrica.funcionarios]
@@ -336,18 +346,66 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
               obra de canteiro — servem para comparar empresas entre si, não como quadro real.
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => void atualizarFuncionarios()}
-            disabled={atualizando}
-            title="Consulta o headcount no Apollo. Não consome crédito de revelação."
-          >
-            <RefreshCw className={cn('mr-1 h-3.5 w-3.5', atualizando && 'animate-spin')} aria-hidden />
-            {atualizando ? 'Disparando…' : 'Atualizar funcionários'}
-          </Button>
+          {/*
+           * Dois botões numa ordem que é uma dependência, não uma preferência: o Apollo é
+           * consultado por DOMÍNIO. Sem domínio, "Atualizar funcionários" só sabe devolver
+           * `sem_dominio` — e devolvia isso depois de exibir "Consultando o Apollo",
+           * porque o worker responde 202 antes de descobrir que não tinha o que consultar.
+           * Bloquear aqui troca um sucesso falso por uma explicação e o botão que resolve.
+           */}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {!props.dominio && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void disparar(
+                    'dominio',
+                    () => resolverDominioEmpresaAction(props.empresaId),
+                    'Procurando o domínio. Recarregue em alguns instantes.',
+                  )
+                }
+                disabled={atualizando !== null}
+                title="Roda a cascata: e-mail da Receita → e-mails dos contatos → heurística validada por DNS/MX → busca com Claude (R$ 0,10)."
+              >
+                <Globe
+                  className={cn('mr-1 h-3.5 w-3.5', atualizando === 'dominio' && 'animate-spin')}
+                  aria-hidden
+                />
+                {atualizando === 'dominio' ? 'Disparando…' : 'Resolver domínio'}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void disparar(
+                  'funcionarios',
+                  () => atualizarFuncionariosAction(props.empresaId),
+                  'Consultando o Apollo. Recarregue em alguns instantes.',
+                )
+              }
+              disabled={atualizando !== null || !props.dominio}
+              title={
+                props.dominio
+                  ? `Consulta o headcount no Apollo por ${props.dominio}. Não consome crédito de revelação.`
+                  : 'Sem domínio salvo não há o que consultar no Apollo — resolva o domínio primeiro.'
+              }
+            >
+              <RefreshCw
+                className={cn('mr-1 h-3.5 w-3.5', atualizando === 'funcionarios' && 'animate-spin')}
+                aria-hidden
+              />
+              {atualizando === 'funcionarios' ? 'Disparando…' : 'Atualizar funcionários'}
+            </Button>
+          </div>
         </div>
+        {!props.dominio && (
+          <p className="text-xs text-muted-foreground">
+            Esta empresa não tem <strong>domínio</strong> salvo, e o Apollo é consultado por
+            domínio — headcount e contatos ficam indisponíveis até ele existir.
+          </p>
+        )}
       </CardHeader>
 
       <CardContent className="grid gap-4 sm:grid-cols-2">

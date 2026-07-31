@@ -20,7 +20,7 @@ import { ingerirCno, type OpcoesCno } from './cno.js'
 import { sincronizarOnepay } from './radar/onepay.js'
 import { sincronizarCertificados } from './radar/certificados.js'
 import { executarLote } from './radar/lote.js'
-import { criarProcessadorDominio } from './radar/dominios.js'
+import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import {
   criarProcessadorProtestos,
@@ -67,6 +67,7 @@ export type TipoJob =
   | 'antecipacao-contatos'
   | 'antecipacao-protesto-fornecedor'
   | 'antecipacao-diario'
+  | 'dominio-empresa'
   | 'funcionarios-backfill'
   | 'funcionarios-empresa'
   | 'funcionarios-lote'
@@ -522,6 +523,19 @@ export function dispararProtestoFornecedor(opts: { cnpj: string }): string {
  */
 export function dispararBackfillFuncionarios(): string {
   return dispararAvulso('funcionarios-backfill', async () => backfillFuncionarios())
+}
+
+/**
+ * O botão "Resolver domínio" da ficha. Roda a cascata inteira (§3) para uma empresa.
+ *
+ * Vem antes de headcount e de contatos na ordem das coisas: as duas consultas do Apollo
+ * são POR DOMÍNIO. Sem ele, os dois botões da ficha só sabem dizer "sem dados".
+ */
+export function dispararDominioEmpresa(empresaId: string): string {
+  return dispararAvulso('dominio-empresa', async () => {
+    logger.info({ empresaId }, 'Domínio sob demanda.')
+    return dominioEmpresa(empresaId)
+  })
 }
 
 /** O botão "Atualizar funcionários" da ficha. Uma empresa, uma chamada ao Apollo. */

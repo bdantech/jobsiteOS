@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import { isValidCnpj, normalizeCnpj } from './cnpj.js'
+// Folha, sem dependências: `radar/schemas.ts` importa DESTE arquivo, então só a direção
+// schemas → radar/dominio é livre de ciclo.
+import { normalizarDominio } from '../radar/dominio.js'
 
 export * from './cnpj.js'
 
@@ -118,13 +121,17 @@ export const atualizarEmpresaSchema = criarEmpresaSchema.omit({ cnpj: true }).pa
   id: z.string().uuid(),
   // O "site" da empresa É a coluna empresas.dominio (Radar §3): a mesma unidade de
   // cobrança do enriquecimento de contatos. Normaliza para o host puro (sem esquema,
-  // sem caminho, minúsculo) para bater com o formato que a cascata de domínio grava.
+  // sem caminho, sem `www.`, minúsculo) para bater com o formato que a cascata de
+  // domínio grava — e porque `organizations/enrich?domain=www.acme.com.br` não acha
+  // nada no Apollo, devolvendo `sem_dados` indistinguível de "empresa desconhecida".
   // '' limpa o campo (o write helper 0038 marca dominio_origem='manual' quando muda).
   dominio: z
     .string()
     .trim()
     .max(255)
-    .transform((s) => (s ? (s.replace(/^https?:\/\//i, '').split('/')[0] ?? '').toLowerCase() : s))
+    // Texto que não é host algum é preservado (em caixa baixa) em vez de virar '': o
+    // usuário precisa ver o que digitou para corrigir, e apagar em silêncio esconde o erro.
+    .transform((s) => (s ? (normalizarDominio(s) ?? s.toLowerCase()) : s))
     .optional(),
 })
 export type AtualizarEmpresaInput = z.infer<typeof atualizarEmpresaSchema>

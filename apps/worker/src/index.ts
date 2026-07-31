@@ -28,6 +28,7 @@ import {
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
   dispararEstimativaFaturamento,
+  dispararDominioEmpresa,
   dispararFuncionariosEmpresa,
   dispararFuncionariosLote,
   dispararLookupCadastral,
@@ -265,8 +266,22 @@ app.post('/jobs/antecipacao/outbox', (_req: Request, res: Response, next: NextFu
   }
 })
 
-const funcionariosEmpresaSchema = z.object({ empresa_id: z.string().uuid() })
+const empresaIdSchema = z.object({ empresa_id: z.string().uuid() })
 const funcionariosLoteSchema = z.object({ lote_id: z.string().uuid() })
+
+/**
+ * Cascata de domínio para UMA empresa (§3), do botão da ficha. Inclui a etapa paga do
+ * Claude (R$ 0,10) porque é um clique deliberado sobre uma empresa só — e registra em
+ * `enriquecimentos`, como toda tentativa que custa.
+ */
+app.post('/jobs/radar/dominio-empresa', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { empresa_id } = empresaIdSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararDominioEmpresa(empresa_id), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
 
 /**
  * Headcount de UMA empresa (04c §4.3). `organizations/enrich` não consome crédito de
@@ -274,7 +289,7 @@ const funcionariosLoteSchema = z.object({ lote_id: z.string().uuid() })
  */
 app.post('/jobs/radar/funcionarios-empresa', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { empresa_id } = funcionariosEmpresaSchema.parse(req.body ?? {})
+    const { empresa_id } = empresaIdSchema.parse(req.body ?? {})
     res.status(202).json({ job_id: dispararFuncionariosEmpresa(empresa_id), status: 'executando' })
   } catch (erro) {
     next(erro)

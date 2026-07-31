@@ -244,6 +244,17 @@ export async function dispararContatosEmpresa(input: {
 }
 
 /**
+ * Cascata de domínio de uma empresa (Radar §3), do botão da ficha. É pré-requisito dos
+ * outros dois botões: contatos e headcount consultam o Apollo POR DOMÍNIO.
+ *
+ * Inclui a etapa paga do Claude (R$ 0,10/empresa) — um clique deliberado sobre uma
+ * empresa só, não vale a cerimônia de um diálogo de custo.
+ */
+export async function dispararDominioEmpresa(empresaId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/dominio-empresa', { empresa_id: empresaId }, 'dominio-empresa')
+}
+
+/**
  * Headcount de uma empresa (04c §4.3). NÃO tem confirmação de custo porque
  * `organizations/enrich` não consome crédito de revelação — ao contrário de protestos.
  */

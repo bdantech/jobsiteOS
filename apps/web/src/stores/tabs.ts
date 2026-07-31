@@ -18,12 +18,27 @@ import { createStore } from 'zustand/vanilla'
  * at its pathname.
  */
 
+/** Where this tab was before its current route — what "voltar" should mean. */
+export interface RotaAnterior {
+  route: string
+  title: string
+}
+
 export interface Tab {
   id: string
   /** Follows the page's <title>; falls back to the module name from the registry. */
   title: string
   /** Pathname. The single thing an inactive tab remembers. */
   route: string
+  /**
+   * A rota de onde esta aba veio, para o "voltar" das fichas.
+   *
+   * Vive AQUI, e não num sessionStorage global, porque o usuário pode ter várias abas do
+   * app dentro da mesma aba do navegador: um "anterior" global viraria "a última aba em
+   * que eu cliquei", e voltar levaria para outro lugar do app. Cada aba lembra o próprio
+   * caminho, que é o que a palavra "voltar" promete.
+   */
+  anterior?: RotaAnterior
 }
 
 export interface TabsState {
@@ -67,6 +82,22 @@ function createTab(route: string, title: string): Tab {
   return { id: crypto.randomUUID(), title, route }
 }
 
+/**
+ * `anterior` vira um href. localStorage é gravável pelo usuário, então um `route` que não
+ * começa com '/' (um `javascript:` , por exemplo) tem de ser recusado aqui — é o único
+ * ponto entre o disco e um <Link>.
+ */
+function isRotaAnterior(value: unknown): value is RotaAnterior {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.title === 'string' &&
+    typeof candidate.route === 'string' &&
+    candidate.route.startsWith('/') &&
+    !candidate.route.startsWith('//') // '//host' é uma URL absoluta disfarçada de caminho
+  )
+}
+
 function isTab(value: unknown): value is Tab {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Record<string, unknown>
@@ -74,7 +105,8 @@ function isTab(value: unknown): value is Tab {
     typeof candidate.id === 'string' &&
     typeof candidate.title === 'string' &&
     typeof candidate.route === 'string' &&
-    candidate.route.startsWith('/')
+    candidate.route.startsWith('/') &&
+    (candidate.anterior === undefined || isRotaAnterior(candidate.anterior))
   )
 }
 
@@ -148,9 +180,14 @@ function createTabsStore(userId: string) {
           // tab activation, and it must NOT clobber the title we already restored).
           if (active.route === route) return
 
+          // O título guardado é o que a página ANTERIOR realmente se chamava (já
+          // renomeado pelo <title> dela), não o palpite do registry — é o que faz o
+          // botão dizer "Sacados a prospectar" em vez de "Antecipação".
+          const anterior: RotaAnterior = { route: active.route, title: active.title }
+
           set({
             tabs: tabs.map((tab) =>
-              tab.id === active.id ? { ...tab, route, title: fallbackTitle } : tab,
+              tab.id === active.id ? { ...tab, route, title: fallbackTitle, anterior } : tab,
             ),
           })
         },

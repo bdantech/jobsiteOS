@@ -133,6 +133,15 @@ export interface LoteItemDetalhe {
   atualizado_em: string
   razao_social: string | null
   nome_fantasia: string | null
+  /**
+   * O domínio DESTE item: o que a cascata resolveu (lote de domínio) ou o que foi usado
+   * na consulta (contatos, funcionários). Sem ele, a lista de "Sucesso" de um lote de
+   * domínio dizia apenas que deu certo, e conferir o que foi atribuído a 200 empresas
+   * exigia abrir 200 fichas — na prática, ninguém confere.
+   */
+  dominio: string | null
+  dominio_origem: string | null
+  dominio_confianca: string | null
 }
 
 export async function buscarItensPorStatus(loteId: string, status: string): Promise<LoteItemDetalhe[]> {
@@ -141,29 +150,43 @@ export async function buscarItensPorStatus(loteId: string, status: string): Prom
   // empresas decide se o nome vem (null para quem não tem o módulo Empresas — o CNPJ fica).
   const { data, error } = await supabase
     .from('lote_itens')
-    .select('id, cnpj, empresa_id, erro, atualizado_em, empresas(razao_social, nome_fantasia)')
+    .select(
+      'id, cnpj, empresa_id, erro, resultado, dominio, atualizado_em, empresas(razao_social, nome_fantasia)',
+    )
     .eq('lote_id', loteId)
     .eq('status', status)
     .order('atualizado_em', { ascending: false })
     .limit(1000)
   if (error) throw new Error(error.message)
+  type Achado = { dominio?: string | null; origem?: string | null; confianca?: string | null }
   type Raw = {
     id: string
     cnpj: string | null
     empresa_id: string | null
     erro: string | null
+    resultado: unknown
+    dominio: string | null
     atualizado_em: string
     empresas: { razao_social: string | null; nome_fantasia: string | null } | null
   }
-  return ((data ?? []) as unknown as Raw[]).map((r) => ({
-    id: r.id,
-    cnpj: r.cnpj,
-    empresa_id: r.empresa_id,
-    erro: r.erro,
-    atualizado_em: r.atualizado_em,
-    razao_social: r.empresas?.razao_social ?? null,
-    nome_fantasia: r.empresas?.nome_fantasia ?? null,
-  }))
+  return ((data ?? []) as unknown as Raw[]).map((r) => {
+    // `resultado` é o achado do item (lote de domínio); `lote_itens.dominio` é o que foi
+    // materializado do universo e é o que os lotes de contatos/funcionários consultaram.
+    // O achado vence: num lote de domínio a coluna materializada estava vazia.
+    const achado = (r.resultado ?? null) as Achado | null
+    return {
+      id: r.id,
+      cnpj: r.cnpj,
+      empresa_id: r.empresa_id,
+      erro: r.erro,
+      atualizado_em: r.atualizado_em,
+      razao_social: r.empresas?.razao_social ?? null,
+      nome_fantasia: r.empresas?.nome_fantasia ?? null,
+      dominio: achado?.dominio ?? r.dominio ?? null,
+      dominio_origem: achado?.origem ?? null,
+      dominio_confianca: achado?.confianca ?? null,
+    }
+  })
 }
 
 export async function buscarClientesOnepay(): Promise<Tables<'clientes_onepay'>[]> {

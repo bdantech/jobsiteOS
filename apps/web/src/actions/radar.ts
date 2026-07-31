@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   dispararBackfillFuncionarios,
   dispararContatosEmpresa,
+  dispararDominioEmpresa,
   dispararEstimadorMensal,
   dispararFuncionariosEmpresa,
   dispararFuncionariosLote,
@@ -145,6 +146,21 @@ export async function rodarContatosEmpresaAction(input: {
   const { erro } = await autorizar()
   if (erro) return erro
   const r = await dispararContatosEmpresa(input)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Roda a cascata de domínio de UMA empresa (Radar §3), do botão da ficha.
+ *
+ * Autoriza pelo módulo Radar, dono do dado e do orçamento — a ficha é só de onde o
+ * clique parte, como em protestos e contatos.
+ */
+export async function resolverDominioEmpresaAction(
+  empresaId: string,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararDominioEmpresa(empresaId)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

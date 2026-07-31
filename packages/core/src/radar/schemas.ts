@@ -8,13 +8,18 @@ import { arvoreSchema } from '../mercado/filters.js'
 
 // ─── Vocabulário ────────────────────────────────────────────────────────────
 
-export const TIPOS_ENRIQUECIMENTO = ['dominio', 'contatos', 'protestos'] as const
+// `funcionarios` entrou em 04c (migração 0069 já aceita os quatro no check de
+// `lotes_enriquecimento` e o construtor de lotes já o oferece). Sem ele aqui, criar o
+// lote morria na validação do zod ANTES de chegar ao banco: a tela oferecia um tipo que
+// o schema recusava.
+export const TIPOS_ENRIQUECIMENTO = ['dominio', 'contatos', 'protestos', 'funcionarios'] as const
 export const tipoEnriquecimentoSchema = z.enum(TIPOS_ENRIQUECIMENTO)
 export type TipoEnriquecimento = z.infer<typeof tipoEnriquecimentoSchema>
 export const TIPO_ENRIQUECIMENTO_LABELS: Record<TipoEnriquecimento, string> = {
   dominio: 'Domínio',
   contatos: 'Contatos',
   protestos: 'Protestos',
+  funcionarios: 'Funcionários',
 }
 
 export const STATUS_LOTE = [

@@ -3,13 +3,41 @@ import { notFound, redirect } from 'next/navigation'
 import { z } from 'zod'
 import { canAccessRoute } from '@jobsiteos/core'
 import { requireSessionContext } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 import { EmpresaDetalhe } from '@/components/empresas/empresa-detalhe'
 
-export const metadata: Metadata = {
-  title: 'Empresa',
-}
-
 const uuidSchema = z.string().uuid()
+
+/**
+ * O título da página É o nome da empresa.
+ *
+ * A barra de abas do app segue o `<title>` de quem está aberto (components/shell/
+ * route-sync.tsx). Com um título fixo, cinco empresas abertas viravam cinco abas escritas
+ * "Empresa", e escolher entre elas era tentativa e erro. O mecanismo já existia — faltava
+ * esta página usá-lo.
+ *
+ * Vai pelo cliente do USUÁRIO, não pelo de serviço: a RLS decide se o nome pode ser lido.
+ * Quem não pode ver a empresa recebe o título genérico, em vez da razão social de uma
+ * ficha que a página em seguida se recusa a mostrar — um título vaza tão bem quanto
+ * qualquer outro texto.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const { id } = await params
+  if (!uuidSchema.safeParse(id).success) return { title: 'Empresa' }
+
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('empresas')
+    .select('razao_social, nome_fantasia')
+    .eq('id', id)
+    .maybeSingle()
+
+  return { title: data?.nome_fantasia || data?.razao_social || 'Empresa' }
+}
 
 export default async function EmpresaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

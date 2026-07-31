@@ -89,6 +89,30 @@ function ItensPorStatusDialog({
                       </span>
                     ) : null}
                   </div>
+                  {/*
+                   * O domínio abaixo do nome: numa lista de "Sucesso" de lote de domínio,
+                   * saber QUE deu certo sem ver O QUE foi atribuído não permite conferir
+                   * nada — e é justamente a etapa em que a heurística acerta o vizinho.
+                   */}
+                  {it.dominio ? (
+                    <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs">
+                      <a
+                        href={`https://${it.dominio}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-no-tab
+                        className="font-mono text-muted-foreground hover:text-foreground hover:underline"
+                      >
+                        {it.dominio}
+                      </a>
+                      {it.dominio_origem ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          {it.dominio_origem}
+                          {it.dominio_confianca ? ` · ${it.dominio_confianca}` : ''}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
                   {it.erro ? <p className="mt-1 text-xs text-destructive">{it.erro}</p> : null}
                 </li>
               )

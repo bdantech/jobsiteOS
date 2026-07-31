@@ -18,7 +18,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FichaGrade, FichaIdentidade, FichaTopo, FichaVoltar } from '@/components/ficha/ficha'
+import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
+import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import { Skeleton } from '@/components/ui/skeleton'
 import { GrupoSecao } from '@/components/mercado/grupos/grupo-secao'
 import { EstagioBadge, labelTipo } from './estagio-badge'
@@ -154,7 +155,11 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
 
   return (
     <div className="space-y-4">
-      <FichaVoltar href="/empresas">Empresas</FichaVoltar>
+      {/*
+       * Voltar para de onde a pessoa veio (Antecipação, Radar, Explorador…), não para a
+       * lista de Empresas — que na maioria das vezes ela nunca abriu.
+       */}
+      <VoltarContextual padrao={{ href: '/empresas', label: 'Empresas' }} />
 
       <FichaTopo
         titulo="Empresa"
@@ -234,6 +239,7 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                   funcionarios={data.funcionarios}
                   funcionariosOrigem={data.funcionarios_origem}
                   funcionariosEm={data.funcionarios_atualizado_em}
+                  dominio={data.dominio}
                   eCliente={data.estagio === 'cliente'}
                 />
                 <EmpresaForm empresa={data} />
