@@ -118,13 +118,22 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
 
   const form = useForm<EmpresaFormValues>({ defaultValues: paraFormValues(empresa) })
 
-  // Canal / representante mora no jsonb erp_detalhes (escrito pela importação), não numa
-  // coluna própria — por isso fica fora do formulário e é exibido apenas para leitura.
-  const detalhes = empresa.erp_detalhes
-  const canalRepresentante =
-    detalhes && typeof detalhes === 'object' && !Array.isArray(detalhes)
-      ? String((detalhes as Record<string, unknown>).canal ?? '')
-      : ''
+  // Canal / representante e quantidade de usuários moram no jsonb erp_detalhes (escrito
+  // pela importação de listas), não em colunas próprias — por isso ficam fora do
+  // formulário e são exibidos apenas para leitura. Quem escreve é o importador.
+  const detalhes =
+    empresa.erp_detalhes && typeof empresa.erp_detalhes === 'object' && !Array.isArray(empresa.erp_detalhes)
+      ? (empresa.erp_detalhes as Record<string, unknown>)
+      : null
+  const canalRepresentante = detalhes ? String(detalhes.canal ?? '') : ''
+  const qtdUsuarios = Number(detalhes?.qtd_usuarios ?? NaN)
+  const temUsuarios = Number.isFinite(qtdUsuarios) && qtdUsuarios > 0
+
+  // R$ por usuário: é o que transforma "R$ 6.400/mês" e "6 usuários" numa informação
+  // única — o preço por assento é o que se compara contra a nossa proposta na conversa.
+  // Mediana da base: R$ 477.
+  const mrrPorUsuario =
+    temUsuarios && empresa.erp_mrr !== null ? Number(empresa.erp_mrr) / qtdUsuarios : null
 
   // A refetch (or another user's edit landing in the cache) must not silently
   // overwrite what the user is typing — only re-sync a pristine form.
@@ -395,7 +404,8 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
           <CardHeader>
             <CardTitle>Inteligência de ERP</CardTitle>
             <CardDescription>
-              Qual ERP a empresa usa hoje, quanto paga por ele e por qual canal comprou.
+              Qual ERP a empresa usa hoje, quanto paga por ele, para quantos usuários e por
+              qual canal comprou.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-3">
@@ -465,6 +475,39 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
               />
               <p className="text-[0.8rem] text-muted-foreground">
                 Da importação de listas. Editável só via reimportação.
+              </p>
+            </div>
+
+            {/*
+             * Usuários do ERP — `erp_detalhes.qtd_usuarios`, mesma procedência do canal.
+             *
+             * É o denominador que dá sentido ao MRR: R$ 6.400/mês por 6 usuários (R$ 1.067
+             * por assento) e os mesmos R$ 6.400 por 60 usuários são duas empresas
+             * diferentes, e só a segunda parece cara. Também é um dos sinais do estimador
+             * de faturamento (modelo `usuarios_erp`).
+             *
+             * `usuarios_ativos` do mesmo jsonb NÃO é mostrado de propósito: na base ele é
+             * maior que `qtd_usuarios` em 5.018 de 5.043 linhas, com razão mediana de
+             * 37,5× — não é uma contagem de usuários ativos, seja lá o que for. Exibi-lo
+             * ao lado deste número faria os dois parecerem comparáveis.
+             */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium leading-none">Usuários do ERP</p>
+              <Input
+                value={temUsuarios ? qtdUsuarios.toLocaleString('pt-BR') : ''}
+                readOnly
+                disabled
+                autoComplete="off"
+                placeholder="Não informado"
+              />
+              <p className="text-[0.8rem] text-muted-foreground">
+                {mrrPorUsuario !== null
+                  ? `${mrrPorUsuario.toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                      maximumFractionDigits: 0,
+                    })} por usuário. Da importação de listas.`
+                  : 'Da importação de listas. Editável só via reimportação.'}
               </p>
             </div>
           </CardContent>
