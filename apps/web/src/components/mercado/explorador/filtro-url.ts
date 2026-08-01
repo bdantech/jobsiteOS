@@ -33,15 +33,26 @@ export const TAMANHOS_PAGINA = [25, 50, 100, 200] as const
 export const TAMANHO_PADRAO = 50
 
 /**
- * A régua de priorização (04d §5): R$ esperados por mês, no lugar de "parece bom".
+ * ORDENAR PELO UNIVERSO, e não por uma coluna de `empresas`.
  *
- * A troca é segura mesmo com a coluna vazia: a RPC ordena com `nulls last` e desempata
- * por `cnpj asc`, então enquanto ninguém tiver valor esperado a lista sai exatamente na
- * ordem anterior. À medida que o potencial for calculado, os que valem mais sobem.
+ * Eu tinha trocado isto por `valor_esperado_mensal` (04d §5) achando que `nulls last`
+ * bastava. Não basta, e o motivo é o plano, não os dados: a chave de ordenação vive na
+ * tabela do LEFT JOIN, então o `limit 51` não desce — o Postgres materializa as 881 mil
+ * linhas através de cinco joins antes de ordenar. Medido:
+ *
+ *   order by cnpj                    →      4,2 ms  (index scan, para nas 51 primeiras)
+ *   order by valor_esperado_mensal   → 23.350,0 ms  (full join + top-N sort)
+ *
+ * Com `statement_timeout` de 8s, isso não é lento: é uma tela que não abre. E não é um
+ * problema de a coluna estar vazia hoje — com dados o plano é o mesmo. Ordenar o universo
+ * inteiro por valor esperado só fica viável denormalizando a coluna em `mercado_universo`,
+ * que é como `camada` e `grupo_id` já vivem lá.
+ *
+ * A coluna continua ORDENÁVEL: sobre uma seleção filtrada o sort é barato, e é assim que
+ * a régua de R$ esperados serve para priorizar de verdade.
  */
-export const ORDEM_PADRAO = 'valor_esperado_mensal'
-/** Maior primeiro: ordenar dinheiro em ordem crescente mostraria o pior da base. */
-export const DIRECAO_PADRAO: Direcao = 'desc'
+export const ORDEM_PADRAO = 'cnpj'
+export const DIRECAO_PADRAO: Direcao = 'asc'
 export type Direcao = 'asc' | 'desc'
 
 export interface EstadoExplorador {
