@@ -38,6 +38,19 @@ E o **limite potencial é nulo para 100% da base**, porque:
 O `giro_mensal`, esse sim, já sai do real: **14,7%** do limite por mês, mediana de 36
 clientes com limite e volume. É o único elo da cadeia que funciona hoje.
 
+### A régua de ordenação não pode ser o default do Explorador
+
+O §5 pede ordenação default por `valor_esperado_mensal`. Foi tentado e **desfeito**: a
+chave vive em `empresas`, que entra por LEFT JOIN, então o `limit 51` não desce e o
+Postgres materializa as 881 mil linhas do universo antes do sort. Medido: 4,2 ms por
+`cnpj` contra **23.350 ms** por valor esperado, com `statement_timeout` de 8 s. Não é
+efeito da coluna estar vazia — com dados o plano é idêntico.
+
+A coluna continua **ordenável sob demanda**, e sobre uma seleção filtrada o sort é barato
+— que é como a régua serve para priorizar de verdade. Para valer como default no universo
+inteiro, ela precisa ser denormalizada em `mercado_universo`, do jeito que `camada` e
+`grupo_id` já vivem lá.
+
 **Para ligar o resto**: declarar o faturamento de ~5 clientes na Company 360 → rodar o
 estimador (`/radar/estimador`) → rodar "Recalibrar e recalcular" em `/credito/painel`.
 Enriquecer protestos de um lote de sacados é o que faz o fator de maior peso sair do
@@ -191,12 +204,26 @@ aprovação vencida contando como vigente valeria pontos no scorecard que ela n�
 Evento de score só na **mudança de faixa**. Um aviso por empresa por rodada seriam 8 mil
 notificações por mês, que é o mesmo que nenhuma.
 
+### Recálculo dirigido depois de uma decisão
+
+Poll, sync, backfill e expiração chamam `recalcularScoresDeCnpjs` com os CNPJs tocados.
+Uma decisão mexe em dois fatores da empresa decidida — "histórico de análises" e, se foi
+negada, o knockout `negada_recente`. Sem o gatilho, a empresa negada hoje ficaria com a
+faixa antiga até a virada do mês, e o valor esperado dela seguiria multiplicado por uma
+chance que a própria seguradora acabou de desmentir.
+
+**Dirigido, e não a varredura inteira**: recalcular 8 mil empresas porque UMA foi decidida
+é caro o bastante para alguém desligar o gatilho — e gatilho desligado é o mesmo que não
+existir. Os dois caminhos usam a mesma função de pontuar (`pontuarLote`), então não há
+onde a renormalização divergir.
+
 ## Onde está o quê
 
 - **Banco**: migração `0073` (tabelas, RLS, RPCs, bucket `analise-docs`, view
-  `analise_vigente`, cache em `empresas`, 8 variáveis no Explorador) e `0074` (whitelist
+  `analise_vigente`, cache em `empresas`, 8 variáveis no Explorador), `0074` (whitelist
   de ordenação — as colunas do 04c também tinham ficado de fora, e clicar no cabeçalho
-  delas caía silenciosamente em `cnpj`).
+  delas caía silenciosamente em `cnpj`), `0075` (o perfil Crédito precisa do módulo
+  `empresas`) e `0076` (cadastro e sócios das empresas do CRM).
 - **Core** (`packages/core/src/credito/`): `score.ts`, `economia.ts`, `seguradora.ts`,
   `schemas.ts`, `mutations.ts`. 26 testes.
 - **Worker**: `credito/potencial.ts` (calibrar, scores, potencial) e `credito/esteira.ts`

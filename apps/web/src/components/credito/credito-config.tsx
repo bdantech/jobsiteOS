@@ -3,12 +3,13 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Save } from 'lucide-react'
+import { Plus, Save, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { salvarCreditoConfigAction } from '@/actions/credito'
 import { buscarCreditoConfig, buscarVersaoCredito, creditoKeys } from './queries'
 
@@ -105,6 +106,145 @@ const CAMPOS: Array<{ chave: string; titulo: string; descricao: string; campos: 
   },
 ]
 
+interface TipoDoc {
+  id: string
+  label: string
+  obrigatorio: boolean
+}
+
+/** `Balanço patrimonial` → `balanco_patrimonial`: id estável, sem acento e sem espaço. */
+function idDoLabel(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40)
+}
+
+/**
+ * O checklist de documentos da esteira (04d §4.2).
+ *
+ * O `id` de um tipo já enviado NÃO muda quando o rótulo muda: os documentos em
+ * `analise_docs` guardam o id, e reescrevê-lo desligaria da análise todo arquivo já
+ * anexado — que continuaria no bucket, invisível. Por isso o id é gerado uma vez, na
+ * criação, e depois só o rótulo é editável.
+ *
+ * Remover um tipo também não apaga nada: some do checklist, e os arquivos daquele tipo
+ * continuam listados no detalhe da análise.
+ */
+function TiposDeDocumento({
+  tipos,
+  onSalvar,
+  salvando,
+}: {
+  tipos: TipoDoc[]
+  onSalvar: (tipos: TipoDoc[]) => Promise<void>
+  salvando: boolean
+}) {
+  const [rascunho, setRascunho] = React.useState<TipoDoc[] | null>(null)
+  const atual = rascunho ?? tipos
+  const sujo = rascunho !== null && JSON.stringify(rascunho) !== JSON.stringify(tipos)
+
+  function mexer(fn: (lista: TipoDoc[]) => TipoDoc[]) {
+    setRascunho((r) => fn(structuredClone(r ?? tipos)))
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Documentos da análise</CardTitle>
+            <CardDescription>
+              O checklist que aparece no detalhe da análise. Enquanto faltar um obrigatório, a
+              tela avisa — a seguradora costuma pedir por eles, e sem isso a análise volta.
+            </CardDescription>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" disabled={!sujo} onClick={() => setRascunho(null)}>
+              Descartar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!sujo || salvando}
+              onClick={async () => {
+                await onSalvar(atual.filter((t) => t.label.trim() !== ''))
+                setRascunho(null)
+              }}
+            >
+              <Save className="mr-1 h-3.5 w-3.5" aria-hidden />
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {atual.map((t, i) => (
+          <div key={t.id || i} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+            <Input
+              value={t.label}
+              onChange={(e) =>
+                mexer((l) => {
+                  const item = l[i]
+                  if (item) item.label = e.target.value
+                  return l
+                })
+              }
+              className="h-8 min-w-40 flex-1"
+              placeholder="Nome do documento"
+            />
+            <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {t.id}
+            </code>
+            <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+              obrigatório
+              <Switch
+                checked={t.obrigatorio}
+                onCheckedChange={(v) =>
+                  mexer((l) => {
+                    const item = l[i]
+                    if (item) item.obrigatorio = v
+                    return l
+                  })
+                }
+              />
+            </label>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 px-2"
+              aria-label={`Remover ${t.label}`}
+              onClick={() => mexer((l) => l.filter((_, j) => j !== i))}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </div>
+        ))}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            mexer((l) => [...l, { id: `tipo_${l.length + 1}`, label: '', obrigatorio: false }])
+          }
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
+          Adicionar tipo
+        </Button>
+
+        <p className="text-[0.8rem] text-muted-foreground">
+          O identificador entre parênteses é o que os arquivos já enviados guardam. Ele é
+          gerado na criação e não muda quando você renomeia o documento — mudá-lo desligaria
+          da análise todo arquivo já anexado.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function CreditoConfig() {
   const qc = useQueryClient()
   const [rascunho, setRascunho] = React.useState<Record<string, Record<string, string>>>({})
@@ -141,6 +281,26 @@ export function CreditoConfig() {
     }
     toast.success('Configuração salva. Rode "Só potencial" no painel para reaplicar.')
     setRascunho((s) => ({ ...s, [chave]: {} }))
+    void qc.invalidateQueries({ queryKey: creditoKeys.config() })
+  }
+
+  async function salvarTipos(tipos: TipoDoc[]) {
+    setSalvando('docs')
+    // Id gerado só para os NOVOS (os que ainda estão com o placeholder). Regerar o id de
+    // um tipo existente porque o rótulo mudou órfãos os arquivos já anexados.
+    const existentes = new Set(
+      (((config.data?.docs as { tipos?: TipoDoc[] } | undefined)?.tipos ?? []).map((t) => t.id)),
+    )
+    const normalizados = tipos.map((t) =>
+      existentes.has(t.id) ? t : { ...t, id: idDoLabel(t.label) || t.id },
+    )
+    const r = await salvarCreditoConfigAction({ chave: 'docs', valor: { tipos: normalizados } })
+    setSalvando(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success('Checklist de documentos salvo.')
     void qc.invalidateQueries({ queryKey: creditoKeys.config() })
   }
 
@@ -185,6 +345,12 @@ export function CreditoConfig() {
           </div>
         </CardContent>
       </Card>
+
+      <TiposDeDocumento
+        tipos={((config.data?.docs as { tipos?: TipoDoc[] } | undefined)?.tipos ?? []) as TipoDoc[]}
+        onSalvar={salvarTipos}
+        salvando={salvando !== null}
+      />
 
       {CAMPOS.map((grupo) => {
         const sujo = Object.keys(rascunho[grupo.chave] ?? {}).length > 0

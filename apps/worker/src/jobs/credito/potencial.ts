@@ -266,37 +266,53 @@ function montarSinais(e: LinhaSacado, ctx: ContextoSinais): SinaisScore {
   }
 }
 
-export async function recalcularScoresJob(): Promise<{
-  status: 'ok' | 'sem_scorecard'
-  avaliados?: number
-  com_score?: number
-  dados_insuficientes?: number
-  mudaram_de_faixa?: number
-}> {
+interface AccScores {
+  avaliados: number
+  com_score: number
+  dados_insuficientes: number
+  mudaram_de_faixa: number
+}
+
+interface Regua {
+  versao: number
+  definicao: DefinicaoScorecard
+  params: ParametrosScore
+  cfg: Awaited<ReturnType<typeof lerConfigCredito>>
+}
+
+/** A régua vigente. `null` quando não há scorecard ativo — e aí nada é pontuado. */
+async function lerRegua(): Promise<Regua | null> {
   const { data: versao } = await supabaseAdmin
     .from('scorecard_versoes')
     .select('versao, definicao')
     .eq('ativa', true)
     .maybeSingle()
-  if (!versao) {
-    logger.warn('Nenhuma versão de scorecard ativa.')
-    return { status: 'sem_scorecard' }
-  }
+  if (!versao) return null
 
-  const definicao = versao.definicao as unknown as DefinicaoScorecard
   const cfg = await lerConfigCredito()
-  const params: ParametrosScore = {
-    corte_concessao: cfg.corte_concessao,
-    completude_minima: cfg.completude_minima,
-    recencia_protesto_dias: cfg.recencia_protesto_dias,
-    knockout_negada_meses: cfg.knockout_negada_meses,
+  return {
+    versao: versao.versao,
+    definicao: versao.definicao as unknown as DefinicaoScorecard,
+    params: {
+      corte_concessao: cfg.corte_concessao,
+      completude_minima: cfg.completude_minima,
+      recencia_protesto_dias: cfg.recencia_protesto_dias,
+      knockout_negada_meses: cfg.knockout_negada_meses,
+    },
+    cfg,
   }
+}
 
-  const acc = { avaliados: 0, com_score: 0, dados_insuficientes: 0, mudaram_de_faixa: 0 }
-
-  await paginarSacados(async (linhas) => {
-    const ctx = await carregarContexto(linhas.map((l) => l.cnpj))
-
+/**
+ * Pontua um lote de sacados. Extraído para a varredura mensal e o recálculo dirigido
+ * usarem exatamente o mesmo caminho — duas implementações seriam dois lugares onde a
+ * renormalização e o knockout podem divergir, e a divergência só apareceria num número
+ * que ninguém consegue explicar.
+ */
+async function pontuarLote(linhas: LinhaSacado[], regua: Regua, acc: AccScores): Promise<void> {
+  const { versao, definicao, params, cfg } = regua
+  const ctx = await carregarContexto(linhas.map((l) => l.cnpj))
+  {
     for (const e of linhas) {
       const r = calcularScore(montarSinais(e, ctx), definicao, params)
       acc.avaliados++
@@ -313,7 +329,7 @@ export async function recalcularScoresJob(): Promise<{
         faixa: r.faixa,
         knockout: r.knockout,
         breakdown: r.breakdown as unknown as Json,
-        scorecard_versao: versao.versao,
+        scorecard_versao: versao,
       })
 
       await supabaseAdmin
@@ -341,10 +357,62 @@ export async function recalcularScoresJob(): Promise<{
         })
       }
     }
-  })
+  }
+}
+
+export async function recalcularScoresJob(): Promise<{
+  status: 'ok' | 'sem_scorecard'
+  avaliados?: number
+  com_score?: number
+  dados_insuficientes?: number
+  mudaram_de_faixa?: number
+}> {
+  const regua = await lerRegua()
+  if (!regua) {
+    logger.warn('Nenhuma versão de scorecard ativa.')
+    return { status: 'sem_scorecard' }
+  }
+
+  const acc: AccScores = { avaliados: 0, com_score: 0, dados_insuficientes: 0, mudaram_de_faixa: 0 }
+  await paginarSacados((linhas) => pontuarLote(linhas, regua, acc))
 
   logger.info(acc, 'Scores recalculados.')
   return { status: 'ok', ...acc }
+}
+
+/**
+ * Recálculo DIRIGIDO, para depois de uma decisão da seguradora (04d §3.3).
+ *
+ * Uma decisão muda dois fatores da empresa decidida — "histórico de análises" e, se foi
+ * negada, o knockout `negada_recente`. Sem isto, a empresa negada hoje continuaria com a
+ * faixa antiga até a virada do mês, e o valor esperado dela seguiria sendo multiplicado
+ * por uma chance que a própria seguradora acabou de desmentir.
+ *
+ * Dirigido, e não a varredura inteira: recalcular 8 mil empresas porque UMA foi decidida
+ * é caro o bastante para alguém desligar o gatilho — e um gatilho desligado é o mesmo que
+ * não existir.
+ */
+export async function recalcularScoresDeCnpjs(cnpjs: readonly string[]): Promise<AccScores> {
+  const acc: AccScores = { avaliados: 0, com_score: 0, dados_insuficientes: 0, mudaram_de_faixa: 0 }
+  const unicos = [...new Set(cnpjs.filter(Boolean))]
+  if (unicos.length === 0) return acc
+
+  const regua = await lerRegua()
+  if (!regua) {
+    logger.warn('Decisão aplicada sem scorecard ativo; nada a repontuar.')
+    return acc
+  }
+
+  const { data } = await supabaseAdmin
+    .from('empresas')
+    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, valor_esperado_mensal')
+    .in('cnpj', unicos)
+    .in('tipo', SACADOS)
+  if (!data?.length) return acc
+
+  await pontuarLote(data as LinhaSacado[], regua, acc)
+  logger.info({ ...acc, cnpjs: unicos.length }, 'Scores repontuados após decisão.')
+  return acc
 }
 
 // ─── §2.2 Potencial ─────────────────────────────────────────────────────────

@@ -157,6 +157,12 @@ interface FichaIdentidadeProps {
   papel?: string | null
   /** Estágio, camada, situação, tipo… as tags que qualificam. */
   tags?: ReactNode
+  /**
+   * Um atalho pequeno logo abaixo do nome — não uma ação que MOVE a entidade (essa é a
+   * do topo), mas um "leve-me até aquele pedaço da ficha". Fica aqui porque o nome é
+   * onde o olho pousa primeiro, e é de lá que a pessoa decide para onde ir.
+   */
+  abaixoDoNome?: ReactNode
   /** A tira de números. Omitida quando a entidade não tem números próprios. */
   resumo?: ItemResumo[]
   linhas?: LinhaFicha[]
@@ -169,6 +175,7 @@ export function FichaIdentidade({
   nome,
   papel,
   tags,
+  abaixoDoNome,
   resumo,
   linhas,
   rodape,
@@ -182,6 +189,7 @@ export function FichaIdentidade({
           <div className="min-w-0 space-y-1">
             <h2 className="text-lg font-semibold leading-tight">{nome}</h2>
             {papel ? <p className="text-sm text-muted-foreground">{papel}</p> : null}
+            {abaixoDoNome}
           </div>
 
           {tags ? <div className="flex flex-wrap justify-center gap-1.5">{tags}</div> : null}

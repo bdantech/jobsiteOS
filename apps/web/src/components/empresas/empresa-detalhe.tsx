@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
@@ -12,6 +13,7 @@ import {
   Hash,
   MapPin,
   SearchX,
+  Users,
 } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +34,7 @@ import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
 import { FaturamentoEquipe } from './faturamento-equipe'
 import { CreditoCard } from '@/components/credito/credito-card'
+import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
@@ -116,6 +119,10 @@ function EstadoVazio({
  * existence oracle for data the user has no right to.
  */
 export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
+  // Controlado (e não `defaultValue`) só por causa do atalho "Ver quadro societário":
+  // um botão que leva a uma aba precisa poder escolhê-la.
+  const [aba, setAba] = React.useState('dados')
+
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: empresasKeys.detalhe(empresaId),
     queryFn: () => buscarEmpresa(empresaId),
@@ -176,10 +183,11 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
        * Sem `grupo` quando não há grupo — uma aba que abre para dizer "não tem" é uma
        * aba que só serve para decepcionar quem clicou nela.
        */}
-      <Tabs defaultValue="dados" className="space-y-4">
+      <Tabs value={aba} onValueChange={setAba} className="space-y-4">
         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="contatos">Contatos</TabsTrigger>
+          <TabsTrigger value="socios">Sócios</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
           <TabsTrigger value="financeiro">Análise financeira</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -196,6 +204,16 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                   <EstagioBadge estagio={data.estagio} />
                   <Badge variant="secondary">{labelTipo(data.tipo)}</Badge>
                 </>
+              }
+              abaixoDoNome={
+                <button
+                  type="button"
+                  onClick={() => setAba('socios')}
+                  className="mx-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  <Users className="h-3 w-3" aria-hidden />
+                  Ver quadro societário
+                </button>
               }
               linhas={[
                 {
@@ -266,6 +284,15 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
               {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}
               <TabsContent value="contatos" className="mt-0">
                 <EmpresaContatos empresaId={data.id} />
+              </TabsContent>
+
+              {/*
+               * O quadro societário vive no Mercado (é QSA da Receita) e continua lá, na
+               * ficha do universo. Aqui é o MESMO componente, não uma segunda tabela:
+               * duas cópias da mesma pergunta divergem, e a segunda é a que envelhece.
+               */}
+              <TabsContent value="socios" className="mt-0">
+                <QuadroSocietario cnpj={data.cnpj} />
               </TabsContent>
 
               <TabsContent value="notas" className="mt-0">

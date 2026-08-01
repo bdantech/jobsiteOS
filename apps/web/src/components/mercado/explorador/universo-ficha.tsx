@@ -33,6 +33,7 @@ import {
   FichaVoltar,
 } from '@/components/ficha/ficha'
 import { Skeleton } from '@/components/ui/skeleton'
+import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import {
   Table,
   TableBody,
@@ -187,68 +188,6 @@ function CardGrupo({ grupoId }: { grupoId: string }) {
   )
 }
 
-function CardSocios({ cnpj }: { cnpj: string }) {
-  const { data, isPending, isError } = useQuery({
-    queryKey: mercadoKeys.socios(cnpj),
-    queryFn: () => buscarSocios(cnpj),
-  })
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Users className="h-4 w-4 text-muted-foreground" aria-hidden />
-          Quadro societário
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isPending ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full" />
-            ))}
-          </div>
-        ) : isError ? (
-          <p className="text-sm text-muted-foreground">Não foi possível carregar os sócios.</p>
-        ) : data.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nenhum sócio no dump da Receita para este CNPJ.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Sócio</TableHead>
-                <TableHead>Documento</TableHead>
-                <TableHead>Qualificação</TableHead>
-                <TableHead>Entrada</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((socio) => (
-                <TableRow key={socio.id}>
-                  <TableCell className="font-medium">
-                    {socio.nome_socio ?? VAZIO}
-                    {socio.tipo_socio && (
-                      <span className="ml-2 text-xs text-muted-foreground">{socio.tipo_socio}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {formatDocumentoSocio(socio.cpf_cnpj_socio)}
-                  </TableCell>
-                  <TableCell>{socio.qualificacao ?? VAZIO}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatDataISO(socio.data_entrada)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
 
 function CardObras({ cnpj }: { cnpj: string }) {
   const { data, isPending, isError } = useQuery({
@@ -550,7 +489,7 @@ export function UniversoFicha({ cnpj }: { cnpj: string }) {
               </TabsContent>
 
               <TabsContent value="socios" className="mt-0">
-                <CardSocios cnpj={cnpj} />
+                <QuadroSocietario cnpj={cnpj} />
               </TabsContent>
 
               <TabsContent value="obras" className="mt-0">

@@ -10,6 +10,7 @@ import { logger } from '../../logger.js'
 import { lerConfigCredito } from '../../credito/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { atradius } from './atradius.js'
+import { recalcularScoresDeCnpjs } from './potencial.js'
 
 /**
  * A esteira contra a seguradora (04d §4).
@@ -238,6 +239,7 @@ export async function pollDecisoes(): Promise<{
     .not('atradius_case_id', 'is', null)
 
   const acc = { consultadas: 0, decididas: 0 }
+  const decididos: string[] = []
 
   for (const a of abertas ?? []) {
     acc.consultadas++
@@ -252,8 +254,16 @@ export async function pollDecisoes(): Promise<{
       r.dados,
       cfg.validade_padrao_meses,
     )
-    if (mudou) acc.decididas++
+    if (mudou) {
+      acc.decididas++
+      decididos.push(a.cnpj)
+    }
   }
+
+  // A decisão muda dois fatores do scorecard da empresa decidida (histórico e, se
+  // negada, o knockout). Repontuar aqui é o que impede que ela fique com a faixa antiga
+  // até a virada do mês, sendo multiplicada por uma chance que a seguradora desmentiu.
+  await recalcularScoresDeCnpjs(decididos)
 
   logger.info(acc, 'Poll de decisões concluído.')
   return { status: 'ok', ...acc }
@@ -283,6 +293,7 @@ export async function backfillAtradius(): Promise<{
   const cfg = await lerConfigCredito()
   const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0 }
   const cnpjPorBuyer = new Map<string, string | null>()
+  const tocados: string[] = []
 
   async function cnpjDoBuyer(buyerId: string): Promise<string | null> {
     if (cnpjPorBuyer.has(buyerId)) return cnpjPorBuyer.get(buyerId) ?? null
@@ -336,7 +347,10 @@ export async function backfillAtradius(): Promise<{
             d,
             cfg.validade_padrao_meses,
           )
-          if (mudou) acc.atualizados++
+          if (mudou) {
+            acc.atualizados++
+            tocados.push(cnpj)
+          }
           continue
         }
 
@@ -357,6 +371,7 @@ export async function backfillAtradius(): Promise<{
           origem: 'atradius_backfill',
         })
         acc.inseridos++
+        tocados.push(cnpj)
       }
       if (!r.dados.proximoCursor) return
       cursor = r.dados.proximoCursor
@@ -366,6 +381,11 @@ export async function backfillAtradius(): Promise<{
 
   await consumir((c) => seguradora.listarPortfolio(c))
   await consumir((c) => seguradora.listarDecisoes(undefined, c))
+
+  // O backfill traz histórico de decisões, e histórico é um fator do scorecard: sem
+  // repontuar, a empresa que a apólice já aprovou continuaria contando como "nunca
+  // analisada" na conta que decide a chance de concessão dela.
+  await recalcularScoresDeCnpjs(tocados)
 
   logger.info(acc, 'Backfill da Atradius concluído.')
   return { status: 'ok', ...acc }
@@ -386,6 +406,7 @@ export async function syncAtradius(): Promise<{
   const desde = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
   const cfg = await lerConfigCredito()
   const acc = { lidos: 0, atualizados: 0 }
+  const decididos: string[] = []
 
   let cursor: string | undefined
   for (let pagina = 0; pagina < 200; pagina++) {
@@ -411,11 +432,16 @@ export async function syncAtradius(): Promise<{
         d,
         cfg.validade_padrao_meses,
       )
-      if (mudou) acc.atualizados++
+      if (mudou) {
+        acc.atualizados++
+        decididos.push(existente.cnpj)
+      }
     }
     if (!r.dados.proximoCursor) break
     cursor = r.dados.proximoCursor
   }
+
+  await recalcularScoresDeCnpjs(decididos)
 
   logger.info(acc, 'Sync da Atradius concluído.')
   return { status: 'ok', ...acc }
@@ -451,6 +477,11 @@ export async function expirarAnalises(): Promise<{ expiradas: number }> {
       analise_id: a.id,
     })
   }
+
+  // Expirar também mexe no fator de histórico: "aprovada vigente" vale mais que
+  // "aprovada expirada", e a empresa não pode continuar levando os pontos de uma
+  // cobertura que acabou ontem.
+  await recalcularScoresDeCnpjs((vencidas ?? []).map((a) => a.cnpj))
 
   const expiradas = (vencidas ?? []).length
   if (expiradas > 0) logger.info({ expiradas }, 'Análises expiradas.')
