@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, Info, RotateCcw, Save, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Check, Info, Lightbulb, RotateCcw, Save, SlidersHorizontal } from 'lucide-react'
 import {
   FAIXAS,
   FAIXA_DESCRICOES,
@@ -22,6 +22,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConstrutorRegra } from '@/components/filtros/construtor-regra'
 import { criarHelpersArvore } from '@/components/filtros/arvore'
 import { ativarFaixaRegraAction, salvarFaixaRegraAction } from '@/actions/antecipacao'
+import { vincularVersaoSugestaoAction } from '@/actions/perfil'
+import { buscarSugestaoAceita, perfilKeys } from '@/components/mercado/perfil/queries'
 import { cn } from '@/lib/utils'
 import { FAIXA_BADGE, formatarDataHora } from './format'
 import { antecipacaoKeys, buscarRegrasFaixa } from './queries'
@@ -65,7 +67,14 @@ function Precedencia() {
   )
 }
 
-function PainelFaixa({ faixa }: { faixa: Faixa }) {
+function PainelFaixa({
+  faixa,
+  sugestao,
+}: {
+  faixa: Faixa
+  /** Rascunho vindo do Perfil de quem opera (04f §6). Nada é ativado por ele. */
+  sugestao?: { logId: string; frase: string; arvore: Grupo } | null
+}) {
   const qc = useQueryClient()
   /** null ⇒ o editor espelha a regra ativa; nenhuma edição local ainda. */
   const [rascunho, setRascunho] = React.useState<Grupo | null>(null)
@@ -81,9 +90,12 @@ function PainelFaixa({ faixa }: { faixa: Faixa }) {
 
   // Trocar de faixa não pode carregar o rascunho: um editor com a árvore da faixa
   // boa enquanto o cabeçalho diz "alta" é como se salva a regra errada.
+  //
+  // A sugestão do Perfil chega JUNTO com a faixa, então entra neste mesmo efeito:
+  // num segundo efeito ela seria apagada pela troca de faixa logo em seguida.
   React.useEffect(() => {
-    setRascunho(null)
-  }, [faixa])
+    setRascunho(sugestao?.arvore ?? null)
+  }, [faixa, sugestao])
 
   const base = React.useMemo<Grupo>(
     () => helpers.arvoreDeJson(ativa?.definicao) ?? helpers.grupoPadrao(),
@@ -108,6 +120,14 @@ function PainelFaixa({ faixa }: { faixa: Faixa }) {
         : `Regra v${r.data.regra.versao} salva (inativa).`,
     )
     setRascunho(null)
+    // Fecha o ciclo do um-clique: o log passa a saber que versão a sugestão gerou.
+    // Best-effort — a regra já foi salva, e uma falha aqui não desfaz nada.
+    if (sugestao) {
+      void vincularVersaoSugestaoAction({
+        log_id: sugestao.logId,
+        regra_versao_criada: r.data.regra.versao,
+      })
+    }
     void qc.invalidateQueries({ queryKey: antecipacaoKeys.all })
   }
 
@@ -138,6 +158,19 @@ function PainelFaixa({ faixa }: { faixa: Faixa }) {
       </CardHeader>
 
       <CardContent className="space-y-6">
+        {sugestao && (
+          <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div className="space-y-1">
+              <p className="font-medium">Rascunho vindo do Perfil de quem opera</p>
+              <p className="text-xs leading-relaxed">
+                {sugestao.frase} O ajuste já está no editor abaixo — confira e salve se concordar.
+                Nada foi alterado ainda.
+              </p>
+            </div>
+          </div>
+        )}
+
         <Precedencia />
 
         {/* ─── Regra ativa ──────────────────────────────────────────────── */}
@@ -331,8 +364,20 @@ function PainelFaixa({ faixa }: { faixa: Faixa }) {
   )
 }
 
-export function RegrasFaixa() {
+export function RegrasFaixa({ sugestaoLogId }: { sugestaoLogId?: string }) {
   const [faixa, setFaixa] = React.useState<Faixa>('alta')
+
+  const { data: sugestao } = useQuery({
+    queryKey: perfilKeys.sugestao(sugestaoLogId ?? ''),
+    queryFn: () => buscarSugestaoAceita(sugestaoLogId as string),
+    enabled: Boolean(sugestaoLogId),
+  })
+
+  // Chegando pelo um-clique, a faixa da sugestão abre sozinha.
+  React.useEffect(() => {
+    const alvo = sugestao?.sugestao.alvo
+    if (alvo?.tipo === 'faixa') setFaixa(alvo.chave as Faixa)
+  }, [sugestao])
 
   return (
     <div className="space-y-4">
@@ -351,7 +396,18 @@ export function RegrasFaixa() {
         define a faixa da nota.
       </p>
 
-      <PainelFaixa faixa={faixa} />
+      <PainelFaixa
+        faixa={faixa}
+        sugestao={
+          sugestao && sugestao.sugestao.alvo.chave === faixa
+            ? {
+                logId: sugestao.log_id,
+                frase: sugestao.sugestao.frase,
+                arvore: sugestao.sugestao.definicao_proposta,
+              }
+            : null
+        }
+      />
     </div>
   )
 }

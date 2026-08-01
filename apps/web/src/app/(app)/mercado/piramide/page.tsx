@@ -24,8 +24,13 @@ export const metadata: Metadata = {
  *
  * Neither is trusted by the server actions: every one of them re-checks.
  */
-export default async function PiramidePage() {
+export default async function PiramidePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sugestao?: string }>
+}) {
   const context = await requireSessionContext()
+  const { sugestao } = await searchParams
 
   if (!canAccessRoute('/mercado', context.grantedModuleIds)) redirect('/sem-acesso')
   if (!isAdmin(context)) redirect('/sem-acesso')
@@ -35,5 +40,5 @@ export default async function PiramidePage() {
   // default on its own, so there is nothing to guard or re-derive here.
   const camadaPromocao = await lerCamadaPromocao(await createClient())
 
-  return <PiramidePagina camadaPromocao={camadaPromocao} />
+  return <PiramidePagina camadaPromocao={camadaPromocao} sugestaoLogId={sugestao} />
 }

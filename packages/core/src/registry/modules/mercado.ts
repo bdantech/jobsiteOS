@@ -17,6 +17,7 @@ import {
   type ResumoPiramideInput,
 } from '../../mercado/schemas.js'
 import type { AppModule, ToolContext } from '../types.js'
+import { perfilTools } from './perfil-tools.js'
 
 /**
  * Mercado: Universo → TAM → SAM → SOM.
@@ -267,5 +268,9 @@ export const mercadoModule: AppModule = {
         }
       },
     },
+    // Perfil de Quem Opera (04f). Vive aqui, e não num módulo próprio: ele existe
+    // para ajustar as réguas de camada e de faixa, e quem cuida delas já tem
+    // Mercado — um módulo a mais seria uma permissão a mais para uma tela só.
+    ...perfilTools,
   ],
 }

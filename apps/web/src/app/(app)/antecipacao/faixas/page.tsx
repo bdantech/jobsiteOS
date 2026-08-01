@@ -11,10 +11,15 @@ export const metadata: Metadata = { title: 'Regras de faixa — Antecipação' }
  * não preferência pessoal. Só admin, como a pirâmide. A RLS de `faixa_regras`
  * também exige app_is_admin() na escrita; aqui não abrimos a porta que não abre.
  */
-export default async function FaixasPage() {
+export default async function FaixasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sugestao?: string }>
+}) {
   const context = await requireSessionContext()
+  const { sugestao } = await searchParams
   if (!canAccessRoute('/antecipacao', context.grantedModuleIds) || !isAdmin(context)) {
     redirect('/sem-acesso')
   }
-  return <RegrasFaixa />
+  return <RegrasFaixa sugestaoLogId={sugestao} />
 }

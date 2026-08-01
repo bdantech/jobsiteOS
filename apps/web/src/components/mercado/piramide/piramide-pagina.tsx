@@ -11,6 +11,7 @@ import { CirculosCamadas, type DadosCamada } from '../camadas/circulos-camadas'
 import { formatInteiro } from './constants'
 import { PromocaoCard } from './promocao-card'
 import { RegraCamada } from './regra-camada'
+import { buscarSugestaoAceita, perfilKeys } from '../perfil/queries'
 import { contarCamadas, piramideKeys } from './queries'
 
 /**
@@ -31,15 +32,36 @@ import { contarCamadas, piramideKeys } from './queries'
 
 interface PiramidePaginaProps {
   camadaPromocao: PromocaoCamada
+  /**
+   * Id do registro em `perfil_sugestoes_log` quando a tela foi aberta pelo
+   * um-clique do Perfil de quem opera (04f §6). A árvore proposta vem do LOG, e
+   * não da URL: uma regra de camada inteira num query param seria frágil de
+   * carregar e trivial de adulterar.
+   */
+  sugestaoLogId?: string
 }
 
-export function PiramidePagina({ camadaPromocao }: PiramidePaginaProps) {
+export function PiramidePagina({ camadaPromocao, sugestaoLogId }: PiramidePaginaProps) {
   /**
    * Nothing is selected at first — and here selecting is EDITING, not navigating. The
    * Mapa's rings open the Explorador; these open a rule editor, so opening one by
    * default would put an editor on screen for a layer nobody asked about.
    */
   const [selecionada, setSelecionada] = React.useState<Camada | null>(null)
+
+  const { data: sugestao } = useQuery({
+    queryKey: perfilKeys.sugestao(sugestaoLogId ?? ''),
+    queryFn: () => buscarSugestaoAceita(sugestaoLogId as string),
+    enabled: Boolean(sugestaoLogId),
+  })
+
+  // Chegando pelo um-clique, a camada da sugestão abre sozinha: obrigar a pessoa
+  // a adivinhar em qual círculo clicar depois de ela já ter decidido seria perder
+  // o "um" do um-clique.
+  React.useEffect(() => {
+    const alvo = sugestao?.sugestao.alvo
+    if (alvo?.tipo === 'camada') setSelecionada(alvo.chave as Camada)
+  }, [sugestao])
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: piramideKeys.contagens(),
@@ -132,7 +154,21 @@ export function PiramidePagina({ camadaPromocao }: PiramidePaginaProps) {
           {/* Nada selecionado ⇒ nada aqui. O diagrama já traz a sua própria dica logo abaixo
               dos círculos; um card gigante de "Nenhuma camada selecionada" repetiria a mesma
               frase 200px mais para baixo e empurraria a promoção para fora da tela. */}
-          {selecionada ? <RegraCamada camada={selecionada} contagens={data} /> : null}
+          {selecionada ? (
+            <RegraCamada
+              camada={selecionada}
+              contagens={data}
+              sugestao={
+                sugestao && sugestao.sugestao.alvo.chave === selecionada
+                  ? {
+                      logId: sugestao.log_id,
+                      frase: sugestao.sugestao.frase,
+                      arvore: sugestao.sugestao.definicao_proposta,
+                    }
+                  : null
+              }
+            />
+          ) : null}
         </>
       )}
 

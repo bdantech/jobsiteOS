@@ -60,8 +60,12 @@ interface PreviewDialogProps {
   onOpenChange: (aberto: boolean) => void
   camada: CamadaComRegra
   modo: Modo
-  /** Called after a successful save/activation, so the panel can leave edit mode. */
-  onConcluido: () => void
+  /**
+   * Called after a successful save/activation, so the panel can leave edit mode.
+   * Recebe a VERSÃO criada — é o que fecha o ciclo do um-clique do Perfil (04f):
+   * o log da sugestão aceita passa a saber qual versão ela realmente gerou.
+   */
+  onConcluido: (versao: number) => void
 }
 
 // ─── A frase ────────────────────────────────────────────────────────────────
@@ -186,7 +190,7 @@ export function PreviewDialog({
     }
 
     onOpenChange(false)
-    onConcluido()
+    onConcluido(regra.versao)
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Layers, RotateCcw, Save } from 'lucide-react'
+import { AlertTriangle, Layers, Lightbulb, RotateCcw, Save } from 'lucide-react'
 import {
   CAMADAS_COM_REGRA,
   CAMADA_DESCRICOES,
@@ -13,6 +13,7 @@ import {
   type Grupo,
 } from '@jobsiteos/core'
 import { Badge, STATUS_SUPERFICIE } from '@/components/ui/badge'
+import { vincularVersaoSugestaoAction } from '@/actions/perfil'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -47,11 +48,17 @@ function ehCamadaComRegra(camada: Camada): camada is CamadaComRegra {
 interface RegraCamadaProps {
   camada: Camada
   contagens: ContagensPiramide
+  /**
+   * Rascunho vindo do Perfil de Quem Opera (04f §6): a árvore já com o ajuste
+   * sugerido. O editor abre com ela carregada, e daí em diante é o fluxo normal —
+   * preview de impacto, depois ativação. Nada é ativado pelo card da sugestão.
+   */
+  sugestao?: { logId: string; frase: string; arvore: Grupo } | null
 }
 
 // ─── Cabeçalho ──────────────────────────────────────────────────────────────
 
-function Cabecalho({ camada, contagens }: RegraCamadaProps) {
+function Cabecalho({ camada, contagens }: { camada: Camada; contagens: ContagensPiramide }) {
   const total = contagens.porCamada[camada] ?? 0
 
   return (
@@ -83,7 +90,7 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 
 // ─── Universo ───────────────────────────────────────────────────────────────
 
-function RegraUniverso(props: RegraCamadaProps) {
+function RegraUniverso(props: { camada: Camada; contagens: ContagensPiramide }) {
   return (
     <Card>
       <Cabecalho {...props} />
@@ -110,9 +117,11 @@ function RegraUniverso(props: RegraCamadaProps) {
 function RegraComRegra({
   camada,
   contagens,
+  sugestao,
 }: {
   camada: CamadaComRegra
   contagens: ContagensPiramide
+  sugestao?: { logId: string; frase: string; arvore: Grupo } | null
 }) {
   /** null ⇒ the editor still mirrors the active rule; no local edit yet. */
   const [rascunho, setRascunho] = React.useState<Grupo | null>(null)
@@ -127,10 +136,14 @@ function RegraComRegra({
 
   // Switching layers must not carry the draft across: an editor holding SAM's
   // tree while the header says TAM is how someone saves the wrong rule.
+  //
+  // A sugestão do Perfil é a exceção: ela CHEGA junto com a camada, e o efeito
+  // roda depois da troca — por isso ela entra aqui, e não num segundo efeito que
+  // correria antes e teria o rascunho apagado em seguida.
   React.useEffect(() => {
-    setRascunho(null)
+    setRascunho(sugestao?.arvore ?? null)
     setPreviewAberto(false)
-  }, [camada])
+  }, [camada, sugestao])
 
   const base = React.useMemo<Grupo>(() => regraAtiva?.definicao ?? grupoPadrao(), [regraAtiva])
 
@@ -143,6 +156,19 @@ function RegraComRegra({
       <Cabecalho camada={camada} contagens={contagens} />
 
       <CardContent className="space-y-6">
+        {sugestao && (
+          <div className={cn('flex items-start gap-2 rounded-lg border p-3 text-sm', STATUS_SUPERFICIE.info)}>
+            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div className="space-y-1">
+              <p className="font-medium">Rascunho vindo do Perfil de quem opera</p>
+              <p className="text-xs leading-relaxed">
+                {sugestao.frase} O ajuste já está aplicado no editor abaixo — confira, veja o
+                impacto e ative se concordar. Nada foi alterado ainda.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ─── Regra ativa ───────────────────────────────────────────────── */}
         <Secao titulo="Regra ativa">
           {isPending ? (
@@ -279,10 +305,19 @@ function RegraComRegra({
           onOpenChange={setPreviewAberto}
           camada={camada}
           modo={{ tipo: 'salvar', arvore: arvoreEditor }}
-          onConcluido={() => {
+          onConcluido={(versao) => {
             // The saved tree is now the active one (or a new version in history);
             // dropping the draft makes the editor mirror the server again.
             setRascunho(null)
+            // Fecha o ciclo do um-clique: o log da sugestão passa a saber qual
+            // versão ela gerou. Best-effort — a régua já foi salva, e uma falha
+            // aqui não pode desfazer nem alarmar.
+            if (sugestao) {
+              void vincularVersaoSugestaoAction({
+                log_id: sugestao.logId,
+                regra_versao_criada: versao,
+              })
+            }
           }}
         />
       )}
@@ -290,9 +325,9 @@ function RegraComRegra({
   )
 }
 
-export function RegraCamada({ camada, contagens }: RegraCamadaProps) {
+export function RegraCamada({ camada, contagens, sugestao }: RegraCamadaProps) {
   return ehCamadaComRegra(camada) ? (
-    <RegraComRegra camada={camada} contagens={contagens} />
+    <RegraComRegra camada={camada} contagens={contagens} sugestao={sugestao} />
   ) : (
     <RegraUniverso camada={camada} contagens={contagens} />
   )

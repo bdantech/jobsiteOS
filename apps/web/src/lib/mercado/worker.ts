@@ -303,6 +303,16 @@ export async function dispararSyncAntecipacoes(): Promise<DispararJobResultado> 
   return postar('/jobs/antecipacao/sync-antecipacoes', {}, 'antecipacao-sync-antecipacoes')
 }
 
+/**
+ * Perfil de Quem Opera (04f): coortes → contrastes → auditoria → sugestões.
+ *
+ * Enqueue-only. O job varre coortes inteiras e compila as regras de camada para
+ * SQL — é trabalho de worker, e o resultado chega em `perfil_snapshots`.
+ */
+export async function dispararPerfilRecalcular(): Promise<DispararJobResultado> {
+  return postar('/jobs/perfil/recalcular', {}, 'perfil-recalcular')
+}
+
 /** Calibração da economia com a carteira real (04e §5). Só mede; aplicar é da tela. */
 export async function dispararCalibrarEconomia(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/calibrar', {}, 'antecipacao-calibrar')

@@ -2152,6 +2152,123 @@ export type Database = {
           },
         ]
       }
+      perfil_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: []
+      }
+      perfil_snapshots: {
+        Row: {
+          auditoria: Json | null
+          calculado_em: string
+          comparacao: string
+          coorte_a: number
+          coorte_b: number
+          id: string
+          resultados: Json
+          sugestoes: Json | null
+          trilha: string
+          versao_regras: Json | null
+        }
+        Insert: {
+          auditoria?: Json | null
+          calculado_em?: string
+          comparacao: string
+          coorte_a?: number
+          coorte_b?: number
+          id?: string
+          resultados: Json
+          sugestoes?: Json | null
+          trilha: string
+          versao_regras?: Json | null
+        }
+        Update: {
+          auditoria?: Json | null
+          calculado_em?: string
+          comparacao?: string
+          coorte_a?: number
+          coorte_b?: number
+          id?: string
+          resultados?: Json
+          sugestoes?: Json | null
+          trilha?: string
+          versao_regras?: Json | null
+        }
+        Relationships: []
+      }
+      perfil_sugestoes_log: {
+        Row: {
+          acao: string
+          em: string
+          id: string
+          motivo: string | null
+          regra_chave: string | null
+          regra_tipo: string | null
+          regra_versao_criada: number | null
+          snapshot_id: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id: string | null
+        }
+        Insert: {
+          acao: string
+          em?: string
+          id?: string
+          motivo?: string | null
+          regra_chave?: string | null
+          regra_tipo?: string | null
+          regra_versao_criada?: number | null
+          snapshot_id?: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id?: string | null
+        }
+        Update: {
+          acao?: string
+          em?: string
+          id?: string
+          motivo?: string | null
+          regra_chave?: string | null
+          regra_tipo?: string | null
+          regra_versao_criada?: number | null
+          snapshot_id?: string | null
+          sugestao?: Json
+          sugestao_id?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfil_sugestoes_log_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "perfil_snapshots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfil_sugestoes_log_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacao_regras: {
         Row: {
           ativo: boolean
@@ -2822,6 +2939,48 @@ export type Database = {
       }
     }
     Functions: {
+      perfil_snapshot_atual: { Args: { p: Json }; Returns: Json }
+      app_salvar_perfil_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+      }
+      app_registrar_sugestao_perfil: {
+        Args: { p: Json }
+        Returns: {
+          acao: string
+          em: string
+          id: string
+          motivo: string | null
+          regra_chave: string | null
+          regra_tipo: string | null
+          regra_versao_criada: number | null
+          snapshot_id: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id: string | null
+        }
+      }
+      app_vincular_versao_sugestao: {
+        Args: { p: Json }
+        Returns: {
+          acao: string
+          em: string
+          id: string
+          motivo: string | null
+          regra_chave: string | null
+          regra_tipo: string | null
+          regra_versao_criada: number | null
+          snapshot_id: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id: string | null
+        }
+      }
       antecipacao_calibracao_carteira: { Args: { p: Json }; Returns: Json }
       antecipacao_candidatas: { Args: { p: Json }; Returns: Json }
       antecipacao_custo_protesto: { Args: never; Returns: Json }

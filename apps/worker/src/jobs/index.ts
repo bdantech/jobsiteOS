@@ -54,6 +54,7 @@ import { gerarOutbox } from './antecipacao/outbox.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
+import { recalcularPerfil } from './perfil/recalcular.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -97,6 +98,7 @@ export type TipoJob =
   | 'credito-backfill'
   | 'credito-sync'
   | 'credito-expirar'
+  | 'perfil-recalcular'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -810,4 +812,21 @@ export function dispararSyncAtradius(): string {
 
 export function dispararExpirarAnalises(): string {
   return dispararAvulso('credito-expirar', async () => expirarAnalises())
+}
+
+// ─── Perfil de Quem Opera (Prompt 04f) ───────────────────────────────────────
+
+/**
+ * Coortes → contrastes → auditoria das regras → sugestões → snapshot.
+ *
+ * Usa a SESSÃO DEDICADA (e não o PostgREST) porque a auditoria compila as regras
+ * de camada para SQL e as roda contra `mercado_explorador` — o mesmo caminho da
+ * reclassificação. Auditar a régua por outra via seria auditar outra régua.
+ *
+ * Mensal e ENCADEADO depois das calibrações do 04c/04d (§7.6): o perfil lê
+ * `faturamento_estimado` e `score_credito`, e rodar antes delas contrastaria a
+ * base com os números do mês passado.
+ */
+export function dispararPerfilRecalcular(): string {
+  return dispararAvulso('perfil-recalcular', async (client) => recalcularPerfil(client))
 }

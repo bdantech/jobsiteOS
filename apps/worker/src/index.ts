@@ -22,6 +22,7 @@ import {
   dispararContatosEmpresa,
   dispararSyncNfs,
   dispararSyncAntecipacoes,
+  dispararPerfilRecalcular,
   dispararCalibrarEconomia,
   dispararAntecipacaoDiario,
   dispararReclassificacaoFunil,
@@ -431,6 +432,18 @@ app.post('/jobs/credito/backfill', (_req: Request, res: Response, next: NextFunc
 app.post('/jobs/credito/sync', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararSyncAtradius(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Perfil de Quem Opera (04f). Mensal, encadeado depois das calibrações — e
+ * também sob demanda, do botão "Recalcular agora" do painel.
+ */
+app.post('/jobs/perfil/recalcular', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararPerfilRecalcular(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, Circle, Compass, FileSpreadsheet, Layers, Radio } from 'lucide-react'
+import { BarChart3, Circle, Compass, FileSpreadsheet, Layers, Radio, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -31,6 +31,7 @@ const ITENS: readonly ItemNav[] = [
   { href: '/mercado', label: 'Mapa', icon: BarChart3 },
   { href: '/mercado/explorador', label: 'Explorador', icon: Compass },
   { href: '/mercado/segmentos', label: 'Segmentos', icon: Layers },
+  { href: '/mercado/perfil', label: 'Perfil de quem opera', icon: Users },
   { href: '/mercado/importacoes', label: 'Importações', icon: FileSpreadsheet },
   { href: '/mercado/ingestoes', label: 'Ingestões', icon: Radio },
   // A rota continua /mercado/piramide de propósito: o rótulo mudou, a URL não —

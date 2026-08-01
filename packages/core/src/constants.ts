@@ -99,6 +99,11 @@ export const EVENTO_TIPOS = {
   ANALISE_LIMITE_REDUZIDO: 'analise.limite_reduzido',
   SCORE_RECALCULADO: 'score.recalculado',
   CREDITO_POTENCIAL_ATUALIZADO: 'credito.potencial_atualizado',
+
+  // Perfil de Quem Opera (04f)
+  PERFIL_RECALCULADO: 'perfil.recalculado',
+  PERFIL_SUGESTAO_ACEITA: 'perfil.sugestao_aceita',
+  PERFIL_SUGESTAO_DESCARTADA: 'perfil.sugestao_descartada',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -170,6 +175,9 @@ export const EVENTO_LABELS: Record<string, string> = {
   'analise.limite_reduzido': 'Limite reduzido pela seguradora',
   'score.recalculado': 'Score de crédito recalculado',
   'credito.potencial_atualizado': 'Potencial de crédito atualizado',
+  'perfil.recalculado': 'Perfil de quem opera recalculado',
+  'perfil.sugestao_aceita': 'Sugestão do perfil aceita',
+  'perfil.sugestao_descartada': 'Sugestão do perfil descartada',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */
