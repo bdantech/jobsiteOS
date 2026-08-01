@@ -32,7 +32,16 @@ export const PARAM_TAMANHO = 'n'
 export const TAMANHOS_PAGINA = [25, 50, 100, 200] as const
 export const TAMANHO_PADRAO = 50
 
-export const ORDEM_PADRAO = 'cnpj'
+/**
+ * A régua de priorização (04d §5): R$ esperados por mês, no lugar de "parece bom".
+ *
+ * A troca é segura mesmo com a coluna vazia: a RPC ordena com `nulls last` e desempata
+ * por `cnpj asc`, então enquanto ninguém tiver valor esperado a lista sai exatamente na
+ * ordem anterior. À medida que o potencial for calculado, os que valem mais sobem.
+ */
+export const ORDEM_PADRAO = 'valor_esperado_mensal'
+/** Maior primeiro: ordenar dinheiro em ordem crescente mostraria o pior da base. */
+export const DIRECAO_PADRAO: Direcao = 'desc'
 export type Direcao = 'asc' | 'desc'
 
 export interface EstadoExplorador {
@@ -48,7 +57,7 @@ export const ESTADO_INICIAL: EstadoExplorador = {
   termo: '',
   arvore: null,
   ordem: ORDEM_PADRAO,
-  direcao: 'asc',
+  direcao: DIRECAO_PADRAO,
   pagina: 0,
   tamanho: TAMANHO_PADRAO,
 }
@@ -72,7 +81,13 @@ export function lerEstado(params: URLSearchParams): EstadoExplorador {
     // Uma coluna fora do catálogo (ou não ordenável) viraria um 400 no PostgREST.
     // Cai no padrão em silêncio.
     ordem: coluna?.ordenarPor ? coluna.id : ORDEM_PADRAO,
-    direcao: params.get(PARAM_DIRECAO) === 'desc' ? 'desc' : 'asc',
+    // Sem `d` na URL, vale o padrão da ordenação escolhida — e o padrão de dinheiro é
+    // decrescente. Fixar 'asc' aqui faria a régua de valor esperado abrir pelo fim.
+    direcao: params.get(PARAM_DIRECAO)
+      ? params.get(PARAM_DIRECAO) === 'desc'
+        ? 'desc'
+        : 'asc'
+      : DIRECAO_PADRAO,
     pagina: numero(params.get(PARAM_PAGINA), 0, 0),
     tamanho: (TAMANHOS_PAGINA as readonly number[]).includes(tamanho) ? tamanho : TAMANHO_PADRAO,
   }
@@ -85,7 +100,7 @@ export function escreverEstado(estado: EstadoExplorador): string {
   if (estado.termo.trim()) params.set(PARAM_TERMO, estado.termo.trim())
   if (estado.arvore) params.set(PARAM_FILTRO, JSON.stringify(estado.arvore))
   if (estado.ordem !== ORDEM_PADRAO) params.set(PARAM_ORDEM, estado.ordem)
-  if (estado.direcao !== 'asc') params.set(PARAM_DIRECAO, estado.direcao)
+  if (estado.direcao !== DIRECAO_PADRAO) params.set(PARAM_DIRECAO, estado.direcao)
   if (estado.pagina > 0) params.set(PARAM_PAGINA, String(estado.pagina))
   if (estado.tamanho !== TAMANHO_PADRAO) params.set(PARAM_TAMANHO, String(estado.tamanho))
 

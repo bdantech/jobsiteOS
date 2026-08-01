@@ -1,5 +1,10 @@
 -- 0073 — Crédito: limite potencial, scorecard e esteira de análise (Prompt 04d).
 --
+-- APLICADA EM CINCO PARTES no banco (`0073a_credito_config_e_scorecard` …
+-- `0073e_credito_seeds`), para localizar a falha caso alguma parte fosse recusada. Este
+-- arquivo é o conteúdo completo, na mesma ordem, e replayar ele numa base limpa produz o
+-- mesmo esquema.
+--
 -- Três coisas encadeadas, e a ordem importa:
 --   faturamento estimado (04c) → limite potencial → receita prevista → valor esperado
 --                                                  ×  chance de concessão (scorecard)

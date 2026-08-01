@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarClock,
   Gavel,
+  Landmark,
   LayoutGrid,
   type LucideIcon,
   Map,
@@ -39,6 +40,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   wallet: Wallet,
   banknote: Banknote,
   gavel: Gavel,
+  landmark: Landmark,
   users: Users,
   settings: Settings,
 }

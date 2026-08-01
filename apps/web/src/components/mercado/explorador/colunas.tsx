@@ -213,6 +213,48 @@ export const COLUNAS: readonly ColunaExplorador[] = [
     numerica: true,
     render: (l) => formatRatio(l.ratio_usuarios_ativos),
   },
+
+  // ─── Crédito (04d) ─────────────────────────────────────────────────────────
+  {
+    // A régua de priorização, e a ordenação default da tela. Vazia hoje: só ganha
+    // valor quando houver faturamento estimado E calibração do limite.
+    id: 'valor_esperado_mensal',
+    label: 'Valor esperado / mês',
+    ordenarPor: 'valor_esperado_mensal',
+    numerica: true,
+    render: (l) => formatMoeda(l.valor_esperado_mensal),
+  },
+  {
+    id: 'limite_potencial',
+    label: 'Limite potencial',
+    ordenarPor: 'limite_potencial',
+    numerica: true,
+    render: (l) => formatMoeda(l.limite_potencial),
+  },
+  {
+    id: 'receita_mensal_prevista',
+    label: 'Receita prevista / mês',
+    ordenarPor: 'receita_mensal_prevista',
+    numerica: true,
+    render: (l) => formatMoeda(l.receita_mensal_prevista),
+  },
+  {
+    id: 'score_credito',
+    label: 'Score de crédito',
+    ordenarPor: 'score_credito',
+    numerica: true,
+    render: (l) => formatNumero(l.score_credito),
+  },
+  {
+    id: 'faixa_score',
+    label: 'Faixa do score',
+    render: (l) => <Texto valor={l.faixa_score} />,
+  },
+  {
+    id: 'tem_analise_vigente',
+    label: 'Análise vigente',
+    render: (l) => formatBooleano(l.tem_analise_vigente),
+  },
   {
     id: 'churn_erp_concorrente',
     label: 'Churn concorrente',

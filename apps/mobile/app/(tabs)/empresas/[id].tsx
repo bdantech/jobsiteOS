@@ -14,6 +14,7 @@ import {
   empresaTitulo,
   useEmpresa360Query,
 } from '@/features/empresas'
+import { CreditoBlock } from '@/features/credito'
 import { CadastroRfbCard } from '@/features/cadastro/cadastro-rfb-card'
 import { GrupoSection } from '@/features/mercado/components/grupo'
 
@@ -90,6 +91,10 @@ export default function EmpresaDetalheScreen() {
             é `mercado_universo`, e duplicar criaria duas verdades. */}
         <CadastroRfbCard cnpj={empresa.cnpj} />
         <FaturamentoEquipeBlock empresa={empresa} />
+        {/* Crédito DEPOIS de Faturamento porque depende dele: o limite potencial é uma
+            proporção do faturamento estimado. Some sozinho quando a empresa não é
+            sacado — fornecedor tem outra pergunta (adesão), não esta. */}
+        <CreditoBlock empresa={empresa} />
         <ErpBlock empresa={empresa} />
         {/* Renders itself away when the company has no grupo_id (most of them) or
             when the perfil doesn't grant `mercado`. Taps through to the group. */}

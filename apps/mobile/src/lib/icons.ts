@@ -2,6 +2,7 @@ import {
   Banknote,
   Bell,
   Building2,
+  Landmark,
   LayoutGrid,
   Map,
   Radar,
@@ -22,6 +23,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   map: Map,
   radar: Radar,
   banknote: Banknote,
+  landmark: Landmark,
 }
 
 export function moduleIcon(token: string): LucideIcon {
