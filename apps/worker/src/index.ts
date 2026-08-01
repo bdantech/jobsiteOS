@@ -21,6 +21,8 @@ import {
   dispararProtestosEmpresa,
   dispararContatosEmpresa,
   dispararSyncNfs,
+  dispararSyncAntecipacoes,
+  dispararCalibrarEconomia,
   dispararAntecipacaoDiario,
   dispararReclassificacaoFunil,
   dispararOutbox,
@@ -253,6 +255,29 @@ app.post('/jobs/antecipacao/sync-nfs', async (_req: Request, res: Response, next
 app.post('/jobs/antecipacao/diario', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararAntecipacaoDiario(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Sync de antecipações + re-matching (04e), sob demanda. No ciclo normal ele roda
+ * encadeado ao sync de NFs; esta rota existe para o botão "sincronizar agora" e
+ * para recuperar uma corrida que falhou sem esperar 4 horas.
+ */
+app.post('/jobs/antecipacao/sync-antecipacoes', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = await dispararSyncAntecipacoes()
+    res.status(202).json({ ingestao_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Calibração da economia com a carteira real (04e §5). Só mede; aplicar é da tela. */
+app.post('/jobs/antecipacao/calibrar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCalibrarEconomia(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -25,8 +25,10 @@ import {
   rodarContatosNfAction,
   rodarLookupAction,
   salvarConfigAction,
+  sincronizarAntecipacoesAction,
   sincronizarNfsAction,
 } from '@/actions/antecipacao'
+import { CalibracaoCarteira } from './calibracao-carteira'
 import { formatarInteiro } from './format'
 import { antecipacaoKeys, buscarConfig, buscarFilaLookup } from './queries'
 
@@ -297,6 +299,13 @@ export function AntecipacaoConfig() {
 
   return (
     <div className="space-y-4">
+      {/*
+       * A calibração vem PRIMEIRO, e não no fim junto dos jobs: ela existe para
+       * responder "os números abaixo ainda descrevem a realidade?". Colocada
+       * depois dos campos, seria lida por quem já decidiu.
+       */}
+      <CalibracaoCarteira />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Parâmetros do módulo</CardTitle>
@@ -377,6 +386,20 @@ export function AntecipacaoConfig() {
           >
             <Play className="mr-2 h-4 w-4" aria-hidden />
             Sync de NFs
+          </Button>
+          {/*
+           * Separado do sync de NFs mesmo rodando encadeado a ele: quando o
+           * endpoint de antecipações cai sozinho, repetir o sync de NFs inteiro
+           * (que pagina milhares de notas e parseia XML) para recuperar o
+           * casamento seria pagar caro por nada.
+           */}
+          <Button
+            variant="outline"
+            disabled={rodando !== null}
+            onClick={() => void rodar('Sync de antecipações', sincronizarAntecipacoesAction)}
+          >
+            <Play className="mr-2 h-4 w-4" aria-hidden />
+            Sync de antecipações
           </Button>
           <Button
             variant="outline"

@@ -4,6 +4,7 @@ import { normalizeCnpj } from '../schemas/cnpj.js'
 import type { Json, Tables } from '../types/database.js'
 import {
   ativarFaixaRegraSchema,
+  casarAntecipacaoSchema,
   descartarMensagemSchema,
   definirPontoFocalSchema,
   marcarSemInteresseSchema,
@@ -15,6 +16,7 @@ import {
   salvarFaixaRegraSchema,
   salvarWhatsappContaSchema,
   type AtivarFaixaRegraInput,
+  type CasarAntecipacaoInput,
   type DefinirPontoFocalInput,
   type DescartarMensagemInput,
   type MarcarSemInteresseInput,
@@ -150,6 +152,27 @@ export async function registrarToqueManual(
   const p = { ...dados, fornecedor_cnpj: normalizeCnpj(dados.fornecedor_cnpj) }
   const { error } = await supabase.rpc('app_registrar_toque_manual', { p: p as unknown as Json })
   if (error) throw traduzirErro(error)
+}
+
+/**
+ * A fila de revisão em uma chamada: casar a antecipação com a NF escolhida, ou
+ * tirá-la da fila com motivo.
+ *
+ * O RPC faz a conversão da nota, o evento e o audit na MESMA transação — é o
+ * mesmo caminho que o job automático usa, e não uma segunda implementação
+ * "manual". Duas formas de converter uma nota é como uma delas passa a esquecer
+ * de recalcular a tipagem do fornecedor.
+ */
+export async function casarAntecipacaoManual(
+  supabase: Supabase,
+  input: CasarAntecipacaoInput | unknown,
+): Promise<Tables<'antecipacoes'>> {
+  const dados = parseOuFalhar(casarAntecipacaoSchema, input)
+  const { data, error } = await supabase.rpc('app_casar_antecipacao', {
+    p: dados as unknown as Json,
+  })
+  if (error) throw traduzirErro(error)
+  return data
 }
 
 export async function salvarAntecipacaoConfig(

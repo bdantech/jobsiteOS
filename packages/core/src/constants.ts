@@ -68,6 +68,18 @@ export const EVENTO_TIPOS = {
   CONTATO_PONTO_FOCAL_DEFINIDO: 'contato.ponto_focal_definido',
   CNPJ_LOOKUP_NAO_ENCONTRADO: 'cnpj.lookup_nao_encontrado',
 
+  // Sync de antecipações e conversão automática (04e)
+  ANTECIPACAO_SINCRONIZADA: 'antecipacao.sincronizada',
+  ANTECIPACAO_STATUS_ALTERADO: 'antecipacao.status_alterado',
+  ANTECIPACAO_CASADA: 'antecipacao.casada',
+  ANTECIPACAO_SEM_NF: 'antecipacao.sem_nf',
+  /**
+   * Uma antecipação já convertida voltou atrás (status não-conversor ou NF
+   * cancelada). NÃO reverte estágio — é evento próprio porque regressão
+   * financeira merece olho humano, não automação (04e §4.5).
+   */
+  ANTECIPACAO_REGREDIU: 'antecipacao.regrediu',
+
   // Certificados digitais (04b)
   CERTIFICADO_VENCENDO: 'certificado.vencendo',
   CERTIFICADO_VENCIDO: 'certificado.vencido',
@@ -140,6 +152,11 @@ export const EVENTO_LABELS: Record<string, string> = {
   'toque.manual': 'Toque manual',
   'contato.ponto_focal_definido': 'Ponto focal definido',
   'cnpj.lookup_nao_encontrado': 'CNPJ não encontrado no lookup cadastral',
+  'antecipacao.sincronizada': 'Antecipação sincronizada',
+  'antecipacao.status_alterado': 'Status da antecipação alterado',
+  'antecipacao.casada': 'Antecipação casada com a nota',
+  'antecipacao.sem_nf': 'Antecipação sem nota correspondente',
+  'antecipacao.regrediu': 'Antecipação regrediu — conversão em disputa',
   'certificado.vencendo': 'Certificado digital vencendo',
   'certificado.vencido': 'Certificado digital vencido',
   'certificado.renovado': 'Certificado digital renovado',

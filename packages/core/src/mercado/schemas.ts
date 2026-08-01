@@ -57,7 +57,14 @@ export interface PreviaRegra {
 
 export const SITUACOES_CADASTRAIS = ['ativa', 'suspensa', 'inapta', 'baixada', 'nula'] as const
 
-export const FONTES_INGESTAO = ['receita_cnpj', 'cno', 'lista', 'onepay_nf', 'onepay_certificados'] as const
+export const FONTES_INGESTAO = [
+  'receita_cnpj',
+  'cno',
+  'lista',
+  'onepay_nf',
+  'onepay_certificados',
+  'onepay_antecipacoes',
+] as const
 export const fonteIngestaoSchema = z.enum(FONTES_INGESTAO)
 export type FonteIngestao = z.infer<typeof fonteIngestaoSchema>
 
@@ -67,6 +74,7 @@ export const FONTE_INGESTAO_LABELS: Record<FonteIngestao, string> = {
   lista: 'Importação de lista',
   onepay_nf: 'Notas fiscais (Onepay)',
   onepay_certificados: 'Certificados digitais (Onepay)',
+  onepay_antecipacoes: 'Antecipações (Onepay)',
 }
 
 export const STATUS_INGESTAO = ['executando', 'concluida', 'falhou'] as const

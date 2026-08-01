@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Building2,
   ChartPie,
+  HandCoins,
   Inbox,
   KanbanSquare,
   MessageCircle,
@@ -35,6 +36,7 @@ const ITENS: readonly ItemNav[] = [
   { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
   { href: '/antecipacao/sacados', label: 'Por sacado', icon: Building2 },
   { href: '/antecipacao/prospectar', label: 'Sacados a prospectar', icon: Sparkles },
+  { href: '/antecipacao/antecipacoes', label: 'Antecipações', icon: HandCoins },
   { href: '/antecipacao/metricas', label: 'Métricas por faixa', icon: ChartPie },
   { href: '/antecipacao/faixas', label: 'Regras de faixa', icon: SlidersHorizontal, somenteAdmin: true },
   { href: '/antecipacao/disparos', label: 'Disparos', icon: Send, somenteAdmin: true },

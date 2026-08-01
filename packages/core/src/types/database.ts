@@ -43,6 +43,141 @@ export type Database = {
           },
         ]
       }
+      antecipacoes: {
+        Row: {
+          access_key_casada: string | null
+          anticipation_days: number | null
+          anticipation_type: string | null
+          approval_with_automation: boolean | null
+          atualizada_em: string
+          completion_date: string | null
+          convertida_em: string | null
+          created_at_plataforma: string | null
+          discounted_amount: number | null
+          document_number: string | null
+          fornecedor_cnpj: string
+          fornecedor_nome: string | null
+          gross_value: number | null
+          id_externo: number
+          invoice_cancelled_at: string | null
+          match_candidatas: Json
+          match_confianca: string | null
+          match_em: string | null
+          match_motivo: string | null
+          match_observacao: string | null
+          match_por: string | null
+          match_status: string
+          monthly_interest_rate: number | null
+          net_value: number | null
+          numero_normalizado: string | null
+          original_due_date: string | null
+          raw: Json | null
+          regrediu_em: string | null
+          request_date: string | null
+          sacado_cnpj: string
+          sacado_nome: string | null
+          sem_nf_definitivo_em: string | null
+          sincronizada_em: string
+          status: string
+          status_anterior: string | null
+          total_spread: number | null
+          withhold_tax: number | null
+        }
+        Insert: {
+          access_key_casada?: string | null
+          anticipation_days?: number | null
+          anticipation_type?: string | null
+          approval_with_automation?: boolean | null
+          atualizada_em?: string
+          completion_date?: string | null
+          convertida_em?: string | null
+          created_at_plataforma?: string | null
+          discounted_amount?: number | null
+          document_number?: string | null
+          fornecedor_cnpj: string
+          fornecedor_nome?: string | null
+          gross_value?: number | null
+          id_externo: number
+          invoice_cancelled_at?: string | null
+          match_candidatas?: Json
+          match_confianca?: string | null
+          match_em?: string | null
+          match_motivo?: string | null
+          match_observacao?: string | null
+          match_por?: string | null
+          match_status?: string
+          monthly_interest_rate?: number | null
+          net_value?: number | null
+          numero_normalizado?: string | null
+          original_due_date?: string | null
+          raw?: Json | null
+          regrediu_em?: string | null
+          request_date?: string | null
+          sacado_cnpj: string
+          sacado_nome?: string | null
+          sem_nf_definitivo_em?: string | null
+          sincronizada_em?: string
+          status: string
+          status_anterior?: string | null
+          total_spread?: number | null
+          withhold_tax?: number | null
+        }
+        Update: {
+          access_key_casada?: string | null
+          anticipation_days?: number | null
+          anticipation_type?: string | null
+          approval_with_automation?: boolean | null
+          atualizada_em?: string
+          completion_date?: string | null
+          convertida_em?: string | null
+          created_at_plataforma?: string | null
+          discounted_amount?: number | null
+          document_number?: string | null
+          fornecedor_cnpj?: string
+          fornecedor_nome?: string | null
+          gross_value?: number | null
+          id_externo?: number
+          invoice_cancelled_at?: string | null
+          match_candidatas?: Json
+          match_confianca?: string | null
+          match_em?: string | null
+          match_motivo?: string | null
+          match_observacao?: string | null
+          match_por?: string | null
+          match_status?: string
+          monthly_interest_rate?: number | null
+          net_value?: number | null
+          numero_normalizado?: string | null
+          original_due_date?: string | null
+          raw?: Json | null
+          regrediu_em?: string | null
+          request_date?: string | null
+          sacado_cnpj?: string
+          sacado_nome?: string | null
+          sem_nf_definitivo_em?: string | null
+          sincronizada_em?: string
+          status?: string
+          status_anterior?: string | null
+          total_spread?: number | null
+          withhold_tax?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antecipacoes_access_key_casada_fkey"
+            columns: ["access_key_casada"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "antecipacoes_match_por_fkey"
+            columns: ["match_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_config: {
         Row: {
           atualizado_em: string
@@ -1890,6 +2025,8 @@ export type Database = {
           operavel_manual: boolean | null
           nao_operavel_motivo: string | null
           xml_parse_erro: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean
         }
         Insert: {
           access_key: string
@@ -1938,6 +2075,8 @@ export type Database = {
           operavel_manual?: boolean | null
           nao_operavel_motivo?: string | null
           xml_parse_erro?: string | null
+          conversao_antecipacao_id?: number | null
+          conversao_em_disputa?: boolean
         }
         Update: {
           access_key?: string
@@ -1986,6 +2125,8 @@ export type Database = {
           operavel_manual?: boolean | null
           nao_operavel_motivo?: string | null
           xml_parse_erro?: string | null
+          conversao_antecipacao_id?: number | null
+          conversao_em_disputa?: boolean
         }
         Relationships: [
           {
@@ -2632,6 +2773,11 @@ export type Database = {
           nao_operavel_motivo: string | null
           sacado_camada: string | null
           fornecedor_protesto_em: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean | null
+          conversao_valor: number | null
+          conversao_taxa: number | null
+          conversao_status: string | null
         }
         Relationships: [
           {
@@ -2676,9 +2822,54 @@ export type Database = {
       }
     }
     Functions: {
+      antecipacao_calibracao_carteira: { Args: { p: Json }; Returns: Json }
+      antecipacao_candidatas: { Args: { p: Json }; Returns: Json }
       antecipacao_custo_protesto: { Args: never; Returns: Json }
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
+      antecipacao_status_conversoes: { Args: { p: Json }; Returns: Json }
+      app_casar_antecipacao: {
+        Args: { p: Json }
+        Returns: {
+          access_key_casada: string | null
+          anticipation_days: number | null
+          anticipation_type: string | null
+          approval_with_automation: boolean | null
+          atualizada_em: string
+          completion_date: string | null
+          convertida_em: string | null
+          created_at_plataforma: string | null
+          discounted_amount: number | null
+          document_number: string | null
+          fornecedor_cnpj: string
+          fornecedor_nome: string | null
+          gross_value: number | null
+          id_externo: number
+          invoice_cancelled_at: string | null
+          match_candidatas: Json
+          match_confianca: string | null
+          match_em: string | null
+          match_motivo: string | null
+          match_observacao: string | null
+          match_por: string | null
+          match_status: string
+          monthly_interest_rate: number | null
+          net_value: number | null
+          numero_normalizado: string | null
+          original_due_date: string | null
+          raw: Json | null
+          regrediu_em: string | null
+          request_date: string | null
+          sacado_cnpj: string
+          sacado_nome: string | null
+          sem_nf_definitivo_em: string | null
+          sincronizada_em: string
+          status: string
+          status_anterior: string | null
+          total_spread: number | null
+          withhold_tax: number | null
+        }
+      }
       app_aprovar_lote: {
         Args: { p: Json }
         Returns: {
@@ -3000,6 +3191,8 @@ export type Database = {
           operavel_manual: boolean | null
           nao_operavel_motivo: string | null
           xml_parse_erro: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean
         }
         SetofOptions: {
           from: "*"

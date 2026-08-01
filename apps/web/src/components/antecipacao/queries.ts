@@ -32,6 +32,11 @@ export const antecipacaoKeys = {
   contas: () => [...antecipacaoKeys.all, 'contas'] as const,
   outbox: (filtros: FiltrosOutbox) => [...antecipacaoKeys.all, 'outbox', filtros] as const,
   config: () => [...antecipacaoKeys.all, 'config'] as const,
+  antecipacoes: (filtros: FiltrosAntecipacoes) =>
+    [...antecipacaoKeys.all, 'antecipacoes', filtros] as const,
+  conversoes: (dias: number) => [...antecipacaoKeys.all, 'conversoes', dias] as const,
+  candidatas: (idExterno: number) => [...antecipacaoKeys.all, 'candidatas', idExterno] as const,
+  calibracao: () => [...antecipacaoKeys.all, 'calibracao'] as const,
   xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
   filaLookup: () => [...antecipacaoKeys.all, 'fila-lookup'] as const,
 }
@@ -53,7 +58,7 @@ export interface FiltrosFunil {
  * degrada em silêncio para `GenericStringError`.
  */
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
+  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
 
 export const PAGINA_FUNIL = 40
 
@@ -376,6 +381,165 @@ export async function buscarConfig(): Promise<Record<string, unknown>> {
   const { data, error } = await supabase.from('antecipacao_config').select('chave, valor')
   if (error) throw error
   return Object.fromEntries((data ?? []).map((r) => [r.chave, r.valor]))
+}
+
+// ─── Antecipações & conversão (04e) ─────────────────────────────────────────
+
+export type Antecipacao = Tables<'antecipacoes'>
+
+export interface FiltrosAntecipacoes {
+  /** `match_status`. `revisao` e `sem_nf` são a FILA; o resto é a tabela. */
+  matchStatus?: string
+  status?: string
+  termo?: string
+  /** Só as que precisam de decisão humana — o modo em que a tela abre. */
+  soPendencias?: boolean
+}
+
+export const LIMITE_ANTECIPACOES = 300
+
+/**
+ * Em UMA string literal: supabase-js parseia o select no nível de tipo e a
+ * concatenação degrada para `GenericStringError`. Sem `raw` — o payload cru é
+ * dezenas de KB por linha e ninguém o lê numa tabela.
+ */
+const COLUNAS_ANTECIPACAO =
+  'id_externo, status, status_anterior, anticipation_type, document_number, numero_normalizado, sacado_cnpj, sacado_nome, fornecedor_cnpj, fornecedor_nome, request_date, created_at_plataforma, original_due_date, completion_date, anticipation_days, gross_value, net_value, total_spread, monthly_interest_rate, invoice_cancelled_at, access_key_casada, match_status, match_confianca, match_motivo, match_candidatas, match_em, match_observacao, sem_nf_definitivo_em, convertida_em, regrediu_em, sincronizada_em'
+
+export async function buscarAntecipacoes(filtros: FiltrosAntecipacoes): Promise<Antecipacao[]> {
+  const supabase = createClient()
+  let query = supabase
+    .from('antecipacoes')
+    .select(COLUNAS_ANTECIPACAO)
+    .order('created_at_plataforma', { ascending: false, nullsFirst: false })
+    .limit(LIMITE_ANTECIPACOES)
+
+  if (filtros.soPendencias) query = query.in('match_status', ['revisao', 'sem_nf'])
+  else if (filtros.matchStatus) query = query.eq('match_status', filtros.matchStatus)
+  if (filtros.status) query = query.eq('status', filtros.status)
+  if (filtros.termo?.trim()) {
+    const t = `*${filtros.termo.trim()}*`
+    query = query.or(
+      `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},document_number.ilike.${t}`,
+    )
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as Antecipacao[]
+}
+
+export interface StatusConversoes {
+  tem_acesso: boolean
+  dias: number
+  total: number
+  casadas: number
+  convertidas: number
+  valor_convertido: number
+  taxa_media: number | null
+  pendentes_revisao: number
+  sem_nf_definitivo: number
+  em_disputa: number
+  por_status: Record<string, number>
+}
+
+export async function buscarStatusConversoes(dias: number): Promise<StatusConversoes> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('antecipacao_status_conversoes', { p: { dias } })
+  if (error) throw error
+  const r = (data ?? {}) as Partial<StatusConversoes>
+  if (!r.tem_acesso) throw new Error('Você não tem acesso ao módulo Antecipação.')
+  return {
+    tem_acesso: true,
+    dias: r.dias ?? dias,
+    total: r.total ?? 0,
+    casadas: r.casadas ?? 0,
+    convertidas: r.convertidas ?? 0,
+    valor_convertido: Number(r.valor_convertido ?? 0),
+    taxa_media: r.taxa_media ?? null,
+    pendentes_revisao: r.pendentes_revisao ?? 0,
+    sem_nf_definitivo: r.sem_nf_definitivo ?? 0,
+    em_disputa: r.em_disputa ?? 0,
+    por_status: r.por_status ?? {},
+  }
+}
+
+export interface CandidataNota {
+  access_key: string
+  numero: string | null
+  serie: string | null
+  valor: number | null
+  vencimento: string | null
+  emitida_em: string | null
+  estagio_funil: string
+  faixa: string | null
+  ja_casada: boolean
+  proximidade: string
+}
+
+export interface CandidatasDaAntecipacao {
+  encontrada: boolean
+  antecipacao: Antecipacao | null
+  candidatas: CandidataNota[]
+}
+
+/**
+ * As NFs do MESMO par fornecedor↔sacado, ordenadas por proximidade.
+ *
+ * Via RPC e não por consulta montada aqui: o recorte por par é a única guarda que
+ * o casamento não negocia, e deixá-la na tela seria deixar a tela poder afrouxá-la.
+ */
+export async function buscarCandidatas(idExterno: number): Promise<CandidatasDaAntecipacao> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('antecipacao_candidatas', {
+    p: { id_externo: idExterno },
+  })
+  if (error) throw error
+  const r = (data ?? {}) as Partial<CandidatasDaAntecipacao>
+  return {
+    encontrada: r.encontrada ?? false,
+    antecipacao: r.antecipacao ?? null,
+    candidatas: r.candidatas ?? [],
+  }
+}
+
+export interface CalibracaoCarteiraSalva {
+  janela_dias: number
+  amostras: number
+  calculado_em: string | null
+  calibracao: {
+    taxa_am: { valor: number | null; n: number }
+    prazo_dias: { valor: number | null; n: number }
+    valor_medio_nf: { valor: number | null; n: number }
+  }
+  configurado: {
+    taxa_mensal_padrao: number
+    taxa_padrao_am: number
+    prazo_medio_dias: number
+    valor_medio_nf: number
+  }
+  desvios: {
+    taxa_funil_pct: number | null
+    taxa_credito_pct: number | null
+    prazo_pct: number | null
+    valor_medio_nf_pct: number | null
+  }
+}
+
+/**
+ * O resultado do último job de calibração. Vem de `antecipacao_config` e não de
+ * um cálculo ao vivo — a data do cálculo aparece ao lado do número, porque um
+ * número sem data é um número que ninguém sabe se pode usar.
+ */
+export async function buscarCalibracao(): Promise<CalibracaoCarteiraSalva | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('antecipacao_config')
+    .select('valor')
+    .eq('chave', 'calibracao_carteira')
+    .maybeSingle()
+  if (error) throw error
+  return (data?.valor as CalibracaoCarteiraSalva | undefined) ?? null
 }
 
 export interface ResumoFilaLookup {

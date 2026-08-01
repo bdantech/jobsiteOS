@@ -30,6 +30,10 @@
       "schedule": "0 5 * * *"
     },
     {
+      "path": "/api/cron/antecipacao-calibrar",
+      "schedule": "0 10 5 * *"
+    },
+    {
       "path": "/api/cron/radar-estimador",
       "schedule": "0 8 6 * *"
     },

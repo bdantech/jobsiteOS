@@ -292,6 +292,22 @@ export async function dispararSyncNfs(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/sync-nfs', { origem: 'cron' }, 'antecipacao-sync-nfs')
 }
 
+/**
+ * Sync de antecipações + re-matching (04e), sob demanda.
+ *
+ * No ciclo normal ele roda ENCADEADO ao sync de NFs, e é assim de propósito: o
+ * matching precisa das notas novas já na base. Esta rota é o botão "sincronizar
+ * agora" e a recuperação de uma corrida que falhou.
+ */
+export async function dispararSyncAntecipacoes(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/sync-antecipacoes', {}, 'antecipacao-sync-antecipacoes')
+}
+
+/** Calibração da economia com a carteira real (04e §5). Só mede; aplicar é da tela. */
+export async function dispararCalibrarEconomia(): Promise<DispararJobResultado> {
+  return postar('/jobs/antecipacao/calibrar', {}, 'antecipacao-calibrar')
+}
+
 /** O job diário (§9): supressões expiradas → lookup cadastral → reclassificar → outbox. */
 export async function dispararAntecipacaoDiario(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/diario', {}, 'antecipacao-diario')

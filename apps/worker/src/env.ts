@@ -104,6 +104,12 @@ const envSchema = z.object({
   ONEPAY_NF_URL: z.string().url().optional(),
   /** Idem: ausente, cai no ONEPAY_BI_TOKEN. É a mesma credencial. */
   ONEPAY_NF_TOKEN: z.string().optional(),
+  /**
+   * Mesmo desenho para o endpoint de antecipações (04e): ausente, o job usa
+   * ONEPAY_BI_URL + `/api/v1/anticipations`. É a mesma API e o mesmo token do
+   * sync de NFs.
+   */
+  ONEPAY_ANTECIPACOES_URL: z.string().url().optional(),
   /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
   ANTHROPIC_API_KEY: z.string().optional(),
 

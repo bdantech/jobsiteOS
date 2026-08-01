@@ -262,6 +262,65 @@ export const registrarToqueManualSchema = z.object({
 })
 export type RegistrarToqueManualInput = z.infer<typeof registrarToqueManualSchema>
 
+/**
+ * A fila de revisão (04e §6): vincular a antecipação a uma NF, ou tirá-la da
+ * fila com motivo.
+ *
+ * `access_key` obrigatório quando `acao = 'casar'`, motivo obrigatório quando
+ * `acao = 'ignorar'` — ignorar sem dizer por quê apaga a única informação que
+ * torna a fila auditável depois.
+ */
+export const casarAntecipacaoSchema = z
+  .object({
+    id_externo: z.number().int().describe('Id da antecipação na plataforma Onepay.'),
+    acao: z
+      .enum(['casar', 'ignorar'])
+      .default('casar')
+      .describe('casar = vincula à NF informada; ignorar = tira da fila de revisão.'),
+    access_key: z
+      .string()
+      .trim()
+      .max(60)
+      .optional()
+      .nullable()
+      .describe('Chave de acesso da NF. Obrigatória ao casar.'),
+    motivo: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .nullable()
+      .describe('Por que ignorar. Obrigatório ao ignorar.'),
+  })
+  .superRefine((v, ctx) => {
+    if (v.acao === 'casar' && !v.access_key) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['access_key'],
+        message: 'Escolha a nota fiscal.',
+      })
+    }
+    if (v.acao === 'ignorar' && !v.motivo) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['motivo'],
+        message: 'Informe o motivo.',
+      })
+    }
+  })
+export type CasarAntecipacaoInput = z.infer<typeof casarAntecipacaoSchema>
+
+export const statusConversoesSchema = z.object({
+  dias: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .default(30)
+    .describe('Janela em dias, contada da data de criação da antecipação.'),
+})
+export type StatusConversoesInput = z.infer<typeof statusConversoesSchema>
+
 export const salvarAntecipacaoConfigSchema = z.object({
   chave: z.string().min(1).max(60),
   valor: z.unknown(), // jsonb livre — validado por chave na UI
@@ -308,6 +367,7 @@ export const ANTECIPACAO_CONFIG_CHAVES = {
   SUPRESSAO: 'supressao',
   SYNC: 'sync',
   LOOKUP: 'lookup_cadastral',
+  CONVERSAO: 'conversao',
 } as const
 
 export interface ConfigFunil {
@@ -391,4 +451,67 @@ export const CONFIG_LOOKUP_PADRAO: ConfigLookup = {
   max_por_execucao: 2_000,
   receitaws_intervalo_ms: 21_000,
   orcamento_ms: 10 * 60_000,
+}
+
+/**
+ * Conversão automática (04e). A lista de status vive em CONFIG e não em código
+ * por um motivo prático: a plataforma cria status novo (foi assim que nasceu
+ * `EXTENDED_BILL_SWAPPED`), e a diferença entre "editar settings" e "esperar um
+ * deploy" é a diferença entre uma tarde e uma semana de conversões não contadas.
+ */
+export interface ConfigConversao {
+  /** Os status em que a antecipação JÁ representa dinheiro operado. */
+  status_conversores: string[]
+  /** Sincronizados e casados para visibilidade, mas nunca convertem. */
+  status_nao_conversores: string[]
+  /** Janela do `period` por data de CRIAÇÃO, em dias. */
+  janela_sync_dias: number
+  /**
+   * Por quantos dias uma antecipação sem NF continua sendo re-tentada a cada
+   * ciclo. Depois disso o `sem_nf` vira definitivo e emite evento — deixar
+   * re-tentando para sempre transforma o job numa varredura da base inteira.
+   */
+  janela_rematch_dias: number
+  /** Tolerância de valor no desempate e no fuzzy, em %. */
+  tolerancia_valor_pct: number
+  /** Tolerância de vencimento no fuzzy, em dias. */
+  tolerancia_vencimento_dias: number
+  /** Janela da calibração de economia (§5), em dias. */
+  calibracao_dias: number
+}
+
+export const CONFIG_CONVERSAO_PADRAO: ConfigConversao = {
+  status_conversores: [
+    'APPROVED',
+    'REVISION',
+    'PAY_OUT',
+    'BILLET_SWAPPED',
+    'PROGRAMED_PAYMENT',
+    'CONCLUDED',
+    'EXPIRED_BILL_SWAPPED',
+    'EXTENDED_BILL_SWAPPED',
+    'IN_EXTENSION_BILL_SWAPPED',
+  ],
+  status_nao_conversores: [
+    'DRAFT',
+    'REQUESTED',
+    'REPROVED',
+    'DENY_BY_CONTRACTED',
+    'PAYMENT_REPROVED',
+  ],
+  janela_sync_dias: 3,
+  janela_rematch_dias: 7,
+  tolerancia_valor_pct: 1,
+  tolerancia_vencimento_dias: 5,
+  calibracao_dias: 90,
+}
+
+/**
+ * Um status DESCONHECIDO nunca converte. É a assimetria que importa: deixar de
+ * converter aparece na fila de revisão e alguém corrige a config; converter por
+ * engano marca como antecipada uma nota que ninguém antecipou, e nada denuncia.
+ */
+export function statusConverte(status: string | null | undefined, cfg: ConfigConversao): boolean {
+  if (!status) return false
+  return cfg.status_conversores.includes(status.toUpperCase())
 }

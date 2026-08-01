@@ -500,9 +500,85 @@ Clicar num sacado abre `/antecipacao/sacados/{cnpj}` com **as notas que ele rece
 a mesma tela que a aba de capacidade usa, porque a pergunta ("quem emite para ele, e
 quanto?") é a mesma nos dois caminhos.
 
+## Conversão automática: quem marca a nota como convertida (04e)
+
+Até aqui `estagio_funil = 'convertida'` só existia por clique humano — **5 notas em
+15.870**. A métrica por faixa media intenção, não receita: "a faixa alta converte melhor"
+era uma frase sobre quem alguém lembrou de arrastar.
+
+Agora a **antecipação realizada na plataforma** é quem marca. O sync de
+`/api/v1/anticipations` roda **encadeado ao sync de NFs**, de 4 em 4 horas, e casa cada
+antecipação com a nota que ela antecipou.
+
+### A regra que governa tudo: precisão acima de recall
+
+Casar com a NF errada marca como antecipada uma nota que ninguém antecipou — e **nada na
+tela denuncia**. O funil fica verde, a métrica conta uma conversão que não houve, e a
+próxima decisão comercial sai de um número inventado. Um caso a mais na fila de revisão
+custa um clique.
+
+Por isso não existe caminho de "melhor palpite". As regras, em ordem
+(`packages/core/src/antecipacao/matching.ts`, puro e testado):
+
+1. **Número idêntico, candidata única** → casa (`exata`).
+2. **Número idêntico, várias candidatas** (mesmo número em séries diferentes) → o valor
+   desempata (±1%); se não desempatar sozinho, **revisão**.
+3. **Número aproximado** (`84` vs `840`) → só casa com valor **E** vencimento
+   confirmando (±1%, ±5 dias). Uma guarda só não basta.
+4. **Nenhuma nota parecida** → `sem_nf`, re-tentado a cada ciclo por 7 dias (a NF pode
+   simplesmente não ter chegado ainda). Passado o prazo, vira definitivo **com evento**.
+
+As candidatas são SEMPRE recortadas pelo par fornecedor↔sacado — a média é 2,6 notas por
+par, a pior 407. Esse recorte é a única parte do casamento que não admite aproximação, e
+por isso **a fila de revisão também o respeita**: o RPC `antecipacao_candidatas` só
+oferece notas do mesmo par. Uma tela que oferecesse notas de fora dele convidaria a
+pessoa a cometer, no clique, o erro que a automação se recusa a cometer.
+
+### A assimetria dos zeros
+
+`normalizarNumeroNf` (compartilhada pelos dois lados — `documentNumber` e
+`notas_fiscais.numero`) tira zeros à **esquerda** e nunca os da **direita**:
+
+- `0084` e `84` são a mesma nota escrita por dois sistemas.
+- `84` e `840` são **notas diferentes**.
+
+Quando as fontes parecem divergir só por um zero ao final, quem decide é o valor — nunca
+a normalização. A série também sai (`8821/1`, `8821 SÉRIE 1` → `8821`), mas só até 3
+dígitos depois do separador: sem esse limite, `2024-1234` viraria `2024` e casaria com
+uma nota que existe e não é essa.
+
+### Status conversores são settings, não deploy
+
+`antecipacao_config.conversao.status_conversores` lista os 9 status em que a antecipação
+já é dinheiro operado. Os outros (`DRAFT`, `REPROVED`, …) são sincronizados e casados —
+para visibilidade — mas **não convertem**. Um status desconhecido nunca converte: deixar
+de converter aparece na fila e alguém corrige a config; converter por engano não aparece
+em lugar nenhum.
+
+### Regressão não se desfaz sozinha
+
+Se uma antecipação já convertida muda para status não-conversor ou ganha
+`invoiceCancelledAt`, o estágio da nota **não é revertido**. A nota ganha
+`conversao_em_disputa = true`, o card diz isso em vermelho, e Admin + Comercial recebem
+push. Reverter em silêncio seria a máquina apagando receita sem que ninguém visse — e
+regressão financeira é exatamente o caso que merece olho, não automação.
+
+### Calibração com a carteira (§5)
+
+Três constantes digitadas multiplicam a receita esperada de todo o funil e o valor
+esperado de todo o Crédito: taxa (% a.m.), prazo médio e ticket médio. O job mensal
+(dia 5) mede as **medianas reais** das antecipações `CONCLUDED` dos últimos 90 dias e as
+põe lado a lado com o configurado, em `/antecipacao/config`.
+
+O botão aplica; o job nunca. E a taxa é gravada nos **dois** lugares em que ela vive —
+`antecipacao.economia.taxa_mensal_padrao` (receita esperada da NF) e
+`credito.economia.taxa_padrao_am` (potencial do sacado) — porque aplicar só uma
+corrigiria metade da casa em silêncio. Métrica sem amostra suficiente (n < 5) fica `null`
+e é **ignorada** no aplicar, não zerada.
+
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0061`, `0065`–`0068`.
+- **Banco**: migrations `0045`–`0061`, `0065`–`0068`, `0077`–`0079`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
@@ -516,20 +592,30 @@ quanto?") é a mesma nos dois caminhos.
   - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
   - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
   - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
+  - `0077`: `antecipacoes` (chave natural `id_externo`) + `conversao_antecipacao_id` e
+    `conversao_em_disputa` em `notas_fiscais` (e no fim de `notas_funil`) + a config
+    `conversao` + fonte de ingestão `onepay_antecipacoes`
+  - `0078`: índice único em `notificacao_regras` — o `on conflict do nothing` de todas as
+    migrações anteriores nunca fez nada, e a 0077 criou a primeira duplicata visível
   - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
     `app_ativar_faixa_regra`, `app_salvar_faixa_disparo`, `app_salvar_whatsapp_conta`,
     `app_descartar_mensagem`, `app_definir_ponto_focal`, `app_registrar_toque_manual`,
     `app_salvar_antecipacao_config`, `antecipacao_metricas_faixa`,
-    `antecipacao_resumo_funil`
+    `antecipacao_resumo_funil`, `app_casar_antecipacao`, `antecipacao_candidatas`,
+    `antecipacao_status_conversoes`, `antecipacao_calibracao_carteira`
 - **Core** (`packages/core/src/antecipacao/`): schemas e vocabulário, `faixas.ts` (o
   **segundo** engine de filtros — catálogo próprio sobre `notas_funil`), `nfe-xml.ts` (o
   parser, semente do Pricing), `economia.ts` (receita esperada, tipagem, urgência,
-  templates), `contato-nf.ts` (a decisão inserir/completar/não-tocar), mutations. Registry: `antecipacaoModule` — **não** é webOnly.
-- **Worker** (`apps/worker/src/jobs/antecipacao/`): `sync-nfs`, `reclassificar`,
-  `outbox`, `lookup-cadastral`, `contatos-nf`, `supressoes`; config em `apps/worker/src/antecipacao/`.
+  templates), `contato-nf.ts` (a decisão inserir/completar/não-tocar), `numero-nf.ts` +
+  `matching.ts` (o motor de casamento, puro e testado), `antecipacao-payload.ts`,
+  `calibracao.ts`, mutations. Registry: `antecipacaoModule` — **não** é webOnly.
+- **Worker** (`apps/worker/src/jobs/antecipacao/`): `sync-nfs`, `sync-antecipacoes`,
+  `calibrar-economia`, `reclassificar`, `outbox`, `lookup-cadastral`, `contatos-nf`,
+  `supressoes`; config em `apps/worker/src/antecipacao/`.
 - **Web** (`apps/web/src/app/(app)/antecipacao/` + `components/antecipacao/`): Kanban,
-  por sacado, sacados a prospectar, métricas por faixa, regras de faixa, disparos,
-  Outbox, contas WhatsApp, settings.
+  por sacado, sacados a prospectar, **antecipações + fila de revisão**, métricas por
+  faixa, regras de faixa, disparos, Outbox, contas WhatsApp, settings (com a calibração
+  da carteira no topo).
 - **Mobile** (`apps/mobile/app/(tabs)/antecipacao/` + `src/features/antecipacao/`):
   funil (tela principal), detalhe do fornecedor, por sacado, a prospectar.
 
@@ -615,14 +701,25 @@ da antecipação.
   `taxa_usada`, senão a receita de ontem é impossível de auditar depois que a taxa muda.
 - Registra execução em `mercado_ingestoes` com fonte **`onepay_nf`** — mesma política de
   retry/alerta dos outros syncs, mesma tela de Ingestões, mesmo botão de reexecutar.
+- **A cadeia da corrida**, e cada elo está onde está por uma razão:
+  `sync NFs → lookup cadastral → reclassificar → sync de antecipações → outbox`.
+  As antecipações vêm **depois** da reclassificação porque ela expira notas cujo
+  vencimento chegou perto demais, e uma nota recém-**antecipada** não é uma nota
+  expirada — a conversão é a última palavra, já que é a única das duas que descreve um
+  fato consumado. E a outbox vem por último porque mandar mensagem para quem acabou de
+  antecipar é o disparo que faz o comercial perder credibilidade.
+  O sync de antecipações abre a **própria** ingestão (`onepay_antecipacoes`) e é
+  best-effort por dentro: uma indisponibilidade daquele endpoint não derruba a ingestão
+  das notas, que já terminou com sucesso quando chegamos ali.
 
 ## Notificações
 
 | Evento | Quem | Como |
 | --- | --- | --- |
 | `sacado.limite_insuficiente` | Admin + Crédito | fan-out (sino) |
-| `nf.convertida` | Comercial | fan-out (sino) |
+| `nf.convertida` | Comercial + Admin | fan-out (sino) |
 | `sacado.credito_alterado` | Crédito | fan-out (sino) |
+| `antecipacao.regrediu` | Comercial + Admin | **`notify()` no worker** — sino **e** push |
 | nova NF em faixa **alta** | Comercial + Admin | **`notify()` no worker** — sino **e** push, com deep link |
 
 O último não pode ser uma regra de `notificacao_regras` por duas razões: o gatilho de
@@ -631,6 +728,12 @@ sair da faixa e ao entrar em média — ruído suficiente, num sync 6× ao dia, 
 desligar as notificações), e o gatilho **não faz push**. Migration `0051` remove a regra
 para que o sino não mostre a mesma notícia duas vezes. A notificação é **agrupada por
 rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
+
+`antecipacao.regrediu` segue a mesma convenção e pelo mesmo motivo — e por isso **não**
+tem regra de fan-out: uma conversão que talvez não exista não pode depender de alguém
+estar olhando a timeline. `antecipacao.sincronizada`, `antecipacao.status_alterado`,
+`antecipacao.casada` e `antecipacao.sem_nf` ficam só na **timeline da empresa**: são
+histórico do fornecedor, não interrupção.
 
 ## Mobile: o funil é experiência de primeira classe
 
@@ -649,7 +752,20 @@ rodada**: uma por nota transformaria um sync de 40 notas em 40 buzinas no bolso.
 
 ## Limitações conhecidas
 
-- **O sync ainda não rodou contra o endpoint real**, mas o contrato inteiro é conhecido
+- **O endpoint de antecipações não foi provado contra a API real.** O envelope descrito
+  no Prompt (`page`, `pageSize`, `totalPages`, `period`) é exatamente o de
+  `/api/v1/invoices`, que já está mapeado e testado — mesma API, mesmo token, mesma
+  convenção — então o job manda `page`, `page_size`, `start_date` e `end_date`, com o
+  significado das datas trocado para **criação** da antecipação. Se a API discordar da
+  grafia, o sintoma será zero linhas com HTTP 200, e o conserto é o querystring em
+  `sync-antecipacoes.ts`. O **payload por item** está travado por fixture
+  (`antecipacao-payload.test.ts`), inclusive o `witholdTaxAmount` com um L só. Nenhuma
+  variável nova precisa ser provisionada: sem `ONEPAY_ANTECIPACOES_URL`, cai em
+  `ONEPAY_BI_URL` + `/api/v1/anticipations`.
+- **`contractor` é o SACADO e `contracted` é o FORNECEDOR.** A inversão mais cara do
+  módulo, e a mais silenciosa: trocados, o matching nunca encontra candidata e 100% das
+  antecipações viram `sem_nf` sem que nenhum erro seja registrado. Tem teste próprio.
+- **O sync de NFs ainda não rodou contra o endpoint real**, mas o contrato inteiro é conhecido
   e está travado por teste: o recurso é `{ONEPAY_BI_URL}/api/v1/invoices`, os filtros
   estão em `sync-plano.test.ts` e o formato do payload em `nf-payload.test.ts` — cujo
   fixture é o payload real, colado inteiro. Como é a mesma API e o mesmo token do sync

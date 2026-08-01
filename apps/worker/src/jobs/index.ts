@@ -47,6 +47,8 @@ import {
   syncAtradius,
 } from './credito/esteira.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
+import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
+import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
@@ -73,6 +75,8 @@ export type TipoJob =
   | 'contatos-empresa'
   | 'certificados'
   | 'antecipacao-sync-nfs'
+  | 'antecipacao-sync-antecipacoes'
+  | 'antecipacao-calibrar'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
   | 'antecipacao-lookup'
@@ -459,8 +463,16 @@ export async function dispararSyncNfs(): Promise<string> {
       // há um sync a cada 4h esperando, e o que sobrar entra na próxima.
       const lookup = await lookupCadastral({ orcamentoMs: 4 * 60_000 })
       const reclass = await reclassificarFunil(client)
+      // As antecipações DEPOIS da reclassificação, e não antes (04e §3): a
+      // reclassificação expira notas cujo vencimento chegou perto demais, e uma
+      // nota que acabou de ser ANTECIPADA não é uma nota expirada. Rodando nesta
+      // ordem, a conversão é a última palavra — como deve ser, já que é a única
+      // das duas que descreve um fato consumado.
+      const antecipacoes = await sincronizarAntecipacoesComIngestao()
+      // A outbox por último: mensagens para notas que acabaram de converter são
+      // exatamente o disparo que faz o comercial perder credibilidade.
       const outbox = await gerarOutbox()
-      await anotarMeta(id, { sync, lookup, reclassificacao: reclass, outbox })
+      await anotarMeta(id, { sync, lookup, reclassificacao: reclass, antecipacoes, outbox })
       return {
         linhas_processadas: sync.notas,
         linhas_novas: sync.novas,
@@ -511,9 +523,91 @@ export function dispararAntecipacaoDiario(): string {
     // recém-promovido esperaria até amanhã.
     const contatos = await backfillContatosNf()
     const reclassificacao = await reclassificarFunil(client)
+    // A rede de segurança das antecipações, pelo mesmo motivo da varredura de
+    // NFs: a janela do ciclo de 4h é de 3 dias por criação, e uma sequência de
+    // falhas abre um buraco que nenhum incremental posterior alcança. 15 dias
+    // por criação o fecham, e é de graça — o upsert é idempotente por id_externo.
+    const antecipacoes = await sincronizarAntecipacoesComIngestao(15)
     const outbox = await gerarOutbox()
-    return { varredura, supressoes, lookup, contatos, reclassificacao, outbox }
+    return { varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox }
   })
+}
+
+// ─── Antecipações & conversão automática (Prompt 04e) ────────────────────────
+
+/**
+ * Sync de antecipações + re-matching, com ingestão própria (`onepay_antecipacoes`).
+ *
+ * BEST-EFFORT por dentro: encadeado ao sync de NFs, uma indisponibilidade deste
+ * endpoint não pode derrubar a ingestão das notas — que já terminou com sucesso
+ * quando chegamos aqui. A falha fica registrada na ingestão de antecipações, com
+ * a política de alerta padrão, e o ciclo seguinte tenta de novo (a janela de 3
+ * dias por criação existe exatamente para isso).
+ */
+async function sincronizarAntecipacoesComIngestao(diasJanela?: number): Promise<unknown> {
+  const id = await abrirIngestao('onepay_antecipacoes', {
+    origem: diasJanela ? 'diario' : 'encadeado_sync_nfs',
+  })
+  try {
+    const sync = await sincronizarAntecipacoes(diasJanela)
+    const rematch = await rematchPendentes()
+    await concluirIngestao(
+      id,
+      'onepay_antecipacoes',
+      {
+        linhas_processadas: sync.antecipacoes,
+        linhas_novas: sync.novas,
+        linhas_atualizadas: sync.atualizadas,
+      },
+      { sync, rematch },
+    )
+    return { sync, rematch }
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Sync de antecipações falhou; o sync de NFs segue.')
+    await falharIngestao(id, 'onepay_antecipacoes', erro)
+    return { erro: String(erro) }
+  }
+}
+
+/** Sync de antecipações sob demanda — o botão "sincronizar agora" da tela. */
+export async function dispararSyncAntecipacoes(): Promise<string> {
+  const id = await abrirIngestao('onepay_antecipacoes', { origem: 'worker' })
+  reservar('antecipacao-sync-antecipacoes', id)
+
+  void (async () => {
+    try {
+      const sync = await sincronizarAntecipacoes()
+      const rematch = await rematchPendentes()
+      await concluirIngestao(
+        id,
+        'onepay_antecipacoes',
+        {
+          linhas_processadas: sync.antecipacoes,
+          linhas_novas: sync.novas,
+          linhas_atualizadas: sync.atualizadas,
+        },
+        { sync, rematch },
+      )
+    } catch (erro) {
+      logger.error({ id, erro: String(erro) }, 'Sync de antecipações falhou.')
+      await falharIngestao(id, 'onepay_antecipacoes', erro)
+    } finally {
+      emExecucao.delete('antecipacao-sync-antecipacoes')
+    }
+  })()
+
+  return id
+}
+
+/**
+ * Calibração da economia com a carteira real (04e §5), mensal e sob demanda.
+ *
+ * Só MEDE. Aplicar os valores nas configs é um botão na tela de settings — e é
+ * assim de propósito: essas três constantes multiplicam a receita esperada de
+ * todo o funil e o valor esperado de todo o Crédito.
+ */
+export function dispararCalibrarEconomia(): string {
+  return dispararAvulso('antecipacao-calibrar', async () => calibrarEconomiaCarteira())
 }
 
 /**

@@ -1,10 +1,12 @@
 import {
+  CONFIG_CONVERSAO_PADRAO,
   CONFIG_DISPARO_PADRAO,
   CONFIG_ECONOMIA_PADRAO,
   CONFIG_FUNIL_PADRAO,
   CONFIG_LOOKUP_PADRAO,
   CONFIG_SUPRESSAO_PADRAO,
   CONFIG_SYNC_PADRAO,
+  type ConfigConversao,
   type ConfigDisparo,
   type ConfigEconomia,
   type ConfigFunil,
@@ -37,3 +39,5 @@ export const lerConfigSupressao = (): Promise<ConfigSupressao> =>
   ler('supressao', CONFIG_SUPRESSAO_PADRAO)
 export const lerConfigSync = (): Promise<ConfigSync> => ler('sync', CONFIG_SYNC_PADRAO)
 export const lerConfigLookup = (): Promise<ConfigLookup> => ler('lookup_cadastral', CONFIG_LOOKUP_PADRAO)
+export const lerConfigConversao = (): Promise<ConfigConversao> =>
+  ler('conversao', CONFIG_CONVERSAO_PADRAO)

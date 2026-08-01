@@ -5,6 +5,7 @@ import {
   MutationError,
   ativarFaixaRegra,
   canAccessRoute,
+  casarAntecipacaoManual,
   definirPontoFocal,
   descartarMensagem,
   marcarSemInteresse,
@@ -12,6 +13,7 @@ import {
   promoverFornecedor,
   registrarToqueManual,
   salvarAntecipacaoConfig,
+  salvarCreditoConfig,
   salvarFaixaDisparo,
   salvarFaixaRegra,
   salvarWhatsappConta,
@@ -22,11 +24,13 @@ import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
   dispararAntecipacaoDiario,
+  dispararCalibrarEconomia,
   dispararContatosNf,
   dispararLookupCadastral,
   dispararOutbox,
   dispararProtestoFornecedor,
   dispararReclassificacaoFunil,
+  dispararSyncAntecipacoes,
   dispararSyncNfs,
 } from '@/lib/mercado/worker'
 
@@ -315,6 +319,143 @@ export async function rodarProtestoFornecedorAction(
 
 export async function rodarLookupAction() {
   return enfileirar(dispararLookupCadastral)
+}
+
+// ─── Antecipações & conversão (04e) ─────────────────────────────────────────
+
+/**
+ * Resolve um caso da fila de revisão: vincula a antecipação a uma NF ou a
+ * ignora com motivo.
+ *
+ * O RPC por trás faz a conversão da nota, o evento e o audit na MESMA transação
+ * — e é o mesmo caminho que o job automático usa. Duas formas de converter uma
+ * nota é como uma delas passa a esquecer de atualizar a tipagem do fornecedor.
+ */
+export async function casarAntecipacaoAction(
+  input: unknown,
+): Promise<ActionResult<Tables<'antecipacoes'>>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const a = await casarAntecipacaoManual(supabase, input)
+    revalidatePath('/antecipacao')
+    revalidatePath('/antecipacao/antecipacoes')
+    return { ok: true, data: a }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+export async function sincronizarAntecipacoesAction() {
+  return enfileirar(dispararSyncAntecipacoes)
+}
+
+/**
+ * Recalcula as medianas da carteira. NÃO aplica nada: aplicar é o botão da tela
+ * de settings, que grava as configs uma a uma pelo caminho auditado de sempre.
+ */
+export async function calibrarEconomiaAction() {
+  return enfileirar(dispararCalibrarEconomia)
+}
+
+export interface ResultadoAplicarCalibracao {
+  aplicados: string[]
+  ignorados: string[]
+}
+
+/**
+ * "Aplicar valores da carteira" (04e §5).
+ *
+ * A taxa vive em DOIS lugares e os dois são atualizados aqui:
+ * `antecipacao.economia.taxa_mensal_padrao` precifica a receita esperada de cada
+ * NF do funil; `credito.economia.taxa_padrao_am` precifica o potencial do sacado.
+ * Aplicar só uma corrigiria metade da casa em silêncio.
+ *
+ * Cada valor `null` (amostra insuficiente) é IGNORADO, não zerado — e a lista do
+ * que ficou de fora volta para a tela. Escrever zero num denominador é como uma
+ * calibração honesta vira uma base inteira de números impossíveis.
+ *
+ * Escrever em `credito_config` exige o módulo Crédito, e o RPC repete a checagem.
+ * A tela é admin-only, então na prática os dois lados sempre passam; quando não
+ * passarem, a resposta diz exatamente o que não foi aplicado.
+ */
+export async function aplicarCalibracaoAction(
+  input: unknown,
+): Promise<ActionResult<ResultadoAplicarCalibracao>> {
+  const context = await getSessionContext()
+  if (!context) return SEM_SESSAO
+  if (!canAccessRoute('/antecipacao', context.grantedModuleIds)) return SEM_MODULO
+
+  const v = (input ?? {}) as {
+    taxa_am?: number | null
+    prazo_dias?: number | null
+    valor_medio_nf?: number | null
+  }
+  const supabase = await createClient()
+  const aplicados: string[] = []
+  const ignorados: string[] = []
+
+  try {
+    if (typeof v.taxa_am === 'number' && v.taxa_am > 0) {
+      const atual = await lerConfigJson(supabase, 'antecipacao_config', 'economia')
+      await salvarAntecipacaoConfig(supabase, {
+        chave: 'economia',
+        valor: { ...atual, taxa_mensal_padrao: v.taxa_am },
+      })
+      aplicados.push('Taxa do funil (% a.m.)')
+    } else {
+      ignorados.push('Taxa do funil (sem amostra suficiente)')
+    }
+
+    const temCredito = canAccessRoute('/credito', context.grantedModuleIds)
+    const economiaCredito: Record<string, unknown> = {}
+    if (typeof v.taxa_am === 'number' && v.taxa_am > 0) economiaCredito.taxa_padrao_am = v.taxa_am
+    if (typeof v.prazo_dias === 'number' && v.prazo_dias > 0) {
+      economiaCredito.prazo_medio_dias = Math.round(v.prazo_dias)
+    } else {
+      ignorados.push('Prazo médio (sem amostra suficiente)')
+    }
+    if (typeof v.valor_medio_nf === 'number' && v.valor_medio_nf > 0) {
+      economiaCredito.valor_medio_nf = v.valor_medio_nf
+    } else {
+      ignorados.push('Ticket médio (sem amostra suficiente)')
+    }
+
+    if (Object.keys(economiaCredito).length > 0) {
+      if (!temCredito) {
+        ignorados.push('Valores do Crédito (você não tem acesso ao módulo Crédito)')
+      } else {
+        const atual = await lerConfigJson(supabase, 'credito_config', 'economia')
+        await salvarCreditoConfig(supabase, {
+          chave: 'economia',
+          valor: { ...atual, ...economiaCredito },
+        })
+        aplicados.push(...Object.keys(economiaCredito).map((k) => `Crédito: ${k}`))
+      }
+    }
+
+    revalidatePath('/antecipacao/config')
+    revalidatePath('/credito/config')
+    return { ok: true, data: { aplicados, ignorados } }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+/**
+ * Lê o jsonb atual da chave para fazer MERGE em vez de substituição.
+ *
+ * `valor` é um jsonb inteiro: gravar `{ taxa_padrao_am: 2.4 }` apagaria `tac`,
+ * `giro_mensal` e o resto da economia do Crédito de uma vez só.
+ */
+async function lerConfigJson(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tabela: 'antecipacao_config' | 'credito_config',
+  chave: string,
+): Promise<Record<string, unknown>> {
+  const { data } = await supabase.from(tabela).select('valor').eq('chave', chave).maybeSingle()
+  const v = data?.valor
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
 export async function rodarContatosNfAction() {

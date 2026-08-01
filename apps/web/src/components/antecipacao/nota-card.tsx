@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Files, Gavel } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Files, Gavel } from 'lucide-react'
 import {
   FAIXA_LABELS,
   TIPAGEM_LABELS,
@@ -166,6 +166,37 @@ export function NotaCard({
                 {nota.fornecedor_suprimido && (
                   <p className="text-xs text-muted-foreground">
                     Fornecedor suprimido — fora das faixas até a supressão expirar.
+                  </p>
+                )}
+
+                {/*
+                 * O selo da conversão automática (04e §6). Só aparece quando a
+                 * antecipação existe de verdade — é o que distingue uma nota que
+                 * alguém arrastou para "convertida" de uma que a plataforma
+                 * antecipou, e com que valores.
+                 */}
+                {nota.conversao_antecipacao_id && (
+                  <p
+                    className={cn(
+                      'flex items-start gap-1 text-xs',
+                      nota.conversao_em_disputa
+                        ? 'text-destructive'
+                        : 'text-emerald-700 dark:text-emerald-300',
+                    )}
+                  >
+                    {nota.conversao_em_disputa ? (
+                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                    ) : (
+                      <BadgeCheck className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                    )}
+                    <span>
+                      Convertida via antecipação #{nota.conversao_antecipacao_id}
+                      {nota.conversao_valor
+                        ? ` · ${formatarMoedaExata(nota.conversao_valor)}`
+                        : ''}
+                      {nota.conversao_taxa ? ` a ${nota.conversao_taxa}% a.m.` : ''}
+                      {nota.conversao_em_disputa ? ' — em disputa, revise.' : ''}
+                    </span>
                   </p>
                 )}
               </footer>

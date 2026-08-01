@@ -1,20 +1,30 @@
 import { formatCnpj, normalizeCnpj } from '../../schemas/cnpj.js'
-import { marcarSemInteresse, moverEstagio } from '../../antecipacao/mutations.js'
+import {
+  casarAntecipacaoManual,
+  marcarSemInteresse,
+  moverEstagio,
+} from '../../antecipacao/mutations.js'
+import { MATCH_STATUS_LABELS, MOTIVO_MATCH_LABELS } from '../../antecipacao/matching.js'
 import {
   ESTAGIO_FUNIL_LABELS,
   ESTAGIOS_ABERTOS,
   FAIXA_LABELS,
   capacidadeSacadoSchema,
+  casarAntecipacaoSchema,
   marcarSemInteresseSchema,
   moverEstagioSchema,
   notasFornecedorSchema,
   resumoFunilSchema,
+  statusConversoesSchema,
   type CapacidadeSacadoInput,
+  type CasarAntecipacaoInput,
   type MarcarSemInteresseInput,
   type MoverEstagioInput,
   type NotasFornecedorInput,
   type ResumoFunilInput,
+  type StatusConversoesInput,
 } from '../../antecipacao/schemas.js'
+import type { Json } from '../../types/database.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -185,6 +195,78 @@ async function capacidadeSacado(input: CapacidadeSacadoInput, ctx: ToolContext) 
   }
 }
 
+// ─── antecipacao.status_conversoes ──────────────────────────────────────────
+
+/**
+ * Em UMA string literal, pelo mesmo motivo de `COLUNAS_NOTA_FORNECEDOR`: o
+ * select é parseado no NÍVEL DE TIPO e a concatenação estoura o parser.
+ */
+const COLUNAS_PENDENCIA =
+  'id_externo, status, document_number, gross_value, original_due_date, created_at_plataforma, fornecedor_cnpj, fornecedor_nome, sacado_cnpj, sacado_nome, match_status, match_motivo, match_candidatas'
+
+async function statusConversoes(input: StatusConversoesInput, ctx: ToolContext) {
+  const { data, error } = await ctx.supabase.rpc('antecipacao_status_conversoes', {
+    p: { dias: input.dias } as unknown as Json,
+  })
+  if (error) throw new Error(`Falha ao ler o status das conversões: ${error.message}`)
+
+  const r = data as {
+    tem_acesso?: boolean
+    total?: number
+    casadas?: number
+    pendentes_revisao?: number
+    sem_nf_definitivo?: number
+    em_disputa?: number
+    convertidas?: number
+    valor_convertido?: number
+    taxa_media?: number | null
+    por_status?: Record<string, number>
+  } | null
+
+  if (!r?.tem_acesso) {
+    return { tem_acesso: false, mensagem: 'Você não tem acesso ao módulo Antecipação.' }
+  }
+
+  const total = r.total ?? 0
+  const casadas = r.casadas ?? 0
+
+  // As pendências vêm junto, e não em outra chamada: quem pergunta "como está a
+  // conversão?" está a um passo de perguntar "o que falta resolver?".
+  const { data: pendencias } = await ctx.supabase
+    .from('antecipacoes')
+    .select(COLUNAS_PENDENCIA)
+    .in('match_status', ['revisao', 'sem_nf'])
+    .order('created_at_plataforma', { ascending: false, nullsFirst: false })
+    .limit(20)
+
+  return {
+    tem_acesso: true,
+    dias: input.dias,
+    antecipacoes_no_periodo: total,
+    casadas,
+    // A taxa de casamento AUTOMÁTICO — o número que diz se o motor está fazendo
+    // o trabalho ou se alguém está fazendo por ele.
+    taxa_casamento: total > 0 ? Number(((casadas / total) * 100).toFixed(1)) : null,
+    convertidas: r.convertidas ?? 0,
+    valor_convertido: Number(r.valor_convertido ?? 0),
+    taxa_media_am: r.taxa_media ?? null,
+    pendentes_revisao: r.pendentes_revisao ?? 0,
+    sem_nf_definitivo: r.sem_nf_definitivo ?? 0,
+    conversoes_em_disputa: r.em_disputa ?? 0,
+    por_match_status: Object.entries(r.por_status ?? {}).map(([status, n]) => ({
+      status,
+      label: MATCH_STATUS_LABELS[status as keyof typeof MATCH_STATUS_LABELS] ?? status,
+      antecipacoes: n,
+    })),
+    pendencias: (pendencias ?? []).map((p) => ({
+      ...p,
+      motivo_legivel:
+        MOTIVO_MATCH_LABELS[p.match_motivo as keyof typeof MOTIVO_MATCH_LABELS] ?? p.match_motivo,
+    })),
+    route: '/antecipacao/antecipacoes',
+  }
+}
+
 // ─── Módulo ─────────────────────────────────────────────────────────────────
 
 export const antecipacaoModule: AppModule = {
@@ -224,6 +306,40 @@ export const antecipacaoModule: AppModule = {
       inputSchema: capacidadeSacadoSchema,
       mutates: false,
       execute: (input, ctx) => capacidadeSacado(input as CapacidadeSacadoInput, ctx),
+    },
+    {
+      id: 'antecipacao.status_conversoes',
+      name: 'Status das conversões',
+      description:
+        'Taxa de casamento automático entre antecipações da plataforma e NFs do funil, conversões ' +
+        'do período (quantas, quanto e a que taxa real) e as pendências que esperam decisão humana: ' +
+        'revisão, sem NF correspondente e conversões em disputa. Responde "o funil está fechando o ' +
+        'loop?" e "o que falta resolver?".',
+      inputSchema: statusConversoesSchema,
+      mutates: false,
+      execute: (input, ctx) => statusConversoes(input as StatusConversoesInput, ctx),
+    },
+    {
+      id: 'antecipacao.casar_manual',
+      name: 'Casar antecipação com nota',
+      description:
+        'Resolve um caso da fila de revisão: vincula a antecipação a uma NF (que precisa ser do MESMO ' +
+        'fornecedor e sacado) ou a ignora com motivo. Casar com status conversor marca a nota como ' +
+        'convertida e registra evento na timeline, então exige confirmação explícita.',
+      inputSchema: casarAntecipacaoSchema,
+      mutates: true,
+      execute: async (input, ctx) => {
+        const a = await casarAntecipacaoManual(ctx.supabase, input as CasarAntecipacaoInput)
+        return {
+          id_externo: a.id_externo,
+          match_status: a.match_status,
+          access_key: a.access_key_casada,
+          convertida: a.convertida_em !== null,
+          fornecedor: a.fornecedor_nome ?? formatCnpj(a.fornecedor_cnpj),
+          sacado: a.sacado_nome ?? formatCnpj(a.sacado_cnpj),
+          route: '/antecipacao/antecipacoes',
+        }
+      },
     },
     {
       id: 'antecipacao.mover_estagio',
