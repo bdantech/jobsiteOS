@@ -124,14 +124,21 @@ function quantasMudam(
   return n
 }
 
-export function ScorecardEditor() {
+export function ScorecardEditor({ podeVerMercado }: { podeVerMercado: boolean }) {
   const qc = useQueryClient()
   const [rascunho, setRascunho] = React.useState<DefinicaoScorecard | null>(null)
   const [salvando, setSalvando] = React.useState(false)
 
   const versoes = useQuery({ queryKey: creditoKeys.scorecards(), queryFn: buscarScorecards })
   const config = useQuery({ queryKey: creditoKeys.config(), queryFn: buscarCreditoConfig })
-  const amostra = useQuery({ queryKey: [...creditoKeys.all, 'amostra'], queryFn: buscarAmostra })
+  // A amostra vem do Explorador, cuja RLS exige o módulo `mercado`. Sem ele a consulta
+  // volta VAZIA, não com erro — e "sem amostra" na tela pareceria uma base vazia em vez
+  // de uma base invisível. Por isso a query nem roda, e a prévia explica o motivo.
+  const amostra = useQuery({
+    queryKey: [...creditoKeys.all, 'amostra'],
+    queryFn: buscarAmostra,
+    enabled: podeVerMercado,
+  })
 
   const ativa = (versoes.data ?? []).find((v) => v.ativa) ?? null
   const definicaoAtiva = (ativa?.definicao ?? null) as DefinicaoScorecard | null
@@ -339,7 +346,14 @@ export function ScorecardEditor() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {amostra.isPending ? (
+          {!podeVerMercado ? (
+            <p className="text-sm text-muted-foreground">
+              A prévia lê o cadastro da Receita (capital, idade, situação) pelo Explorador, que
+              exige o módulo <strong>Mercado</strong>. Sem ele a amostra viria vazia — e uma
+              prévia vazia pareceria &ldquo;nada muda&rdquo;, que é a leitura mais perigosa
+              possível antes de ativar uma versão. Salvar e ativar continuam funcionando.
+            </p>
+          ) : amostra.isPending ? (
             <Skeleton className="h-32 w-full" />
           ) : !previa ? (
             <p className="text-sm text-muted-foreground">Sem amostra para comparar.</p>
