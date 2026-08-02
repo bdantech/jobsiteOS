@@ -21,6 +21,7 @@ import { recalcularPerfilAction } from '@/actions/perfil'
 import { AchadoCard } from './achado-card'
 import { AuditoriaSecao } from './auditoria-secao'
 import { SugestaoCard } from './sugestao-card'
+import { SugestoesModal } from './sugestoes-modal'
 import { buscarPerfil, perfilKeys, type SnapshotPerfil } from './queries'
 
 /**
@@ -64,7 +65,18 @@ export function PerfilPagina({ podeRecalcular }: { podeRecalcular: boolean }) {
     )
   }
 
+  // O id da sugestão agora carrega a COMPARAÇÃO que a gerou
+  // (`clientes_x_som:afrouxar:sam:3`). Antes não carregava, e as duas comparações
+  // da trilha de sacados produziam `afrouxar:sam:3` idêntico — descartar numa
+  // fazia a sugestão sumir da outra junto, porque a chave de decisão é o id.
   const decisoes = new Map((data?.decisoes ?? []).map((d) => [d.sugestao_id, d]))
+
+  // Todas as sugestões ainda pendentes da trilha, para o modal agrupado.
+  const pendentesDaTrilha = (data?.snapshots ?? []).flatMap((s) =>
+    (s.sugestoes ?? [])
+      .filter((x) => !decisoes.has(x.id))
+      .map((x) => ({ ...x, snapshotId: s.id, comparacao: s.comparacao })),
+  )
 
   return (
     <div className="space-y-6">
@@ -76,12 +88,19 @@ export function PerfilPagina({ podeRecalcular }: { podeRecalcular: boolean }) {
             fora. Cada achado vira, no máximo, uma sugestão de ajuste: nada aqui muda regra sozinho.
           </p>
         </div>
-        {podeRecalcular && (
-          <Button variant="outline" size="sm" onClick={() => void recalcular()} disabled={rodando}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${rodando ? 'animate-spin' : ''}`} aria-hidden />
-            Recalcular agora
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <SugestoesModal
+            sugestoes={pendentesDaTrilha}
+            total={pendentesDaTrilha.length}
+            onDecidida={() => void qc.invalidateQueries({ queryKey: perfilKeys.trilha(trilha) })}
+          />
+          {podeRecalcular && (
+            <Button variant="outline" size="sm" onClick={() => void recalcular()} disabled={rodando}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${rodando ? 'animate-spin' : ''}`} aria-hidden />
+              Recalcular agora
+            </Button>
+          )}
+        </div>
       </header>
 
       <Tabs value={trilha} onValueChange={(v) => setTrilha(v as Trilha)}>

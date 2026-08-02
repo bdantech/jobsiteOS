@@ -164,7 +164,7 @@ function afrouxarCondicao(
 
   if (cond.operador === 'em') {
     const atuais = new Set((cond.valor as unknown[]).map(String))
-    const faltantes = [...new Set(valores.filter((v) => v !== null && v !== undefined).map(String))]
+    const faltantes = [...new Set(valores.filter((v) => v !== null && v !== undefined && v !== '').map(String))]
       .filter((v) => !atuais.has(v))
       .sort()
     if (faltantes.length === 0) return null
@@ -176,7 +176,18 @@ function afrouxarCondicao(
     }
   }
 
-  const numeros = valores.map(Number).filter((n) => Number.isFinite(n))
+  // AUSENTE NÃO É ZERO, e este filtro é a diferença entre uma sugestão e um
+  // desastre: `Number(null)` é 0, e 0 é finito. Sem descartar os nulos ANTES da
+  // conversão, uma coorte com metade das empresas sem cadastro empurra o
+  // percentil para zero e o card propõe "capital social ≥ 0" — que não é
+  // afrouxar a condição, é apagá-la.
+  //
+  // Aconteceu de verdade: o conserto do LEFT JOIN nas coortes trouxe as empresas
+  // sem cadastro (corretamente), e a proposta de capital caiu de R$ 85 mil para 0.
+  const numeros = valores
+    .filter((v) => v !== null && v !== undefined && v !== '')
+    .map(Number)
+    .filter((n) => Number.isFinite(n))
   const corte = corteQueInclui(numeros, params.cobertura_alvo)
   if (corte === null) return null
 
@@ -215,6 +226,14 @@ export interface EntradaSugestoes {
   definicaoSinal: Grupo | null
   /** Rótulo humano da coorte operadora, para a frase. */
   rotuloCoorte: string
+  /**
+   * A comparação que gerou estas sugestões, e ela ENTRA NO ID.
+   *
+   * Sem isso, `afrouxar:sam:3` (capital social) nasce idêntico nas duas
+   * comparações da trilha de sacados — e descartar numa fazia a outra sumir da
+   * tela junto, porque a chave de decisão é o id.
+   */
+  comparacao: string
   descrever: (no: No) => string
   rotuloVariavel: (id: string) => string
 }
@@ -245,7 +264,7 @@ function afrouxamentos(entrada: EntradaSugestoes, params: ParametrosSugestao): S
       const pct = Math.round(barreira.fracao * 100)
 
       saida.push({
-        id: `afrouxar:${auditoria.camada}:${barreira.indice}`,
+        id: `${entrada.comparacao}:afrouxar:${auditoria.camada}:${barreira.indice}`,
         tipo: 'afrouxar',
         trilha: entrada.trilha,
         alvo: { tipo: 'camada', chave: auditoria.camada, versao: auditoria.versao },
@@ -294,7 +313,7 @@ function novosSinais(entrada: EntradaSugestoes, params: ParametrosSugestao): Sug
     if (!cond) continue
 
     saida.push({
-      id: `sinal:${alvoSinal.tipo}:${alvoSinal.chave}:${achado.variavel}`,
+      id: `${entrada.comparacao}:sinal:${alvoSinal.tipo}:${alvoSinal.chave}:${achado.variavel}`,
       tipo: 'adicionar_sinal',
       trilha: entrada.trilha,
       alvo: alvoSinal,

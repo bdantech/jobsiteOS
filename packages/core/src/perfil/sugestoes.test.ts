@@ -54,6 +54,7 @@ function entrada(over: Partial<EntradaSugestoes> = {}): EntradaSugestoes {
     alvoSinal: { tipo: 'camada', chave: 'som', versao: 7 },
     definicaoSinal: REGRA_SOM,
     rotuloCoorte: 'sacados pesados',
+    comparacao: 'pesados_x_dormentes',
     descrever,
     rotuloVariavel: (id) => id,
     ...over,
@@ -196,6 +197,92 @@ test('barreira pequena não vira sugestão', () => {
     }),
   )
   assert.equal(r.length, 0)
+})
+
+test('AUSENTE NÃO É ZERO — nulo não pode virar corte zero', () => {
+  // Metade da coorte sem cadastro (capital nulo). `Number(null)` é 0 e 0 é
+  // finito: sem descartar antes, o percentil desaba e a sugestão vira
+  // "capital ≥ 0", que não afrouxa a condição — apaga.
+  //
+  // Não é hipótese: o conserto do LEFT JOIN nas coortes trouxe as empresas sem
+  // cadastro e derrubou a proposta de R$ 85 mil para zero em produção.
+  const cond = { variavel: 'capital_social', operador: 'maior_ou_igual', valor: 500_000 } as const
+  const regra: Grupo = { operador: 'e', condicoes: [cond] }
+  const linhas = [
+    ...Array.from({ length: 50 }, () => ({ capital_social: null })),
+    ...Array.from({ length: 50 }, () => ({ capital_social: 200_000 })),
+  ]
+
+  const r = gerarSugestoes(
+    entrada({
+      linhas,
+      definicaoSinal: regra,
+      auditorias: [
+        auditoria({
+          definicao: regra,
+          barreiras: [
+            {
+              indice: 0,
+              descricao: 'Capital social é maior ou igual a 500000',
+              barrados: 100,
+              fracao: 1,
+              no: cond as never,
+            },
+          ],
+        }),
+      ],
+    }),
+  )
+
+  assert.equal(r.length, 1)
+  const proposto = (r[0]?.definicao_proposta as Grupo).condicoes[0] as { valor: number }
+  assert.equal(proposto.valor, 200_000, 'o corte sai de quem TEM capital, não dos nulos')
+  assert.notEqual(proposto.valor, 0)
+})
+
+test('lista também ignora nulo — não propõe uma UF vazia', () => {
+  const cond = { variavel: 'uf', operador: 'em', valor: ['SP'] } as const
+  const regra: Grupo = { operador: 'e', condicoes: [cond] }
+  const r = gerarSugestoes(
+    entrada({
+      linhas: [{ uf: 'RS' }, { uf: null }, { uf: '' }, { uf: undefined }],
+      definicaoSinal: regra,
+      auditorias: [
+        auditoria({
+          definicao: regra,
+          barreiras: [
+            { indice: 0, descricao: 'UF está em SP', barrados: 30, fracao: 0.3, no: cond as never },
+          ],
+        }),
+      ],
+    }),
+  )
+  assert.deepEqual(((r[0]?.definicao_proposta as Grupo).condicoes[0] as { valor: string[] }).valor, [
+    'SP',
+    'RS',
+  ])
+})
+
+test('o id carrega a comparação — sem isso duas comparações colidem', () => {
+  // `afrouxar:sam:3` nascia idêntico nas duas comparações de sacados, e
+  // descartar numa fazia a sugestão sumir da outra junto: a chave de decisão é
+  // o id.
+  const barreira = {
+    indice: 1,
+    descricao: 'Idade (anos) é maior ou igual a 6',
+    barrados: 30,
+    fracao: 0.3,
+    no: REGRA_SOM.condicoes[1] as never,
+  }
+  const linhas = Array.from({ length: 100 }, () => ({ idade_anos: 3 }))
+  const a = gerarSugestoes(
+    entrada({ linhas, comparacao: 'pesados_x_dormentes', auditorias: [auditoria({ barreiras: [barreira] })] }),
+  )
+  const b = gerarSugestoes(
+    entrada({ linhas, comparacao: 'clientes_x_som', auditorias: [auditoria({ barreiras: [barreira] })] }),
+  )
+  assert.notEqual(a[0]?.id, b[0]?.id)
+  assert.ok(a[0]?.id.startsWith('pesados_x_dormentes:'))
 })
 
 // ─── Adicionar sinal ────────────────────────────────────────────────────────

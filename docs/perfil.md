@@ -95,6 +95,20 @@ card de sugestão
   → a versão criada é carimbada de volta no log
 ```
 
+### O modal "Ver todas as sugestões"
+
+Cada aba tem um botão que reúne as sugestões da trilha **agrupadas pela régua** que
+alteram. A página continua mostrando cada uma dentro da comparação que a gerou — é ali
+que a evidência está; o modal responde outra pergunta: *"o que, no total, está sendo
+proposto para a regra de SOM?"*.
+
+O ganho real não é ver junto, é **ver o conflito**. A mesma condição é proposta por
+comparações diferentes com valores diferentes — hoje, em produção, `capital_social ≥
+500.000` recebe duas propostas: **R$ 25 mil** vindo da coorte de clientes e **R$ 85 mil**
+vindo dos sacados pesados. Na página elas ficam a oitocentos pixels de distância e
+ninguém percebe que são a mesma linha da regra. No modal ficam lado a lado, marcadas como
+concorrentes: só uma pode valer, e escolher é o trabalho.
+
 Nada é ativado pelo card. Uma regra de camada reclassifica ~2M linhas e reescreve todos
 os números contra os quais o comercial planeja — é a coisa mais cara de desfazer no
 sistema.
@@ -160,6 +174,9 @@ colada num slide.
 - **As comparações são fixas** (§2), não configuráveis. Três contrastes bem escolhidos
   valem mais que um construtor de coortes que ninguém usa — e que produziria comparações
   sem controle, o erro que este módulo existe para não cometer.
+- **O id da sugestão carrega a comparação** (`clientes_x_som:afrouxar:sam:3`). Sem isso,
+  as duas comparações da trilha de sacados geravam ids idênticos e descartar numa fazia a
+  sugestão sumir da outra junto — a chave de decisão é o id.
 - **A trilha de fornecedores não gera sugestão de afrouxar faixa.** Barreira de faixa
   fala de NOTAS, e a coorte é de FORNECEDORES; o caminho honesto para afrouxar faixa é a
   auditoria de conversão fora de faixa, que a tela mostra.
