@@ -101,6 +101,15 @@ export default function MapaDoMercadoScreen() {
             <Button variant="outline" onPress={() => abrirExplorador()}>
               <Text>Abrir o Explorador</Text>
             </Button>
+
+            {/*
+             * O Perfil de quem opera (04f) só se alcança daqui no mobile — não há
+             * nav interna neste módulo. Sem este botão a tela existiria,
+             * funcionaria e só responderia a quem digitasse a rota.
+             */}
+            <Button variant="outline" onPress={() => router.push('/mercado/perfil')}>
+              <Text>Perfil de quem opera</Text>
+            </Button>
           </>
         )}
       </ScrollView>
