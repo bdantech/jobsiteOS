@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/apps/worker/src/index.js",
     "sample": "tsc -p tsconfig.json && node --env-file=.env dist/apps/worker/src/sample/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "node --experimental-strip-types --import ./test/register.mjs --test src/**/*.test.ts",
     "//env": "dev/sample carregam apps/worker/.env via --env-file do próprio Node. start NAO carrega: no Railway as variaveis vem da plataforma."
   },
   "dependencies": {

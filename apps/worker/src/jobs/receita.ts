@@ -2,6 +2,7 @@ import type pg from 'pg'
 import { env, mesCorrente } from '../env.js'
 import { logger } from '../logger.js'
 import { baixarComRetentativa } from '../net/download.js'
+import { reterApenas } from '../net/retencao.js'
 import { atualizarIngestao, anotarMeta } from '../ingestoes.js'
 import { copiarLinhas, type ValorCopia } from '../pg/copy.js'
 import { lerLinhas } from '../rfb/leitura.js'
@@ -45,8 +46,18 @@ async function baixarTudo(ingestaoId: string, fallback: boolean): Promise<Arquiv
   const mes = mesCorrente()
   const raiz = `${base.replace(/\/+$/, '')}/${mes}`
 
+  // ANTES de baixar: o volume tem 20 GB e cada dump ocupa ~8 GB. Se a limpeza fosse
+  // no fim da ingestão, o disco encheria no meio do download que ela ia liberar.
+  const limpeza = await reterApenas(env.DOWNLOAD_DIR, mes)
+  if (limpeza.removidos.length > 0) {
+    logger.info(
+      { removidos: limpeza.removidos, gb_liberados: +(limpeza.bytes_liberados / 1e9).toFixed(2) },
+      'Volume: dumps de outros meses removidos.',
+    )
+  }
+
   logger.info({ mes, fallback }, 'Baixando o dump da Receita.')
-  await anotarMeta(ingestaoId, { mes, fonte_url: raiz, fallback })
+  await anotarMeta(ingestaoId, { mes, fonte_url: raiz, fallback, limpeza })
 
   // Every attempt of every file bumps `tentativa`, so the Ingestões page shows
   // how hard this run had to fight for the data.

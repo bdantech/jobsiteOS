@@ -1,7 +1,8 @@
 import type pg from 'pg'
-import { env } from '../env.js'
+import { env, mesCorrente } from '../env.js'
 import { logger } from '../logger.js'
 import { baixarComRetentativa } from '../net/download.js'
+import { reterApenas } from '../net/retencao.js'
 import { atualizarIngestao, anotarMeta } from '../ingestoes.js'
 import { copiarLinhas, type ValorCopia } from '../pg/copy.js'
 import { lerRegistros } from '../rfb/leitura.js'
@@ -114,9 +115,27 @@ export async function ingerirCno(
     ? `${env.RECEITA_FALLBACK_URL.replace(/\/+$/, '')}/cno.zip`
     : env.CNO_SOURCE_URL
 
+  // O destino carrega o mês. Era fixo ('cno/cno.zip'), e como o download REUTILIZA
+  // arquivo já baixado, a rodada seguinte relia o zip do mês anterior e reportava
+  // sucesso com dado velho — a falha mais silenciosa que este job tinha.
+  const mes = mesCorrente()
+
+  // Mesma retenção da Receita, e pelo mesmo motivo. No caminho feliz não remove nada
+  // (o CNO roda dois dias depois, no mesmo mês); ela existe para o dia em que a
+  // Receita falhar e o CNO for o primeiro a tocar o volume no mês novo.
+  if (!opcoes.sample) {
+    const limpeza = await reterApenas(env.DOWNLOAD_DIR, mes)
+    if (limpeza.removidos.length > 0) {
+      logger.info(
+        { removidos: limpeza.removidos, gb_liberados: +(limpeza.bytes_liberados / 1e9).toFixed(2) },
+        'Volume: dumps de outros meses removidos.',
+      )
+    }
+  }
+
   const arquivo = opcoes.sample
     ? await arquivoCnoDeAmostra()
-    : await baixarComRetentativa(url, 'cno/cno.zip', {
+    : await baixarComRetentativa(url, `${mes}/cno.zip`, {
         token: env.CNO_SHARE_TOKEN,
         onTentativa: async (tentativa) => {
           if (tentativa > 1) await atualizarIngestao(ingestaoId, { tentativa })

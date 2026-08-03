@@ -105,4 +105,11 @@ por uma cópia de terceiros é uma decisão humana.
 2. **Um volume montado em `DOWNLOAD_DIR`.** Sem volume, um restart na terceira hora do download recomeça
    do zero — e a retomada por `Range` (que já está implementada) não tem em que se apoiar.
 
+   O volume tem 20 GB e cada dump da Receita ocupa ~8 GB, numa pasta por mês (`2026-08/`). Antes de
+   baixar qualquer coisa, `net/retencao.ts` apaga toda pasta de mês que não seja a da execução — então
+   o teto é um dump, não um por mês. A limpeza roda ANTES do download de propósito: no fim da ingestão
+   ela liberaria espaço tarde demais, e um disco cheio no meio de um download entra no backoff de horas
+   e só falha ~10h depois. A pasta do mês corrente FICA depois do sucesso: são 8 GB parados que compram
+   um re-run barato no mesmo mês.
+
 Variáveis: veja `.env.example`. O `WORKER_SECRET` precisa ser o mesmo no Vercel.

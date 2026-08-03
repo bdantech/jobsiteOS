@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield, Users } from 'lucide-react'
+import { Clock, Shield, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ABAS = [
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/perfis', label: 'Perfis', icon: Shield },
+  { href: '/admin/crons', label: 'Crons', icon: Clock },
 ] as const
 
 /**

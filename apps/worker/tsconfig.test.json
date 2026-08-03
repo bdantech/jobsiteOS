@@ -1,0 +1,14 @@
+{
+  // Os *.test.ts ficam FORA do tsconfig de build: eles importam './x.ts' (o que
+  // `node --experimental-strip-types` exige) e `allowImportingTsExtensions` é
+  // incompatível com emissão. Aqui só se checa tipo, sem emitir — então pode.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.test.ts"]
+}

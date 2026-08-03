@@ -13,6 +13,7 @@ export * from './antecipacao/index.js'
 export * from './certificados/index.js'
 export * from './credito/index.js'
 export * from './perfil/index.js'
+export * from './crons/index.js'
 export * from './constants.js'
 export type {
   Database,
