@@ -160,7 +160,7 @@ function RegraComRegra({
           <div className={cn('flex items-start gap-2 rounded-lg border p-3 text-sm', STATUS_SUPERFICIE.info)}>
             <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <div className="space-y-1">
-              <p className="font-medium">Rascunho vindo do Perfil de quem opera</p>
+              <p className="font-medium">Rascunho vindo do Perfil dos Clientes</p>
               <p className="text-xs leading-relaxed">
                 {sugestao.frase} O ajuste já está aplicado no editor abaixo — confira, veja o
                 impacto e ative se concordar. Nada foi alterado ainda.

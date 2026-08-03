@@ -72,7 +72,7 @@ function PainelFaixa({
   sugestao,
 }: {
   faixa: Faixa
-  /** Rascunho vindo do Perfil de quem opera (04f §6). Nada é ativado por ele. */
+  /** Rascunho vindo do Perfil dos Clientes (04f §6). Nada é ativado por ele. */
   sugestao?: { logId: string; frase: string; arvore: Grupo } | null
 }) {
   const qc = useQueryClient()
@@ -162,7 +162,7 @@ function PainelFaixa({
           <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
             <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <div className="space-y-1">
-              <p className="font-medium">Rascunho vindo do Perfil de quem opera</p>
+              <p className="font-medium">Rascunho vindo do Perfil dos Clientes</p>
               <p className="text-xs leading-relaxed">
                 {sugestao.frase} O ajuste já está no editor abaixo — confira e salve se concordar.
                 Nada foi alterado ainda.

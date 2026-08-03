@@ -31,7 +31,7 @@ const ITENS: readonly ItemNav[] = [
   { href: '/mercado', label: 'Mapa', icon: BarChart3 },
   { href: '/mercado/explorador', label: 'Explorador', icon: Compass },
   { href: '/mercado/segmentos', label: 'Segmentos', icon: Layers },
-  { href: '/mercado/perfil', label: 'Perfil de quem opera', icon: Users },
+  { href: '/mercado/perfil', label: 'Perfil dos Clientes', icon: Users },
   { href: '/mercado/importacoes', label: 'Importações', icon: FileSpreadsheet },
   { href: '/mercado/ingestoes', label: 'Ingestões', icon: Radio },
   // A rota continua /mercado/piramide de propósito: o rótulo mudou, a URL não —

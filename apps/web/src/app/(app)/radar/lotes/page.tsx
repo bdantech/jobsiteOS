@@ -4,7 +4,7 @@ import { canAccessRoute } from '@jobsiteos/core'
 import { requireSessionContext } from '@/lib/auth'
 import { LotesLista } from '@/components/radar/lotes-lista'
 
-export const metadata: Metadata = { title: 'Lotes — Radar' }
+export const metadata: Metadata = { title: 'Enriquecimento — Radar' }
 
 export default async function LotesPage() {
   const { grantedModuleIds } = await requireSessionContext()

@@ -10,7 +10,7 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function SacadosLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Por sacado' }} />
+      <Stack.Screen name="index" options={{ title: 'Por Sacado' }} />
       <Stack.Screen name="[cnpj]" options={{ title: 'Sacado' }} />
     </ModuleStack>
   )

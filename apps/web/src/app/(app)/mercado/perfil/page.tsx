@@ -4,7 +4,7 @@ import { canAccessRoute } from '@jobsiteos/core'
 import { isAdmin, requireSessionContext } from '@/lib/auth'
 import { PerfilPagina } from '@/components/mercado/perfil/perfil-pagina'
 
-export const metadata: Metadata = { title: 'Perfil de quem opera — Mercado' }
+export const metadata: Metadata = { title: 'Perfil dos Clientes — Mercado' }
 
 /**
  * LEITURA para todo o módulo Mercado, RECÁLCULO só para admin.

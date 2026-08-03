@@ -34,7 +34,7 @@ interface PiramidePaginaProps {
   camadaPromocao: PromocaoCamada
   /**
    * Id do registro em `perfil_sugestoes_log` quando a tela foi aberta pelo
-   * um-clique do Perfil de quem opera (04f §6). A árvore proposta vem do LOG, e
+   * um-clique do Perfil dos Clientes (04f §6). A árvore proposta vem do LOG, e
    * não da URL: uma regra de camada inteira num query param seria frágil de
    * carregar e trivial de adulterar.
    */

@@ -82,7 +82,7 @@ export function PerfilPagina({ podeRecalcular }: { podeRecalcular: boolean }) {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Perfil de quem opera</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Perfil dos Clientes</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             O que as empresas que realmente operam têm em comum — e onde a régua vigente as deixa de
             fora. Cada achado vira, no máximo, uma sugestão de ajuste: nada aqui muda regra sozinho.

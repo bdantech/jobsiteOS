@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,14 +28,24 @@ export function LotesLista() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Lotes de enriquecimento</h1>
+          <h1 className="text-2xl font-semibold">Enriquecimento</h1>
           <p className="text-muted-foreground">Seleção, estimativa, aprovação e reconciliação.</p>
         </div>
-        <Button asChild>
-          <Link href="/radar/lotes/nova">Novo lote</Link>
-        </Button>
+        {/* Domínios deixou de ser aba: é a tela que se abre quando um lote recusa empresas
+            por falta de domínio, então o caminho até ela é daqui — não do topo do Radar. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/radar/dominios">
+              <Globe className="h-4 w-4" aria-hidden />
+              Domínios
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/radar/lotes/nova">Novo lote</Link>
+          </Button>
+        </div>
       </div>
 
       {lotes.isPending ? (

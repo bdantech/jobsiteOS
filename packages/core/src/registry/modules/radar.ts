@@ -248,6 +248,7 @@ export const radarModule: AppModule = {
   name: 'Radar',
   icon: 'radar',
   route: '/radar',
+  group: 'inteligencia',
   webOnly: true, // TODO Fase 5: criar telas mobile e remover este flag.
   tools: [
     {

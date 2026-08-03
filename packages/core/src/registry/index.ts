@@ -6,7 +6,7 @@ import { empresasModule } from './modules/empresas.js'
 import { mercadoModule } from './modules/mercado.js'
 import { notificacoesModule } from './modules/notificacoes.js'
 import { radarModule } from './modules/radar.js'
-import type { AppModule, ModuleTool } from './types.js'
+import type { AppModule, ModuleGroup, ModuleTool } from './types.js'
 
 export * from './types.js'
 
@@ -15,8 +15,9 @@ export * from './types.js'
  * permissions, and AI capabilities — so a new module is exactly: (1) migration,
  * (2) screens on both platforms, (3) one entry in this array.
  */
-// Order is the sidebar order. Mercado sits before Empresas because it is where
-// the funnel starts: you find a company in the market before you work it.
+// Order within each sidebar section (as seções e a ordem delas estão em
+// MODULE_GROUPS). Mercado sits before Empresas because it is where the funnel
+// starts: you find a company in the market before you work it.
 export const MODULES: readonly AppModule[] = [
   mercadoModule,
   radarModule,
@@ -40,6 +41,32 @@ export function getModule(id: string): AppModule | undefined {
 /** Modules the user's perfil grants. Drives the web sidebar. */
 export function grantedModules(grantedIds: readonly string[]): AppModule[] {
   return MODULES.filter((m) => grantedIds.includes(m.id))
+}
+
+/**
+ * Ordem e rótulos das seções da sidebar. É esta lista que manda, não a ordem do
+ * MODULES: um módulo novo aparece na seção que declarar, no lugar que a seção
+ * ocupa aqui.
+ */
+export const MODULE_GROUPS: readonly { id: ModuleGroup; label: string }[] = [
+  { id: 'inteligencia', label: 'Inteligência' },
+  { id: 'operacoes', label: 'Operações' },
+  { id: 'outros', label: 'Outros' },
+]
+
+/**
+ * Os módulos liberados, já quebrados em seções e na ordem do MODULE_GROUPS.
+ * Seções sem nenhum módulo liberado saem do resultado — um cabeçalho sozinho é
+ * pior que a ausência dele.
+ */
+export function grantedModuleGroups(
+  grantedIds: readonly string[],
+): { id: ModuleGroup; label: string; modules: AppModule[] }[] {
+  const granted = grantedModules(grantedIds)
+  return MODULE_GROUPS.map((g) => ({
+    ...g,
+    modules: granted.filter((m) => m.group === g.id),
+  })).filter((g) => g.modules.length > 0)
 }
 
 /** Same, minus webOnly modules. Drives the mobile tab bar and "Mais" grid. */

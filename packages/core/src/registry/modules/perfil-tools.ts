@@ -201,7 +201,7 @@ async function sugestoesPendentes(input: PerfilSugestoesInput, ctx: ToolContext)
 export const perfilTools: readonly ModuleTool[] = [
   {
     id: 'perfil.resumo',
-    name: 'Perfil de quem opera',
+    name: 'Perfil dos Clientes',
     description:
       'O retrato das empresas que realmente operam — construtoras que mais antecipam e ' +
       'fornecedores cujas notas convertem — comparado a um grupo de controle, com lift e tamanho ' +

@@ -184,7 +184,7 @@ export function LoteDetalhe({ id }: { id: string }) {
       <div className="flex items-start justify-between">
         <div>
           <Link href="/radar/lotes" className="text-sm text-muted-foreground hover:underline">
-            ← Lotes
+            ← Enriquecimento
           </Link>
           <h1 className="mt-1 text-2xl font-semibold">{l.nome ?? `Lote de ${l.tipo}`}</h1>
           <p className="text-muted-foreground capitalize">

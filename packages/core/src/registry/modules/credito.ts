@@ -160,6 +160,7 @@ export const creditoModule: AppModule = {
   name: 'Crédito',
   icon: 'landmark',
   route: '/credito',
+  group: 'operacoes',
   tools: [
     {
       id: 'credito.potencial_empresa',

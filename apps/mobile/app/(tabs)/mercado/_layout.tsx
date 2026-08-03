@@ -9,7 +9,7 @@ import { ModuleStack } from '@/components/shell/module-stack'
  * screen React Navigation cannot resolve.
  *
  * Mapa → Explorador → ficha do universo / grupo econômico, each pushing on top of
- * the last, mais o Perfil de quem opera (04f), que é LEITURA aqui. A Pirâmide
+ * the last, mais o Perfil dos Clientes (04f), que é LEITURA aqui. A Pirâmide
  * (rule builder), o Importador de listas, as Ingestões e — dentro do Perfil — as
  * sugestões e o recálculo são webOnly: não têm tela mobile porque editar uma
  * árvore de regra num telefone é a pior versão dessa tarefa.
@@ -19,7 +19,7 @@ export default function MercadoLayout() {
     <ModuleStack>
       <Stack.Screen name="index" options={{ title: 'Mapa do Mercado' }} />
       <Stack.Screen name="explorador" options={{ title: 'Explorador' }} />
-      <Stack.Screen name="perfil" options={{ title: 'Perfil de quem opera' }} />
+      <Stack.Screen name="perfil" options={{ title: 'Perfil dos Clientes' }} />
       <Stack.Screen name="universo/[cnpj]" options={{ title: 'Empresa no universo' }} />
       <Stack.Screen name="grupos/[id]" options={{ title: 'Grupo econômico' }} />
     </ModuleStack>

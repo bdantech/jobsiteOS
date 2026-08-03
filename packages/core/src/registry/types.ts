@@ -32,6 +32,13 @@ export interface ModuleTool<TInput = unknown, TOutput = unknown> {
   mutates: boolean
 }
 
+/**
+ * Agrupamento do módulo na sidebar. Responde "por que este item está aqui?" antes
+ * de a pessoa clicar: `inteligencia` é onde se descobre com quem falar, `operacoes`
+ * é onde o dinheiro anda, `outros` é o que não é trabalho do dia.
+ */
+export type ModuleGroup = 'inteligencia' | 'operacoes' | 'outros'
+
 export interface AppModule {
   /** Matches perfil_modulos.modulo_id in the database. */
   id: string
@@ -40,6 +47,8 @@ export interface AppModule {
   icon: string
   /** Web route. Mobile maps it onto its own navigator via the linking config. */
   route: string
+  /** Seção da sidebar web. O mobile ignora — lá a navegação é plana. */
+  group: ModuleGroup
   tools: ModuleTool[]
   /**
    * Module has no mobile implementation. Mobile navigation must skip it, and the

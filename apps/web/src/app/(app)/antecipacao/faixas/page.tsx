@@ -4,7 +4,7 @@ import { canAccessRoute } from '@jobsiteos/core'
 import { isAdmin, requireSessionContext } from '@/lib/auth'
 import { RegrasFaixa } from '@/components/antecipacao/regras-faixa'
 
-export const metadata: Metadata = { title: 'Regras de faixa — Antecipação' }
+export const metadata: Metadata = { title: 'Regras de Faixa — Antecipação' }
 
 /**
  * Uma regra de faixa reclassifica o funil de todo mundo — é alavanca da empresa,

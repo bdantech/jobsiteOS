@@ -274,6 +274,7 @@ export const antecipacaoModule: AppModule = {
   name: 'Antecipação',
   icon: 'banknote',
   route: '/antecipacao',
+  group: 'operacoes',
   tools: [
     {
       id: 'antecipacao.resumo_funil',

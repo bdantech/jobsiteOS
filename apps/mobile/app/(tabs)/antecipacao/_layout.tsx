@@ -19,7 +19,7 @@ export default function AntecipacaoLayout() {
       <Stack.Screen name="index" options={{ title: 'Funil' }} />
       <Stack.Screen name="fornecedores/[cnpj]" options={{ title: 'Fornecedor' }} />
       <Stack.Screen name="sacados" options={{ headerShown: false }} />
-      <Stack.Screen name="prospectar" options={{ title: 'Sacados a prospectar' }} />
+      <Stack.Screen name="prospectar" options={{ title: 'Sacados a Prospectar' }} />
     </ModuleStack>
   )
 }

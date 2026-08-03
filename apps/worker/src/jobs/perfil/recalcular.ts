@@ -249,7 +249,7 @@ export async function recalcularPerfil(client: pg.Client): Promise<ResultadoPerf
   // Evento de sistema (empresa_id null): o fan-out usa titulo/url do payload.
   const totalSugestoes = resultado.comparacoes.reduce((s, c) => s + c.sugestoes, 0)
   await emitirEvento(null, EVENTO_TIPOS.PERFIL_RECALCULADO, {
-    titulo: 'Perfil de quem opera recalculado',
+    titulo: 'Perfil dos Clientes recalculado',
     resumo:
       `${resultado.snapshots} comparações atualizadas. ` +
       (totalSugestoes > 0
@@ -260,7 +260,7 @@ export async function recalcularPerfil(client: pg.Client): Promise<ResultadoPerf
   })
   resultado.eventos++
 
-  logger.info(resultado, 'Perfil de quem opera recalculado.')
+  logger.info(resultado, 'Perfil dos Clientes recalculado.')
   return resultado
 }
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Ban, Globe, LayoutDashboard, Layers, Settings, Sigma } from 'lucide-react'
+import { Ban, LayoutDashboard, Layers, Settings, Sigma } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -15,13 +15,16 @@ interface ItemNav {
   label: string
   icon: typeof Layers
   somenteAdmin?: boolean
+  /** Rotas que não ficam sob o href mas pertencem à aba (Domínios mora no Enriquecimento). */
+  tambem?: readonly string[]
 }
 
 // Clientes Onepay saiu daqui: agora vive no menu Empresas (aba Clientes Onepay).
+// Domínios também saiu: continua em /radar/dominios, alcançada por um botão dentro do
+// Enriquecimento — é uma ferramenta de quem já está enriquecendo, não um destino próprio.
 const ITENS: readonly ItemNav[] = [
   { href: '/radar', label: 'Painel', icon: LayoutDashboard },
-  { href: '/radar/lotes', label: 'Lotes', icon: Layers },
-  { href: '/radar/dominios', label: 'Domínios', icon: Globe },
+  { href: '/radar/lotes', label: 'Enriquecimento', icon: Layers, tambem: ['/radar/dominios'] },
   { href: '/radar/supressao', label: 'Supressão', icon: Ban },
   { href: '/radar/estimador', label: 'Estimador', icon: Sigma },
   { href: '/radar/config', label: 'Configurações', icon: Settings, somenteAdmin: true },
@@ -34,7 +37,10 @@ export function RadarNav({ ehAdmin }: { ehAdmin: boolean }) {
   return (
     <nav aria-label="Seções do Radar" className="mb-6 flex gap-1 overflow-x-auto border-b border-border pb-px">
       {itens.map((item) => {
-        const ativo = item.href === '/radar' ? pathname === '/radar' : pathname.startsWith(item.href)
+        const ativo =
+          item.href === '/radar'
+            ? pathname === '/radar'
+            : pathname.startsWith(item.href) || (item.tambem ?? []).some((r) => pathname.startsWith(r))
         const Icon = item.icon
         return (
           <Link

@@ -10,5 +10,6 @@ export const notificacoesModule: AppModule = {
   name: 'Notificações',
   icon: 'bell',
   route: '/notificacoes',
+  group: 'outros',
   tools: [],
 }

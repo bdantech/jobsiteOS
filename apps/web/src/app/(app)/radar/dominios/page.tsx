@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
 import { requireSessionContext } from '@/lib/auth'
@@ -18,6 +19,10 @@ export const metadata: Metadata = { title: 'Domínios — Radar' }
  * (um lote é uma foto; isto tem de estar sempre fresco).
  *
  * Não é admin-only: quem enriquece é quem descobre que o domínio está errado.
+ *
+ * Saiu das abas do Radar e passou a ser alcançada por um botão no Enriquecimento: é a
+ * tela que se abre por causa de um lote (empresa sem domínio é empresa que o Apollo só
+ * sabe recusar), não um lugar onde alguém começa o dia. A URL não mudou.
  */
 export default async function DominiosPage() {
   const context = await requireSessionContext()
@@ -26,5 +31,12 @@ export default async function DominiosPage() {
   // `contatos` e `empresas` são gated por `app_tem_modulo('empresas')`. Sem esse módulo a
   // consulta volta VAZIA, não com erro — e a tela diria "nenhuma divergência", que é a
   // frase mais enganosa possível: parece uma base limpa e é uma base invisível.
-  return <DominiosContato podeVerEmpresas={canAccessRoute('/empresas', context.grantedModuleIds)} />
+  return (
+    <div className="space-y-4">
+      <Link href="/radar/lotes" className="text-sm text-muted-foreground hover:underline">
+        ← Enriquecimento
+      </Link>
+      <DominiosContato podeVerEmpresas={canAccessRoute('/empresas', context.grantedModuleIds)} />
+    </div>
+  )
 }

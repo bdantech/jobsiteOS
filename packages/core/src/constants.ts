@@ -175,7 +175,7 @@ export const EVENTO_LABELS: Record<string, string> = {
   'analise.limite_reduzido': 'Limite reduzido pela seguradora',
   'score.recalculado': 'Score de crédito recalculado',
   'credito.potencial_atualizado': 'Potencial de crédito atualizado',
-  'perfil.recalculado': 'Perfil de quem opera recalculado',
+  'perfil.recalculado': 'Perfil dos Clientes recalculado',
   'perfil.sugestao_aceita': 'Sugestão do perfil aceita',
   'perfil.sugestao_descartada': 'Sugestão do perfil descartada',
 }

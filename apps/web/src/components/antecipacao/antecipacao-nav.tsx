@@ -34,11 +34,11 @@ interface ItemNav {
 
 const ITENS: readonly ItemNav[] = [
   { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
-  { href: '/antecipacao/sacados', label: 'Por sacado', icon: Building2 },
-  { href: '/antecipacao/prospectar', label: 'Sacados a prospectar', icon: Sparkles },
+  { href: '/antecipacao/sacados', label: 'Por Sacado', icon: Building2 },
+  { href: '/antecipacao/prospectar', label: 'Sacados a Prospectar', icon: Sparkles },
   { href: '/antecipacao/antecipacoes', label: 'Antecipações', icon: HandCoins },
-  { href: '/antecipacao/metricas', label: 'Métricas por faixa', icon: ChartPie },
-  { href: '/antecipacao/faixas', label: 'Regras de faixa', icon: SlidersHorizontal, somenteAdmin: true },
+  { href: '/antecipacao/metricas', label: 'Métricas', icon: ChartPie },
+  { href: '/antecipacao/faixas', label: 'Regras de Faixa', icon: SlidersHorizontal, somenteAdmin: true },
   { href: '/antecipacao/disparos', label: 'Disparos', icon: Send, somenteAdmin: true },
   { href: '/antecipacao/outbox', label: 'Outbox', icon: Inbox },
   { href: '/antecipacao/whatsapp', label: 'Contas WhatsApp', icon: MessageCircle, somenteAdmin: true },

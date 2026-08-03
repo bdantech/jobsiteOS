@@ -185,6 +185,7 @@ export const mercadoModule: AppModule = {
   name: 'Mercado',
   icon: 'map',
   route: '/mercado',
+  group: 'inteligencia',
   tools: [
     {
       id: 'mercado.resumo_piramide',
