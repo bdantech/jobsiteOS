@@ -19,6 +19,7 @@
 
 export const ORIGENS_METRICA = [
   'declarado_cliente',
+  'publicacao',
   'apollo',
   'apollo_search',
   'lista',
@@ -29,6 +30,7 @@ export type OrigemMetrica = (typeof ORIGENS_METRICA)[number]
 
 export const ORIGEM_METRICA_LABELS: Record<OrigemMetrica, string> = {
   declarado_cliente: 'Declarado',
+  publicacao: 'Ranking publicado',
   apollo: 'Apollo',
   apollo_search: 'Apollo (busca)',
   lista: 'Lista importada',
@@ -36,14 +38,28 @@ export const ORIGEM_METRICA_LABELS: Record<OrigemMetrica, string> = {
   bracket_simples: 'Faixa do Simples',
 }
 
-/** Menor é melhor. `declarado_cliente` vence tudo — estimativa nunca sobrescreve. */
+/**
+ * Menor é melhor. `declarado_cliente` vence tudo — estimativa nunca sobrescreve.
+ *
+ * `publicacao` fica ACIMA do Apollo, e isso não é preferência: um ranking setorial
+ * publica o número que a própria empresa informou à revista, enquanto o Apollo conta
+ * perfis indexados no LinkedIn (ver o aviso no topo deste arquivo). Deixá-lo abaixo
+ * faria o dado pior vencer o melhor no cache.
+ *
+ * `lista` continua embaixo do Apollo de propósito: é a lista genérica de prospecção,
+ * onde o número foi digitado por alguém sem fonte declarada.
+ *
+ * Esta ordem é replicada na RPC app_registrar_metrica_importada (migração 0081) —
+ * a alternativa seria a função do banco importar TypeScript.
+ */
 const RANK_ORIGEM: Record<OrigemMetrica, number> = {
   declarado_cliente: 0,
-  apollo: 1,
-  apollo_search: 2,
-  lista: 3,
-  modelo: 4,
-  bracket_simples: 5,
+  publicacao: 1,
+  apollo: 2,
+  apollo_search: 3,
+  lista: 4,
+  modelo: 5,
+  bracket_simples: 6,
 }
 
 /**

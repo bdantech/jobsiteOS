@@ -158,6 +158,15 @@ function LinhaDaFilaCard({
                   <span className="block truncate font-medium">
                     {candidato.razao_social ?? formatCnpj(candidato.cnpj)}
                   </span>
+                  {/* A marca, quando ela existe e não é a própria razão social: é por
+                      ela que uma lista publicada costuma chamar a empresa, e vê-la aqui
+                      é o que confirma o match para quem está decidindo. */}
+                  {candidato.nome_fantasia &&
+                    candidato.nome_fantasia !== candidato.razao_social && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {candidato.nome_fantasia}
+                      </span>
+                    )}
                   <span className="block text-xs text-muted-foreground">
                     {formatCnpj(candidato.cnpj)}
                     {candidato.municipio ? ` — ${candidato.municipio}` : ''}

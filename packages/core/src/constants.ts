@@ -48,6 +48,7 @@ export const EVENTO_TIPOS = {
 
   // Faturamento & funcionários (04c)
   METRICA_DECLARADA: 'metrica.declarada',
+  METRICA_IMPORTADA: 'metrica.importada',
   FUNCIONARIOS_ATUALIZADO: 'funcionarios.atualizado',
   FATURAMENTO_REESTIMADO: 'faturamento.reestimado',
   ESTIMADOR_RECALIBRADO: 'estimador.recalibrado',
@@ -140,6 +141,7 @@ export const EVENTO_LABELS: Record<string, string> = {
   'cliente.status_operacional_alterado': 'Status operacional alterado',
   'cliente.reativado': 'Cliente reativado',
   'metrica.declarada': 'Métrica declarada pelo cliente',
+  'metrica.importada': 'Métrica de lista importada',
   'funcionarios.atualizado': 'Funcionários atualizados',
   'faturamento.reestimado': 'Faturamento reestimado',
   'estimador.recalibrado': 'Estimador recalibrado',

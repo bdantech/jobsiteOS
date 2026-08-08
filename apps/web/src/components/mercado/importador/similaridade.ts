@@ -132,6 +132,8 @@ export const MAX_CANDIDATOS = 5
 export interface Candidato {
   cnpj: string
   razao_social: string | null
+  /** A marca. É por ela que uma lista publicada costuma chamar a empresa. */
+  nome_fantasia: string | null
   uf: string | null
   municipio: string | null
   situacao_cadastral: string | null

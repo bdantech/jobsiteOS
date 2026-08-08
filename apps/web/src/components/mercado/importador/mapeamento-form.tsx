@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import {
   CAMPOS_IMPORTACAO,
   CAMPO_IMPORTACAO_LABELS,
+  ehCampoMetrica,
   formatCnpj,
+  type AnosColunas,
   type CampoImportacao,
   type MapeamentoImportacao,
 } from '@jobsiteos/core'
@@ -16,6 +18,7 @@ import { salvarMapeamentoAction } from '@/actions/mercado-importacao'
 import { STATUS_SUPERFICIE } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
   Select,
@@ -32,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { extrairLinha, IGNORAR, validarMapeamento } from './mapeamento'
+import { extrairLinha, IGNORAR, sugerirAnos, validarMapeamento, type LinhaExtraida } from './mapeamento'
 import { formatMrrErp } from './format'
 import { importadorKeys } from './queries'
 
@@ -53,6 +56,16 @@ interface MapeamentoFormProps {
   amostra: Record<string, string>[]
   sugestao: MapeamentoImportacao
 }
+
+/** Uma coluna da tabela de prévia. Métrica rende uma por ANO; o resto, uma por campo. */
+interface ColunaPrevia {
+  chave: string
+  titulo: string
+  valor: (extraida: LinhaExtraida) => string
+}
+
+const moeda = (v: number): string =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 /** Ordem das colunas na prévia — a leitura de negócio, não a da planilha. */
 const CAMPOS_PREVIA: CampoImportacao[] = [...CAMPOS_IMPORTACAO]
@@ -104,6 +117,12 @@ function valorDaPrevia(
       return extraida.contato?.telefone ?? '—'
     case 'contato.cargo':
       return extraida.contato?.cargo ?? '—'
+    // Os de série não passam por aqui: a prévia deles é por coluna/ano (ver
+    // `colunasPrevia`), porque "Faturamento" sem o ano ao lado não diz nada.
+    case 'faturamento_anual':
+    case 'funcionarios':
+    case 'patrimonio_liquido':
+      return '—'
   }
 }
 
@@ -117,9 +136,12 @@ export function MapeamentoForm({
   const queryClient = useQueryClient()
 
   const [mapeamento, setMapeamento] = React.useState<MapeamentoImportacao>(sugestao)
+  // O ano detectado no cabeçalho de cada coluna de métrica. É palpite como o resto:
+  // fica editável ao lado do campo, e sem ele a importação não avança.
+  const [anos, setAnos] = React.useState<AnosColunas>(() => sugerirAnos(sugestao))
   const [salvando, setSalvando] = React.useState(false)
 
-  const problema = validarMapeamento(mapeamento)
+  const problema = validarMapeamento(mapeamento, anos)
 
   const camposUsados = React.useMemo(() => {
     const contagem = new Map<CampoImportacao, number>()
@@ -129,16 +151,49 @@ export function MapeamentoForm({
     return contagem
   }, [mapeamento])
 
-  const duplicados = [...camposUsados.entries()].filter(([, n]) => n > 1).map(([campo]) => campo)
-
-  // Só as colunas mapeadas entram na prévia: 40 colunas de planilha em uma tabela
-  // de 17 campos canônicos não é prévia, é ruído.
-  const camposVisiveis = CAMPOS_PREVIA.filter((campo) => camposUsados.has(campo))
+  // Métrica repetida NÃO é duplicata: são anos diferentes da mesma série, e o
+  // conflito de verdade (mesma métrica no mesmo ano) já é barrado por validarMapeamento.
+  const duplicados = [...camposUsados.entries()]
+    .filter(([campo, n]) => n > 1 && !ehCampoMetrica(campo))
+    .map(([campo]) => campo)
 
   const linhasPrevia = React.useMemo(
-    () => amostra.map((linha) => extrairLinha(linha, mapeamento)),
-    [amostra, mapeamento],
+    () => amostra.map((linha) => extrairLinha(linha, mapeamento, anos)),
+    [amostra, mapeamento, anos],
   )
+
+  // Só as colunas mapeadas entram na prévia: 40 colunas de planilha em uma tabela
+  // de 20 campos canônicos não é prévia, é ruído.
+  const colunasPrevia = React.useMemo<ColunaPrevia[]>(() => {
+    const simples: ColunaPrevia[] = CAMPOS_PREVIA.filter(
+      (campo) => camposUsados.has(campo) && !ehCampoMetrica(campo),
+    ).map((campo) => ({
+      chave: campo,
+      titulo: CAMPO_IMPORTACAO_LABELS[campo],
+      valor: (extraida) => valorDaPrevia(campo, extraida),
+    }))
+
+    const series: ColunaPrevia[] = Object.entries(mapeamento)
+      .filter(([, campo]) => ehCampoMetrica(campo))
+      .map(([coluna, campo]) => {
+        const ano = anos[coluna]
+        const rotulo = CAMPO_IMPORTACAO_LABELS[campo as CampoImportacao].replace(' (por ano)', '')
+
+        return {
+          chave: coluna,
+          titulo: ano ? `${rotulo} ${ano}` : rotulo,
+          valor: (extraida) => {
+            const leitura = extraida.metricas.find((m) => m.coluna === coluna)
+            if (!leitura) return '—'
+            return leitura.metrica === 'funcionarios'
+              ? leitura.valor.toLocaleString('pt-BR')
+              : moeda(leitura.valor)
+          },
+        }
+      })
+
+    return [...simples, ...series]
+  }, [camposUsados, mapeamento, anos])
 
   async function salvar() {
     if (problema || salvando) return
@@ -148,6 +203,7 @@ export function MapeamentoForm({
       const resultado = await salvarMapeamentoAction({
         importacao_id: importacaoId,
         mapeamento,
+        anos_colunas: anos,
       })
 
       if (!resultado.ok) {
@@ -224,6 +280,44 @@ export function MapeamentoForm({
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {/* Faturamento, funcionários e PL valem para um ANO. O palpite vem do
+                      cabeçalho ("Receita Bruta 2023" → 2023) e fica aqui para conferir:
+                      um ano errado desloca a série inteira, e isso só apareceria meses
+                      depois, numa variação 12m absurda. */}
+                  {ehCampoMetrica(atual) && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <label
+                        className="text-xs text-muted-foreground"
+                        htmlFor={`ano-${cabecalho}`}
+                      >
+                        Ano
+                      </label>
+                      <Input
+                        id={`ano-${cabecalho}`}
+                        inputMode="numeric"
+                        placeholder="2024"
+                        className="h-8 w-24"
+                        value={anos[cabecalho]?.toString() ?? ''}
+                        onChange={(e) => {
+                          const bruto = e.target.value.replace(/\D/g, '').slice(0, 4)
+                          setAnos((anterior) => {
+                            const proximo = { ...anterior }
+                            const ano = Number(bruto)
+                            if (bruto.length === 4 && ano >= 2000 && ano <= 2100) {
+                              proximo[cabecalho] = ano
+                            } else {
+                              delete proximo[cabecalho]
+                            }
+                            return proximo
+                          })
+                        }}
+                      />
+                      {!anos[cabecalho] && (
+                        <span className="text-xs text-destructive">obrigatório</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -263,7 +357,7 @@ export function MapeamentoForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {camposVisiveis.length === 0 ? (
+          {colunasPrevia.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma coluna mapeada ainda.
             </p>
@@ -272,9 +366,9 @@ export function MapeamentoForm({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {camposVisiveis.map((campo) => (
-                      <TableHead key={campo} className="whitespace-nowrap">
-                        {CAMPO_IMPORTACAO_LABELS[campo]}
+                    {colunasPrevia.map((coluna) => (
+                      <TableHead key={coluna.chave} className="whitespace-nowrap">
+                        {coluna.titulo}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -282,9 +376,9 @@ export function MapeamentoForm({
                 <TableBody>
                   {linhasPrevia.map((extraida, indice) => (
                     <TableRow key={indice}>
-                      {camposVisiveis.map((campo) => (
-                        <TableCell key={campo} className="whitespace-nowrap text-sm">
-                          {valorDaPrevia(campo, extraida)}
+                      {colunasPrevia.map((coluna) => (
+                        <TableCell key={coluna.chave} className="whitespace-nowrap text-sm">
+                          {coluna.valor(extraida)}
                         </TableCell>
                       ))}
                     </TableRow>

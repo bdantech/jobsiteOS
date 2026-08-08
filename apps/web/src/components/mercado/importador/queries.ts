@@ -143,6 +143,8 @@ function lerCandidatos(bruto: unknown): Candidato[] {
       {
         cnpj: c.cnpj,
         razao_social: typeof c.razao_social === 'string' ? c.razao_social : null,
+        // Ausente nos candidatos gravados antes da busca por marca: null, não erro.
+        nome_fantasia: typeof c.nome_fantasia === 'string' ? c.nome_fantasia : null,
         uf: typeof c.uf === 'string' ? c.uf : null,
         municipio: typeof c.municipio === 'string' ? c.municipio : null,
         situacao_cadastral:

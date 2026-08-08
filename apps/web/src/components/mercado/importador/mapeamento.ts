@@ -1,9 +1,13 @@
 import {
   CAMPOS_IMPORTACAO,
   CAMPO_IMPORTACAO_LABELS,
+  anoDoCabecalho,
+  ehCampoMetrica,
   isValidCnpj,
   normalizeCnpj,
+  type AnosColunas,
   type CampoImportacao,
+  type CampoMetricaImportacao,
   type MapeamentoImportacao,
 } from '@jobsiteos/core'
 
@@ -75,6 +79,25 @@ const SINONIMOS: Record<CampoImportacao, readonly string[]> = {
     'ativo inativo',
     'cancelado',
   ],
+  // Os três de série. O ano no cabeçalho ("Receita Bruta 2023") não atrapalha: a
+  // comparação por `includes` acha o sinônimo dentro dele, e o ano é lido à parte.
+  faturamento_anual: [
+    'faturamento anual',
+    'faturamento',
+    'receita bruta',
+    'receita liquida',
+    'receita',
+    'faturamento bruto',
+  ],
+  funcionarios: [
+    'pessoal graduado',
+    'funcionarios',
+    'colaboradores',
+    'empregados',
+    'headcount',
+    'quadro de pessoal',
+  ],
+  patrimonio_liquido: ['patrimonio liquido', 'patrimonio', 'pl'],
   'contato.nome': ['contato', 'contato nome', 'nome contato', 'responsavel'],
   'contato.email': ['email', 'e mail', 'contato email', 'email contato'],
   'contato.telefone': ['telefone', 'fone', 'celular', 'whatsapp', 'contato telefone'],
@@ -94,10 +117,19 @@ export function sugerirMapeamento(cabecalhos: readonly string[]): MapeamentoImpo
 
   // Duas passadas: igualdade exata primeiro, para que "nome" não roube
   // `razao_social` de uma coluna que se chama exatamente "Razão Social".
+  //
+  // Dentro da passada, quem manda é a ORDEM DOS SINÔNIMOS, não a ordem das colunas
+  // — que é o que este arquivo sempre disse fazer. A diferença aparece quando duas
+  // colunas casam com o mesmo campo: um ranking setorial traz "Funcionários" (total,
+  // com canteiro) e "Pessoal Graduado" lado a lado, e é o graduado que se compara
+  // com o headcount do Apollo, medido em perfis de LinkedIn. Por ordem de coluna, o
+  // total venceria por vir antes; por ordem de sinônimo, vence o que o palpite deve
+  // preferir.
   for (const campo of CAMPOS_IMPORTACAO) {
-    const alvo = normalizados.find(
-      (h) => !mapeamento[h.original] && SINONIMOS[campo].includes(h.chave),
-    )
+    const alvo = SINONIMOS[campo]
+      .map((sinonimo) => normalizados.find((h) => !mapeamento[h.original] && h.chave === sinonimo))
+      .find((h) => h !== undefined)
+
     if (alvo) {
       mapeamento[alvo.original] = campo
       usados.add(campo)
@@ -117,11 +149,64 @@ export function sugerirMapeamento(cabecalhos: readonly string[]): MapeamentoImpo
     }
   }
 
+  // Terceira passada, só para os campos de SÉRIE: uma coluna por ano é a forma
+  // natural dessas listas ("Receita Bruta 2023", "Receita Bruta 2024"), e as duas
+  // são a mesma métrica em dois pontos do tempo — não duas colunas brigando pelo
+  // mesmo campo.
+  //
+  // O ano é o que autoriza a repetição. Sem ele, duas colunas no mesmo campo são um
+  // conflito de verdade (é o caso de "Funcionários" e "Pessoal Graduado", que falam
+  // do mesmo ano e medem coisas diferentes) e a segunda fica sem mapeamento, para a
+  // pessoa escolher.
+  const anosUsados = new Map<CampoMetricaImportacao, Set<number>>()
+  for (const [coluna, campo] of Object.entries(mapeamento)) {
+    if (!ehCampoMetrica(campo)) continue
+    const ano = anoDoCabecalho(coluna)
+    if (ano === null) continue
+    const jaTem = anosUsados.get(campo) ?? new Set<number>()
+    jaTem.add(ano)
+    anosUsados.set(campo, jaTem)
+  }
+
+  for (const { original, chave } of normalizados) {
+    if (original in mapeamento) continue
+    const ano = anoDoCabecalho(original)
+    if (ano === null) continue
+
+    const campo = CAMPOS_IMPORTACAO.filter(ehCampoMetrica).find((c) =>
+      SINONIMOS[c].some((s) => s.length >= 3 && chave.includes(s)),
+    )
+    if (!campo) continue
+
+    const jaTem = anosUsados.get(campo) ?? new Set<number>()
+    if (jaTem.has(ano)) continue
+
+    mapeamento[original] = campo
+    jaTem.add(ano)
+    anosUsados.set(campo, jaTem)
+  }
+
   for (const { original } of normalizados) {
     if (!(original in mapeamento)) mapeamento[original] = null
   }
 
   return mapeamento
+}
+
+/**
+ * O ano de cada coluna mapeada numa métrica, lido do cabeçalho. Palpite: a tela
+ * mostra e a pessoa confirma antes de aplicar (ver `validarMapeamento`).
+ */
+export function sugerirAnos(mapeamento: MapeamentoImportacao): AnosColunas {
+  const anos: AnosColunas = {}
+
+  for (const [coluna, campo] of Object.entries(mapeamento)) {
+    if (!ehCampoMetrica(campo)) continue
+    const ano = anoDoCabecalho(coluna)
+    if (ano !== null) anos[coluna] = ano
+  }
+
+  return anos
 }
 
 export function labelDoCampo(campo: CampoImportacao): string {
@@ -215,6 +300,15 @@ export interface ErpDetalhes {
   modalidade?: string
 }
 
+/** Uma leitura de série: a métrica, o valor e o ANO a que ele se refere. */
+export interface LeituraMetrica {
+  metrica: CampoMetricaImportacao
+  valor: number
+  ano: number | null
+  /** O cabeçalho de onde veio. Vai para o erro quando a linha falha. */
+  coluna: string
+}
+
 export interface LinhaExtraida {
   /** 14 dígitos válidos, ou null — um CNPJ com dígito verificador errado é lixo, não dado. */
   cnpj: string | null
@@ -228,6 +322,8 @@ export interface LinhaExtraida {
   erp_mrr: number | null
   erp_detalhes: ErpDetalhes
   churn_erp_concorrente: boolean | null
+  /** Uma por coluna de métrica preenchida. Vazio quando a lista não traz nenhuma. */
+  metricas: LeituraMetrica[]
   contato: ContatoImportado | null
 }
 
@@ -240,17 +336,39 @@ function texto(valor: string | undefined): string | null {
 export function extrairLinha(
   dados: Record<string, string>,
   mapeamento: MapeamentoImportacao,
+  anos: AnosColunas = {},
 ): LinhaExtraida {
   const por = new Map<CampoImportacao, string>()
+  const metricas: LeituraMetrica[] = []
 
   for (const [coluna, campo] of Object.entries(mapeamento)) {
     if (!campo) continue
     const valor = dados[coluna]
     if (valor === undefined || valor.trim() === '') continue
+
+    // Métrica é SÉRIE: toda coluna mapeada vira uma leitura, porque duas colunas
+    // aqui são dois anos, não duas tentativas de preencher o mesmo campo. É a única
+    // exceção ao "primeira coluna vence" logo abaixo.
+    if (ehCampoMetrica(campo)) {
+      const numero = parseNumeroBr(valor)
+      if (numero === null) continue
+      metricas.push({
+        metrica: campo,
+        valor: campo === 'funcionarios' ? Math.trunc(numero) : numero,
+        ano: anos[coluna] ?? anoDoCabecalho(coluna),
+        coluna,
+      })
+      continue
+    }
+
     // Primeira coluna não vazia mapeada num campo vence: duas colunas no mesmo
     // campo é erro do usuário, mas não pode ser motivo de perder a linha.
     if (!por.has(campo)) por.set(campo, valor.trim())
   }
+
+  // Mais antigo primeiro. A RPC protege o cache contra retrocesso, mas gravar na
+  // ordem cronológica deixa a série coerente para quem lê o log de eventos.
+  metricas.sort((a, b) => (a.ano ?? 0) - (b.ano ?? 0))
 
   const cnpjBruto = texto(por.get('cnpj'))
   const cnpjNormalizado = cnpjBruto ? normalizeCnpj(cnpjBruto) : null
@@ -300,6 +418,7 @@ export function extrairLinha(
     erp_mrr: mrrBruto === undefined ? null : parseNumeroBr(mrrBruto),
     erp_detalhes: erpDetalhes,
     churn_erp_concorrente: churnBruto === undefined ? null : interpretarChurn(churnBruto),
+    metricas,
     contato: temContato
       ? {
           nome: contatoNome,
@@ -312,11 +431,38 @@ export function extrairLinha(
 }
 
 /** O mapeamento precisa, no mínimo, saber QUEM é a empresa de cada linha. */
-export function validarMapeamento(mapeamento: MapeamentoImportacao): string | null {
+export function validarMapeamento(
+  mapeamento: MapeamentoImportacao,
+  anos: AnosColunas = {},
+): string | null {
   const campos = new Set(Object.values(mapeamento).filter((c): c is CampoImportacao => c !== null))
 
   if (!campos.has('cnpj') && !campos.has('razao_social')) {
     return 'Mapeie ao menos a coluna de CNPJ ou a de razão social — sem uma das duas não há como identificar a empresa.'
+  }
+
+  // Sem ano, o snapshot seria datado de hoje: dois anos da mesma métrica viram dois
+  // pontos na MESMA data, a variação 12m passa a comparar valor com ele mesmo e
+  // ninguém descobre isso olhando a tela. Exigir o ano aqui é mais barato.
+  const semAno = Object.entries(mapeamento)
+    .filter(([coluna, campo]) => ehCampoMetrica(campo) && !anos[coluna])
+    .map(([coluna]) => coluna)
+
+  if (semAno.length > 0) {
+    return `Informe o ano de referência de: ${semAno.join(', ')}. Sem ele, o valor não entra na série no lugar certo.`
+  }
+
+  // Duas colunas na mesma métrica E no mesmo ano é conflito, não série: uma das
+  // duas venceria por ordem de leitura, e qual delas é detalhe de implementação.
+  const vistos = new Map<string, string>()
+  for (const [coluna, campo] of Object.entries(mapeamento)) {
+    if (!ehCampoMetrica(campo)) continue
+    const chave = `${campo}:${anos[coluna]}`
+    const anterior = vistos.get(chave)
+    if (anterior) {
+      return `"${anterior}" e "${coluna}" estão na mesma métrica e no mesmo ano (${anos[coluna]}). Escolha uma das duas.`
+    }
+    vistos.set(chave, coluna)
   }
 
   return null

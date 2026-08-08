@@ -159,6 +159,32 @@ export const declararMetricaSchema = z.object({
 })
 export type DeclararMetricaInput = z.infer<typeof declararMetricaSchema>
 
+/**
+ * Métrica vinda de LISTA IMPORTADA (migração 0081).
+ *
+ * Separada da declaração por dois motivos que não são estilo: a origem aqui nunca
+ * pode ser `declarado_cliente` (declarar exige uma PESSOA afirmando o número), e o
+ * patrimônio líquido pode ser negativo — a Odebrecht do ranking 2025 está com
+ * −R$ 21,4 bi, e recusar o sinal seria descartar justamente a informação mais
+ * interessante da linha.
+ */
+export const registrarMetricaImportadaSchema = z
+  .object({
+    empresa_id: z.string().uuid(),
+    metrica: z.enum(['faturamento_anual', 'funcionarios', 'patrimonio_liquido']),
+    valor: z.coerce.number().finite(),
+    origem: z.enum(['publicacao', 'lista']).default('publicacao'),
+    /** Sem ano, o snapshot é datado de hoje — e a série perde a ordem cronológica real. */
+    ano: z.coerce.number().int().min(2000).max(2100).optional().nullable(),
+    /** O nome da lista. Vira parte do evento na ficha: "— Ranking O Empreiteiro 2025". */
+    fonte: z.string().trim().max(200).optional().nullable(),
+  })
+  .refine((d) => d.metrica === 'patrimonio_liquido' || d.valor >= 0, {
+    message: 'Faturamento e funcionários não podem ser negativos.',
+    path: ['valor'],
+  })
+export type RegistrarMetricaImportadaInput = z.infer<typeof registrarMetricaImportadaSchema>
+
 export const buscarEmpresasSchema = z.object({
   termo: z
     .string()

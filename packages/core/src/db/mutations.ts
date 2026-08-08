@@ -3,10 +3,12 @@ import {
   criarEmpresaSchema,
   criarNotaSchema,
   declararMetricaSchema,
+  registrarMetricaImportadaSchema,
   type AtualizarEmpresaInput,
   type CriarEmpresaInput,
   type CriarNotaInput,
   type DeclararMetricaInput,
+  type RegistrarMetricaImportadaInput,
 } from '../schemas/index.js'
 import { parseOuFalhar, traduzirErro } from './shared.js'
 
@@ -75,6 +77,26 @@ export async function declararMetrica(
 ): Promise<Tables<'empresa_metricas'>> {
   const dados = parseOuFalhar(declararMetricaSchema, input)
   const { data, error } = await supabase.rpc('app_declarar_metrica', { p: dados as unknown as Json })
+  if (error) throw traduzirErro(error)
+  return data
+}
+
+/**
+ * Registra faturamento, headcount ou patrimônio líquido vindos de uma LISTA (0081).
+ *
+ * Mesmo desenho do irmão acima e pelo mesmo motivo — só que datado pelo ANO DO DADO,
+ * não pela data do upload: é isso que faz "Receita 2023" e "Receita 2024" virarem dois
+ * pontos reais da série em vez de dois snapshots de hoje que o cálculo de variação
+ * leria como um só.
+ */
+export async function registrarMetricaImportada(
+  supabase: Supabase,
+  input: RegistrarMetricaImportadaInput | unknown,
+): Promise<Tables<'empresa_metricas'>> {
+  const dados = parseOuFalhar(registrarMetricaImportadaSchema, input)
+  const { data, error } = await supabase.rpc('app_registrar_metrica_importada', {
+    p: dados as unknown as Json,
+  })
   if (error) throw traduzirErro(error)
   return data
 }

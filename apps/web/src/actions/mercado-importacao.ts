@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import {
+  anosColunasSchema,
   canAccessRoute,
   mapeamentoImportacaoSchema,
   MutationError,
   resolverLinhaSchema,
+  type AnosColunas,
   type FieldErrors,
   type Json,
   type MapeamentoImportacao,
@@ -144,6 +146,12 @@ function lerMapeamento(importacao: Tables<'importacoes_listas'>): MapeamentoImpo
   return parsed.data
 }
 
+/** Anos por coluna, tolerante: uma importação antiga simplesmente não tem nenhum. */
+function lerAnos(importacao: Tables<'importacoes_listas'>): AnosColunas {
+  const parsed = anosColunasSchema.safeParse(importacao.anos_colunas)
+  return parsed.success ? parsed.data : {}
+}
+
 function urlDaImportacao(id: string): string {
   return `/mercado/importacoes/${id}`
 }
@@ -238,6 +246,8 @@ export async function criarImportacaoAction(
 const salvarMapeamentoSchema = z.object({
   importacao_id: z.string().uuid(),
   mapeamento: mapeamentoImportacaoSchema,
+  /** Ano de referência das colunas de métrica, confirmado na tela. */
+  anos_colunas: anosColunasSchema.default({}),
 })
 
 export interface ResultadoMapeamento {
@@ -269,9 +279,9 @@ export async function salvarMapeamentoAction(
     return { ok: false, message: 'Mapeamento inválido.', code: 'validation' }
   }
 
-  const { importacao_id, mapeamento } = parsed.data
+  const { importacao_id, mapeamento, anos_colunas } = parsed.data
 
-  const problema = validarMapeamento(mapeamento)
+  const problema = validarMapeamento(mapeamento, anos_colunas)
   if (problema) return { ok: false, message: problema, code: 'validation' }
 
   try {
@@ -289,7 +299,11 @@ export async function salvarMapeamentoAction(
 
     const { error: erroStatus } = await auth.supabase
       .from('importacoes_listas')
-      .update({ mapeamento: mapeamento as unknown as Json, status: 'processando' })
+      .update({
+        mapeamento: mapeamento as unknown as Json,
+        anos_colunas: anos_colunas as unknown as Json,
+        status: 'processando',
+      })
       .eq('id', importacao.id)
 
     if (erroStatus) throw new Error(erroStatus.message)
@@ -468,7 +482,7 @@ export async function aplicarLoteAction(input: unknown): Promise<ActionResult<Pr
       }
     }
 
-    const lote = await aplicarLote(auth.supabase, importacao, mapeamento, cursor)
+    const lote = await aplicarLote(auth.supabase, importacao, mapeamento, lerAnos(importacao), cursor)
 
     if (lote.concluido) {
       const { error } = await auth.supabase

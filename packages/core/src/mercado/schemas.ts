@@ -206,12 +206,36 @@ export const CAMPOS_IMPORTACAO = [
   'erp_detalhes.canal',
   'erp_detalhes.modalidade',
   'churn_erp_concorrente',
+  'faturamento_anual',
+  'funcionarios',
+  'patrimonio_liquido',
   'contato.nome',
   'contato.email',
   'contato.telefone',
   'contato.cargo',
 ] as const
 export type CampoImportacao = (typeof CAMPOS_IMPORTACAO)[number]
+
+/**
+ * Os campos que viram SÉRIE, e não coluna.
+ *
+ * Eles são diferentes de todos os outros em duas coisas. Primeira: cada um vale
+ * para um ANO — "Receita Bruta 2023" e "Receita Bruta 2024" são a mesma métrica em
+ * dois pontos do tempo, não duas colunas disputando o mesmo campo. Segunda: eles
+ * não são gravados em `empresas` por UPDATE; passam pela hierarquia de origem
+ * (empresa_metricas + cache), porque um número de lista não pode apagar o que o
+ * cliente declarou.
+ */
+export const CAMPOS_METRICA_IMPORTACAO = [
+  'faturamento_anual',
+  'funcionarios',
+  'patrimonio_liquido',
+] as const
+export type CampoMetricaImportacao = (typeof CAMPOS_METRICA_IMPORTACAO)[number]
+
+export function ehCampoMetrica(campo: CampoImportacao | null): campo is CampoMetricaImportacao {
+  return campo !== null && (CAMPOS_METRICA_IMPORTACAO as readonly string[]).includes(campo)
+}
 
 export const CAMPO_IMPORTACAO_LABELS: Record<CampoImportacao, string> = {
   cnpj: 'CNPJ',
@@ -227,6 +251,9 @@ export const CAMPO_IMPORTACAO_LABELS: Record<CampoImportacao, string> = {
   'erp_detalhes.canal': 'Canal / representante',
   'erp_detalhes.modalidade': 'Modalidade',
   churn_erp_concorrente: 'Churn em ERP concorrente',
+  faturamento_anual: 'Faturamento anual (por ano)',
+  funcionarios: 'Funcionários (por ano)',
+  patrimonio_liquido: 'Patrimônio líquido (por ano)',
   'contato.nome': 'Contato — nome',
   'contato.email': 'Contato — e-mail',
   'contato.telefone': 'Contato — telefone',
@@ -238,6 +265,28 @@ export const mapeamentoImportacaoSchema = z.record(
   z.enum(CAMPOS_IMPORTACAO).nullable(),
 )
 export type MapeamentoImportacao = z.infer<typeof mapeamentoImportacaoSchema>
+
+/** Ano de referência por COLUNA da planilha: { "Receita Bruta 2023 (R$)": 2023 }. */
+export const anosColunasSchema = z.record(z.string(), z.number().int().min(2000).max(2100))
+export type AnosColunas = z.infer<typeof anosColunasSchema>
+
+/**
+ * O ano escrito no cabeçalho da coluna — "Receita Bruta 2023 (R$)" → 2023.
+ *
+ * É um PALPITE, como o resto do mapeamento: a tela mostra o que foi detectado e a
+ * pessoa confirma ou corrige antes de aplicar. Detectar em silêncio um ano errado
+ * gravaria a série inteira deslocada, e ninguém descobriria até a variação 12m sair
+ * absurda meses depois.
+ *
+ * Pega a PRIMEIRA ocorrência: num cabeçalho como "PL 2024 (base 2023)" o ano do
+ * título é o que a coluna diz ser, e a pessoa corrige se discordar.
+ */
+export function anoDoCabecalho(cabecalho: string): number | null {
+  const achado = cabecalho.match(/\b(20\d{2})\b/)
+  if (!achado?.[1]) return null
+  const ano = Number(achado[1])
+  return ano >= 2000 && ano <= 2100 ? ano : null
+}
 
 export const resolverLinhaSchema = z.object({
   linha_id: z.string().uuid(),

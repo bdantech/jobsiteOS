@@ -977,6 +977,9 @@ export type Database = {
           estagio: string
           faturamento_anual: number | null
           faturamento_atualizado_em: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
           faturamento_confianca: string | null
           faturamento_origem: string | null
           funcionarios: number | null
@@ -1029,6 +1032,9 @@ export type Database = {
           estagio?: string
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
+          patrimonio_atualizado_em?: string | null
+          patrimonio_liquido?: number | null
+          patrimonio_origem?: string | null
           faturamento_confianca?: string | null
           faturamento_origem?: string | null
           funcionarios?: number | null
@@ -1081,6 +1087,9 @@ export type Database = {
           estagio?: string
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
+          patrimonio_atualizado_em?: string | null
+          patrimonio_liquido?: number | null
+          patrimonio_origem?: string | null
           faturamento_confianca?: string | null
           faturamento_origem?: string | null
           funcionarios?: number | null
@@ -1321,6 +1330,7 @@ export type Database = {
       }
       importacoes_listas: {
         Row: {
+          anos_colunas: Json
           arquivo_url: string | null
           criado_em: string
           criado_por: string | null
@@ -1330,6 +1340,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          anos_colunas?: Json
           arquivo_url?: string | null
           criado_em?: string
           criado_por?: string | null
@@ -1339,6 +1350,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          anos_colunas?: Json
           arquivo_url?: string | null
           criado_em?: string
           criado_por?: string | null
@@ -3431,6 +3443,16 @@ export type Database = {
         }
       }
       app_declarar_metrica: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "empresa_metricas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_registrar_metrica_importada: {
         Args: { p: Json }
         Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]
         SetofOptions: {

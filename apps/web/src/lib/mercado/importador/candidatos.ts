@@ -55,6 +55,7 @@ function ranquear(
   linhas: readonly {
     cnpj: string
     razao_social: string | null
+    nome_fantasia: string | null
     uf: string | null
     municipio: string | null
     situacao_cadastral: string | null
@@ -64,7 +65,13 @@ function ranquear(
 
   return linhas
     .map((linha) => {
-      const base = similaridade(chave.razao_social, linha.razao_social ?? '')
+      // O melhor dos dois nomes: a lista pode trazer a razão social de uma e a
+      // marca de outra, e perder o match por ter comparado com o campo errado
+      // seria perder a linha por detalhe de cadastro.
+      const base = Math.max(
+        similaridade(chave.razao_social, linha.razao_social ?? ''),
+        similaridade(chave.razao_social, linha.nome_fantasia ?? ''),
+      )
       const mesmoMunicipio =
         municipioBuscado !== null &&
         linha.municipio !== null &&
@@ -73,6 +80,7 @@ function ranquear(
       return {
         cnpj: linha.cnpj,
         razao_social: linha.razao_social,
+        nome_fantasia: linha.nome_fantasia,
         uf: linha.uf,
         municipio: linha.municipio,
         situacao_cadastral: linha.situacao_cadastral,
@@ -114,10 +122,17 @@ export function criarBuscadorDeCandidatos(supabase: ClienteServidor): {
 
       let query = supabase
         .from('mercado_universo')
-        .select('cnpj, razao_social, uf, municipio, situacao_cadastral')
-        // `token` sai de normalizarNome(): só [A-Z0-9], então não há curinga a
-        // escapar aqui — nem `%`, nem `_`, nem vírgula (que quebraria o PostgREST).
-        .ilike('razao_social', `%${token}%`)
+        .select('cnpj, razao_social, nome_fantasia, uf, municipio, situacao_cadastral')
+        // Razão social OU nome fantasia. Um ranking setorial publica a MARCA
+        // ("ACCIONA", "OHL", "TSE"), não a razão social — buscar só em razao_social
+        // deixava esses de fora ou com candidato fraco. Medido numa amostra de 64
+        // nomes do Ranking da Engenharia: os matches fortes vão de 36 para 53.
+        //
+        // As duas colunas têm índice GIN de trigramas no universo, então o `or`
+        // continua sendo index scan. `token` sai de normalizarNome(): só [A-Z0-9],
+        // então não há curinga a escapar — nem `%`, nem `_`, nem vírgula (que
+        // quebraria a sintaxe do `or` do PostgREST).
+        .or(`razao_social.ilike.%${token}%,nome_fantasia.ilike.%${token}%`)
         .limit(LIMITE_BUSCA)
 
       if (chave.uf) query = query.eq('uf', chave.uf)

@@ -61,6 +61,7 @@ export function AplicarImportacao({
     let criadas = 0
     let atualizadas = 0
     let contatos = 0
+    let metricas = 0
     let acumulado = 0
     const erros: string[] = []
 
@@ -77,6 +78,7 @@ export function AplicarImportacao({
         criadas += lote.empresasCriadas
         atualizadas += lote.empresasAtualizadas
         contatos += lote.contatosCriados
+        metricas += lote.metricasGravadas
         acumulado += lote.processadas
         erros.push(...lote.erros)
 
@@ -87,7 +89,11 @@ export function AplicarImportacao({
       }
 
       toast.success('Importação concluída.', {
-        description: `${formatNumero(criadas)} empresas criadas, ${formatNumero(atualizadas)} atualizadas, ${formatNumero(contatos)} contatos.`,
+        description:
+          `${formatNumero(criadas)} empresas criadas, ${formatNumero(atualizadas)} atualizadas, ` +
+          `${formatNumero(contatos)} contatos` +
+          (metricas > 0 ? `, ${formatNumero(metricas)} métricas` : '') +
+          '.',
       })
 
       if (erros.length > 0) {

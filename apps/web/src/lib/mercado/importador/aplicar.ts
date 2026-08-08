@@ -5,6 +5,8 @@ import {
   criarEmpresa,
   formatCnpj,
   promoverEmpresa,
+  registrarMetricaImportada,
+  type AnosColunas,
   type Json,
   type MapeamentoImportacao,
   type Tables,
@@ -51,6 +53,8 @@ export interface ResultadoLote {
   empresasCriadas: number
   empresasAtualizadas: number
   contatosCriados: number
+  /** Snapshots de faturamento/funcionários/PL gravados (um por coluna-ano preenchida). */
+  metricasGravadas: number
   /** Último id percorrido: o cursor da próxima chamada. */
   ultimoId: string | null
   /** Não há mais linhas resolvidas depois deste lote. */
@@ -101,6 +105,7 @@ export async function aplicarLote(
   supabase: ClienteServidor,
   importacao: Tables<'importacoes_listas'>,
   mapeamento: MapeamentoImportacao,
+  anos: AnosColunas,
   cursor: string | null,
 ): Promise<ResultadoLote> {
   let query = supabase
@@ -125,6 +130,7 @@ export async function aplicarLote(
       empresasCriadas: 0,
       empresasAtualizadas: 0,
       contatosCriados: 0,
+      metricasGravadas: 0,
       ultimoId: cursor,
       concluido: true,
       erros: [],
@@ -155,6 +161,7 @@ export async function aplicarLote(
     empresasCriadas: 0,
     empresasAtualizadas: 0,
     contatosCriados: 0,
+    metricasGravadas: 0,
     ultimoId: cursor,
     concluido: false,
     erros: [],
@@ -167,7 +174,7 @@ export async function aplicarLote(
 
     try {
       const dados = (linha.dados ?? {}) as Record<string, string>
-      const extraida = extrairLinha(dados, mapeamento)
+      const extraida = extrairLinha(dados, mapeamento, anos)
       const noUniverso = universo.get(cnpj)
       const existente = porCnpj.get(cnpj)
 
@@ -236,6 +243,26 @@ export async function aplicarLote(
       // a empresa já vinculada sem reemitir o evento).
       if (noUniverso) {
         await promoverEmpresa(supabase, { cnpj })
+      }
+
+      // ─── Métricas (faturamento, funcionários, PL) ─────────────────────────
+      // NÃO vão no patch acima, e a diferença não é organizacional: elas passam
+      // pela hierarquia de origem (0081). Um número de ranking publicado não pode
+      // apagar o que o cliente declarou na reunião da semana passada, e um UPDATE
+      // direto em `empresas` apagaria — em silêncio, para a base inteira.
+      //
+      // Uma leitura por coluna-ano, em ordem cronológica. Cada uma vira snapshot em
+      // `empresa_metricas` datado pelo ano do DADO, e a RPC decide se o cache muda.
+      for (const leitura of extraida.metricas) {
+        await registrarMetricaImportada(supabase, {
+          empresa_id: empresa.id,
+          metrica: leitura.metrica,
+          valor: leitura.valor,
+          origem: 'publicacao',
+          ano: leitura.ano,
+          fonte: importacao.nome,
+        })
+        resultado.metricasGravadas++
       }
 
       // ─── Contato ──────────────────────────────────────────────────────────
