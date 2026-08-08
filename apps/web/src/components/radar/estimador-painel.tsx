@@ -126,10 +126,12 @@ export function EstimadorPainel() {
                 {data && <Badge variant="outline">versão {data.versao}</Badge>}
               </div>
               <CardDescription>
-                Calibrado nos clientes que <strong>declararam</strong> faturamento — eles são a
-                régua para estimar quem não declarou. O método só vale enquanto clientes e
-                prospects forem medidos pela mesma régua: fontes como o Apollo subcontam
-                canteiro nos dois lados, e é por isso que subcontar não estraga o ratio.
+                Calibrado no faturamento que se <strong>conhece</strong> — o que o cliente
+                declarou e o que um ranking setorial publicou. Eles são a régua para estimar
+                quem não tem número. O método só vale enquanto o SINAL for medido do mesmo
+                jeito dos dois lados: MRR e usuários saem do nosso sistema sempre, então
+                servem; headcount de ranking é pessoal graduado e não se mistura com o do
+                Apollo, então as amostras publicadas entram sem ele.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -182,7 +184,8 @@ export function EstimadorPainel() {
             <div className="space-y-2">
               <h3 className="text-sm font-medium">Erro típico de cada modelo</h3>
               <p className="text-xs text-muted-foreground">
-                Medido contra os próprios clientes declarados. O peso de cada modelo na
+                Medido contra as próprias amostras de calibração, então é otimista por
+                construção: o modelo já viu esses números. O peso de cada modelo na
                 combinação é o inverso disto — quem erra mais, pesa menos.
               </p>
               <p className="text-xs text-muted-foreground">

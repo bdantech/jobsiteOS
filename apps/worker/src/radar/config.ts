@@ -30,6 +30,21 @@ export interface ConfigFaturamento {
   pct_teto_simples_default: number
   variacao_minima_snapshot: number
   n_minimo_calibracao_por_tipo: number
+  /**
+   * Se amostras de faturamento PUBLICADO (ranking setorial) entram na calibração,
+   * ao lado das declaradas pelo cliente.
+   *
+   * Está em config, e não no código, porque é uma decisão que se revisa com dado
+   * novo. A medição de agosto/2026, com 15 declarantes e 9 empresas do Ranking da
+   * Engenharia: incluir a revista levou o erro fora da amostra de 1,34x para 1,47x
+   * nos declarantes e de 1,29x para 1,41x nas próprias empresas da revista. O
+   * suspeito é uso PARCIAL do ERP — uma construtora de R$ 1,5 bi com 3 usuários
+   * paga um MRR que não fala do tamanho dela —, e não dá para separar essas contas
+   * pelos campos que temos hoje.
+   *
+   * Desligar aqui volta ao comportamento anterior sem deploy.
+   */
+  usar_amostras_publicadas: boolean
 }
 
 export interface ConfigFuncionarios {
@@ -85,6 +100,7 @@ export const lerConfigFaturamento = (): Promise<ConfigFaturamento> =>
     pct_teto_simples_default: 0.5,
     variacao_minima_snapshot: 0.1,
     n_minimo_calibracao_por_tipo: 5,
+    usar_amostras_publicadas: true,
   })
 
 export const lerConfigFuncionarios = (): Promise<ConfigFuncionarios> =>

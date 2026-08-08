@@ -6,7 +6,6 @@ import {
   estimarFaturamento,
   origemVence,
   variouOSuficiente,
-  type AmostraCalibracao,
   type Coeficientes,
 } from '../../../../../packages/core/src/radar/faturamento.js'
 import type { Json } from '../../../../../packages/core/src/types/database.js'
@@ -15,6 +14,7 @@ import { logger } from '../../logger.js'
 import { lerConfigFaturamento } from '../../radar/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { gravarMetrica } from './funcionarios.js'
+import { montarAmostra, type AmostraComOrigem, type LinhaAmostra } from './amostras.js'
 
 /**
  * Calibração e estimativa de faturamento (04c §6) — os dois jobs mensais.
@@ -47,24 +47,23 @@ interface LinhaSinais {
 }
 
 /**
- * Uma amostra por CNPJ: o snapshot declarado mais recente, com os sinais de hoje.
+ * Uma amostra por CNPJ: o faturamento conhecido mais recente, com os sinais de hoje.
  *
  * Declarações antigas não são descartadas da série — só não entram na calibração,
  * porque parear "faturamento de 2023" com "headcount de agora" produziria um ratio
  * que não descreve nenhum dos dois momentos.
+ *
+ * O faturamento pode vir do cliente (`declarado_cliente`) ou de ranking publicado
+ * (`publicacao`, ligado por `usar_amostras_publicadas`). Qual sinal cada procedência
+ * pode emprestar é decidido por `montarAmostra`, que é testado — ver amostras.ts.
  */
-async function amostrasDeclaradas(): Promise<AmostraCalibracao[]> {
-  const { rows } = await pool.query<{
-    cnpj: string
-    valor: string
-    tipo: string | null
-    funcionarios: number | null
-    erp_mrr: string | null
-    qtd_usuarios_erp: number | null
-  }>(`
+async function amostrasDeCalibracao(usarPublicadas: boolean): Promise<AmostraComOrigem[]> {
+  const { rows } = await pool.query<LinhaAmostra>(
+    `
     select distinct on (m.cnpj)
       m.cnpj,
       m.valor,
+      m.origem,
       e.tipo,
       e.funcionarios,
       e.erp_mrr,
@@ -72,23 +71,23 @@ async function amostrasDeclaradas(): Promise<AmostraCalibracao[]> {
     from empresa_metricas m
     join empresas e on e.id = m.empresa_id
     where m.metrica = 'faturamento_anual'
-      and m.origem = 'declarado_cliente'
       and m.valor > 0
-    order by m.cnpj, m.capturado_em desc
-  `)
+      and (m.origem = 'declarado_cliente' or ($1 and m.origem = 'publicacao'))
+    -- Declarado vence publicado no mesmo CNPJ: o cliente falando de si é a melhor
+    -- verdade que existe, e o distinct on pega a primeira linha da ordenação.
+    order by m.cnpj, (m.origem = 'declarado_cliente') desc, m.capturado_em desc
+  `,
+    [usarPublicadas],
+  )
 
-  return rows.map((r) => ({
-    tipo: r.tipo,
-    faturamento_declarado: Number(r.valor),
-    funcionarios: r.funcionarios,
-    erp_mrr: r.erp_mrr === null ? null : Number(r.erp_mrr),
-    qtd_usuarios_erp: r.qtd_usuarios_erp,
-  }))
+  return rows.map(montarAmostra)
 }
 
 export interface ResultadoCalibracaoJob {
   versao: number | null
   amostras: number
+  /** Quantas vieram do cliente e quantas de ranking publicado. */
+  amostras_por_origem: Record<string, number>
   n_por_tipo: Record<string, number>
   erro_por_modelo: Record<string, number | null>
   motivo?: string
@@ -96,13 +95,25 @@ export interface ResultadoCalibracaoJob {
 
 export async function calibrarEstimadorJob(): Promise<ResultadoCalibracaoJob> {
   const cfg = await lerConfigFaturamento()
-  const amostras = await amostrasDeclaradas()
+  const amostras = await amostrasDeCalibracao(cfg.usar_amostras_publicadas)
+
+  const porOrigem = amostras.reduce<Record<string, number>>((acc, a) => {
+    acc[a.origem_faturamento] = (acc[a.origem_faturamento] ?? 0) + 1
+    return acc
+  }, {})
 
   if (amostras.length === 0) {
-    // Sem declarante não há régua, e estimar sem régua seria inventar. Falhar
+    // Sem amostra não há régua, e estimar sem régua seria inventar. Falhar
     // explicitamente é o que faz alguém ir preencher o primeiro faturamento.
-    logger.warn('Calibração sem amostras: nenhum cliente com faturamento declarado.')
-    return { versao: null, amostras: 0, n_por_tipo: {}, erro_por_modelo: {}, motivo: 'sem_amostras' }
+    logger.warn('Calibração sem amostras: nenhum faturamento conhecido.')
+    return {
+      versao: null,
+      amostras: 0,
+      amostras_por_origem: porOrigem,
+      n_por_tipo: {},
+      erro_por_modelo: {},
+      motivo: 'sem_amostras',
+    }
   }
 
   const r = calibrarEstimador(amostras, { nMinimoPorTipo: cfg.n_minimo_calibracao_por_tipo })
@@ -130,16 +141,25 @@ export async function calibrarEstimadorJob(): Promise<ResultadoCalibracaoJob> {
 
   await emitirEvento(null, EVENTO_TIPOS.ESTIMADOR_RECALIBRADO, {
     titulo: 'Estimador recalibrado',
-    resumo: `Versão ${versao}, calibrada em ${amostras.length} cliente(s) com faturamento declarado.`,
+    resumo:
+      `Versão ${versao}, calibrada em ${amostras.length} empresa(s): ` +
+      `${porOrigem.declarado_cliente ?? 0} declaradas pelo cliente` +
+      (porOrigem.publicacao ? `, ${porOrigem.publicacao} de ranking publicado` : '') +
+      '.',
     url: '/radar/estimador',
     versao,
     amostras: amostras.length,
+    amostras_por_origem: porOrigem,
   })
 
-  logger.info({ versao, amostras: amostras.length, nPorTipo: r.nPorTipo }, 'Estimador recalibrado.')
+  logger.info(
+    { versao, amostras: amostras.length, porOrigem, nPorTipo: r.nPorTipo, erro: r.erroPorModelo },
+    'Estimador recalibrado.',
+  )
   return {
     versao,
     amostras: amostras.length,
+    amostras_por_origem: porOrigem,
     n_por_tipo: r.nPorTipo,
     erro_por_modelo: r.erroPorModelo,
   }
