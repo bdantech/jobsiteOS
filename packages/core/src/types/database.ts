@@ -3452,6 +3452,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_buscar_candidatos_universo: {
+        Args: { p: Json }
+        Returns: {
+          cnpj: string
+          razao_social: string | null
+          nome_fantasia: string | null
+          uf: string | null
+          municipio: string | null
+          situacao_cadastral: string | null
+        }[]
+      }
       app_registrar_metrica_importada: {
         Args: { p: Json }
         Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { Json } from '@jobsiteos/core'
 import {
   LIMITE_SIMILARIDADE,
   MAX_CANDIDATOS,
@@ -93,12 +94,13 @@ function ranquear(
 }
 
 /**
- * Cache por token+UF dentro de uma mesma importação: listas de ERP repetem a
+ * Cache por nome+UF dentro de uma mesma importação: listas de ERP repetem a
  * mesma razão social em várias linhas (uma por contrato, uma por módulo), e o
- * mesmo token não precisa de duas idas ao banco.
+ * mesmo nome não precisa de duas idas ao banco.
  *
- * O client é o do USUÁRIO — `mercado_universo` é SELECT sob
- * `app_tem_modulo('mercado')` (migração 0012), então o RLS continua decidindo.
+ * O client é o do USUÁRIO. A busca em si é uma RPC SECURITY DEFINER (0082), que
+ * refaz o mesmo gate de módulo da policy — não há caminho aqui que leia o universo
+ * sem ter `mercado`.
  */
 export function criarBuscadorDeCandidatos(supabase: ClienteServidor): {
   buscar: (chave: ChaveBusca) => Promise<Candidato[]>
@@ -111,7 +113,11 @@ export function criarBuscadorDeCandidatos(supabase: ClienteServidor): {
     const token = tokenDeBusca(chave.razao_social)
     if (!token) return []
 
-    const chaveCache = `${token}|${chave.uf ?? ''}`
+    // A chave inclui o NOME, não só o token: a RPC ordena por similaridade com o
+    // nome, então reaproveitar o resultado de outro nome devolveria os 60 melhores
+    // para a empresa errada. Listas de ERP repetem a MESMA razão social em várias
+    // linhas — que é o caso que o cache existe para servir, e ele continua servindo.
+    const chaveCache = `${normalizarNome(chave.razao_social)}|${chave.uf ?? ''}`
     const emCache = cache.get(chaveCache)
 
     let linhas = emCache
@@ -120,28 +126,24 @@ export function criarBuscadorDeCandidatos(supabase: ClienteServidor): {
       if (consultas >= MAX_CONSULTAS_UNIVERSO) return []
       consultas++
 
-      let query = supabase
-        .from('mercado_universo')
-        .select('cnpj, razao_social, nome_fantasia, uf, municipio, situacao_cadastral')
-        // Razão social OU nome fantasia. Um ranking setorial publica a MARCA
-        // ("ACCIONA", "OHL", "TSE"), não a razão social — buscar só em razao_social
-        // deixava esses de fora ou com candidato fraco. Medido numa amostra de 64
-        // nomes do Ranking da Engenharia: os matches fortes vão de 36 para 53.
-        //
-        // As duas colunas têm índice GIN de trigramas no universo, então o `or`
-        // continua sendo index scan. `token` sai de normalizarNome(): só [A-Z0-9],
-        // então não há curinga a escapar — nem `%`, nem `_`, nem vírgula (que
-        // quebraria a sintaxe do `or` do PostgREST).
-        .or(`razao_social.ilike.%${token}%,nome_fantasia.ilike.%${token}%`)
-        .limit(LIMITE_BUSCA)
-
-      if (chave.uf) query = query.eq('uf', chave.uf)
-
-      const { data, error } = await query
+      // RPC, e não PostgREST, por uma razão medida: sob RLS o `ilike` não alcança os
+      // índices GIN de trigrama (a policy de `mercado_universo` é barreira de
+      // segurança e `ILIKE` não é LEAKPROOF), e a mesma busca que leva 60 ms passava
+      // de 8 s — o statement_timeout do papel `authenticated`. Detalhes e números no
+      // cabeçalho da migração 0082. A autorização não se perde: a função checa
+      // `app_tem_modulo('mercado')` no topo.
+      const { data, error } = await supabase.rpc('app_buscar_candidatos_universo', {
+        p: {
+          token,
+          nome: chave.razao_social,
+          uf: chave.uf,
+          limite: LIMITE_BUSCA,
+        } as unknown as Json,
+      })
       if (error) throw new Error(`Falha ao buscar candidatos no universo: ${error.message}`)
 
-      // O cache guarda as linhas CRUAS (por token+UF); o score depende também do
-      // município, que varia entre linhas que compartilham o mesmo token.
+      // O cache guarda as linhas CRUAS; o score depende também do município, que
+      // varia entre linhas que compartilham o mesmo nome.
       const brutas = data ?? []
       cache.set(
         chaveCache,
