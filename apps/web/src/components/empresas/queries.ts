@@ -132,6 +132,10 @@ export interface ClienteProtesto {
   valor: number
   qtd: number
   empresas_com_protesto: number
+  /** SPEs afiançadas no monitoramento mensal. Conta a EMPRESA (raiz do CNPJ). */
+  spes_monitoradas: number
+  /** Estabelecimentos marcados. Maior que `spes_monitoradas` quando matriz e filial da mesma SPE entraram. */
+  cnpjs_monitorados: number
 }
 
 export interface ClienteProtestoRecente {

@@ -434,6 +434,16 @@ function RankingProtestoGrupo({
                 c.tem_grupo && c.empresas_com_protesto > 1
                   ? `${c.empresas_com_protesto} empresas do grupo`
                   : null,
+                // Só quando há: a maioria dos clientes não tem SPE afiançada, e um
+                // "0 SPEs" em toda linha seria ruído com cara de informação.
+                c.spes_monitoradas > 0
+                  ? `${c.spes_monitoradas} SPE(s) monitorada(s)` +
+                    // Matriz e filial da mesma SPE entram as duas na marcação, e a
+                    // consulta é por estabelecimento — quem paga a conta é o CNPJ.
+                    (c.cnpjs_monitorados > c.spes_monitoradas
+                      ? ` em ${c.cnpjs_monitorados} CNPJs`
+                      : '')
+                  : null,
               ]
                 .filter(Boolean)
                 .join(' · ')

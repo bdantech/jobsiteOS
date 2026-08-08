@@ -13,6 +13,35 @@
 -- grupo é um grupo de um.
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- ─── Os títulos protestados, achatados ───────────────────────────────────────
+-- O DirectD devolve DUAS estruturas: SP usa estado.cartoriosProtesto[] com
+-- cartorio.protesto[]; o Nacional usa estado.cartorios[] com cartorio.titulos[].
+-- Ler só uma zeraria em silêncio metade das consultas. É a mesma normalização que o
+-- TypeScript já faz em protestos-serie.tsx.
+
+create or replace function public.radar_onepay_titulos(p_cnpjs text[])
+returns table (cnpj text, data date, valor numeric)
+language sql stable set search_path to '' as $$
+  select pa.cnpj,
+    case when t->>'dataProtesto' ~ '^\d{2}/\d{2}/\d{4}$'
+         then to_date(t->>'dataProtesto', 'DD/MM/YYYY') end as data,
+    coalesce(nullif(replace(regexp_replace(coalesce(t->>'valorProtestado',''), '[^0-9,]', '', 'g'), ',', '.'), '')::numeric, 0) as valor
+  from public.protestos_atual pa,
+    lateral jsonb_array_elements(
+      case when jsonb_typeof(pa.cartorios) = 'array' then pa.cartorios else '[]'::jsonb end) uf,
+    lateral jsonb_array_elements(
+      case when jsonb_typeof(coalesce(uf->'cartoriosProtesto', uf->'cartorios')) = 'array'
+           then coalesce(uf->'cartoriosProtesto', uf->'cartorios') else '[]'::jsonb end) c,
+    lateral jsonb_array_elements(
+      case when jsonb_typeof(coalesce(c->'protesto', c->'titulos')) = 'array'
+           then coalesce(c->'protesto', c->'titulos') else '[]'::jsonb end) t
+  where pa.tem_protesto and pa.cnpj = any(p_cnpjs)
+$$;
+
+comment on function public.radar_onepay_titulos is
+  'Achata os títulos protestados de um conjunto de CNPJs. Cobre as DUAS formas do '
+  'DirectD (SP e Nacional) — ler só uma zeraria metade das consultas em silêncio.';
+
 create or replace function public.radar_onepay_analytics()
 returns jsonb language plpgsql stable security definer set search_path to '' as $function$
 declare v jsonb;
@@ -82,28 +111,6 @@ begin
       count(*)::int as n
     from base group by 1
   ),
-  -- Protesto de cada CNPJ com o detalhe achatado: estado → cartório → título.
-  -- SP devolve `protesto[]`, o Nacional devolve `titulos[]`; os dois têm dataProtesto
-  -- e valorProtestado. Cartório sem detalhe simplesmente não rende linha aqui — o
-  -- total dele continua valendo no valor_total do snapshot.
-  titulos as (
-    select pa.cnpj,
-      case when t->>'dataProtesto' ~ '^\d{2}/\d{2}/\d{4}$'
-           then to_date(t->>'dataProtesto', 'DD/MM/YYYY') end as data,
-      coalesce(
-        nullif(replace(regexp_replace(coalesce(t->>'valorProtestado',''), '[^0-9,]', '', 'g'), ',', '.'), '')::numeric,
-        0
-      ) as valor
-    from public.protestos_atual pa,
-      lateral jsonb_array_elements(
-        case when jsonb_typeof(pa.cartorios) = 'array' then pa.cartorios else '[]'::jsonb end) uf,
-      lateral jsonb_array_elements(
-        case when jsonb_typeof(uf->'cartorios') = 'array' then uf->'cartorios' else '[]'::jsonb end) c,
-      lateral jsonb_array_elements(
-        case when jsonb_typeof(coalesce(c->'protesto', c->'titulos')) = 'array'
-             then coalesce(c->'protesto', c->'titulos') else '[]'::jsonb end) t
-    where pa.tem_protesto
-  ),
   -- O grupo de cada cliente. Sem grupo_id, o "grupo" é o próprio CNPJ.
   membros as (
     select b.cnpj as cliente, u2.cnpj as membro
@@ -121,12 +128,33 @@ begin
     left join public.protestos_atual pa on pa.cnpj = m.membro and pa.tem_protesto
     group by 1
   ),
+  -- SPEs que alguém marcou para o monitoramento mensal (as "afiançadas").
+  -- Duas portas de entrada porque a marcação guarda cnpj E grupo_id: uma SPE
+  -- monitorada pode não estar em mercado_universo, e aí só o grupo_id a alcança.
+  -- O CNPJ do próprio cliente não conta: ele não é SPE dele mesmo.
+  monit_pares as (
+    select m.cliente, pm.cnpj
+    from membros m join public.protesto_monitoramento pm on pm.cnpj = m.membro
+    where pm.cnpj <> m.cliente
+    union
+    select b.cnpj, pm.cnpj
+    from base b join public.protesto_monitoramento pm on pm.grupo_id = b.grupo_id
+    where b.grupo_id is not null and pm.cnpj <> b.cnpj
+  ),
+  monitoradas as (
+    -- Conta SPE, não CNPJ: matriz e filial da mesma SPE são a mesma empresa e
+    -- aparecem as duas na marcação (a consulta de protesto é por estabelecimento).
+    -- Medido na base: o grupo Halsten tem 6 CNPJs marcados que são 3 SPEs.
+    select cliente,
+      count(distinct left(cnpj, 8))::int as spes,
+      count(distinct cnpj)::int as cnpjs
+    from monit_pares group by 1
+  ),
   recentes as (
-    select m.cliente,
-      count(*)::int as qtd,
-      coalesce(sum(t.valor), 0) as valor,
-      max(t.data) as ultimo
-    from membros m join titulos t on t.cnpj = m.membro
+    select m.cliente, count(*)::int as qtd, coalesce(sum(t.valor), 0) as valor, max(t.data) as ultimo
+    from membros m
+    -- radar_onepay_titulos cobre as DUAS formas do DirectD (SP e Nacional).
+    join lateral public.radar_onepay_titulos(array[m.membro]) t on true
     where t.data is not null and t.data >= (current_date - interval '12 months')
     group by 1
   )
@@ -142,8 +170,12 @@ begin
       select coalesce(jsonb_agg(to_jsonb(x) order by x.valor desc nulls last), '[]'::jsonb)
       from (
         select b.cnpj, b.nome, b.empresa_id, (b.grupo_id is not null) as tem_grupo,
-               p.valor, p.qtd, p.empresas_com_protesto
-        from base b join por_cliente p on p.cliente = b.cnpj
+               p.valor, p.qtd, p.empresas_com_protesto,
+               coalesce(mo.spes, 0) as spes_monitoradas,
+               coalesce(mo.cnpjs, 0) as cnpjs_monitorados
+        from base b
+        join por_cliente p on p.cliente = b.cnpj
+        left join monitoradas mo on mo.cliente = b.cnpj
         -- Sem protesto não entra na lista: o pedido é ranking de quem tem.
         where p.valor > 0 or p.qtd > 0
         order by p.valor desc nulls last
