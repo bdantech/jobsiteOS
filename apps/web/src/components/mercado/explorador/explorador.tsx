@@ -147,16 +147,34 @@ export function Explorador() {
   const [termoLocal, setTermoLocal] = React.useState(estado.termo)
   const termoDebounced = useDebounce(termoLocal, 350)
 
-  // Voltar/avançar no navegador (ou um deep link) troca o termo da URL: o input
-  // acompanha. Não dispara nada — só quando a URL muda de fato.
+  /**
+   * O último termo que ESTA tela escreveu na URL.
+   *
+   * `router.replace` não é instantâneo: ele busca o payload da rota e só então os
+   * searchParams mudam. Quem continua digitando durante essa ida e volta recebia de
+   * presente o eco do termo de 350 ms atrás — e o efeito de sincronia abaixo o
+   * aplicava no input, apagando tudo o que foi teclado no meio-tempo. Era o "sumiu
+   * parte do que eu escrevi": não some ao digitar, some quando a navegação aterrissa.
+   */
+  const termoNaUrl = React.useRef(estado.termo)
+
+  // Acompanha a URL só quando ela muda por FORA (voltar/avançar, deep link, um link
+  // de segmento). O eco da nossa própria escrita chega velho e não manda no input.
   React.useEffect(() => {
+    if (estado.termo === termoNaUrl.current) return
+    termoNaUrl.current = estado.termo
     setTermoLocal(estado.termo)
   }, [estado.termo])
 
   React.useEffect(() => {
-    if (termoDebounced !== estado.termo) {
-      navegar({ ...estado, termo: termoDebounced, pagina: 0 })
-    }
+    // Aparado, porque é aparado que `escreverEstado` grava. Comparar o valor cru
+    // fazia "alfa " nunca bater com o "alfa" da URL: cada espaço digitado no fim de
+    // uma palavra reescrevia a URL, e o eco vinha sem o espaço — o cursor perdia o
+    // espaço no meio da frase, que é a outra metade deste bug.
+    const alvo = termoDebounced.trim()
+    if (alvo === estado.termo) return
+    termoNaUrl.current = alvo
+    navegar({ ...estado, termo: alvo, pagina: 0 })
   }, [termoDebounced, estado, navegar])
 
   // ─── Seleção ──────────────────────────────────────────────────────────────
