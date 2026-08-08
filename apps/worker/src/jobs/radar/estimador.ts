@@ -66,6 +66,7 @@ async function amostrasDeCalibracao(usarPublicadas: boolean): Promise<AmostraCom
       m.origem,
       e.tipo,
       e.funcionarios,
+      e.funcionarios_origem,
       e.erp_mrr,
       (e.erp_detalhes ->> 'qtd_usuarios')::int as qtd_usuarios_erp
     from empresa_metricas m
@@ -217,6 +218,7 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
       e.id as empresa_id,
       e.tipo,
       e.funcionarios,
+      e.funcionarios_origem,
       e.erp_mrr,
       (e.erp_detalhes ->> 'qtd_usuarios')::int as qtd_usuarios_erp,
       u.opcao_simples,

@@ -18,6 +18,7 @@ const linha = (over: Partial<LinhaAmostra> = {}): LinhaAmostra => ({
   origem: 'declarado_cliente',
   tipo: 'construtora',
   funcionarios: 80,
+  funcionarios_origem: 'apollo',
   erp_mrr: '9000',
   qtd_usuarios_erp: 19,
   ...over,
@@ -33,13 +34,38 @@ test('amostra declarada leva todos os sinais, headcount incluído', () => {
 })
 
 test('amostra publicada entra SEM headcount — graduado não é Apollo', () => {
-  const a = montarAmostra(linha({ origem: 'publicacao', funcionarios: 120 }))
+  const a = montarAmostra(linha({
+    origem: 'publicacao',
+    funcionarios: 120,
+    funcionarios_origem: 'publicacao',
+  }))
   assert.equal(a.origem_faturamento, 'publicacao')
   assert.equal(a.funcionarios, null)
   // O que vem do NOSSO sistema atravessa: só o rótulo mudou de fonte.
   assert.equal(a.erp_mrr, 9000)
   assert.equal(a.qtd_usuarios_erp, 19)
   assert.equal(a.faturamento_declarado, 100_000_000)
+})
+
+test('declarante com headcount da revista também perde o headcount', () => {
+  // O caso que passou batido na primeira versão: faturamento DECLARADO pelo cliente,
+  // mas o headcount sobrescrito pelo pessoal graduado do ranking. Dois clientes
+  // reais nessa situação marcavam R$ 6,74 mi por pessoa contra R$ 551 mil dos
+  // outros quinze — sozinhos, moviam a régua de headcount em +44%.
+  const a = montarAmostra(linha({ origem: 'declarado_cliente', funcionarios_origem: 'publicacao' }))
+  assert.equal(a.origem_faturamento, 'declarado_cliente')
+  assert.equal(a.funcionarios, null)
+  assert.equal(a.erp_mrr, 9000)
+})
+
+test('headcount sem origem conhecida não entra — na dúvida, fora', () => {
+  assert.equal(montarAmostra(linha({ funcionarios_origem: null })).funcionarios, null)
+  assert.equal(montarAmostra(linha({ funcionarios_origem: 'lista' })).funcionarios, null)
+})
+
+test('headcount que o próprio cliente declarou entra: mede o que o Apollo tenta medir', () => {
+  const a = montarAmostra(linha({ funcionarios_origem: 'declarado_cliente' }))
+  assert.equal(a.funcionarios, 80)
 })
 
 test('MRR ausente vira null, não zero — zero seria um sinal falso', () => {
