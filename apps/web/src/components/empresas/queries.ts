@@ -78,6 +78,7 @@ export const empresasKeys = {
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
   onepayClientesFiltrados: (dimensao: string, valor: string) =>
     ['empresas', 'onepay-clientes', dimensao, valor] as const,
+  onepayProtestosCliente: (cnpj: string) => ['empresas', 'onepay-protestos', cnpj] as const,
 }
 
 /** Um cliente Onepay dentro de um recorte da Análise (região/camada/faixa de capital). */
@@ -115,6 +116,32 @@ export interface OnepayAnalytics {
   por_regiao: Record<string, number>
   por_camada: Record<string, number>
   por_capital: Record<string, number>
+  por_faturamento: Record<string, number>
+  por_funcionarios: Record<string, number>
+  /** Ranking por valor protestado do GRUPO. Só quem tem protesto entra. */
+  protestos_grupo: ClienteProtesto[]
+  /** Quem mais tomou protesto nos últimos 12 meses. */
+  protestos_recentes: ClienteProtestoRecente[]
+}
+
+export interface ClienteProtesto {
+  cnpj: string
+  nome: string | null
+  empresa_id: string | null
+  tem_grupo: boolean
+  valor: number
+  qtd: number
+  empresas_com_protesto: number
+}
+
+export interface ClienteProtestoRecente {
+  cnpj: string
+  nome: string | null
+  empresa_id: string | null
+  qtd: number
+  valor: number
+  /** Data do protesto mais recente, ISO. */
+  ultimo: string | null
 }
 
 export async function buscarOnepayAnalytics(): Promise<OnepayAnalytics> {
@@ -128,7 +155,26 @@ export async function buscarOnepayAnalytics(): Promise<OnepayAnalytics> {
     por_regiao: r.por_regiao ?? {},
     por_camada: r.por_camada ?? {},
     por_capital: r.por_capital ?? {},
+    por_faturamento: r.por_faturamento ?? {},
+    por_funcionarios: r.por_funcionarios ?? {},
+    protestos_grupo: r.protestos_grupo ?? [],
+    protestos_recentes: r.protestos_recentes ?? [],
   }
+}
+
+/**
+ * Os snapshots de protesto do grupo de um cliente Onepay, para o gráfico de evolução.
+ * Mesma forma de `buscarGrupoProtestos`, mas partindo do CNPJ — o cliente pode não
+ * ter empresa no CRM, e mesmo assim tem protesto para mostrar.
+ */
+export async function buscarProtestosDoCliente(cnpj: string): Promise<GrupoEmpresaProtesto[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_onepay_protestos_cliente' as never, {
+    p_cnpj: cnpj,
+  } as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as { empresas?: GrupoEmpresaProtesto[] }
+  return r.empresas ?? []
 }
 
 /** Snapshot atual de protesto de um CNPJ (último registro append-only). */

@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Lock } from 'lucide-react'
+import { AlertTriangle, Lock, TrendingUp } from 'lucide-react'
 import { CAMADAS, CAMADA_DESCRICOES, CAMADA_LABELS, formatCnpj, type Camada } from '@jobsiteos/core'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -21,9 +21,13 @@ import {
 import {
   buscarClientesOnepayFiltrados,
   buscarOnepayAnalytics,
+  buscarProtestosDoCliente,
   empresasKeys,
+  type ClienteProtesto,
+  type ClienteProtestoRecente,
   type OnepayAnalytics,
 } from './queries'
+import { GraficoTempoProtestos, extrairProtestos } from './protestos-serie'
 
 const pctDe = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 1000) / 10 : 0)
 const fmtPct = (p: number) => `${p.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -32,10 +36,19 @@ const brl = (n: number | null) =>
 
 /** Um recorte clicado num gráfico → a lista de clientes que caem nele. */
 export interface Filtro {
-  dimensao: 'regiao' | 'camada' | 'capital'
+  dimensao: 'regiao' | 'camada' | 'capital' | 'faturamento' | 'funcionarios'
   valor: string
   label: string
 }
+
+/** Um cliente clicado num ranking de protesto → a evolução no tempo. */
+interface AlvoProtesto {
+  cnpj: string
+  nome: string
+}
+
+const fmtData = (iso: string | null) =>
+  iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR') : '—'
 
 // ─── a) Mapa do Brasil por região ───────────────────────────────────────────
 // SVG estilizado (não é geografia exata): 5 regiões em posições relativas corretas,
@@ -295,6 +308,268 @@ function CapitalPie({
   )
 }
 
+
+// ─── d) Faturamento e funcionários (barras horizontais) ──────────────────────
+// Barra, e não pizza: aqui a ordem das faixas é a informação (elas são uma ESCALA,
+// não categorias soltas), e pizza embaralha grandeza com ângulo. O capital social
+// continua em pizza porque já estava — trocar os dois de uma vez seria mexer no que
+// ninguém pediu.
+
+interface FaixaBarra {
+  key: string
+  label: string
+}
+
+const FAIXAS_FATURAMENTO: readonly FaixaBarra[] = [
+  { key: 'f1', label: 'até 4,8 mi' },
+  { key: 'f2', label: '4,8 – 20 mi' },
+  { key: 'f3', label: '20 – 50 mi' },
+  { key: 'f4', label: '50 – 100 mi' },
+  { key: 'f5', label: '100 – 300 mi' },
+  { key: 'f6', label: '300 mi +' },
+  { key: 'sem_dado', label: 'Sem estimativa' },
+]
+
+const FAIXAS_FUNCIONARIOS: readonly FaixaBarra[] = [
+  { key: 'f1', label: 'até 9' },
+  { key: 'f2', label: '10 – 49' },
+  { key: 'f3', label: '50 – 99' },
+  { key: 'f4', label: '100 – 249' },
+  { key: 'f5', label: '250 +' },
+  { key: 'sem_dado', label: 'Sem dado' },
+]
+
+function BarrasPorFaixa({
+  titulo,
+  nota,
+  faixas,
+  dados,
+  dimensao,
+  prefixoLabel,
+  onAbrir,
+}: {
+  titulo: string
+  nota?: string
+  faixas: readonly FaixaBarra[]
+  dados: Record<string, number>
+  dimensao: Filtro['dimensao']
+  prefixoLabel: string
+  onAbrir: (f: Filtro) => void
+}) {
+  const itens = faixas.map((f) => ({ ...f, n: dados[f.key] ?? 0 }))
+  const total = itens.reduce((s, i) => s + i.n, 0)
+  const max = Math.max(1, ...itens.map((i) => i.n))
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{titulo}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {total === 0 ? (
+          <p className="text-sm text-muted-foreground">Sem clientes para exibir.</p>
+        ) : (
+          <>
+            {itens.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                disabled={f.n === 0}
+                onClick={() =>
+                  onAbrir({ dimensao, valor: f.key, label: `${prefixoLabel} ${f.label}` })
+                }
+                className="block w-full rounded px-1 py-1 text-left transition-colors hover:bg-muted/60 disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className={f.key === 'sem_dado' ? 'text-muted-foreground' : ''}>{f.label}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {f.n} · {fmtPct(pctDe(f.n, total))}
+                  </span>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full ${f.key === 'sem_dado' ? 'bg-muted-foreground/40' : 'bg-primary'}`}
+                    style={{ width: `${(f.n / max) * 100}%` }}
+                  />
+                </div>
+              </button>
+            ))}
+            {nota ? <p className="pt-1 text-xs text-muted-foreground">{nota}</p> : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── e) Protesto: dois rankings ──────────────────────────────────────────────
+// Ranking, e não faixa: a pergunta aqui não é "como se distribuem" e sim "quais são
+// os piores". E o valor é o do GRUPO — cliente que opera por SPE tem o protesto na
+// SPE, não na matriz, e somar só o CNPJ dele mostraria zero justamente em quem tem
+// risco espalhado.
+
+function RankingProtestoGrupo({
+  itens,
+  onAbrir,
+}: {
+  itens: ClienteProtesto[]
+  onAbrir: (a: AlvoProtesto) => void
+}) {
+  const max = Math.max(1, ...itens.map((i) => i.valor))
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Clientes por protesto do grupo</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum cliente com protesto.</p>
+        ) : (
+          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {itens.map((c) => {
+              const nome = c.nome ?? formatCnpj(c.cnpj)
+              const meta = [
+                c.qtd > 0 ? `${c.qtd} protesto(s)` : null,
+                c.tem_grupo && c.empresas_com_protesto > 1
+                  ? `${c.empresas_com_protesto} empresas do grupo`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+
+              return (
+                <button
+                  key={c.cnpj}
+                  type="button"
+                  onClick={() => onAbrir({ cnpj: c.cnpj, nome })}
+                  className="block w-full rounded px-1 py-1 text-left transition-colors hover:bg-muted/60"
+                >
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="truncate">{nome}</span>
+                    <span className="shrink-0 tabular-nums font-medium">{brl(c.valor)}</span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-destructive"
+                      style={{ width: `${(c.valor / max) * 100}%` }}
+                    />
+                  </div>
+                  {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ProtestosRecentes({
+  itens,
+  onAbrir,
+}: {
+  itens: ClienteProtestoRecente[]
+  onAbrir: (a: AlvoProtesto) => void
+}) {
+  const max = Math.max(1, ...itens.map((i) => i.qtd))
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <TrendingUp className="h-4 w-4 text-destructive" aria-hidden />
+          Protestos nos últimos 12 meses
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum protesto datado no período.</p>
+        ) : (
+          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {itens.map((c) => {
+              const nome = c.nome ?? formatCnpj(c.cnpj)
+              return (
+                <button
+                  key={c.cnpj}
+                  type="button"
+                  onClick={() => onAbrir({ cnpj: c.cnpj, nome })}
+                  className="block w-full rounded px-1 py-1 text-left transition-colors hover:bg-muted/60"
+                >
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="truncate">{nome}</span>
+                    <span className="shrink-0 tabular-nums font-medium">{c.qtd}</span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-destructive/70"
+                      style={{ width: `${(c.qtd / max) * 100}%` }}
+                    />
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {brl(c.valor)} · último em {fmtData(c.ultimo)}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/** A evolução no tempo do grupo do cliente — o MESMO gráfico da ficha da empresa. */
+function ProtestoEvolucaoDialog({
+  alvo,
+  onOpenChange,
+}: {
+  alvo: AlvoProtesto | null
+  onOpenChange: (aberto: boolean) => void
+}) {
+  const aberto = alvo !== null
+  const q = useQuery({
+    queryKey: empresasKeys.onepayProtestosCliente(alvo?.cnpj ?? ''),
+    queryFn: () => buscarProtestosDoCliente(alvo!.cnpj),
+    enabled: aberto,
+  })
+
+  const protestos = React.useMemo(
+    () => (q.data ?? []).flatMap((e) => extrairProtestos(e.cartorios, e.nome)),
+    [q.data],
+  )
+  const total = protestos.reduce((s, p) => s + p.valor, 0)
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{alvo?.nome ?? ''}</DialogTitle>
+          <DialogDescription>
+            Valor protestado por mês, somando as empresas do grupo.
+          </DialogDescription>
+        </DialogHeader>
+        {q.isPending ? (
+          <Skeleton className="h-40 w-full" />
+        ) : protestos.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Sem detalhe de protesto para desenhar a série.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <GraficoTempoProtestos protestos={protestos} />
+            <p className="text-xs text-muted-foreground">
+              {protestos.length} protesto(s) · {brl(total)} no total
+              {(q.data ?? []).length > 1 ? ` · ${(q.data ?? []).length} empresas do grupo` : ''}
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── A aba ────────────────────────────────────────────────────────────────────
 function SemRadar() {
   return (
@@ -379,6 +654,7 @@ function ClientesFiltradosDialog({
  */
 export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
   const [filtro, setFiltro] = React.useState<Filtro | null>(null)
+  const [alvoProtesto, setAlvoProtesto] = React.useState<AlvoProtesto | null>(null)
   const { data, isPending, isError, error } = useQuery<OnepayAnalytics>({
     queryKey: empresasKeys.onepayAnalytics(),
     queryFn: buscarOnepayAnalytics,
@@ -421,13 +697,47 @@ export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {data.total.toLocaleString('pt-BR')} cliente(s) Onepay. Clique num segmento para ver as empresas.
+        {data.total.toLocaleString('pt-BR')} cliente(s) Onepay. Clique num segmento para ver as
+        empresas, ou num cliente dos rankings de protesto para ver a evolução no tempo.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <MapaRegioes porRegiao={data.por_regiao} onAbrir={setFiltro} />
         <CamadasClientes porCamada={data.por_camada} total={data.total} onAbrir={setFiltro} />
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BarrasPorFaixa
+          titulo="Clientes por faturamento"
+          nota="Faturamento estimado pelo Radar, ou declarado quando o cliente informou."
+          faixas={FAIXAS_FATURAMENTO}
+          dados={data.por_faturamento}
+          dimensao="faturamento"
+          prefixoLabel="Faturamento"
+          onAbrir={setFiltro}
+        />
+        <BarrasPorFaixa
+          titulo="Clientes por número de funcionários"
+          nota="Contagem do Apollo, que indexa perfis públicos e subconta mão de obra de canteiro."
+          faixas={FAIXAS_FUNCIONARIOS}
+          dados={data.por_funcionarios}
+          dimensao="funcionarios"
+          prefixoLabel="Funcionários"
+          onAbrir={setFiltro}
+        />
+      </div>
+
       <CapitalPie porCapital={data.por_capital} onAbrir={setFiltro} />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RankingProtestoGrupo itens={data.protestos_grupo} onAbrir={setAlvoProtesto} />
+        <ProtestosRecentes itens={data.protestos_recentes} onAbrir={setAlvoProtesto} />
+      </div>
+
+      <ProtestoEvolucaoDialog
+        alvo={alvoProtesto}
+        onOpenChange={(aberto) => {
+          if (!aberto) setAlvoProtesto(null)
+        }}
+      />
 
       <ClientesFiltradosDialog
         filtro={filtro}
