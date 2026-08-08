@@ -41,6 +41,21 @@ const RUIDO = new Set([
   'spe',
 ])
 
+/**
+ * Palavras que atrapalham a COMPARAÇÃO, não só a busca — saem do nome antes de
+ * qualquer coisa.
+ *
+ * "GRUPO" é o caso que motivou isto. Ele tem 5 letras, não é ruído societário nem
+ * genérico do setor, então `tokenDeBusca` o escolhia como âncora: "GRUPO MONTO"
+ * buscava por GRUPO e trazia 60 empresas com "grupo" no nome, nenhuma delas a certa.
+ * E na hora de pontuar, os trigramas de GRUPO ainda diluíam a semelhança com a razão
+ * social do universo, que quase nunca repete a palavra.
+ *
+ * Sai dos DOIS lados da comparação, porque `normalizarNome` roda no nome da planilha
+ * e no do universo — assimetria aqui criaria uma penalidade em vez de resolver.
+ */
+const PALAVRAS_REMOVIDAS = new Set(['grupo', 'grupos'])
+
 /** Genéricos do setor: presentes em quase toda construtora, então não servem de âncora de busca. */
 const GENERICOS = new Set([
   'construtora',
@@ -65,12 +80,18 @@ const GENERICOS = new Set([
 ])
 
 export function normalizarNome(nome: string): string {
-  return nome
+  const limpo = nome
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
     .trim()
+
+  const palavras = limpo.split(' ').filter((p) => p && !PALAVRAS_REMOVIDAS.has(p.toLowerCase()))
+
+  // "GRUPO" sozinho não vira string vazia: sem nada para comparar, o nome original
+  // ao menos ainda é alguma coisa.
+  return palavras.length > 0 ? palavras.join(' ') : limpo
 }
 
 /**
@@ -123,8 +144,57 @@ export function similaridade(a: string, b: string): number {
   return uniao === 0 ? 0 : intersecao / uniao
 }
 
+/**
+ * Matriz, não filial: os quatro dígitos de ordem do CNPJ são `0001`.
+ *
+ * No dump da Receita a razão social é da RAIZ — matriz e filiais têm exatamente o
+ * mesmo nome e, portanto, exatamente a mesma similaridade. O desempate era a ordem
+ * em que o índice devolvia, ou seja, nenhum critério. Uma lista publicada fala da
+ * empresa, não de um estabelecimento: a matriz é a resposta certa quase sempre.
+ */
+export function ehMatriz(cnpj: string): boolean {
+  return cnpj.length === 14 && cnpj.slice(8, 12) === '0001'
+}
+
+/**
+ * Diferença de score abaixo da qual dois candidatos são considerados empatados, e a
+ * matriz passa na frente. Não é zero porque a filial pode ter `nome_fantasia`
+ * próprio e arranhar o score em alguns centésimos — o que não a torna a melhor
+ * resposta, só a torna diferente.
+ */
+export const EMPATE_TECNICO = 0.02
+
+/**
+ * Quanto do nome buscado APARECE no candidato: |A ∩ B| / |A|.
+ *
+ * A similaridade de Jaccard divide pela UNIÃO, então nome curto contra razão social
+ * longa tem teto baixo por construção — "GRUPO MONTO" contra "MONTO ENGENHARIA LTDA"
+ * dá 0,27 e morria no corte de 0,3, mesmo sendo a empresa certa. Não é o nome que é
+ * ruim, é a métrica que pune comprimento diferente.
+ *
+ * A cobertura não pune: ela pergunta se o que a planilha escreveu está inteiro
+ * dentro do nome do universo. Medido nos casos reais desta importação, ela dá 1,00
+ * nos acertos e 0,67 no melhor falso positivo ("MONTO" contra "MONTREAL").
+ */
+export function cobertura(buscado: string, candidato: string): number {
+  const a = trigramas(buscado)
+  if (a.size === 0) return 0
+  const b = trigramas(candidato)
+
+  let intersecao = 0
+  for (const t of a) if (b.has(t)) intersecao++
+  return intersecao / a.size
+}
+
 /** O default do pg_trgm. Abaixo disso, "candidato" é um chute. */
 export const LIMITE_SIMILARIDADE = 0.3
+
+/**
+ * A segunda porta: entra também quem contém o nome buscado quase inteiro, ainda que
+ * a similaridade fique baixa por diferença de comprimento. 0,8 é onde os acertos
+ * (1,00) ficam de um lado e o falso positivo mais próximo (0,67) do outro.
+ */
+export const COBERTURA_MINIMA = 0.8
 
 /** Mais que isso não é uma escolha, é uma lista de leitura. */
 export const MAX_CANDIDATOS = 5

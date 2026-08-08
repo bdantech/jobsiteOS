@@ -2,8 +2,12 @@ import 'server-only'
 
 import type { Json } from '@jobsiteos/core'
 import {
+  COBERTURA_MINIMA,
+  EMPATE_TECNICO,
   LIMITE_SIMILARIDADE,
   MAX_CANDIDATOS,
+  cobertura,
+  ehMatriz,
   normalizarNome,
   similaridade,
   tokenDeBusca,
@@ -78,18 +82,35 @@ function ranquear(
         linha.municipio !== null &&
         normalizarNome(linha.municipio) === municipioBuscado
 
+      // A cobertura decide só a ENTRADA; o score exibido continua sendo a
+      // similaridade, que é o que dá para comparar entre candidatos.
+      const cobre = Math.max(
+        cobertura(chave.razao_social, linha.razao_social ?? ''),
+        cobertura(chave.razao_social, linha.nome_fantasia ?? ''),
+      )
+
       return {
-        cnpj: linha.cnpj,
-        razao_social: linha.razao_social,
-        nome_fantasia: linha.nome_fantasia,
-        uf: linha.uf,
-        municipio: linha.municipio,
-        situacao_cadastral: linha.situacao_cadastral,
-        score: Math.min(1, base + (mesmoMunicipio ? BONUS_MUNICIPIO : 0)),
+        candidato: {
+          cnpj: linha.cnpj,
+          razao_social: linha.razao_social,
+          nome_fantasia: linha.nome_fantasia,
+          uf: linha.uf,
+          municipio: linha.municipio,
+          situacao_cadastral: linha.situacao_cadastral,
+          score: Math.min(1, base + (mesmoMunicipio ? BONUS_MUNICIPIO : 0)),
+        },
+        cobre,
       }
     })
-    .filter((c) => c.score >= LIMITE_SIMILARIDADE)
-    .sort((a, b) => b.score - a.score)
+    .filter(({ candidato, cobre }) => candidato.score >= LIMITE_SIMILARIDADE || cobre >= COBERTURA_MINIMA)
+    .map(({ candidato }) => candidato)
+    // Score manda; empatado, a matriz vem primeiro. O score exibido não é tocado —
+    // inflá-lo para promover a matriz mentiria para quem está decidindo.
+    .sort((a, b) => {
+      if (Math.abs(b.score - a.score) > EMPATE_TECNICO) return b.score - a.score
+      const matriz = Number(ehMatriz(b.cnpj)) - Number(ehMatriz(a.cnpj))
+      return matriz !== 0 ? matriz : b.score - a.score
+    })
     .slice(0, MAX_CANDIDATOS)
 }
 
