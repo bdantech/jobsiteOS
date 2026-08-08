@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import {
   CAMPOS_IMPORTACAO,
   CAMPO_IMPORTACAO_LABELS,
+  anoDoCabecalho,
   ehCampoMetrica,
   formatCnpj,
   type AnosColunas,
@@ -136,9 +137,31 @@ export function MapeamentoForm({
   const queryClient = useQueryClient()
 
   const [mapeamento, setMapeamento] = React.useState<MapeamentoImportacao>(sugestao)
-  // O ano detectado no cabeçalho de cada coluna de métrica. É palpite como o resto:
-  // fica editável ao lado do campo, e sem ele a importação não avança.
-  const [anos, setAnos] = React.useState<AnosColunas>(() => sugerirAnos(sugestao))
+  /**
+   * O ano de cada coluna de métrica, detectado do cabeçalho. É palpite como o resto:
+   * fica editável ao lado do campo, e sem ele a importação não avança.
+   *
+   * Guardado como TEXTO, com o número derivado dele.
+   *
+   * Guardar só o número parecia mais limpo e tornava o campo impossível de usar: ao
+   * digitar o primeiro "2" o valor ainda não era um ano válido, o estado descartava,
+   * e o input — controlado por esse estado — voltava a vazio. Não dava para chegar no
+   * segundo dígito. Enquanto se digita, o texto é a verdade; o número é o que sai
+   * dele quando fica completo.
+   */
+  const [anosTexto, setAnosTexto] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(sugerirAnos(sugestao)).map(([col, ano]) => [col, String(ano)])),
+  )
+
+  const anos = React.useMemo<AnosColunas>(() => {
+    const saida: AnosColunas = {}
+    for (const [coluna, texto] of Object.entries(anosTexto)) {
+      const ano = Number(texto)
+      if (/^\d{4}$/.test(texto) && ano >= 2000 && ano <= 2100) saida[coluna] = ano
+    }
+    return saida
+  }, [anosTexto])
+
   const [salvando, setSalvando] = React.useState(false)
 
   const problema = validarMapeamento(mapeamento, anos)
@@ -261,12 +284,21 @@ export function MapeamentoForm({
                   </p>
                   <Select
                     value={atual ?? IGNORAR}
-                    onValueChange={(valor) =>
-                      setMapeamento((anterior) => ({
-                        ...anterior,
-                        [cabecalho]: valor === IGNORAR ? null : (valor as CampoImportacao),
-                      }))
-                    }
+                    onValueChange={(valor) => {
+                      const campo = valor === IGNORAR ? null : (valor as CampoImportacao)
+                      setMapeamento((anterior) => ({ ...anterior, [cabecalho]: campo }))
+
+                      // Mapear na mão uma coluna que tem o ano no nome não deveria
+                      // exigir digitar o ano de novo: o palpite vale aqui também.
+                      if (ehCampoMetrica(campo)) {
+                        const detectado = anoDoCabecalho(cabecalho)
+                        if (detectado !== null) {
+                          setAnosTexto((anterior) =>
+                            anterior[cabecalho] ? anterior : { ...anterior, [cabecalho]: String(detectado) },
+                          )
+                        }
+                      }
+                    }}
                   >
                     <SelectTrigger aria-label={`Campo para a coluna ${cabecalho}`}>
                       <SelectValue />
@@ -298,20 +330,16 @@ export function MapeamentoForm({
                         inputMode="numeric"
                         placeholder="2024"
                         className="h-8 w-24"
-                        value={anos[cabecalho]?.toString() ?? ''}
-                        onChange={(e) => {
-                          const bruto = e.target.value.replace(/\D/g, '').slice(0, 4)
-                          setAnos((anterior) => {
-                            const proximo = { ...anterior }
-                            const ano = Number(bruto)
-                            if (bruto.length === 4 && ano >= 2000 && ano <= 2100) {
-                              proximo[cabecalho] = ano
-                            } else {
-                              delete proximo[cabecalho]
-                            }
-                            return proximo
-                          })
-                        }}
+                        value={anosTexto[cabecalho] ?? ''}
+                        onChange={(e) =>
+                          setAnosTexto((anterior) => ({
+                            ...anterior,
+                            // Só dígitos e no máximo quatro: o resto do teclado não
+                            // tem o que fazer aqui, e barrar na entrada é melhor que
+                            // recusar depois.
+                            [cabecalho]: e.target.value.replace(/\D/g, '').slice(0, 4),
+                          }))
+                        }
                       />
                       {!anos[cabecalho] && (
                         <span className="text-xs text-destructive">obrigatório</span>
