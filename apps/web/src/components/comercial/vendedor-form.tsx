@@ -51,16 +51,30 @@ export interface EmpresaEscolhida {
   razao_social: string | null
   cnpj: string
   uf: string | null
+  estagio: string
   gestao_operacao: string | null
+}
+
+/** Só cliente em prospecção ativa entra na carteira — ver a nota do componente. */
+function elegivel(e: { estagio: string; gestao_operacao: string | null }): boolean {
+  return e.estagio === 'cliente' && e.gestao_operacao === 'prospeccao_ativa'
 }
 
 /**
  * A carteira explícita do originador: as empresas cujas NFs vão para ele.
  *
- * Busca por nome ou CNPJ, e **recusa conta passiva**. Não é filtro de conveniência: a
- * NF de sacado passivo é descartada pelo roteador antes de olhar carteira nenhuma, então
- * adicionar uma passiva aqui criaria uma linha que promete trabalho e nunca entrega —
- * e o originador só descobriria ao perceber que a nota nunca chega.
+ * A busca só devolve **cliente em prospecção ativa**, e o recorte não é conveniência —
+ * é o conjunto das empresas cuja nota pode, de fato, ser roteada:
+ *
+ *   quem não é cliente não emite nota no nosso funil, então uma carteira cheia delas é
+ *   uma carteira que nunca entrega trabalho;
+ *
+ *   quem é passivo tem a nota descartada antes de o roteador olhar carteira nenhuma —
+ *   adicionar uma passiva criaria uma linha que promete trabalho e nunca entrega, e o
+ *   originador só descobriria ao notar que a nota nunca chega.
+ *
+ * Empresa já escolhida que DEIXOU de ser elegível continua na lista, marcada: tirá-la
+ * sozinho seria decidir por quem cadastrou, e a marca é o que faz alguém revisar.
  */
 function CarteiraOriginador({
   escolhidas,
@@ -71,6 +85,7 @@ function CarteiraOriginador({
 }) {
   const [termo, setTermo] = React.useState('')
   const [buscando, setBuscando] = React.useState(false)
+  const [buscou, setBuscou] = React.useState(false)
   const [achadas, setAchadas] = React.useState<EmpresaEscolhida[]>([])
 
   async function buscar() {
@@ -81,20 +96,26 @@ function CarteiraOriginador({
     const supabase = createClient()
     const q = supabase
       .from('empresas')
-      .select('id, razao_social, cnpj, uf, gestao_operacao')
+      .select('id, razao_social, cnpj, uf, estagio, gestao_operacao')
+      // O recorte é do BANCO, não da tela: filtrar depois de buscar devolveria vinte
+      // linhas e mostraria três, e a pessoa concluiria que a busca está quebrada.
+      .eq('estagio', 'cliente')
+      .eq('gestao_operacao', 'prospeccao_ativa')
       .limit(20)
     const { data } = digitos.length >= 6
       ? await q.like('cnpj', `${digitos}%`)
       : await q.ilike('razao_social', `%${t}%`)
     setAchadas((data ?? []) as EmpresaEscolhida[])
+    setBuscou(true)
     setBuscando(false)
   }
 
   function adicionar(e: EmpresaEscolhida) {
-    if (e.gestao_operacao === 'passivo') return
+    if (!elegivel(e)) return
     if (escolhidas.some((x) => x.id === e.id)) return
     onChange([...escolhidas, e])
     setAchadas([])
+    setBuscou(false)
     setTermo('')
   }
 
@@ -103,14 +124,17 @@ function CarteiraOriginador({
       <p className="text-sm font-medium">Carteira de originação</p>
       <p className="text-xs text-muted-foreground">
         As NFs destas empresas — como sacado OU como fornecedor — são roteadas para este
-        originador. Conta passiva não entra: a nota dela é descartada antes do roteamento.
+        originador. A busca só mostra <strong>cliente em prospecção ativa</strong>: quem não
+        é cliente não emite nota no funil, e a nota de passivo é descartada antes do
+        roteamento.
       </p>
 
-      <div className="flex gap-2">
+      <div className="flex min-w-0 gap-2">
         <Input
           value={termo}
           onChange={(e) => setTermo(e.target.value)}
-          placeholder="Nome ou CNPJ (mín. 3 caracteres)"
+          placeholder="Nome ou CNPJ (mín. 3)"
+          className="min-w-0 flex-1"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               // Enter aqui NÃO pode submeter o formulário inteiro.
@@ -119,37 +143,37 @@ function CarteiraOriginador({
             }
           }}
         />
-        <Button type="button" variant="outline" onClick={() => void buscar()} disabled={buscando}>
+        <Button type="button" variant="outline" className="shrink-0" onClick={() => void buscar()} disabled={buscando}>
           {buscando ? 'Buscando…' : 'Buscar'}
         </Button>
       </div>
 
+      {buscou && achadas.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Nenhum cliente em prospecção ativa com esse nome ou CNPJ. A gestão da conta se
+          define na ficha da empresa, aba Dados.
+        </p>
+      )}
+
       {achadas.length > 0 && (
-        <ul className="max-h-40 divide-y overflow-y-auto rounded-md border">
-          {achadas.map((e) => {
-            const passiva = e.gestao_operacao === 'passivo'
-            return (
-              <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
-                <span className="min-w-0">
-                  <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {e.uf ?? '—'}
-                    {passiva ? ' · conta PASSIVA' : ''}
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 shrink-0 text-xs"
-                  disabled={passiva}
-                  onClick={() => adicionar(e)}
-                >
-                  {passiva ? 'Passiva' : 'Adicionar'}
-                </Button>
-              </li>
-            )
-          })}
+        <ul className="max-h-40 divide-y overflow-y-auto overflow-x-hidden rounded-md border">
+          {achadas.map((e) => (
+            <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
+                <span className="block truncate text-xs text-muted-foreground">{e.uf ?? '—'}</span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 text-xs"
+                onClick={() => adicionar(e)}
+              >
+                Adicionar
+              </Button>
+            </li>
+          ))}
         </ul>
       )}
 
@@ -158,12 +182,21 @@ function CarteiraOriginador({
           Nenhuma empresa ainda — sem carteira, nenhuma nota é roteada para ele.
         </p>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y overflow-hidden rounded-md border">
           {escolhidas.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
-              <span className="min-w-0 truncate">
-                {e.razao_social ?? e.cnpj}
-                <span className="ml-1 text-xs text-muted-foreground">{e.uf ?? ''}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {e.uf ?? '—'}
+                  {/* Deixou de ser elegível depois de escolhida: a nota dela não chega
+                      mais, e sem a marca ninguém descobriria isso. */}
+                  {!elegivel(e)
+                    ? e.gestao_operacao === 'passivo'
+                      ? ' · virou PASSIVA — a nota não é roteada'
+                      : ' · não é mais cliente ativo'
+                    : ''}
+                </span>
               </span>
               <Button
                 type="button"
@@ -219,7 +252,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
     }
     void createClient()
       .from('empresas')
-      .select('id, razao_social, cnpj, uf, gestao_operacao')
+      .select('id, razao_social, cnpj, uf, estagio, gestao_operacao')
       .in('id', ids)
       .then(({ data }) => setEscolhidas((data ?? []) as EmpresaEscolhida[]))
   }, [aberto, vendedor])
@@ -295,7 +328,9 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      {/* `overflow-x-hidden`: sem ele, um nome de empresa longo dentro do seletor empurra
+          a largura e o modal inteiro ganha barra horizontal. */}
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
         <form onSubmit={enviar}>
           <DialogHeader>
             <DialogTitle>{vendedor ? 'Editar vendedor' : 'Novo vendedor'}</DialogTitle>

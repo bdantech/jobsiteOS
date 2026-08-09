@@ -42,12 +42,19 @@ A distinção organiza o módulo inteiro:
 | | trabalha | recebe por | onde se configura |
 |---|---|---|---|
 | **Originador** | NOTA | escolha — lista de empresas a dedo | carteira, no cadastro do vendedor |
+
 | **Closer** | CONTA | recorte — UF + faixa de faturamento | território, no cadastro do vendedor |
 | **SDR** | LEAD | recorte, para a distribuição semanal | território + direção + cota |
 
 Quem originou a relação continua dono dela mesmo que a empresa mude de porte ou de
 estado — por isso o originador recebe por escolha. Quem fecha negócio é alocado por
 perfil de cliente — por isso o closer recebe por recorte.
+
+A carteira do originador só aceita **cliente em prospecção ativa**, e o recorte é o
+conjunto das empresas cuja nota pode de fato ser roteada: quem não é cliente não emite
+nota no funil, e a de passivo é descartada antes do roteamento. Empresa já escolhida que
+deixa de ser elegível continua na lista, **marcada** — tirá-la sozinho seria decidir por
+quem cadastrou, e a marca é o que faz alguém revisar.
 
 ## Roteamento de NFs
 
