@@ -117,6 +117,16 @@ export interface SinaisPotencial {
   tipo?: string | null
   faturamento_estimado?: number | null
   faturamento_confianca?: string | null
+  /**
+   * A taxa que ESTA empresa paga, em % ao mês — `monthlyRateD0` do snapshot de
+   * crédito mais recente, o mesmo número que precifica as notas dela no funil.
+   *
+   * Sem ela a conta usava a taxa padrão para todo mundo, e a padrão é uma média:
+   * quem paga 2,5% aparecia rendendo o que renderia a 1,9%, o que subestima em um
+   * terço a receita das empresas de que mais se sabe. Justamente as que estão em
+   * qualquer lista de prioridade.
+   */
+  taxa_mensal_am?: number | null
 }
 
 export type MotivoSemPotencial = 'sem_faturamento' | 'sem_calibracao'
@@ -128,6 +138,10 @@ export interface ResultadoPotencial {
   receita_tac: number | null
   receita_mensal_prevista: number | null
   valor_esperado_mensal: number | null
+  /** A taxa mensal (%) que entrou na conta. Gravada pelo mesmo motivo de `taxa_usada` na nota. */
+  taxa_am: number | null
+  /** false quando caiu na taxa padrão — a tela marca a previsão como menos específica. */
+  taxa_real: boolean
   confianca: ConfiancaCredito | null
   /** Verdadeiro quando a chance veio do default por falta de score. */
   chance_presumida: boolean
@@ -144,6 +158,8 @@ function semPotencial(motivo: MotivoSemPotencial): ResultadoPotencial {
     receita_tac: null,
     receita_mensal_prevista: null,
     valor_esperado_mensal: null,
+    taxa_am: null,
+    taxa_real: false,
     confianca: null,
     chance_presumida: false,
     cap_aplicado: null,
@@ -189,8 +205,15 @@ export function calcularPotencial(
   const cap_aplicado: ResultadoPotencial['cap_aplicado'] =
     limitePotencial === porRatio ? 'ratio' : limitePotencial === limite.cap_absoluto ? 'absoluto' : 'pct_faturamento'
 
+  // A taxa da própria empresa quando a conhecemos; a padrão só como último recurso.
+  const taxaReal =
+    typeof sinais.taxa_mensal_am === 'number' &&
+    Number.isFinite(sinais.taxa_mensal_am) &&
+    sinais.taxa_mensal_am > 0
+  const taxa = taxaReal ? (sinais.taxa_mensal_am as number) : economia.taxa_padrao_am
+
   const volumeMensal = limitePotencial * giro
-  const receitaFinanceira = volumeMensal * (economia.taxa_padrao_am / 100) * (economia.prazo_medio_dias / 30)
+  const receitaFinanceira = volumeMensal * (taxa / 100) * (economia.prazo_medio_dias / 30)
   const receitaTac =
     economia.valor_medio_nf > 0 ? (volumeMensal / economia.valor_medio_nf) * economia.tac : 0
   const receitaMensal = receitaFinanceira + receitaTac
@@ -202,6 +225,8 @@ export function calcularPotencial(
     receita_tac: receitaTac,
     receita_mensal_prevista: receitaMensal,
     valor_esperado_mensal: receitaMensal * chance.valor,
+    taxa_am: taxa,
+    taxa_real: taxaReal,
     confianca: confiancaHerdada(sinais.faturamento_confianca),
     chance_presumida: chance.presumida,
     cap_aplicado,

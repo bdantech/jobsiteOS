@@ -17,6 +17,7 @@ import {
   dispararSincronizarOnepay,
   dispararSincronizarCertificados,
   dispararLoteRadar,
+  dispararAvisoCustoProtestos,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
   dispararContatosEmpresa,
@@ -186,6 +187,15 @@ app.post('/jobs/radar/lote', (req: Request, res: Response, next: NextFunction) =
 app.post('/jobs/radar/protestos-clientes', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const id = dispararProtestosClientesMensal()
+    res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/radar/protestos-aviso', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = dispararAvisoCustoProtestos()
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)

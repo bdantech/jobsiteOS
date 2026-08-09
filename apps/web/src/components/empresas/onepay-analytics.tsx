@@ -3,8 +3,16 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Lock, TrendingUp } from 'lucide-react'
-import { CAMADAS, CAMADA_DESCRICOES, CAMADA_LABELS, formatCnpj, type Camada } from '@jobsiteos/core'
+import { AlertTriangle, Lock, Receipt, TrendingUp } from 'lucide-react'
+import {
+  CAMADAS,
+  CAMADA_DESCRICOES,
+  CAMADA_LABELS,
+  formatCnpj,
+  proximaExecucao,
+  type Camada,
+} from '@jobsiteos/core'
+import vercel from '../../../vercel.json'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -20,6 +28,7 @@ import {
 } from '@/components/mercado/camadas/circulos-camadas'
 import {
   buscarClientesOnepayFiltrados,
+  buscarCustoProtestos,
   buscarOnepayAnalytics,
   buscarProtestosDoCliente,
   empresasKeys,
@@ -403,6 +412,90 @@ function BarrasPorFaixa({
 }
 
 // ─── e) Protesto: dois rankings ──────────────────────────────────────────────
+// ─── O preço de descobrir tudo isso ─────────────────────────────────────────
+
+const PATH_CRON_PROTESTOS = '/api/cron/radar-protestos-clientes'
+
+/**
+ * Quanto custa a rodada mensal de protestos, antes de ela acontecer.
+ *
+ * Todo o resto desta aba é retrato do que já sabemos; este card é o único que fala do
+ * que vai ser gasto para saber. A consulta é paga por CNPJ, o lote roda sozinho no
+ * dia 5 (é política, não decisão de alguém), e até agora o número só aparecia depois,
+ * no extrato — que é tarde para a única reação possível, que é pôr crédito antes.
+ *
+ * A agenda vem do `vercel.json`, o mesmo arquivo que a Vercel executa. Uma data
+ * digitada aqui teria dois donos e mostraria com confiança um dia em que nada roda.
+ */
+function CustoDoCron() {
+  const { data } = useQuery({
+    queryKey: empresasKeys.custoProtestos(),
+    queryFn: buscarCustoProtestos,
+  })
+
+  const proxima = React.useMemo(() => {
+    const cron = vercel.crons.find((c) => c.path === PATH_CRON_PROTESTOS)
+    return cron ? proximaExecucao(cron.schedule, new Date()) : null
+  }, [])
+
+  if (!data || !data.tem_acesso) return null
+
+  const pctTeto =
+    data.teto_mensal && data.teto_mensal > 0 ? (data.custo_total / data.teto_mensal) * 100 : null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Receipt className="h-4 w-4" aria-hidden />
+          Custo da rodada mensal de protestos
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">{brl(data.custo_total)}</p>
+            <p className="text-xs text-muted-foreground">
+              {/* Com centavos: o unitário é R$ 3,50, e arredondar viraria "R$ 4". */}
+              {data.consultas.toLocaleString('pt-BR')} consulta(s) ×{' '}
+              {data.custo_unitario.toLocaleString('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+              })}
+            </p>
+          </div>
+          <dl className="grid gap-1 text-sm">
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">Clientes Onepay</dt>
+              <dd className="tabular-nums">{data.clientes.toLocaleString('pt-BR')}</dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">SPEs afiançadas (fora da carteira)</dt>
+              <dd className="tabular-nums">{data.monitoradas.toLocaleString('pt-BR')}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Cada cliente e cada SPE marcada como afiançada é <strong>uma consulta paga</strong>, pelo
+          provedor nacional. Uma SPE que também é cliente conta uma vez só.
+          {proxima ? <> Próxima rodada em {proxima.toLocaleDateString('pt-BR')}.</> : null}{' '}
+          {pctTeto === null ? null : (
+            <>
+              É {fmtPct(Math.round(pctTeto * 10) / 10)} do teto mensal do Radar (
+              {brl(data.teto_mensal)}), que cobre todo o resto do enriquecimento também.
+            </>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Quem tem perfil de Crédito recebe este valor no último dia do mês — cinco dias antes
+          da rodada, que é o tempo de pôr crédito na plataforma se faltar.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
 // Ranking, e não faixa: a pergunta aqui não é "como se distribuem" e sim "quais são
 // os piores". E o valor é o do GRUPO — cliente que opera por SPE tem o protesto na
 // SPE, não na matriz, e somar só o CNPJ dele mostraria zero justamente em quem tem
@@ -736,6 +829,9 @@ export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
       </div>
 
       <CapitalPie porCapital={data.por_capital} onAbrir={setFiltro} />
+
+      {/* Antes dos rankings de protesto: é o preço de mantê-los atualizados. */}
+      <CustoDoCron />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RankingProtestoGrupo itens={data.protestos_grupo} onAbrir={setAlvoProtesto} />

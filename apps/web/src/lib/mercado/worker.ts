@@ -206,6 +206,15 @@ export async function dispararProtestosClientesMensal(): Promise<DispararJobResu
 }
 
 /**
+ * Radar: o aviso de custo da rotina mensal de protestos. Dispara nos dias 28–31 e o
+ * worker só notifica no ÚLTIMO dia do mês — que é sempre exatamente cinco dias antes
+ * da rodada do dia 5, em fevereiro como em março.
+ */
+export async function dispararAvisoCustoProtestos(): Promise<DispararJobResultado> {
+  return postar('/jobs/radar/protestos-aviso', {}, 'radar-protestos-aviso')
+}
+
+/**
  * Radar (§5): protestos sob demanda de uma empresa (+ SPEs do grupo criadas a partir de
  * um ano). Ação PAGA — a autorização e a confirmação de custo ficam no caller (a aba
  * Análise financeira mostra a estimativa antes de disparar).

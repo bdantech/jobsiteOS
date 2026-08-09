@@ -59,8 +59,16 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Protestos dos clientes',
     moduloId: 'radar',
     descricao:
-      'Consulta protestos da matriz e das SPEs ativas do grupo de cada cliente, como um lote automático já aprovado (é política), respeitando o teto de orçamento.',
+      'Consulta protestos de cada cliente Onepay e de cada CNPJ marcado como afiançado no monitoramento, como um lote automático já aprovado (é política), respeitando o teto de orçamento. O custo aparece na aba Análise de Empresas e é avisado cinco dias antes.',
     destino: 'POST /jobs/radar/protestos-clientes',
+  },
+  {
+    path: '/api/cron/radar-protestos-aviso',
+    nome: 'Aviso de custo dos protestos',
+    moduloId: 'radar',
+    descricao:
+      'Avisa Admin e Crédito quanto a rodada do dia 5 vai custar — clientes Onepay mais SPEs afiançadas, a preço de consulta nacional. Agendado nos dias 28–31, mas só notifica no ÚLTIMO dia do mês: é sempre exatamente cinco dias antes da rodada, em fevereiro como em março, e um cron marcado no dia 30 nunca dispararia em fevereiro. Cinco dias é o que separa descobrir no extrato de pôr crédito antes.',
+    destino: 'POST /jobs/radar/protestos-aviso',
   },
   {
     path: '/api/cron/radar-estimador',

@@ -959,6 +959,7 @@ export type Database = {
           limite_confianca: string | null
           limite_potencial: number | null
           receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
           score_calculado_em: string | null
           score_completude: number | null
           score_credito: number | null
@@ -1014,6 +1015,7 @@ export type Database = {
           limite_confianca?: string | null
           limite_potencial?: number | null
           receita_mensal_prevista?: number | null
+          receita_taxa_am?: number | null
           score_calculado_em?: string | null
           score_completude?: number | null
           score_credito?: number | null
@@ -1069,6 +1071,7 @@ export type Database = {
           limite_confianca?: string | null
           limite_potencial?: number | null
           receita_mensal_prevista?: number | null
+          receita_taxa_am?: number | null
           score_calculado_em?: string | null
           score_completude?: number | null
           score_credito?: number | null
@@ -3663,6 +3666,7 @@ export type Database = {
         Args: { p_grupo_id: string }
         Returns: Json
       }
+      radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_onepay_analytics: { Args: never; Returns: Json }
       radar_onepay_clientes: {
         Args: { p_dimensao: string; p_valor: string }

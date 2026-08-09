@@ -423,6 +423,8 @@ export async function estimarPotencialJob(): Promise<{
   com_limite?: number
   sem_faturamento?: number
   sem_calibracao?: number
+  /** Quantos usaram a taxa da própria empresa em vez da padrão. */
+  com_taxa_real?: number
 }> {
   const ativa = await versaoAtiva()
   if (!ativa) {
@@ -445,7 +447,8 @@ export async function estimarPotencialJob(): Promise<{
   }
 
   const coef = ativa.coef ?? coeficientesVazios()
-  const acc = { avaliados: 0, com_limite: 0, sem_faturamento: 0, sem_calibracao: 0 }
+  const taxas = await taxasConhecidas()
+  const acc = { avaliados: 0, com_limite: 0, sem_faturamento: 0, sem_calibracao: 0, com_taxa_real: 0 }
 
   await paginarSacados(async (linhas) => {
     for (const e of linhas) {
@@ -464,7 +467,12 @@ export async function estimarPotencialJob(): Promise<{
           : { valor: cfg.chance_sem_score, presumida: true }
 
       const r = calcularPotencial(
-        { tipo: e.tipo, faturamento_estimado: e.faturamento_anual, faturamento_confianca: e.faturamento_confianca },
+        {
+          tipo: e.tipo,
+          faturamento_estimado: e.faturamento_anual,
+          faturamento_confianca: e.faturamento_confianca,
+          taxa_mensal_am: taxas.get(e.cnpj) ?? null,
+        },
         coef,
         economia,
         limite,
@@ -473,6 +481,7 @@ export async function estimarPotencialJob(): Promise<{
 
       if (r.motivo === 'sem_faturamento') acc.sem_faturamento++
       if (r.motivo === 'sem_calibracao') acc.sem_calibracao++
+      if (r.taxa_real) acc.com_taxa_real++
 
       // NULL quando não dá para calcular — e null, não zero. Zero ordenaria a empresa
       // como "não vale nada" na régua do Explorador, quando o que se sabe é que não
@@ -483,6 +492,7 @@ export async function estimarPotencialJob(): Promise<{
           limite_potencial: r.limite_potencial,
           limite_confianca: r.confianca,
           receita_mensal_prevista: r.receita_mensal_prevista,
+          receita_taxa_am: r.taxa_am,
           valor_esperado_mensal: r.valor_esperado_mensal,
           credito_calculado_em: new Date().toISOString(),
           credito_versao: ativa.versao,
@@ -495,7 +505,12 @@ export async function estimarPotencialJob(): Promise<{
       // Série: mesma regra de variação mínima do 04c — só grava snapshot quando o
       // número realmente mudou, senão a série vira uma coluna de repetições.
       await gravarSerie(e, 'limite_potencial', r.limite_potencial, cfg.variacao_minima_snapshot)
-      await gravarSerie(e, 'receita_prevista', r.receita_mensal_prevista ?? 0, cfg.variacao_minima_snapshot)
+      // A taxa vai junto com a receita pelo mesmo motivo de `taxa_usada` na nota: sem
+      // ela, a receita prevista de ontem é impossível de auditar depois que a taxa muda.
+      await gravarSerie(e, 'receita_prevista', r.receita_mensal_prevista ?? 0, cfg.variacao_minima_snapshot, {
+        taxa_am: r.taxa_am,
+        taxa_real: r.taxa_real,
+      })
 
       if (e.limite_potencial === null && r.limite_potencial !== null) {
         await emitirEvento(e.id, EVENTO_TIPOS.CREDITO_POTENCIAL_ATUALIZADO, {
@@ -515,11 +530,37 @@ export async function estimarPotencialJob(): Promise<{
   return { status: 'ok', ...acc }
 }
 
+/**
+ * A taxa mensal de cada CNPJ que já tem análise de crédito — o `monthlyRateD0` do
+ * snapshot mais recente, exatamente o número que precifica as notas dessa empresa no
+ * funil da Antecipação.
+ *
+ * Carregado de uma vez: são dezenas de CNPJs contra milhares de sacados avaliados, e
+ * uma consulta por linha aqui seria uma ida ao banco para quase sempre não achar nada.
+ */
+async function taxasConhecidas(): Promise<Map<string, number>> {
+  const { data } = await supabaseAdmin
+    .from('credito_snapshots')
+    .select('cnpj, monthly_rate_d0, capturado_em')
+    .not('monthly_rate_d0', 'is', null)
+    .order('capturado_em', { ascending: false })
+
+  const taxas = new Map<string, number>()
+  // Ordenado do mais recente para o mais antigo: o primeiro de cada CNPJ vence.
+  for (const s of data ?? []) {
+    if (!s.cnpj || taxas.has(s.cnpj)) continue
+    const t = Number(s.monthly_rate_d0)
+    if (Number.isFinite(t) && t > 0) taxas.set(s.cnpj, t)
+  }
+  return taxas
+}
+
 async function gravarSerie(
   e: LinhaSacado,
   metrica: 'limite_potencial' | 'receita_prevista',
   valor: number,
   variacaoMinima: number,
+  detalhes: Record<string, unknown> = {},
 ): Promise<void> {
   const { data: ultimo } = await supabaseAdmin
     .from('empresa_metricas')
@@ -542,6 +583,6 @@ async function gravarSerie(
     valor,
     origem: 'modelo',
     confianca: e.faturamento_confianca,
-    detalhes: {} as Json,
+    detalhes: detalhes as Json,
   })
 }

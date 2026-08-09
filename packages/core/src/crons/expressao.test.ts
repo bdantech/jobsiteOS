@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CronError, descreverCron, parseCron, proximaExecucao } from './expressao.ts'
+import { CronError, descreverCron, ehUltimoDiaDoMes, parseCron, proximaExecucao } from './expressao.ts'
 import { CRONS, listarCrons } from './catalogo.ts'
 
 const utc = (iso: string): Date => new Date(`${iso}Z`)
@@ -114,4 +114,33 @@ test('listarCrons: expressão inválida não derruba a lista', () => {
 
 test('o catálogo não tem path duplicado', () => {
   assert.equal(new Set(CRONS.map((c) => c.path)).size, CRONS.length)
+})
+
+// ─── Último dia do mês ──────────────────────────────────────────────────────
+// O aviso de custo dos protestos depende disto: o último dia de QUALQUER mês é
+// exatamente cinco dias antes do dia 5 do mês seguinte. Se este teste cair, o aviso
+// chega no dia errado — ou não chega, que é pior, porque não gera erro nenhum.
+
+test('reconhece o último dia em meses de 31, 30, 28 e 29 dias', () => {
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-08-31T11:00:00Z')), true)
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-09-30T11:00:00Z')), true)
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-02-28T11:00:00Z')), true)
+  // 2028 é bissexto: o dia 28 deixa de ser o último.
+  assert.equal(ehUltimoDiaDoMes(new Date('2028-02-28T11:00:00Z')), false)
+  assert.equal(ehUltimoDiaDoMes(new Date('2028-02-29T11:00:00Z')), true)
+})
+
+test('os outros dias da janela 28–31 do cron não disparam o aviso', () => {
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-08-28T11:00:00Z')), false)
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-08-30T11:00:00Z')), false)
+  assert.equal(ehUltimoDiaDoMes(new Date('2026-09-29T11:00:00Z')), false)
+})
+
+test('do último dia até a rodada do dia 5 são sempre cinco dias', () => {
+  for (const iso of ['2026-01-31', '2026-02-28', '2026-04-30', '2026-11-30', '2028-02-29']) {
+    const ultimo = new Date(`${iso}T00:00:00Z`)
+    assert.equal(ehUltimoDiaDoMes(ultimo), true)
+    const rodada = new Date(Date.UTC(ultimo.getUTCFullYear(), ultimo.getUTCMonth() + 1, 5))
+    assert.equal((rodada.getTime() - ultimo.getTime()) / 86_400_000, 5, iso)
+  }
 })

@@ -23,6 +23,7 @@ import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import {
+  avisarCustoProtestos,
   criarProcessadorProtestos,
   protestoFornecedor,
   protestosClientesMensal,
@@ -72,6 +73,7 @@ export type TipoJob =
   | 'onepay'
   | 'radar-lote'
   | 'protestos-mensal'
+  | 'protestos-aviso-custo'
   | 'protestos-empresa'
   | 'contatos-empresa'
   | 'certificados'
@@ -401,6 +403,15 @@ export function dispararProtestosClientesMensal(): string {
     logger.info('Rotina mensal de protestos de clientes.')
     return protestosClientesMensal()
   })
+}
+
+/**
+ * O aviso de custo, cinco dias antes da rotina acima. Dispara nos dias 28–31 e só
+ * notifica no último do mês — a expressão de cron não sabe dizer "último dia", e um
+ * cron no dia 30 nunca rodaria em fevereiro.
+ */
+export function dispararAvisoCustoProtestos(): string {
+  return dispararAvulso('protestos-aviso-custo', async () => avisarCustoProtestos())
 }
 
 /**

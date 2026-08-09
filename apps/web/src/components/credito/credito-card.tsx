@@ -179,6 +179,8 @@ export interface CreditoCardProps {
   limitePotencial: number | null
   limiteConfianca: string | null
   receitaMensalPrevista: number | null
+  /** Taxa mensal (%) que entrou na conta: a da própria empresa quando a conhecemos. */
+  receitaTaxaAm: number | null
   valorEsperadoMensal: number | null
   chanceConcessao: number | null
   faturamentoEstimado: number | null
@@ -287,7 +289,23 @@ export function CreditoCard(props: CreditoCardProps) {
                       <dd className="font-semibold tabular-nums">{moeda(props.limitePotencial)}</dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-2">
-                      <dt className="text-muted-foreground">Receita prevista</dt>
+                      <dt className="text-muted-foreground">
+                        Receita prevista
+                        {/*
+                         * A taxa aparece junto do número porque ela é metade dele. Vem
+                         * da análise de crédito desta empresa quando existe; senão, da
+                         * padrão da carteira — e entre 1,9% e 2,6% há um terço de
+                         * diferença na mesma previsão.
+                         */}
+                        {props.receitaTaxaAm === null ? null : (
+                          <span
+                            className="block text-xs"
+                            title="Taxa mensal usada na conta: a monthlyRateD0 desta empresa quando ela já tem análise de crédito, senão a padrão da configuração."
+                          >
+                            a {props.receitaTaxaAm.toLocaleString('pt-BR')}% a.m.
+                          </span>
+                        )}
+                      </dt>
                       <dd className="tabular-nums">{moeda(props.receitaMensalPrevista)}/mês</dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-2">

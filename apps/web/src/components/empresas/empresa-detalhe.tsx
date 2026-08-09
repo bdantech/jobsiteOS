@@ -273,6 +273,7 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                   limitePotencial={data.limite_potencial}
                   limiteConfianca={data.limite_confianca}
                   receitaMensalPrevista={data.receita_mensal_prevista}
+                  receitaTaxaAm={data.receita_taxa_am}
                   valorEsperadoMensal={data.valor_esperado_mensal}
                   chanceConcessao={data.chance_concessao}
                   faturamentoEstimado={data.faturamento_anual}

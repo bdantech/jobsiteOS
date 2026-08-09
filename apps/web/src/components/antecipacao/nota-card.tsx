@@ -236,8 +236,21 @@ export function NotaCard({
               </dd>
             </div>
             <div className="flex justify-between gap-4">
+              {/*
+               * A taxa junto do número porque ela é metade dele: quando o sacado já
+               * tem análise de crédito, é a monthlyRateD0 dele que precifica a nota;
+               * quando não tem, é a padrão da carteira. Sem o rótulo, as duas receitas
+               * têm a mesma cara — e uma delas é uma média chutada.
+               */}
               <dt className="opacity-70">Receita esperada</dt>
-              <dd className="tabular-nums">{formatarMoedaExata(nota.receita_esperada)}</dd>
+              <dd className="text-right tabular-nums">
+                {formatarMoedaExata(nota.receita_esperada)}
+                {nota.taxa_usada === null || nota.taxa_usada === undefined ? null : (
+                  <span className="block text-[11px] opacity-70">
+                    a {Number(nota.taxa_usada).toLocaleString('pt-BR')}% a.m.
+                  </span>
+                )}
+              </dd>
             </div>
             {nota.vencimento_origem === 'estimado' ? (
               <p className="pt-0.5 text-[11px] leading-snug opacity-70">

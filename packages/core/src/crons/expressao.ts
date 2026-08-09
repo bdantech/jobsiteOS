@@ -191,3 +191,20 @@ export function descreverCron(expressao: string): DescricaoCron {
     viraDia: brasilia.some((x) => x.virou),
   }
 }
+
+/**
+ * É hoje o último dia do mês?
+ *
+ * Existe porque a expressão de cron não sabe dizer "último dia": os campos são
+ * números, e `30` simplesmente nunca acontece em fevereiro. Um job que precisa do
+ * último dia se agenda em `28-31` e pergunta isto — as outras passagens saem sem
+ * fazer nada.
+ *
+ * O uso concreto é o aviso de custo dos protestos, e ele depende de uma coincidência
+ * de calendário que vale sempre: o último dia de qualquer mês é exatamente cinco dias
+ * antes do dia 5 do mês seguinte (31/08 → 05/09, 30/09 → 05/10, 28/02 → 05/03).
+ */
+export function ehUltimoDiaDoMes(d: Date): boolean {
+  const amanha = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1))
+  return amanha.getUTCDate() === 1
+}

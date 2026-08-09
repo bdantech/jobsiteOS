@@ -1,4 +1,6 @@
+import { formatarMoeda } from '../../../../../packages/core/src/antecipacao/economia.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
+import { ehUltimoDiaDoMes } from '../../../../../packages/core/src/crons/expressao.js'
 import type { ProvedorCredito } from '../../../../../packages/core/src/radar/credit.js'
 import type { Tables } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
@@ -278,6 +280,72 @@ export async function protestoFornecedor(opts: {
  * Lote automático já aprovado (é política, não pedido ad hoc); o teto de orçamento é
  * respeitado pelo harness (interrompe ao estourar).
  */
+// ─── O aviso de custo, cinco dias antes ─────────────────────────────────────
+
+export interface ResultadoAvisoCusto {
+  avisou: boolean
+  motivo?: 'nao_e_vespera' | 'sem_consultas' | 'sem_acesso'
+  consultas?: number
+  custo_total?: number
+}
+
+/**
+ * Avisa quem responde pelo Crédito quanto a rodada do dia 5 vai custar.
+ *
+ * O cron do dia 5 é POLÍTICA: ele roda sozinho, sem ninguém aprovar, e a conta chega
+ * depois. Cinco dias é o que separa "descobrir no extrato" de "pôr crédito antes" —
+ * é a única reação possível, e ela precisa de prazo.
+ *
+ * O gatilho é o ÚLTIMO DIA DO MÊS, e não uma data fixa: o último dia de qualquer mês
+ * é sempre exatamente cinco dias antes do dia 5 do mês seguinte, em fevereiro como
+ * em março. Um cron marcado no dia 30 nunca dispararia em fevereiro, que é o tipo de
+ * furo que ninguém percebe porque um aviso que não chega não gera erro.
+ *
+ * A conta vem do banco (`radar_custo_protestos_mensal`), a mesma que a aba Análise
+ * mostra. Refazê-la aqui daria dois números para a mesma pergunta.
+ */
+export async function avisarCustoProtestos(hoje: Date = new Date()): Promise<ResultadoAvisoCusto> {
+  if (!ehUltimoDiaDoMes(hoje)) {
+    // O cron dispara nos dias 28–31 porque a expressão não sabe dizer "último dia".
+    // Quem sabe é isto aqui, e as outras passagens saem sem notificar ninguém.
+    return { avisou: false, motivo: 'nao_e_vespera' }
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('radar_custo_protestos_mensal' as never)
+  if (error) throw new Error(`Falha ao calcular o custo dos protestos: ${error.message}`)
+
+  const c = (data ?? {}) as {
+    tem_acesso?: boolean
+    clientes?: number
+    monitoradas?: number
+    consultas?: number
+    custo_unitario?: number
+    custo_total?: number
+  }
+  if (!c.tem_acesso) return { avisou: false, motivo: 'sem_acesso' }
+
+  const consultas = Number(c.consultas ?? 0)
+  // Sem consulta não há custo, e um aviso de R$ 0,00 todo mês treina a pessoa a
+  // ignorar a notificação — inclusive no mês em que ela importar.
+  if (consultas === 0) return { avisou: false, motivo: 'sem_consultas', consultas: 0, custo_total: 0 }
+
+  const custo = Number(c.custo_total ?? 0)
+  const corpo =
+    `Em 5 dias a rotina mensal consulta protestos de ${consultas} CNPJ(s) — ` +
+    `${Number(c.clientes ?? 0)} cliente(s) Onepay e ${Number(c.monitoradas ?? 0)} SPE(s) afiançada(s) — ` +
+    `a ${formatarMoeda(Number(c.custo_unitario ?? 0))} cada: ${formatarMoeda(custo)}. ` +
+    'Confira o saldo na plataforma de consulta antes do dia 5.'
+
+  await notificarPerfis(['Admin', 'Crédito'], {
+    titulo: 'Protestos do mês: custo estimado',
+    corpo,
+    url: '/empresas?tab=analise',
+  })
+
+  logger.info({ consultas, custo }, 'Aviso de custo dos protestos enviado.')
+  return { avisou: true, consultas, custo_total: custo }
+}
+
 export async function protestosClientesMensal(): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
   if (!env.DIRECTD_API_KEY) throw new Error('DIRECTD_API_KEY não configurada.')
 

@@ -145,6 +145,45 @@ test('a cadeia inteira, com número conferível', () => {
   assert.equal(r.receita_mensal_prevista, 5_175)
   // esperado = 5.175 × 0,8 = 4.140
   assert.equal(r.valor_esperado_mensal, 4_140)
+  // sem taxa conhecida, a padrão — e a previsão diz que foi a padrão.
+  assert.equal(r.taxa_am, 1.9)
+  assert.equal(r.taxa_real, false)
+})
+
+// ─── A taxa da própria empresa ──────────────────────────────────────────────
+
+test('a taxa real da empresa vence a padrão, e a conta muda junto', () => {
+  const r = calcularPotencial(
+    { faturamento_estimado: 10_000_000, taxa_mensal_am: 2.6 },
+    COEF,
+    ECONOMIA,
+    LIMITE,
+    CHANCE,
+  )
+  // financeira = 150.000 × 2,6% × (45/30) = 5.850, contra 4.275 na taxa padrão.
+  // (2,6/100 não tem representação exata em binário; a conta não é arredondada.)
+  assert.ok(Math.abs((r.receita_financeira ?? 0) - 5_850) < 0.01)
+  assert.equal(r.taxa_am, 2.6)
+  assert.equal(r.taxa_real, true)
+  // A TAC não depende da taxa: continua saindo do volume.
+  assert.equal(r.receita_tac, 900)
+})
+
+test('taxa zero, negativa ou não-finita cai na padrão em vez de zerar a receita', () => {
+  // Um zero aqui é dado faltando disfarçado de dado — e zeraria a receita
+  // financeira inteira em silêncio, que é o pior jeito de errar este número.
+  for (const taxa of [0, -1, Number.NaN, null, undefined]) {
+    const r = calcularPotencial(
+      { faturamento_estimado: 10_000_000, taxa_mensal_am: taxa },
+      COEF,
+      ECONOMIA,
+      LIMITE,
+      CHANCE,
+    )
+    assert.equal(r.taxa_am, 1.9)
+    assert.equal(r.taxa_real, false)
+    assert.equal(r.receita_financeira, 4_275)
+  }
 })
 
 test('o cap absoluto morde e diz que mordeu', () => {

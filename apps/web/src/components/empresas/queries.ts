@@ -75,6 +75,7 @@ export const empresasKeys = {
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null, afiancadas = false) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin, afiancadas] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+  custoProtestos: () => ['empresas', 'custo-protestos'] as const,
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
   onepayClientesFiltrados: (dimensao: string, valor: string) =>
     ['empresas', 'onepay-clientes', dimensao, valor] as const,
@@ -146,6 +147,37 @@ export interface ClienteProtestoRecente {
   valor: number
   /** Data do protesto mais recente, ISO. */
   ultimo: string | null
+}
+
+/**
+ * O preço do cron mensal de protestos, do mesmo RPC que o worker usa para avisar
+ * cinco dias antes. Uma conta só nos dois lugares: duas divergiriam no primeiro
+ * cliente novo, e o aviso perderia a única coisa que o torna útil — bater com a tela.
+ */
+export interface CustoProtestos {
+  tem_acesso: boolean
+  clientes: number
+  monitoradas: number
+  consultas: number
+  custo_unitario: number
+  custo_total: number
+  teto_mensal: number | null
+}
+
+export async function buscarCustoProtestos(): Promise<CustoProtestos> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('radar_custo_protestos_mensal' as never)
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<CustoProtestos>
+  return {
+    tem_acesso: r.tem_acesso ?? false,
+    clientes: r.clientes ?? 0,
+    monitoradas: r.monitoradas ?? 0,
+    consultas: r.consultas ?? 0,
+    custo_unitario: Number(r.custo_unitario ?? 0),
+    custo_total: Number(r.custo_total ?? 0),
+    teto_mensal: r.teto_mensal == null ? null : Number(r.teto_mensal),
+  }
 }
 
 export async function buscarOnepayAnalytics(): Promise<OnepayAnalytics> {
