@@ -28,6 +28,7 @@ import { atualizarFuncionariosAction, resolverDominioEmpresaAction } from '@/act
 import { declararMetricaAction } from '@/actions/empresas'
 import { cn } from '@/lib/utils'
 import { empresasKeys, buscarMetricas } from './queries'
+import { usePollInvalidar } from './use-poll-invalidar'
 
 /**
  * Faturamento & Equipe na Company 360 (04c §8).
@@ -281,10 +282,18 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
     queryFn: () => buscarMetricas(props.cnpj),
   })
 
+  const chaves = React.useMemo(
+    () => [
+      empresasKeys.metricas(props.cnpj),
+      empresasKeys.detalhe(props.empresaId),
+      empresasKeys.eventos(props.empresaId),
+    ],
+    [props.cnpj, props.empresaId],
+  )
+  const { iniciar: acompanharJob } = usePollInvalidar(chaves)
+
   function recarregar() {
-    void qc.invalidateQueries({ queryKey: empresasKeys.metricas(props.cnpj) })
-    void qc.invalidateQueries({ queryKey: empresasKeys.detalhe(props.empresaId) })
-    void qc.invalidateQueries({ queryKey: empresasKeys.eventos(props.empresaId) })
+    for (const chave of chaves) void qc.invalidateQueries({ queryKey: chave })
   }
 
   const porMetrica = React.useMemo(() => {
@@ -320,8 +329,12 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
       toast.error(r.data.aviso ?? 'Não foi possível disparar a consulta.')
       return
     }
-    // Assíncrono: o worker devolve 202 e trabalha em segundo plano.
+    // Assíncrono: o worker devolve 202 e trabalha em segundo plano. Por isso não
+    // basta invalidar uma vez aqui — o dado ainda não existe no clique. O poll
+    // recarrega enquanto o resultado não chega, e é o que tira o "recarregue a
+    // página" do caminho de quem só queria ver o número atualizado.
     toast.success(sucesso)
+    acompanharJob()
   }
 
   const pontosEquipe = [...porMetrica.funcionarios]
@@ -362,7 +375,7 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
                   void disparar(
                     'dominio',
                     () => resolverDominioEmpresaAction(props.empresaId),
-                    'Procurando o domínio. Recarregue em alguns instantes.',
+                    'Procurando o domínio — o resultado aparece aqui em instantes.',
                   )
                 }
                 disabled={atualizando !== null}
@@ -382,7 +395,7 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
                 void disparar(
                   'funcionarios',
                   () => atualizarFuncionariosAction(props.empresaId),
-                  'Consultando o Apollo. Recarregue em alguns instantes.',
+                  'Consultando o Apollo — o resultado aparece aqui em instantes.',
                 )
               }
               disabled={atualizando !== null || !props.dominio}

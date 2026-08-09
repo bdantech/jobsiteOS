@@ -118,6 +118,8 @@ export async function protestosEmpresa(opts: {
   empresaId: string
   incluirSpes: boolean
   anoMin: number | null
+  /** Em vez do corte por ano, só as SPEs marcadas em `protesto_monitoramento`. */
+  somenteAfiancadas?: boolean
 }): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
   if (!env.DIRECTD_API_KEY) throw new Error('DIRECTD_API_KEY não configurada.')
 
@@ -131,7 +133,39 @@ export async function protestosEmpresa(opts: {
   const porCnpj = new Map<string, { cnpj: string; empresa_id: string | null }>()
   porCnpj.set(emp.cnpj, { cnpj: emp.cnpj, empresa_id: opts.empresaId })
 
-  if (opts.incluirSpes && emp.grupo_id) {
+  if (opts.incluirSpes && emp.grupo_id && opts.somenteAfiancadas) {
+    // As afiançadas: quem alguém marcou à mão para o monitoramento mensal. Sem corte
+    // de ano nem de situação — se foi marcada, é porque se quer acompanhar. Duas
+    // portas porque a marcação guarda cnpj E grupo_id: uma SPE marcada pode não
+    // estar em mercado_universo, e aí só o grupo_id a alcança.
+    // (O mesmo conjunto que radar_protestos_empresa_previa conta, migração 0086.)
+    const [{ data: porGrupo }, { data: doUniverso }] = await Promise.all([
+      supabaseAdmin
+        .from('protesto_monitoramento' as never)
+        .select('cnpj, empresa_id')
+        .eq('grupo_id', emp.grupo_id),
+      supabaseAdmin
+        .from('mercado_universo')
+        .select('cnpj, empresa_id')
+        .eq('grupo_id', emp.grupo_id),
+    ])
+
+    const doGrupo = new Set((doUniverso ?? []).map((u) => u.cnpj))
+    const { data: todasMarcadas } = await supabaseAdmin
+      .from('protesto_monitoramento' as never)
+      .select('cnpj, empresa_id')
+
+    const marcadas = [
+      ...((porGrupo ?? []) as unknown as { cnpj: string; empresa_id: string | null }[]),
+      ...((todasMarcadas ?? []) as unknown as { cnpj: string; empresa_id: string | null }[]).filter(
+        (m) => doGrupo.has(m.cnpj),
+      ),
+    ]
+
+    for (const m of marcadas) {
+      if (!porCnpj.has(m.cnpj)) porCnpj.set(m.cnpj, { cnpj: m.cnpj, empresa_id: m.empresa_id })
+    }
+  } else if (opts.incluirSpes && emp.grupo_id) {
     let q = supabaseAdmin
       .from('mercado_universo')
       .select('cnpj, empresa_id')
@@ -148,7 +182,9 @@ export async function protestosEmpresa(opts: {
     .from('lotes_enriquecimento')
     .insert({
       tipo: 'protestos',
-      nome: `Protestos — ${emp.razao_social ?? emp.cnpj}${opts.incluirSpes ? ' + SPEs' : ''}`,
+      nome:
+        `Protestos — ${emp.razao_social ?? emp.cnpj}` +
+        (opts.incluirSpes ? (opts.somenteAfiancadas ? ' + SPEs afiançadas' : ' + SPEs') : ''),
       definicao_filtro: {} as never,
       parametros: { cliente: true, motivo: 'sob_demanda', empresa_id: opts.empresaId } as never,
       status: 'aprovado',

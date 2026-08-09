@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertTriangle, Loader2, Lock, ShieldCheck, TrendingUp } from 'lucide-react'
 import type { Json } from '@jobsiteos/core'
@@ -37,6 +37,7 @@ import {
   type ProtestoHistoricoItem,
 } from './queries'
 import { formatData, formatDataHora } from './format'
+import { usePollInvalidar } from './use-poll-invalidar'
 import {
   GraficoTempoProtestos,
   extrairProtestos,
@@ -442,13 +443,20 @@ function RodarProtestosDialog({
   onDisparado: () => void
 }) {
   const [incluirSpes, setIncluirSpes] = React.useState(false)
+  /**
+   * Como escolher as SPEs. `ano` é o corte por data de criação — um proxy para "as
+   * que importam". `afiancadas` são as que alguém marcou à mão no monitoramento
+   * mensal, ou seja, a resposta já dada para a mesma pergunta.
+   */
+  const [modoSpes, setModoSpes] = React.useState<'ano' | 'afiancadas'>('ano')
   const [anoMin, setAnoMin] = React.useState<number>(ANO_ATUAL - 5)
   const [rodando, setRodando] = React.useState(false)
 
-  const anoEfetivo = incluirSpes ? anoMin : null
+  const afiancadas = incluirSpes && modoSpes === 'afiancadas'
+  const anoEfetivo = incluirSpes && !afiancadas ? anoMin : null
   const previa = useQuery({
-    queryKey: empresasKeys.previaProtestos(empresaId, incluirSpes, anoEfetivo),
-    queryFn: () => buscarPreviaProtestos(empresaId, incluirSpes, anoEfetivo),
+    queryKey: empresasKeys.previaProtestos(empresaId, incluirSpes, anoEfetivo, afiancadas),
+    queryFn: () => buscarPreviaProtestos(empresaId, incluirSpes, anoEfetivo, afiancadas),
     enabled: open,
   })
 
@@ -458,7 +466,12 @@ function RodarProtestosDialog({
 
   async function rodar() {
     setRodando(true)
-    const r = await rodarProtestosEmpresaAction({ empresaId, incluirSpes, anoMin: anoEfetivo })
+    const r = await rodarProtestosEmpresaAction({
+      empresaId,
+      incluirSpes,
+      anoMin: anoEfetivo,
+      somenteAfiancadas: afiancadas,
+    })
     setRodando(false)
     if (!r.ok) {
       toast.error(r.message)
@@ -495,23 +508,49 @@ function RodarProtestosDialog({
           ) : null}
 
           {incluirSpes ? (
-            <div className="space-y-1">
-              <Label>Criadas a partir de</Label>
-              <Select value={String(anoMin)} onValueChange={(v) => setAnoMin(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {ANOS.map((a) => (
-                    <SelectItem key={a} value={String(a)}>
-                      {a}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Só SPEs com início de atividade nesse ano ou depois.
-              </p>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Quais SPEs</Label>
+                <Select
+                  value={modoSpes}
+                  onValueChange={(v) => setModoSpes(v as 'ano' | 'afiancadas')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ano">Ativas, por ano de criação</SelectItem>
+                    <SelectItem value="afiancadas">Somente as afiançadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {modoSpes === 'ano' ? (
+                <div className="space-y-1">
+                  <Label>Criadas a partir de</Label>
+                  <Select value={String(anoMin)} onValueChange={(v) => setAnoMin(Number(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      {ANOS.map((a) => (
+                        <SelectItem key={a} value={String(a)}>
+                          {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Só SPEs com início de atividade nesse ano ou depois.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  As SPEs marcadas no monitoramento mensal de protesto. Sem corte de ano nem de
+                  situação: se foi marcada, entra. Zero aqui significa que ninguém marcou nenhuma
+                  ainda — a marcação é feita no card de monitoramento da ficha.
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -549,7 +588,6 @@ function RodarProtestosDialog({
  * `tem_acesso: false` e mostramos um estado bloqueado, nunca um erro.
  */
 export function AnaliseFinanceira({ empresaId }: { empresaId: string }) {
-  const qc = useQueryClient()
   const [rodarAberto, setRodarAberto] = React.useState(false)
   const [grupoAberto, setGrupoAberto] = React.useState(false)
   const [consultaAberta, setConsultaAberta] = React.useState<ProtestoHistoricoItem | null>(null)
@@ -559,14 +597,11 @@ export function AnaliseFinanceira({ empresaId }: { empresaId: string }) {
   })
 
   // Os protestos chegam em segundo plano; recarrega algumas vezes após o disparo.
-  function aoDisparar() {
-    let n = 0
-    const timer = setInterval(() => {
-      n++
-      void qc.invalidateQueries({ queryKey: empresasKeys.analiseFinanceira(empresaId) })
-      if (n >= 12) clearInterval(timer)
-    }, 5_000)
-  }
+  const chaves = React.useMemo(
+    () => [empresasKeys.analiseFinanceira(empresaId)],
+    [empresaId],
+  )
+  const { iniciar: aoDisparar } = usePollInvalidar(chaves)
 
   if (isPending) {
     return (

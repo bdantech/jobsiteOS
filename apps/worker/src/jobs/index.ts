@@ -412,9 +412,18 @@ export function dispararProtestosEmpresa(opts: {
   empresaId: string
   incluirSpes: boolean
   anoMin: number | null
+  somenteAfiancadas?: boolean
 }): string {
   return dispararAvulso('protestos-empresa', async () => {
-    logger.info({ empresaId: opts.empresaId, incluirSpes: opts.incluirSpes, anoMin: opts.anoMin }, 'Protestos sob demanda.')
+    logger.info(
+      {
+        empresaId: opts.empresaId,
+        incluirSpes: opts.incluirSpes,
+        anoMin: opts.anoMin,
+        somenteAfiancadas: opts.somenteAfiancadas,
+      },
+      'Protestos sob demanda.',
+    )
     return protestosEmpresa(opts)
   })
 }

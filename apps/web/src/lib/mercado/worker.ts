@@ -214,10 +214,16 @@ export async function dispararProtestosEmpresa(input: {
   empresaId: string
   incluirSpes: boolean
   anoMin: number | null
+  somenteAfiancadas?: boolean
 }): Promise<DispararJobResultado> {
   return postar(
     '/jobs/radar/protestos-empresa',
-    { empresa_id: input.empresaId, incluir_spes: input.incluirSpes, ano_min: input.anoMin },
+    {
+      empresa_id: input.empresaId,
+      incluir_spes: input.incluirSpes,
+      ano_min: input.anoMin,
+      somente_afiancadas: input.somenteAfiancadas ?? false,
+    },
     'radar-protestos-empresa',
   )
 }

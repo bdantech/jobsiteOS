@@ -124,6 +124,7 @@ export async function rodarProtestosEmpresaAction(input: {
   empresaId: string
   incluirSpes: boolean
   anoMin: number | null
+  somenteAfiancadas?: boolean
 }): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
   const { erro } = await autorizar()
   if (erro) return erro

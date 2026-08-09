@@ -4,11 +4,12 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ShieldCheck } from 'lucide-react'
+import { Search, ShieldCheck } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { sincronizarOnepayAction } from '@/actions/radar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buscarClientesOnepay, radarKeys } from './queries'
 
@@ -16,6 +17,25 @@ const brl = (n: number | null) => (Number(n) || 0).toLocaleString('pt-BR', { sty
 const pct = (n: number | null) => `${Math.round((Number(n) || 0) * 100)}%`
 
 const DORMENTE = 15
+
+/**
+ * Busca no cliente, não no servidor: a lista inteira já veio numa consulta só (são
+ * dezenas de clientes, não milhares), então filtrar aqui responde a cada tecla sem
+ * uma ida ao banco por letra.
+ *
+ * O CNPJ é comparado só por dígitos. Quem cola "12.345.678/0001-90" de outro sistema
+ * não deveria precisar apagar a pontuação para achar a empresa — e quem digita
+ * "12345678" também acha.
+ */
+function combina(cliente: { nome: string | null; cnpj: string }, termo: string): boolean {
+  const t = termo.trim().toLowerCase()
+  if (!t) return true
+
+  const digitos = t.replace(/\D/g, '')
+  if (digitos.length >= 3 && cliente.cnpj.includes(digitos)) return true
+
+  return (cliente.nome ?? '').toLowerCase().includes(t)
+}
 
 function Sinal({ children, tom }: { children: React.ReactNode; tom: 'alerta' | 'aviso' | 'ok' }) {
   const cor =
@@ -31,6 +51,10 @@ export function ClientesOnepay() {
   const qc = useQueryClient()
   const clientes = useQuery({ queryKey: radarKeys.clientes(), queryFn: buscarClientesOnepay })
   const [sincronizando, setSincronizando] = React.useState(false)
+  const [termo, setTermo] = React.useState('')
+
+  const todos = React.useMemo(() => clientes.data ?? [], [clientes.data])
+  const filtrados = React.useMemo(() => todos.filter((c) => combina(c, termo)), [todos, termo])
 
   async function sincronizar() {
     setSincronizando(true)
@@ -81,7 +105,7 @@ export function ClientesOnepay() {
 
       {clientes.isPending ? (
         <Skeleton className="h-64 w-full" />
-      ) : (clientes.data ?? []).length === 0 ? (
+      ) : todos.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             Nenhum cliente sincronizado ainda. Rode o sync Onepay no worker.
@@ -89,6 +113,26 @@ export function ClientesOnepay() {
         </Card>
       ) : (
         <Card>
+          <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
+            <div className="relative min-w-64 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ"
+                className="pl-9"
+                aria-label="Buscar clientes Onepay"
+              />
+            </div>
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {termo.trim()
+                ? `${filtrados.length} de ${todos.length}`
+                : `${todos.length} cliente(s)`}
+            </span>
+          </div>
           <CardContent className="overflow-x-auto p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-border text-left text-xs text-muted-foreground">
@@ -101,7 +145,7 @@ export function ClientesOnepay() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {(clientes.data ?? []).map((c) => {
+                {filtrados.map((c) => {
                   const dias = c.days_without_anticipation ?? 0
                   const pctConsumido = Number(c.consumed_pct) || 0
                   return (
@@ -133,6 +177,11 @@ export function ClientesOnepay() {
                 })}
               </tbody>
             </table>
+            {filtrados.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Nenhum cliente para “{termo.trim()}”.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       )}

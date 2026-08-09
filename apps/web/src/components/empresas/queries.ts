@@ -72,8 +72,8 @@ export const empresasKeys = {
   contatos: (id: string) => ['empresas', 'contatos', id] as const,
   analiseFinanceira: (id: string) => ['empresas', 'analise-financeira', id] as const,
   grupoProtestos: (id: string) => ['empresas', 'analise-financeira', id, 'grupo-protestos'] as const,
-  previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null) =>
-    ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin] as const,
+  previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null, afiancadas = false) =>
+    ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin, afiancadas] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
   onepayClientesFiltrados: (dimensao: string, valor: string) =>
@@ -233,12 +233,14 @@ export async function buscarPreviaProtestos(
   empresaId: string,
   incluirSpes: boolean,
   anoMin: number | null,
+  somenteAfiancadas = false,
 ): Promise<PreviaProtestos> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('radar_protestos_empresa_previa' as never, {
     p_empresa_id: empresaId,
     p_incluir_spes: incluirSpes,
     p_ano_min: anoMin,
+    p_somente_afiancadas: somenteAfiancadas,
   } as never)
   if (error) throw new Error(error.message)
   const r = (data ?? {}) as Partial<PreviaProtestos>
