@@ -6,6 +6,7 @@ import { logger } from '../../logger.js'
 import { lerOrcamento, lerTtl, type TtlDias } from '../../radar/config.js'
 import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
 import { estadoOrcamento } from '../../radar/orcamento.js'
+import { todasAsPaginas } from '../../paginar.js'
 import { atualizarItem, registrarEnriquecimento } from '../../radar/persist.js'
 
 /**
@@ -96,19 +97,35 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
 
   try {
     const total = await materializarItens(lote)
+
+    // `total_itens` vinha da ESTIMATIVA feita na tela, antes do TTL entrar na conta.
+    // Guardar aqui o número real materializado é o que faz "992 de 1.614" ser uma
+    // frase verificável em vez de duas contagens que quase batem.
+    await supabaseAdmin.from('lotes_enriquecimento').update({ total_itens: total }).eq('id', loteId)
     logger.info({ loteId, tipo: lote.tipo, total }, 'Lote materializado; processando itens.')
 
-    const { data: itens } = await supabaseAdmin
-      .from('lote_itens')
-      .select('*')
-      .eq('lote_id', loteId)
-      .eq('status', 'pendente')
+    /*
+     * Paginado, e isto é uma cicatriz: um `.select()` sem paginação volta no máximo
+     * `db-max-rows` linhas (mil, no padrão do Supabase) SEM ERRO NENHUM. Um lote de
+     * 1.614 domínios processou exatamente 1.000, marcou-se como concluído e deixou 614
+     * pendentes — invisíveis, porque um lote concluído não tem botão de executar.
+     */
+    const itens = await todasAsPaginas<Tables<'lote_itens'>>((de, ate) =>
+      supabaseAdmin
+        .from('lote_itens')
+        .select('*')
+        .eq('lote_id', loteId)
+        .eq('status', 'pendente')
+        // Ordem estável: sem ela, duas páginas podem repetir ou pular linhas.
+        .order('id', { ascending: true })
+        .range(de, ate),
+    )
 
     let custo = 0
     let processados = 0
     let alertou = false
 
-    for (const item of itens ?? []) {
+    for (const item of itens) {
       // Teto de orçamento: bloqueia ANTES de gastar mais (§6.2).
       const orc = await estadoOrcamento(custo)
       if (orc.estourou) {
@@ -169,18 +186,41 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
       processados++
     }
 
+    /*
+     * Sobrou pendente? Então NÃO acabou, e dizer que acabou é a pior parte do bug
+     * antigo: o número errado alguém confere, mas um lote marcado como concluído
+     * ninguém volta a olhar. `interrompido` é re-executável pela tela e retoma de onde
+     * parou — os itens já processados não voltam para a fila.
+     *
+     * O caminho normal para isto é o teto de orçamento, que corta no meio de propósito.
+     */
+    const { count: pendentes } = await supabaseAdmin
+      .from('lote_itens')
+      .select('id', { count: 'exact', head: true })
+      .eq('lote_id', loteId)
+      .eq('status', 'pendente')
+
+    const restaram = pendentes ?? 0
+    const concluiu = restaram === 0
+
     await supabaseAdmin
       .from('lotes_enriquecimento')
-      .update({ status: 'concluido', concluido_em: new Date().toISOString(), custo_real: custo })
+      .update({
+        status: concluiu ? 'concluido' : 'interrompido',
+        concluido_em: concluiu ? new Date().toISOString() : null,
+        custo_real: custo,
+      })
       .eq('id', loteId)
 
     await emitirEvento(null, EVENTO_TIPOS.LOTE_CONCLUIDO, {
-      titulo: 'Lote concluído',
-      resumo: `${processados} itens processados — custo real R$ ${custo.toFixed(2)}.`,
+      titulo: concluiu ? 'Lote concluído' : 'Lote interrompido',
+      resumo: concluiu
+        ? `${processados} itens processados — custo real R$ ${custo.toFixed(2)}.`
+        : `${processados} itens processados, ${restaram} ainda pendentes — custo real R$ ${custo.toFixed(2)}. Execute o lote de novo para retomar.`,
       url: `/radar/lotes/${loteId}`,
     })
 
-    logger.info({ loteId, processados, custo }, 'Lote concluído.')
+    logger.info({ loteId, processados, restaram, custo }, concluiu ? 'Lote concluído.' : 'Lote interrompido.')
     return { processados, custo }
   } catch (e) {
     await supabaseAdmin.from('lotes_enriquecimento').update({ status: 'falhou' }).eq('id', loteId)

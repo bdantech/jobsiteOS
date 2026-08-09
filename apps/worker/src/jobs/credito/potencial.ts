@@ -19,6 +19,7 @@ import {
 import type { Json } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
+import { todasAsPaginas } from '../../paginar.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { lerConfigCredito } from '../../credito/config.js'
 
@@ -539,15 +540,22 @@ export async function estimarPotencialJob(): Promise<{
  * uma consulta por linha aqui seria uma ida ao banco para quase sempre não achar nada.
  */
 async function taxasConhecidas(): Promise<Map<string, number>> {
-  const { data } = await supabaseAdmin
-    .from('credito_snapshots')
-    .select('cnpj, monthly_rate_d0, capturado_em')
-    .not('monthly_rate_d0', 'is', null)
-    .order('capturado_em', { ascending: false })
+  // Paginado: `credito_snapshots` é append-only e o PostgREST corta em mil linhas sem
+  // avisar. Sem isto, no dia em que a tabela passar de mil, as taxas mais ANTIGAS
+  // sumiriam da leitura em silêncio — e algumas empresas voltariam para a taxa padrão
+  // sem nada ter mudado.
+  const data = await todasAsPaginas<{ cnpj: string; monthly_rate_d0: number | null }>((de, ate) =>
+    supabaseAdmin
+      .from('credito_snapshots')
+      .select('cnpj, monthly_rate_d0, capturado_em')
+      .not('monthly_rate_d0', 'is', null)
+      .order('capturado_em', { ascending: false })
+      .range(de, ate),
+  )
 
   const taxas = new Map<string, number>()
   // Ordenado do mais recente para o mais antigo: o primeiro de cada CNPJ vence.
-  for (const s of data ?? []) {
+  for (const s of data) {
     if (!s.cnpj || taxas.has(s.cnpj)) continue
     const t = Number(s.monthly_rate_d0)
     if (Number.isFinite(t) && t > 0) taxas.set(s.cnpj, t)

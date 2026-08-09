@@ -27,6 +27,7 @@ const STATUS: Record<string, string> = {
   concluido: 'Concluído',
   cancelado: 'Cancelado',
   falhou: 'Falhou',
+  interrompido: 'Interrompido (sobraram pendentes)',
 }
 const ITEM_LABEL: Record<string, string> = {
   pendente: 'Pendente',
@@ -177,7 +178,10 @@ export function LoteDetalhe({ id }: { id: string }) {
   const c = itens.data
   const podeAprovar = l.status === 'rascunho' || l.status === 'aguardando_aprovacao'
   const podeCancelar = podeAprovar || l.status === 'aprovado'
-  const podeExecutar = l.status === 'aprovado'
+  // `interrompido` é execução parcial: sobraram itens pendentes. Executar de novo
+  // retoma de onde parou — o executor só pega os `pendente`, então nada é refeito nem
+  // recobrado. Sem isto os itens que sobraram ficam inalcançáveis pela tela.
+  const podeExecutar = l.status === 'aprovado' || l.status === 'interrompido'
 
   return (
     <div className="space-y-6">
