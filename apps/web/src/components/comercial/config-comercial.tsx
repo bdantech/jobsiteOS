@@ -362,7 +362,8 @@ export function ConfigComercial() {
           </div>
           <CardDescription>
             <strong>Originador</strong> recebe NOTA, por carteira de empresas escolhidas a dedo.
-            <strong> Closer</strong> recebe CONTA, por território — UF e faixa de faturamento.
+            <strong> Closer</strong> recebe CONTA, por território — UF e faixa de faturamento — e
+            ainda carrega uma carteira de contas passivas, cujo volume é a comissão dele.
             Território em branco não significa &quot;atende tudo&quot;: vazio é ignorado, senão
             um cadastro incompleto abocanha a base inteira.
           </CardDescription>
@@ -371,48 +372,75 @@ export function ConfigComercial() {
           {(vendedores.data ?? []).length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">Nenhum vendedor cadastrado ainda.</p>
           ) : (
-            <ul className="divide-y">
-              {(vendedores.data ?? []).map((v) => {
-                const t = terrPorVendedor.get(v.id)
-                const s = (v.settings ?? {}) as { direcao?: string; empresas_escolhidas?: string[] }
-                return (
-                  <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <span className={v.ativo ? 'font-medium' : 'font-medium text-muted-foreground line-through'}>
-                        {v.nome}
-                      </span>
-                      <Badge variant="outline" className="text-[10px]">
-                        {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
-                      </Badge>
-                      {v.is_ia ? <Badge className="text-[10px]">IA</Badge> : null}
-                      {s.direcao ? <Badge variant="secondary" className="text-[10px]">{s.direcao}</Badge> : null}
-                    </span>
-                    <span className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">
-                      {/*
-                        O que se mostra depende do tipo, porque a régua é outra: o
-                        originador só tem carteira, e um "sem território" ao lado do nome
-                        dele sugeriria um campo faltando que não existe.
-                      */}
-                      {v.tipo === 'originador'
-                        ? (s.empresas_escolhidas ?? []).length > 0
-                          ? `${s.empresas_escolhidas?.length} empresa(s) na carteira`
-                          : 'carteira vazia — nenhuma nota é roteada'
-                        : t && ((t.ufs ?? []).length > 0 || t.faturamento_min || t.faturamento_max)
-                          ? `${(t.ufs ?? []).join(', ') || 'todas as UFs'} · ${
-                              t.faturamento_min ? brl(t.faturamento_min) : 'sem piso'
-                            } → ${t.faturamento_max ? brl(t.faturamento_max) : 'sem teto'}`
-                          : 'sem território'}
-                    </span>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs"
-                      onClick={() => { setEditando(v); setAbrindoForm(true) }}>
-                      Editar
-                    </Button>
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
+            /*
+             * Tabela de verdade, não linhas de flex.
+             *
+             * Com `justify-between` cada linha se alinhava sozinha: nome curto empurrava o
+             * território para a esquerda, nome longo para a direita, e os "Editar" ficavam
+             * numa diagonal. Colunas fixas fazem a coluna do meio ser comparável de linha
+             * em linha, que é a única razão de existir uma lista assim.
+             *
+             * `overflow-x-auto` no wrapper: em telas estreitas quem rola é a tabela, nunca
+             * a página inteira.
+             */
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th scope="col" className="px-3 py-2 font-normal">Nome</th>
+                    <th scope="col" className="px-3 py-2 font-normal">Tipo</th>
+                    <th scope="col" className="px-3 py-2 font-normal">Território ou carteira</th>
+                    <th scope="col" className="w-16 px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(vendedores.data ?? []).map((v) => {
+                    const t = terrPorVendedor.get(v.id)
+                    const s = (v.settings ?? {}) as { direcao?: string; empresas_escolhidas?: string[] }
+                    return (
+                      <tr key={v.id} className="align-middle">
+                        <td className="px-3 py-2">
+                          <span className={v.ativo ? 'font-medium' : 'font-medium text-muted-foreground line-through'}>
+                            {v.nome}
+                          </span>
+                          {v.is_ia ? <Badge className="ml-2 text-[10px]">IA</Badge> : null}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <Badge variant="outline" className="text-[10px]">
+                            {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
+                          </Badge>
+                          {s.direcao ? (
+                            <Badge variant="secondary" className="ml-1 text-[10px]">{s.direcao}</Badge>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {/*
+                            O que se mostra depende do tipo, porque a régua é outra: o
+                            originador só tem carteira, e um "sem território" ao lado do
+                            nome dele sugeriria um campo faltando que não existe.
+                          */}
+                          {v.tipo === 'originador'
+                            ? (s.empresas_escolhidas ?? []).length > 0
+                              ? `${s.empresas_escolhidas?.length} empresa(s) na carteira`
+                              : 'carteira vazia — nenhuma nota é roteada'
+                            : t && ((t.ufs ?? []).length > 0 || t.faturamento_min || t.faturamento_max)
+                              ? `${(t.ufs ?? []).join(', ') || 'todas as UFs'} · ${
+                                  t.faturamento_min ? brl(t.faturamento_min) : 'sem piso'
+                                } → ${t.faturamento_max ? brl(t.faturamento_max) : 'sem teto'}`
+                              : 'sem território'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button size="sm" variant="ghost" className="h-7 text-xs"
+                            onClick={() => { setEditando(v); setAbrindoForm(true) }}>
+                            Editar
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -431,30 +459,43 @@ export function ConfigComercial() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <ul className="divide-y">
-            {(dados.data?.regras ?? []).map((r) => {
-              const p = (r.parametros ?? {}) as Record<string, unknown>
-              const valor =
-                p.valor_por_reuniao !== undefined
-                  ? `${brl(p.valor_por_reuniao)} por reunião agendada`
-                  : `${brl(p.valor_por_milhao)} por milhão`
-              return (
-                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-                  <span className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px]">
-                      {TIPO_VENDEDOR_LABELS[r.tipo_vendedor as TipoVendedorId] ?? r.tipo_vendedor}
-                    </Badge>
-                    {r.vendedor_id ? <Badge className="text-[10px]">override pessoal</Badge> : null}
-                    {valor}
-                  </span>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    vigente de {new Date(`${r.vigente_de}T12:00:00`).toLocaleDateString('pt-BR')}
-                    {r.vigente_ate ? ` até ${new Date(`${r.vigente_ate}T12:00:00`).toLocaleDateString('pt-BR')}` : ''}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th scope="col" className="px-3 py-2 font-normal">Tipo</th>
+                  <th scope="col" className="px-3 py-2 font-normal">Valor</th>
+                  <th scope="col" className="px-3 py-2 font-normal">Vigência</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {(dados.data?.regras ?? []).map((r) => {
+                  const p = (r.parametros ?? {}) as Record<string, unknown>
+                  const valor =
+                    p.valor_por_reuniao !== undefined
+                      ? `${brl(p.valor_por_reuniao)} por reunião agendada`
+                      : `${brl(p.valor_por_milhao)} por milhão`
+                  return (
+                    <tr key={r.id}>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        <Badge variant="outline" className="text-[10px]">
+                          {TIPO_VENDEDOR_LABELS[r.tipo_vendedor as TipoVendedorId] ?? r.tipo_vendedor}
+                        </Badge>
+                        {r.vendedor_id ? <Badge className="ml-1 text-[10px]">override pessoal</Badge> : null}
+                      </td>
+                      <td className="px-3 py-2">{valor}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                        de {new Date(`${r.vigente_de}T12:00:00`).toLocaleDateString('pt-BR')}
+                        {r.vigente_ate
+                          ? ` até ${new Date(`${r.vigente_ate}T12:00:00`).toLocaleDateString('pt-BR')}`
+                          : ' — vigente'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -501,6 +542,7 @@ export function ConfigComercial() {
         onOpenChange={setAbrindoForm}
         vendedor={editando}
         territorio={editando ? (terrPorVendedor.get(editando.id) ?? null) : null}
+        vendedores={vendedores.data ?? []}
       />
 
       <NovaRegraDialog

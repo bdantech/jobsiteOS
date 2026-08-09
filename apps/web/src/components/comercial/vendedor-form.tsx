@@ -11,21 +11,28 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { salvarTerritorioAction, salvarVendedorAction } from '@/actions/comercial'
+import {
+  definirCarteiraPassivaAction,
+  salvarAcessoAction,
+  salvarTerritorioAction,
+  salvarVendedorAction,
+} from '@/actions/comercial'
 import type { Tables } from '@jobsiteos/core'
 
 /**
  * Cadastro de vendedor.
  *
  * O formulário muda com o tipo, e a diferença não é cosmética — é a distinção entre as
- * duas formas de receber trabalho:
+ * três formas de receber trabalho:
  *
  *   ORIGINADOR trabalha NOTA, e recebe por ESCOLHA: uma lista de empresas escolhidas a
  *   dedo. As NFs dessas empresas são dele. Quem originou a relação continua dono dela
  *   mesmo que a empresa mude de porte ou de estado.
  *
- *   CLOSER trabalha CONTA, e recebe por RECORTE: UF e faixa de faturamento. Quem fecha
- *   negócio é alocado por perfil de cliente, não por relação prévia.
+ *   CLOSER trabalha CONTA, e recebe por RECORTE: UF e faixa de faturamento. Além disso
+ *   carrega uma CARTEIRA DE PASSIVAS — contas que antecipam sozinhas e cujo volume é a
+ *   comissão dele. As duas coisas convivem: o recorte diz que negócio novo cai nele, a
+ *   carteira diz que conta antiga ele mantém.
  *
  *   SDR também tem recorte, mas para a distribuição semanal — não para nota.
  *
@@ -36,7 +43,7 @@ import type { Tables } from '@jobsiteos/core'
 const SETTINGS_POR_TIPO: Record<TipoVendedorId, string> = {
   sdr: 'Recebe empresas na distribuição semanal, dentro do território e da cota.',
   originador: 'Recebe as NFs das empresas que você escolher abaixo. Nada de território.',
-  vendedor: 'Recebe contas por território — UF e faixa de faturamento.',
+  vendedor: 'Recebe contas por território, e gere as contas passivas da carteira dele.',
 }
 
 /** Território é do closer (recorte de conta) e do SDR (recorte de distribuição). */
@@ -55,31 +62,81 @@ export interface EmpresaEscolhida {
   gestao_operacao: string | null
 }
 
-/** Só cliente em prospecção ativa entra na carteira — ver a nota do componente. */
-function elegivel(e: { estagio: string; gestao_operacao: string | null }): boolean {
-  return e.estagio === 'cliente' && e.gestao_operacao === 'prospeccao_ativa'
-}
+const COLUNAS_EMPRESA = 'id, razao_social, cnpj, uf, estagio, gestao_operacao'
 
 /**
- * A carteira explícita do originador: as empresas cujas NFs vão para ele.
+ * As duas carteiras que se montam a partir do vendedor, e o que cada uma pode conter.
  *
- * A busca só devolve **cliente em prospecção ativa**, e o recorte não é conveniência —
- * é o conjunto das empresas cuja nota pode, de fato, ser roteada:
+ * O recorte é do BANCO, não da tela: filtrar depois de buscar devolveria vinte linhas e
+ * mostraria três, e a pessoa concluiria que a busca está quebrada.
  *
- *   quem não é cliente não emite nota no nosso funil, então uma carteira cheia delas é
- *   uma carteira que nunca entrega trabalho;
- *
- *   quem é passivo tem a nota descartada antes de o roteador olhar carteira nenhuma —
- *   adicionar uma passiva criaria uma linha que promete trabalho e nunca entrega, e o
- *   originador só descobriria ao notar que a nota nunca chega.
- *
- * Empresa já escolhida que DEIXOU de ser elegível continua na lista, marcada: tirá-la
- * sozinho seria decidir por quem cadastrou, e a marca é o que faz alguém revisar.
+ * `aviso` existe porque empresa já escolhida que DEIXOU de ser elegível continua na
+ * lista, marcada. Tirá-la sozinho seria decidir por quem cadastrou; a marca é o que faz
+ * alguém revisar.
  */
-function CarteiraOriginador({
+interface ReguaCarteira {
+  titulo: string
+  explicacao: React.ReactNode
+  vazio: string
+  semResultado: string
+  /** Recorte aplicado na consulta. */
+  recorte: (q: ReturnType<typeof consultaBase>) => ReturnType<typeof consultaBase>
+  elegivel: (e: EmpresaEscolhida) => boolean
+  aviso: (e: EmpresaEscolhida) => string | null
+}
+
+function consultaBase() {
+  return createClient().from('empresas').select(COLUNAS_EMPRESA)
+}
+
+const REGUA_ORIGINACAO: ReguaCarteira = {
+  titulo: 'Carteira de originação',
+  explicacao: (
+    <>
+      As NFs destas empresas — como sacado OU como fornecedor — são roteadas para este
+      originador. A busca só mostra <strong>cliente em prospecção ativa</strong>: quem não é
+      cliente não emite nota no funil, e a nota de passivo é descartada antes do roteamento.
+    </>
+  ),
+  vazio: 'Nenhuma empresa ainda — sem carteira, nenhuma nota é roteada para ele.',
+  semResultado:
+    'Nenhum cliente em prospecção ativa com esse nome ou CNPJ. A gestão da conta se define na ' +
+    'ficha da empresa, seção Comercial.',
+  recorte: (q) => q.eq('estagio', 'cliente').eq('gestao_operacao', 'prospeccao_ativa'),
+  elegivel: (e) => e.estagio === 'cliente' && e.gestao_operacao === 'prospeccao_ativa',
+  aviso: (e) =>
+    e.gestao_operacao === 'passivo'
+      ? 'virou PASSIVA — a nota não é roteada'
+      : e.estagio !== 'cliente'
+        ? 'não é mais cliente ativo'
+        : null,
+}
+
+const REGUA_PASSIVAS: ReguaCarteira = {
+  titulo: 'Contas passivas na carteira',
+  explicacao: (
+    <>
+      Contas que antecipam sozinhas e que este closer mantém. O <strong>volume antecipado
+      por elas no mês</strong> é o que gera a comissão dele — não há NF roteada nem funil.
+      Entrar aqui marca a empresa como passiva; sair devolve a gestão a &quot;não
+      definido&quot;, porque parar de gerir não é decidir prospectar.
+    </>
+  ),
+  vazio: 'Nenhuma conta passiva — a comissão por volume dele será zero.',
+  semResultado:
+    'Nenhum cliente ou ex-cliente com esse nome ou CNPJ. Só quem antecipa (ou antecipou) ' +
+    'pode ser conta passiva.',
+  recorte: (q) => q.in('estagio', ['cliente', 'ex_cliente']),
+  elegivel: (e) => e.estagio === 'cliente' || e.estagio === 'ex_cliente',
+  aviso: (e) => (e.estagio === 'ex_cliente' ? 'ex-cliente — volume tende a zero' : null),
+}
+
+function SeletorEmpresas({
+  regua,
   escolhidas,
   onChange,
 }: {
+  regua: ReguaCarteira
   escolhidas: EmpresaEscolhida[]
   onChange: (e: EmpresaEscolhida[]) => void
 }) {
@@ -93,25 +150,17 @@ function CarteiraOriginador({
     if (t.length < 3) return
     setBuscando(true)
     const digitos = t.replace(/\D/g, '')
-    const supabase = createClient()
-    const q = supabase
-      .from('empresas')
-      .select('id, razao_social, cnpj, uf, estagio, gestao_operacao')
-      // O recorte é do BANCO, não da tela: filtrar depois de buscar devolveria vinte
-      // linhas e mostraria três, e a pessoa concluiria que a busca está quebrada.
-      .eq('estagio', 'cliente')
-      .eq('gestao_operacao', 'prospeccao_ativa')
-      .limit(20)
+    const q = regua.recorte(consultaBase())
     const { data } = digitos.length >= 6
-      ? await q.like('cnpj', `${digitos}%`)
-      : await q.ilike('razao_social', `%${t}%`)
+      ? await q.like('cnpj', `${digitos}%`).limit(20)
+      : await q.ilike('razao_social', `%${t}%`).limit(20)
     setAchadas((data ?? []) as EmpresaEscolhida[])
     setBuscou(true)
     setBuscando(false)
   }
 
   function adicionar(e: EmpresaEscolhida) {
-    if (!elegivel(e)) return
+    if (!regua.elegivel(e)) return
     if (escolhidas.some((x) => x.id === e.id)) return
     onChange([...escolhidas, e])
     setAchadas([])
@@ -121,13 +170,8 @@ function CarteiraOriginador({
 
   return (
     <div className="space-y-3 rounded-md border p-3">
-      <p className="text-sm font-medium">Carteira de originação</p>
-      <p className="text-xs text-muted-foreground">
-        As NFs destas empresas — como sacado OU como fornecedor — são roteadas para este
-        originador. A busca só mostra <strong>cliente em prospecção ativa</strong>: quem não
-        é cliente não emite nota no funil, e a nota de passivo é descartada antes do
-        roteamento.
-      </p>
+      <p className="text-sm font-medium">{regua.titulo}</p>
+      <p className="text-xs text-muted-foreground">{regua.explicacao}</p>
 
       <div className="flex min-w-0 gap-2">
         <Input
@@ -149,10 +193,7 @@ function CarteiraOriginador({
       </div>
 
       {buscou && achadas.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          Nenhum cliente em prospecção ativa com esse nome ou CNPJ. A gestão da conta se
-          define na ficha da empresa, aba Dados.
-        </p>
+        <p className="text-xs text-muted-foreground">{regua.semResultado}</p>
       )}
 
       {achadas.length > 0 && (
@@ -178,35 +219,87 @@ function CarteiraOriginador({
       )}
 
       {escolhidas.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Nenhuma empresa ainda — sem carteira, nenhuma nota é roteada para ele.
-        </p>
+        <p className="text-xs text-muted-foreground">{regua.vazio}</p>
       ) : (
         <ul className="divide-y overflow-hidden rounded-md border">
-          {escolhidas.map((e) => (
-            <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {e.uf ?? '—'}
-                  {/* Deixou de ser elegível depois de escolhida: a nota dela não chega
-                      mais, e sem a marca ninguém descobriria isso. */}
-                  {!elegivel(e)
-                    ? e.gestao_operacao === 'passivo'
-                      ? ' · virou PASSIVA — a nota não é roteada'
-                      : ' · não é mais cliente ativo'
-                    : ''}
+          {escolhidas.map((e) => {
+            const aviso = regua.aviso(e)
+            return (
+              <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {e.uf ?? '—'}
+                    {aviso ? ` · ${aviso}` : ''}
+                  </span>
                 </span>
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 shrink-0 text-xs"
-                onClick={() => onChange(escolhidas.filter((x) => x.id !== e.id))}
-              >
-                Remover
-              </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 text-xs"
+                  onClick={() => onChange(escolhidas.filter((x) => x.id !== e.id))}
+                >
+                  Remover
+                </Button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Quais painéis este vendedor pode abrir além do próprio.
+ *
+ * Não é preferência de tela: desde a 0095 a RLS de funil, agenda e comissão lê esta
+ * lista. Marcar aqui é conceder leitura de verdade — e só leitura, porque ver o funil
+ * do outro não é agir em nome dele.
+ */
+function AcessosCruzados({
+  vendedorId,
+  vendedores,
+  concedidos,
+  onChange,
+}: {
+  vendedorId: string | null
+  vendedores: readonly Tables<'vendedores'>[]
+  concedidos: Set<string>
+  onChange: (s: Set<string>) => void
+}) {
+  const outros = vendedores.filter((v) => v.ativo && v.id !== vendedorId)
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <p className="text-sm font-medium">Pode ver o painel de</p>
+      <p className="text-xs text-muted-foreground">
+        Funil, agenda e comissão de quem estiver marcado. Somente leitura. Admin e Comercial
+        enxergam todos sem precisar de marca aqui.
+      </p>
+      {outros.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Não há outro vendedor cadastrado ainda.</p>
+      ) : (
+        <ul className="space-y-1">
+          {outros.map((v) => (
+            <li key={v.id}>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={concedidos.has(v.id)}
+                  onChange={(e) => {
+                    const s = new Set(concedidos)
+                    if (e.target.checked) s.add(v.id)
+                    else s.delete(v.id)
+                    onChange(s)
+                  }}
+                />
+                {v.nome}
+                <span className="text-xs text-muted-foreground">
+                  {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
+                </span>
+              </label>
             </li>
           ))}
         </ul>
@@ -227,15 +320,22 @@ export interface VendedorFormProps {
   /** null = novo. */
   vendedor: Tables<'vendedores'> | null
   territorio: Tables<'vendedor_territorios'> | null
+  /** Para a lista de acessos cruzados — quem existe para ser enxergado. */
+  vendedores: readonly Tables<'vendedores'>[]
 }
 
-export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: VendedorFormProps) {
+export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vendedores }: VendedorFormProps) {
   const qc = useQueryClient()
   const [salvando, setSalvando] = React.useState(false)
   const [erro, setErro] = React.useState<string | null>(null)
   const [tipo, setTipo] = React.useState<TipoVendedorId>((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
   const [ehIa, setEhIa] = React.useState(vendedor?.is_ia ?? false)
   const [escolhidas, setEscolhidas] = React.useState<EmpresaEscolhida[]>([])
+  const [passivas, setPassivas] = React.useState<EmpresaEscolhida[]>([])
+  const [acessos, setAcessos] = React.useState<Set<string>>(new Set())
+  // O estado inicial guardado para o diff: `app_salvar_acesso_vendedor` concede ou revoga
+  // um par por vez, então só o que mudou vira chamada.
+  const acessosIniciais = React.useRef<Set<string>>(new Set())
 
   const usuarios = useQuery({ queryKey: ['comercial', 'usuarios'], queryFn: buscarUsuarios, enabled: aberto })
 
@@ -244,17 +344,44 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
     setTipo((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
     setEhIa(vendedor?.is_ia ?? false)
     setErro(null)
-    // A carteira guarda só ids; a tela precisa dos nomes para ser legível.
+
+    // A carteira de originação guarda só ids nas settings; a tela precisa dos nomes.
     const ids = ((vendedor?.settings ?? {}) as { empresas_escolhidas?: string[] }).empresas_escolhidas ?? []
-    if (ids.length === 0) {
-      setEscolhidas([])
+    if (ids.length === 0) setEscolhidas([])
+    else {
+      void createClient().from('empresas').select(COLUNAS_EMPRESA).in('id', ids)
+        .then(({ data }) => setEscolhidas((data ?? []) as EmpresaEscolhida[]))
+    }
+
+    if (!vendedor) {
+      setPassivas([])
+      setAcessos(new Set())
+      acessosIniciais.current = new Set()
       return
     }
+
+    // A carteira de passivas mora em `vendedor_carteira` — temporal, porque é ela que a
+    // comissão consulta na data do evento. Ler das settings daria a foto de hoje.
     void createClient()
-      .from('empresas')
-      .select('id, razao_social, cnpj, uf, estagio, gestao_operacao')
-      .in('id', ids)
-      .then(({ data }) => setEscolhidas((data ?? []) as EmpresaEscolhida[]))
+      .from('vendedor_carteira')
+      .select(`empresa_id, empresas(${COLUNAS_EMPRESA})`)
+      .eq('vendedor_id', vendedor.id)
+      .eq('papel', 'gestao_passiva')
+      .is('ate', null)
+      .then(({ data }) => {
+        const linhas = (data ?? []) as unknown as { empresas: EmpresaEscolhida | null }[]
+        setPassivas(linhas.map((l) => l.empresas).filter((e): e is EmpresaEscolhida => e !== null))
+      })
+
+    void createClient()
+      .from('vendedor_acessos')
+      .select('pode_ver_vendedor_id')
+      .eq('vendedor_id', vendedor.id)
+      .then(({ data }) => {
+        const s = new Set((data ?? []).map((a) => a.pode_ver_vendedor_id))
+        setAcessos(s)
+        acessosIniciais.current = new Set(s)
+      })
   }, [aberto, vendedor])
 
   const settings = (vendedor?.settings ?? {}) as { direcao?: string; empresas_por_semana?: number }
@@ -297,25 +424,60 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
       return
     }
 
+    const id = r.data.id ?? vendedor?.id
+    if (!id) {
+      setSalvando(false)
+      setErro('O vendedor foi salvo, mas o id não voltou — recarregue e edite de novo.')
+      return
+    }
+
     // Território na mesma submissão. Só para quem recebe por recorte — o originador
     // recebe por escolha, e um território nele seria um campo que não faz nada.
-    const id = r.data.id ?? vendedor?.id
-    if (id && TEM_TERRITORIO[tipo]) {
+    if (TEM_TERRITORIO[tipo]) {
       const ufs = String(fd.get('ufs') ?? '')
         .split(',')
         .map((u) => u.trim().toUpperCase())
         .filter(Boolean)
-      const min = fd.get('fat_min') ? Number(fd.get('fat_min')) : null
-      const max = fd.get('fat_max') ? Number(fd.get('fat_max')) : null
       const t = await salvarTerritorioAction({
         vendedor_id: id,
         ufs,
-        faturamento_min: min,
-        faturamento_max: max,
+        faturamento_min: fd.get('fat_min') ? Number(fd.get('fat_min')) : null,
+        faturamento_max: fd.get('fat_max') ? Number(fd.get('fat_max')) : null,
       })
       if (!t.ok) {
         setSalvando(false)
         setErro(t.message)
+        return
+      }
+    }
+
+    // A carteira de passivas vai SEMPRE que o tipo é closer, inclusive vazia: a lista
+    // vazia é o jeito de esvaziar a carteira, e pular a chamada faria "removi todas"
+    // não gravar nada.
+    if (tipo === 'vendedor') {
+      const c = await definirCarteiraPassivaAction({
+        vendedor_id: id,
+        empresa_ids: passivas.map((p) => p.id),
+      })
+      if (!c.ok) {
+        setSalvando(false)
+        setErro(c.message)
+        return
+      }
+    }
+
+    for (const outro of new Set([...acessos, ...acessosIniciais.current])) {
+      const antes = acessosIniciais.current.has(outro)
+      const agora = acessos.has(outro)
+      if (antes === agora) continue
+      const a = await salvarAcessoAction({
+        vendedor_id: id,
+        pode_ver_vendedor_id: outro,
+        conceder: agora,
+      })
+      if (!a.ok) {
+        setSalvando(false)
+        setErro(a.message)
         return
       }
     }
@@ -462,11 +624,19 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
             )}
 
             {tipo === 'originador' && (
-              <CarteiraOriginador
-                escolhidas={escolhidas}
-                onChange={setEscolhidas}
-              />
+              <SeletorEmpresas regua={REGUA_ORIGINACAO} escolhidas={escolhidas} onChange={setEscolhidas} />
             )}
+
+            {tipo === 'vendedor' && (
+              <SeletorEmpresas regua={REGUA_PASSIVAS} escolhidas={passivas} onChange={setPassivas} />
+            )}
+
+            <AcessosCruzados
+              vendedorId={vendedor?.id ?? null}
+              vendedores={vendedores}
+              concedidos={acessos}
+              onChange={setAcessos}
+            />
 
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="ativo" defaultChecked={vendedor?.ativo ?? true} />

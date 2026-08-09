@@ -8,6 +8,7 @@ import {
   salvarRegraSchema,
   salvarTerritorioSchema,
   salvarVendedorSchema,
+  definirCarteiraPassivaSchema,
   definirCarteiraSchema,
   definirGestaoSchema,
   moverLeadSchema,
@@ -34,6 +35,22 @@ export async function definirGestaoOperacao(supabase: Supabase, input: unknown) 
 export async function definirCarteira(supabase: Supabase, input: unknown) {
   const dados = definirCarteiraSchema.parse(input)
   const { data, error } = await supabase.rpc('app_definir_carteira', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/**
+ * A carteira passiva inteira de um closer, numa chamada.
+ *
+ * O RPC recusa o lote todo se alguma empresa não puder ser passiva. É o comportamento
+ * certo para uma tela que mostra uma lista: gravar as boas e ignorar as ruins deixaria
+ * o formulário exibindo um sucesso que não corresponde ao que ficou no banco.
+ */
+export async function definirCarteiraPassiva(supabase: Supabase, input: unknown) {
+  const dados = definirCarteiraPassivaSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_definir_carteira_passiva', {
+    p: dados as unknown as Json,
+  })
   if (error) throw new Error(error.message)
   return data
 }

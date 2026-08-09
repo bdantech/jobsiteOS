@@ -50,6 +50,11 @@ export interface FiltrosFunil {
   estagio?: EstagioFunil | 'encerradas'
   /** Traz de volta o que a regra de natureza ocultou. Para auditoria, não para o dia a dia. */
   incluirNaoOperaveis?: boolean
+  /**
+   * Só as notas roteadas para este vendedor. É o que separa "o funil de NFs do
+   * originador" da fila inteira, que é a tela do gestor.
+   */
+  vendedorId?: string
 }
 
 /**
@@ -92,6 +97,7 @@ export async function buscarFunil(
   else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)
   else query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
 
+  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
   if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
   if (typeof filtros.valorMin === 'number') query = query.gte('valor', filtros.valorMin)

@@ -59,7 +59,11 @@ const TITULO_COLUNA: Record<string, string> = {
   encerradas: 'Encerradas',
 }
 
-export function FunilKanban() {
+/**
+ * `vendedorId` recorta o mesmo Kanban para UMA carteira — é o funil de NFs do
+ * originador. Mesma tela, mesmas ações: o trabalho é idêntico, o que muda é o escopo.
+ */
+export function FunilKanban({ vendedorId }: { vendedorId?: string } = {}) {
   const [termo, setTermo] = React.useState('')
   const [faixa, setFaixa] = React.useState<Faixa | undefined>()
   const [tipagem, setTipagem] = React.useState<Tipagem | undefined>()
@@ -74,8 +78,8 @@ export function FunilKanban() {
     (config?.funil as { minimo_operavel_dias?: number } | undefined)?.minimo_operavel_dias ?? 7
 
   const base: FiltrosFunil = React.useMemo(
-    () => ({ termo: termoDebounced || undefined, faixa, tipagem }),
-    [termoDebounced, faixa, tipagem],
+    () => ({ termo: termoDebounced || undefined, faixa, tipagem, vendedorId }),
+    [termoDebounced, faixa, tipagem, vendedorId],
   )
 
   const colunas = useQueries({

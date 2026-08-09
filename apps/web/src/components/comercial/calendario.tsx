@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { gerarTokenIcsAction } from '@/actions/comercial'
-import { buscarAgenda, buscarVendedores, comercialKeys } from './queries'
+import { buscarAgenda, buscarVendedoresVisiveis, comercialKeys } from './queries'
 
 /**
  * Calendário interno (v1): a agenda que sai dos funis, por dia.
@@ -36,11 +36,9 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
   const [link, setLink] = React.useState<string | null>(null)
   const [gerando, setGerando] = React.useState(false)
 
-  const vendedores = useQuery({
-    queryKey: comercialKeys.vendedores(),
-    queryFn: buscarVendedores,
-    enabled: ehGestor,
-  })
+  // Quem eu posso ABRIR, não quem existe: um nome no seletor cuja agenda a RLS devolve
+  // vazia ensina que a tela está quebrada.
+  const vendedores = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const agenda = useQuery({
     queryKey: comercialKeys.agenda(vendedorId),
     queryFn: () => buscarAgenda(vendedorId),
@@ -69,12 +67,12 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
           <p className="text-sm text-muted-foreground">Reuniões dos funis, da semana passada em diante.</p>
         </div>
         <div className="flex items-center gap-2">
-          {ehGestor && (
+          {(ehGestor || (vendedores.data ?? []).length > 1) && (
             <Select value={vendedorId ?? 'eu'} onValueChange={(v) => setVendedorId(v === 'eu' ? null : v)}>
               <SelectTrigger className="w-52"><SelectValue placeholder="Minha agenda" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="eu">Minha agenda</SelectItem>
-                {(vendedores.data ?? []).filter((v) => v.ativo).map((v) => (
+                {(vendedores.data ?? []).map((v) => (
                   <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
                 ))}
               </SelectContent>

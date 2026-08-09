@@ -23,6 +23,20 @@ export const GESTAO_OPERACAO_DESCRICOES: Record<GestaoOperacao, string> = {
     'originação e não contam na distribuição — só o volume, na comissão de quem a gere.',
 }
 
+/**
+ * A pergunta ativo × passivo só existe para quem antecipa (ou antecipou) conosco.
+ *
+ * Numa empresa de mercado ela não tem resposta possível, e responder assim mesmo tem
+ * efeito real: `passivo` a tira da distribuição do SDR — um rótulo sem sentido
+ * bloquearia exatamente a prospecção que deveria acontecer. O banco garante isso com
+ * CHECK e trigger; aqui é a mesma régua, para a tela não oferecer o que será recusado.
+ */
+export const ESTAGIOS_COM_GESTAO = ['cliente', 'ex_cliente'] as const
+
+export function aceitaGestaoOperacao(empresa: { estagio?: string | null }): boolean {
+  return ESTAGIOS_COM_GESTAO.includes((empresa.estagio ?? '') as (typeof ESTAGIOS_COM_GESTAO)[number])
+}
+
 // ─── Vendedores ─────────────────────────────────────────────────────────────
 
 export const TIPOS_VENDEDOR = ['sdr', 'vendedor', 'originador'] as const
@@ -190,6 +204,19 @@ export const definirGestaoSchema = z.object({
   vendedor_gestao_id: uuid.nullable().optional(),
 })
 export type DefinirGestaoInput = z.infer<typeof definirGestaoSchema>
+
+/**
+ * A carteira de contas passivas de um closer, como CONJUNTO.
+ *
+ * Conjunto e não delta: um delta obrigaria a tela a saber o que mudou desde que
+ * carregou, e duas abas abertas gravariam metade da intenção cada uma. Mandar a lista
+ * inteira faz a última gravação ser a verdade, que é o que a pessoa espera.
+ */
+export const definirCarteiraPassivaSchema = z.object({
+  vendedor_id: uuid,
+  empresa_ids: z.array(uuid).default([]),
+})
+export type DefinirCarteiraPassivaInput = z.infer<typeof definirCarteiraPassivaSchema>
 
 export const definirCarteiraSchema = z.object({
   empresa_id: uuid,

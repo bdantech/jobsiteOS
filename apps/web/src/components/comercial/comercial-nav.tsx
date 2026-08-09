@@ -2,16 +2,26 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Coins, Inbox, LayoutDashboard, Settings, Target, Users } from 'lucide-react'
+import {
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, Target, Users,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
  * Navegação do Comercial. Ao contrário dos outros módulos, o que aparece aqui depende
- * do TIPO do vendedor logado: um SDR não tem funil de vendas, e um originador não tem
- * funil de reuniões. Mostrar as duas abas vazias para os dois seria uma tela que
- * ensina errado sobre o próprio trabalho.
+ * do TIPO do vendedor logado — e a ORDEM também: o funil é sempre a primeira aba.
  *
- * Gestor (Admin/Comercial) vê tudo — é ele quem atribui a fila e aprova a comissão.
+ * A ordem não é estética. Estas abas são o dia de trabalho de alguém, e o dia começa no
+ * funil: é lá que está a próxima ação. Calendário, comissão e carteira são consulta —
+ * abrir o módulo neles seria abrir o trabalho pela contabilidade dele.
+ *
+ * Cada tipo vê o seu conjunto:
+ *   SDR         funil de reuniões · calendário · comissão
+ *   Originador  funil de NFs · carteira · comissão
+ *   Closer      funil de vendas · calendário · comissão · passivas na carteira
+ *
+ * Gestor (Admin/Comercial) vê tudo — é ele quem atribui a fila e aprova a comissão — e
+ * ganha "Painel" no fim, que é a tela de olhar o trabalho dos outros.
  */
 
 interface ItemNav {
@@ -21,15 +31,25 @@ interface ItemNav {
   /** Tipos de vendedor para quem o item faz sentido. Vazio = todos. */
   tipos?: readonly string[]
   somenteGestor?: boolean
+  /** Rótulo diferente por tipo, quando a mesma tela responde a perguntas diferentes. */
+  labelPorTipo?: Record<string, string>
 }
 
 const ITENS: readonly ItemNav[] = [
-  { href: '/comercial', label: 'Meu Painel', icon: LayoutDashboard },
-  { href: '/comercial/sdr', label: 'Reuniões', icon: Target, tipos: ['sdr'] },
+  { href: '/comercial/sdr', label: 'Funil de reuniões', icon: Target, tipos: ['sdr'] },
   { href: '/comercial/vendas', label: 'Funil de vendas', icon: Users, tipos: ['vendedor'] },
-  { href: '/comercial/fila', label: 'Fila sem dono', icon: Inbox, somenteGestor: true },
+  { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
-  { href: '/comercial/comissoes', label: 'Comissões', icon: Coins },
+  { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
+  {
+    href: '/comercial/carteira',
+    label: 'Carteira',
+    icon: Briefcase,
+    tipos: ['originador', 'vendedor'],
+    labelPorTipo: { originador: 'Empresas da carteira', vendedor: 'Passivas na carteira' },
+  },
+  { href: '/comercial/fila', label: 'Fila sem dono', icon: Inbox, somenteGestor: true },
+  { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },
 ]
 
@@ -38,15 +58,18 @@ export function ComercialNav({ tipo, ehGestor }: { tipo: string | null; ehGestor
   const itens = ITENS.filter((i) => {
     if (i.somenteGestor && !ehGestor) return false
     if (!i.tipos) return true
-    // Gestor enxerga os dois funis mesmo sem ser vendedor de nenhum tipo.
+    // Gestor enxerga todos os funis mesmo sem ser vendedor de nenhum tipo.
     return ehGestor || (tipo !== null && i.tipos.includes(tipo))
   })
 
   return (
     <nav aria-label="Seções do Comercial" className="mb-6 flex gap-1 overflow-x-auto border-b border-border pb-px">
       {itens.map((item) => {
-        const ativo = item.href === '/comercial' ? pathname === '/comercial' : pathname.startsWith(item.href)
+        const ativo = pathname === item.href || pathname.startsWith(`${item.href}/`)
         const Icon = item.icon
+        // Sem tipo (gestor puro), o rótulo genérico: "Empresas da carteira" e "Passivas na
+        // carteira" são a mesma tela, e prometer uma das duas para quem vê as duas mente.
+        const label = (tipo && item.labelPorTipo?.[tipo]) || item.label
         return (
           <Link
             key={item.href}
@@ -59,7 +82,7 @@ export function ComercialNav({ tipo, ehGestor }: { tipo: string | null; ehGestor
             )}
           >
             <Icon className="h-4 w-4" />
-            {item.label}
+            {label}
           </Link>
         )
       })}

@@ -17,8 +17,23 @@ A segunda ideia: **passivo é passivo de verdade.** Não é filtro visual.
 
 ## Ativo × passivo
 
-`empresas.gestao_operacao` ∈ {`prospeccao_ativa`, `passivo`, null}. Aplica-se a sacados;
-`null` significa "a pergunta ainda não existe" (não-cliente).
+`empresas.gestao_operacao` ∈ {`prospeccao_ativa`, `passivo`, null}. **Só existe para
+`estagio` ∈ {`cliente`, `ex_cliente`}** — a pergunta "esta conta é trabalhada ou antecipa
+sozinha?" pressupõe uma conta que antecipa. Numa empresa de mercado ela não tem resposta
+possível, e responder assim mesmo teria efeito real: `passivo` a tira da distribuição do
+SDR, ou seja, um rótulo sem sentido bloquearia a prospecção que deveria acontecer.
+
+Garantido em três camadas (0095): CHECK na tabela, trigger `empresas_gestao_so_cliente`
+que LIMPA a gestão quando o estágio sai da régua, e recusa em português no
+`app_definir_gestao_operacao`. O trigger limpa em vez de recusar porque quem rebaixa um
+ex-cliente para `mercado` está corrigindo o cadastro, não mexendo no comercial — um CHECK
+sozinho transformaria a operação legítima em violação de constraint.
+
+Um segundo trigger (`empresas_fecha_gestao_passiva`) encerra a vigência em
+`vendedor_carteira` no mesmo movimento. Carteira órfã é pior que carteira errada: a
+comissão de volume lê a vigência e não olha `gestao_operacao`, então uma linha vigente
+sobrevivente continuaria pagando gestão de uma conta que ninguém gere — e o valor
+apareceria na folha do mesmo jeito de sempre.
 
 Efeitos reais de `passivo`:
 
@@ -43,12 +58,26 @@ A distinção organiza o módulo inteiro:
 |---|---|---|---|
 | **Originador** | NOTA | escolha — lista de empresas a dedo | carteira, no cadastro do vendedor |
 
-| **Closer** | CONTA | recorte — UF + faixa de faturamento | território, no cadastro do vendedor |
+| **Closer** | CONTA + contas passivas | recorte — UF + faixa de faturamento; passivas por escolha | território **e** carteira de passivas, no cadastro do vendedor |
 | **SDR** | LEAD | recorte, para a distribuição semanal | território + direção + cota |
 
 Quem originou a relação continua dono dela mesmo que a empresa mude de porte ou de
 estado — por isso o originador recebe por escolha. Quem fecha negócio é alocado por
 perfil de cliente — por isso o closer recebe por recorte.
+
+O closer acumula as duas formas, e elas não competem: o **recorte** diz que negócio novo
+cai nele, a **carteira de passivas** diz que conta antiga ele mantém. A segunda é o
+insumo da comissão por volume — sem ela, o closer só recebe por venda nova.
+
+A carteira de passivas se monta por dois caminhos, e é o mesmo fato visto de dois lados:
+pela **ficha da empresa** ("quem cuida desta conta") e pelo **cadastro do vendedor**
+("quais contas são deste closer", que é a pergunta de quem monta carteira). O RPC
+`app_definir_carteira_passiva` recebe o CONJUNTO inteiro, não um delta — um delta
+obrigaria a tela a saber o que mudou desde que carregou, e duas abas abertas gravariam
+metade da intenção cada uma. Entrar marca a empresa como passiva; **sair devolve a "não
+definido"**, não a "prospecção ativa": parar de gerir passivamente não é decidir
+prospectar, e inventar a segunda afirmação colocaria a conta na fila do SDR sem ninguém
+ter pedido.
 
 A carteira do originador só aceita **cliente em prospecção ativa**, e o recorte é o
 conjunto das empresas cuja nota pode de fato ser roteada: quem não é cliente não emite
@@ -196,14 +225,64 @@ O feed carrega **só título e horário**. Um link de assinatura vaza com facili
 vaza junto tem que ser inócuo. Token inexistente e token revogado devolvem o mesmo 404:
 distinguir os dois diria a quem tropeçou no link que ele existiu, e para quem.
 
+## As abas de cada tipo
+
+A navegação do módulo é montada pelo TIPO do vendedor logado, e a **primeira aba é sempre
+o funil**:
+
+| tipo | abas, nesta ordem |
+|---|---|
+| **SDR** | Funil de reuniões · Calendário · Comissão |
+| **Originador** | Funil de NFs · Empresas da carteira · Comissão |
+| **Closer** | Funil de vendas · Calendário · Comissão · Passivas na carteira |
+| **Gestor** | tudo acima, mais Fila sem dono, Painel e Configurações |
+
+A ordem não é estética. Estas abas são o dia de trabalho de alguém, e o dia começa no
+funil: é lá que está a próxima ação. Calendário, comissão e carteira são consulta — abrir
+o módulo neles seria abrir o trabalho pela contabilidade dele.
+
+`/comercial` não é tela: é o despacho para o funil de quem entrou (gestor sem cadastro de
+vendedor cai no Painel, que para ele É a tela inicial — o trabalho dele é olhar o dos
+outros). Redirecionar em vez de renderizar mantém UMA url por funil; duas rotas pintando a
+mesma tela deixariam a aba ativa piscando conforme o caminho de entrada.
+
+O **funil de NFs** do originador é o mesmo Kanban da Antecipação recortado por
+`vendedor_id`. Mesma tela e mesmas ações de propósito: o trabalho sobre uma nota é
+idêntico, o que muda é de quem ela é — uma segunda tela "igual mas do originador"
+duplicaria as regras de conversão e perda, que são exatamente as que não podem divergir.
+A nota vive sob a RLS do módulo `antecipacao`, não do `comercial`; quem tem só o Comercial
+recebe uma explicação em vez de um Kanban vazio, porque funil vazio e carteira vazia são
+conclusões diferentes sobre o próprio trabalho.
+
+A **carteira** é uma tela só para os dois papéis, com a coluna que muda: o originador vê
+NFs vivas (empresa sem nota viva é cadastro que não virou trabalho), o closer vê volume
+antecipado no mês (é literalmente o insumo da comissão dele). Nenhuma das duas se edita
+ali — carteira se monta em Configurações ou na ficha da empresa, e um terceiro lugar seria
+mais um jeito de a mesma decisão divergir.
+
 ## Permissões
 
-Leitura: quem tem o módulo lê tudo — é uma equipe pequena onde o funil do colega é
-contexto de trabalho. O que ninguém pode é **agir em nome do outro**, e isso vem da
-ausência de grant de escrita (toda mutação passa por RPC), não de policy.
+Escrita: ninguém escreve direto. Nenhuma tabela do módulo tem grant de insert/update para
+`authenticated`, e toda mutação passa por RPC — é assim que "agir em nome do outro" fica
+impossível sem depender de policy.
 
-A exceção é `comissao_lancamentos`: dinheiro de pessoa. Cada um vê o seu, mais os acessos
-cruzados de `vendedor_acessos`, mais Admin e Comercial.
+Leitura: `vendedor_acessos` decide. Desde a 0095 ele vale para **funil de reuniões, funil
+de vendas, agenda e comissão** — antes só filtrava comissão, e todo o resto era visível
+para quem tivesse o módulo. Isso era verdade enquanto o módulo só existia para Admin e
+Comercial, que são gestores e veem tudo por definição; no instante em que existe um perfil
+de vendedor, "quem eu enxergo" vira uma decisão — e uma decisão que só vale na tela não é
+decisão, porque basta a URL do outro funil para contorná-la.
+
+Duas exceções deliberadas na policy de `sdr_leads`: quem vê o lead é o SDR dono **ou** o
+closer destino. Sem a segunda, o closer abriria uma reunião sem conseguir ler de onde ela
+veio.
+
+O cadastro de pessoas (`vendedores`) continua legível para quem tem o módulo — um roster
+não é segredo. O que muda é **abrir o painel** de alguém, e é por isso que os seletores da
+tela se montam com `comercial_vendedores_visiveis()` e não com a lista de vendedores:
+oferecer um nome cujo funil a RLS devolve vazio ensina que a tela está quebrada.
+
+A visibilidade cruzada se concede no cadastro do vendedor, em "Pode ver o painel de".
 
 ## Mobile
 
@@ -218,8 +297,8 @@ de gestor, e nenhuma das duas acontece entre uma reunião e outra.
 ## O que ficou de fora
 
 - **Toggle "ocultar NFs de sacados passivos" no funil de NFs.** O efeito real do passivo
-  (sem outbox, sem roteamento) está implementado; o filtro visual precisa de
-  `gestao_operacao` na view `notas_funil`, que é uma migração de view inteira.
+  (sem outbox, sem roteamento) está implementado. A coluna que faltava
+  (`sacado_gestao_operacao`) já entrou na view em 0095; falta só o controle na tela.
 - Envio real de mensagens, automação do vendedor de IA, OAuth do Google Calendar, metas e
   forecast, comissão de gestor — todos Prompt 05+, como o próprio 04g define.
 
@@ -233,9 +312,11 @@ inativa. Apagar qualquer um dos três levaria junto a explicação de uma comiss
 
 Três decisões que a tela toma por quem usa:
 
-- **Território é salvo junto com o vendedor**, na mesma submissão. Em telas separadas, o
-  estado mais provável é originador ativo com território em branco — que não casa com
-  nada e não diz por quê.
+- **Território, carteira e acessos são salvos junto com o vendedor**, na mesma submissão.
+  Em telas separadas, o estado mais provável é originador ativo com território em branco —
+  que não casa com nada e não diz por quê. A carteira de passivas vai **sempre** que o
+  tipo é closer, inclusive vazia: a lista vazia é como se esvazia a carteira, e pular a
+  chamada faria "removi todas" não gravar nada.
 - **Regra nova encerra a anterior na véspera.** A busca por vigência já resolveria a
   sobreposição pela data de início, mas duas regras vigentes ao mesmo tempo é o estado
   que faz alguém conferir a folha e não conseguir explicar o número.

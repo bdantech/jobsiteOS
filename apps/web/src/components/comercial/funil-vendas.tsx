@@ -20,7 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { moverVendaAction } from '@/actions/comercial'
 import {
-  buscarMotivos, buscarVendas, buscarVendedores, comercialKeys, type VendaComEmpresa,
+  buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
+  type VendaComEmpresa,
 } from './queries'
 
 /**
@@ -59,11 +60,19 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
+  // Quem eu posso ABRIR — não é a mesma lista de quem existe. O seletor sai daqui para
+  // não oferecer um funil que a RLS devolveria vazio.
+  const alcance = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const vendas = useQuery({ queryKey: comercialKeys.vendas(vendedorId), queryFn: () => buscarVendas(vendedorId) })
   const motivos = useQuery({
     queryKey: comercialKeys.motivos('funil_vendedor'),
     queryFn: () => buscarMotivos('funil_vendedor'),
   })
+
+  // Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
+  // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
+  const closersVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'vendedor')
+  const mostrarSeletor = ehGestor || closersVisiveis.length > 1
 
   async function mover(v: VendaComEmpresa, estagio: EstagioVenda) {
     setAgindo(true)
@@ -131,18 +140,16 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
             Mostrar {foraDoFunil} fora do funil
           </label>
         )}
-        {ehGestor && (
+        {mostrarSeletor && (
           <Select value={vendedorId ?? 'todos'} onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}>
             <SelectTrigger className="w-56">
               <SelectValue placeholder="Todos os vendedores" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os vendedores</SelectItem>
-              {(vendedores.data ?? [])
-                .filter((v) => v.tipo === 'vendedor')
-                .map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-                ))}
+              {closersVisiveis.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         )}

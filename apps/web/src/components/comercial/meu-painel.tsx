@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { buscarResumo, buscarVendedores, comercialKeys } from './queries'
+import { buscarResumo, buscarVendedoresVisiveis, comercialKeys } from './queries'
 
 /**
  * "Meu Painel" — a primeira tela de quem vende, montada pelo TIPO do vendedor.
@@ -101,11 +101,9 @@ function Contagens({
 export function MeuPainel({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
 
-  const vendedores = useQuery({
-    queryKey: comercialKeys.vendedores(),
-    queryFn: buscarVendedores,
-    enabled: ehGestor,
-  })
+  // Quem eu posso ABRIR, não quem existe: para o gestor dá na mesma, mas um closer com
+  // acesso cruzado passa a ter o seletor — que é o único lugar onde esse acesso aparece.
+  const vendedores = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const { data, isPending } = useQuery({
     queryKey: comercialKeys.resumo(vendedorId),
     queryFn: () => buscarResumo(vendedorId),
@@ -118,21 +116,23 @@ export function MeuPainel({ ehGestor }: { ehGestor: boolean }) {
 
   const tipo = (data.vendedor?.tipo ?? null) as TipoVendedorId | null
 
+  // O seletor aparece quando há painel de OUTRA pessoa ao alcance. Para o gestor isso é
+  // sempre; para um vendedor, só se alguém lhe deu acesso cruzado — e é aí que esse
+  // acesso vira visível na tela, em vez de ser uma linha de banco que ninguém percebe.
+  const outros = (vendedores.data ?? []).filter((v) => v.id !== data.vendedor?.id)
   const seletor =
-    ehGestor && (vendedores.data ?? []).length > 0 ? (
+    outros.length > 0 ? (
       <Select value={vendedorId ?? 'eu'} onValueChange={(v) => setVendedorId(v === 'eu' ? null : v)}>
         <SelectTrigger className="w-64">
           <SelectValue placeholder="Ver painel de…" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="eu">Meu painel</SelectItem>
-          {(vendedores.data ?? [])
-            .filter((v) => v.ativo)
-            .map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.nome} · {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
-              </SelectItem>
-            ))}
+          {(vendedores.data ?? []).map((v) => (
+            <SelectItem key={v.id} value={v.id}>
+              {v.nome} · {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     ) : null

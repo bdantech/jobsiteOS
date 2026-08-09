@@ -1,23 +1,38 @@
-import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { isAdmin, requireSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { MeuPainel } from '@/components/comercial/meu-painel'
-
-export const metadata: Metadata = { title: 'Comercial' }
 
 // A tela lê o funil do usuário logado; renderizar estático congelaria a contagem.
 export const dynamic = 'force-dynamic'
+
+/**
+ * `/comercial` não é uma tela — é o despacho para o funil de quem entrou.
+ *
+ * A primeira aba de um vendedor é sempre o funil dele, porque é lá que está a próxima
+ * ação. Abrir o módulo num painel de números seria abrir o dia de trabalho pela
+ * contabilidade dele: bonito na segunda de manhã, inútil às onze da terça.
+ *
+ * Redirecionar em vez de renderizar o funil aqui mantém UMA url por funil. Duas rotas
+ * pintando a mesma tela deixariam a aba ativa piscando conforme o caminho de entrada.
+ */
+const FUNIL_DO_TIPO: Record<string, string> = {
+  sdr: '/comercial/sdr',
+  vendedor: '/comercial/vendas',
+  originador: '/comercial/nfs',
+}
 
 export default async function Pagina() {
   const context = await requireSessionContext()
   const supabase = await createClient()
   const { data: vendedor } = await supabase
     .from('vendedores')
-    .select('id')
+    .select('tipo')
     .eq('usuario_id', context.usuario.id)
     .eq('ativo', true)
     .maybeSingle()
-  const ehGestor = isAdmin(context) || !vendedor
 
-  return <MeuPainel ehGestor={ehGestor} />
+  const destino = vendedor?.tipo ? FUNIL_DO_TIPO[vendedor.tipo] : undefined
+  // Gestor sem cadastro de vendedor administra o módulo — para ele o painel É a tela
+  // inicial, porque o trabalho dele é olhar o trabalho dos outros.
+  redirect(destino ?? (isAdmin(context) || !vendedor ? '/comercial/painel' : '/comercial/comissoes'))
 }

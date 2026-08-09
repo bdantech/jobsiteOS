@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Handshake } from 'lucide-react'
 import {
   ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS, GESTAO_OPERACAO_DESCRICOES, GESTAO_OPERACAO_LABELS,
-  PAPEL_CARTEIRA_LABELS, TIPO_VENDEDOR_LABELS,
+  PAPEL_CARTEIRA_LABELS, TIPO_VENDEDOR_LABELS, aceitaGestaoOperacao,
   type EstagioSdr, type EstagioVenda, type GestaoOperacao, type PapelCarteira, type TipoVendedorId,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +51,7 @@ async function buscarComercialDaEmpresa(empresaId: string) {
       .limit(10),
     supabase
       .from('empresas')
-      .select('gestao_operacao, gestao_definida_em')
+      .select('estagio, gestao_operacao, gestao_definida_em')
       .eq('id', empresaId)
       .maybeSingle(),
   ])
@@ -77,6 +77,10 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   const vigentes = data.carteira.filter((c) => c.ate === null)
   const historico = data.carteira.filter((c) => c.ate !== null)
   const gestao = (data.gestao?.gestao_operacao ?? null) as GestaoOperacao | null
+  // A pergunta ativo × passivo só existe para quem antecipa (ou antecipou) conosco. Numa
+  // empresa de mercado ela não tem resposta possível, e o banco recusa desde a 0095 —
+  // oferecer o botão aqui seria oferecer um erro.
+  const podeDefinirGestao = aceitaGestaoOperacao({ estagio: data.gestao?.estagio })
 
   async function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -107,7 +111,10 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
             <CardDescription>
               {gestao
                 ? GESTAO_OPERACAO_DESCRICOES[gestao]
-                : 'Ainda não definido se esta conta é trabalhada em prospecção ativa ou é passiva.'}
+                : podeDefinirGestao
+                  ? 'Ainda não definido se esta conta é trabalhada em prospecção ativa ou é passiva.'
+                  : 'Prospecção ativa × passiva é decisão de cliente ou ex-cliente da OnePay — '
+                    + 'esta empresa ainda não chegou lá.'}
             </CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -116,9 +123,11 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
                 {GESTAO_OPERACAO_LABELS[gestao]}
               </Badge>
             ) : null}
-            <Button size="sm" variant="outline" onClick={() => setEditando(true)}>
-              Definir gestão
-            </Button>
+            {podeDefinirGestao ? (
+              <Button size="sm" variant="outline" onClick={() => setEditando(true)}>
+                Definir gestão
+              </Button>
+            ) : null}
           </div>
         </div>
       </CardHeader>

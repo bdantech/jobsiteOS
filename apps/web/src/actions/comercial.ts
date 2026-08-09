@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import {
   atribuirNf,
   definirCarteira,
+  definirCarteiraPassiva,
   definirGestaoOperacao,
   gerarTokenIcs,
   moverLeadSdr,
@@ -63,6 +64,23 @@ export async function definirCarteiraAction(input: unknown): Promise<ActionResul
   try {
     await definirCarteira(supabase, input)
     return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function definirCarteiraPassivaAction(
+  input: unknown,
+): Promise<ActionResult<{ adicionadas: number; removidas: number }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await definirCarteiraPassiva(supabase, input)) as
+      | { adicionadas?: number; removidas?: number }
+      | null
+    revalidatePath('/comercial/admin')
+    revalidatePath('/comercial/carteira')
+    return { ok: true, data: { adicionadas: r?.adicionadas ?? 0, removidas: r?.removidas ?? 0 } }
   } catch (error) {
     return falha(error)
   }

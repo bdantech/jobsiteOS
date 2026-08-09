@@ -20,6 +20,8 @@ export const comercialKeys = {
   motivos: (contexto: string) => ['comercial', 'motivos', contexto] as const,
   territorios: () => ['comercial', 'territorios'] as const,
   config: () => ['comercial', 'config'] as const,
+  carteira: (vendedorId?: string | null) => ['comercial', 'carteira', vendedorId ?? 'eu'] as const,
+  visiveis: () => ['comercial', 'visiveis'] as const,
 }
 
 export interface ResumoComercial {
@@ -52,6 +54,28 @@ export async function buscarResumo(vendedorId?: string | null): Promise<ResumoCo
     proximas_reunioes: r.proximas_reunioes ?? [],
     comissao_mes: r.comissao_mes ?? { competencia: '', total: 0, por_status: {} },
   }
+}
+
+/** Um vendedor cujo painel o usuário logado pode abrir de fato — a mesma régua da RLS. */
+export interface VendedorVisivel {
+  id: string
+  nome: string
+  tipo: string
+  is_ia: boolean
+}
+
+/**
+ * O seletor "ver painel de…" se monta com ISTO, não com a lista de vendedores.
+ *
+ * A lista completa é legível para quem tem o módulo — um cadastro de pessoas não é
+ * segredo. Já ABRIR o painel do outro depende de `vendedor_acessos`, e oferecer no
+ * seletor um nome cujo funil volta vazio ensina que a tela está quebrada.
+ */
+export async function buscarVendedoresVisiveis(): Promise<VendedorVisivel[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_vendedores_visiveis')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as VendedorVisivel[]
 }
 
 export async function buscarVendedores(): Promise<Tables<'vendedores'>[]> {
@@ -105,6 +129,56 @@ export async function buscarVendas(vendedorId?: string | null): Promise<VendaCom
   const { data, error } = await q
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as VendaComEmpresa[]
+}
+
+export interface PassivaNaCarteira {
+  id: string
+  cnpj: string
+  razao_social: string | null
+  uf: string | null
+  faturamento_anual: number | null
+  desde: string
+  gestao_operacao: string | null
+  /** Volume antecipado no mês corrente. É o número que vira comissão. */
+  volume_mes: number
+}
+
+export interface EmpresaDeOriginacao {
+  id: string
+  cnpj: string
+  razao_social: string | null
+  uf: string | null
+  estagio: string
+  gestao_operacao: string | null
+  nfs_vivas: number
+}
+
+export interface CarteiraVendedorDados {
+  tem_acesso: boolean
+  sem_vendedor?: boolean
+  vendedor_id?: string
+  tipo?: string
+  competencia?: string
+  passivas: PassivaNaCarteira[]
+  originacao: EmpresaDeOriginacao[]
+}
+
+export async function buscarCarteira(vendedorId?: string | null): Promise<CarteiraVendedorDados> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_carteira_vendedor', {
+    p_vendedor_id: vendedorId ?? undefined,
+  })
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as Partial<CarteiraVendedorDados>
+  return {
+    tem_acesso: r.tem_acesso ?? false,
+    sem_vendedor: r.sem_vendedor,
+    vendedor_id: r.vendedor_id,
+    tipo: r.tipo,
+    competencia: r.competencia,
+    passivas: r.passivas ?? [],
+    originacao: r.originacao ?? [],
+  }
 }
 
 export async function buscarMotivos(contexto: string): Promise<Tables<'motivos_perda'>[]> {

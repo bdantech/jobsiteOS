@@ -3409,6 +3409,9 @@ export type Database = {
           conversao_valor: number | null
           conversao_taxa: number | null
           conversao_status: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
+          sacado_gestao_operacao: string | null
         }
         Relationships: [
           {
@@ -4175,6 +4178,7 @@ export type Database = {
       app_salvar_comercial_config: { Args: { p: Json }; Returns: Json }
       app_salvar_motivo_perda: { Args: { p: Json }; Returns: Json }
       app_definir_carteira: { Args: { p: Json }; Returns: Json }
+      app_definir_carteira_passiva: { Args: { p: Json }; Returns: Json }
       app_definir_gestao_operacao: { Args: { p: Json }; Returns: Json }
       app_mover_lead_sdr: { Args: { p: Json }; Returns: Json }
       app_mover_venda: { Args: { p: Json }; Returns: Json }
@@ -4185,6 +4189,8 @@ export type Database = {
       app_gestor_comercial: { Args: never; Returns: boolean }
       app_pode_ver_vendedor: { Args: { p_vendedor_id: string }; Returns: boolean }
       comercial_resumo_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
+      comercial_carteira_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
+      comercial_vendedores_visiveis: { Args: never; Returns: Json }
       radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_onepay_analytics: { Args: never; Returns: Json }
       radar_onepay_clientes: {

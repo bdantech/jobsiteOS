@@ -26,7 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { moverLeadAction } from '@/actions/comercial'
 import {
-  buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, comercialKeys,
+  buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
+  comercialKeys,
   type LeadComEmpresa,
 } from './queries'
 
@@ -60,6 +61,9 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
+  // Quem eu posso ABRIR — não é a mesma lista de quem existe. O seletor sai daqui para
+  // não oferecer um funil que a RLS devolveria vazio.
+  const alcance = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const leads = useQuery({ queryKey: comercialKeys.leads(sdrId), queryFn: () => buscarLeads(sdrId) })
   const motivos = useQuery({
     queryKey: comercialKeys.motivos('sdr_sem_fit'),
@@ -70,6 +74,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     queryKey: comercialKeys.territorios(),
     queryFn: buscarTerritoriosCloser,
   })
+
+  // Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
+  // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
+  const sdrsVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'sdr')
+  const mostrarSeletor = ehGestor || sdrsVisiveis.length > 1
 
   function recarregar() {
     void qc.invalidateQueries({ queryKey: ['comercial'] })
@@ -154,18 +163,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
             Mostrar {encerrados} encerrado(s)
           </label>
         )}
-        {ehGestor && (
+        {mostrarSeletor && (
           <Select value={sdrId ?? 'todos'} onValueChange={(v) => setSdrId(v === 'todos' ? null : v)}>
             <SelectTrigger className="w-56">
               <SelectValue placeholder="Todos os SDRs" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os SDRs</SelectItem>
-              {(vendedores.data ?? [])
-                .filter((v) => v.tipo === 'sdr')
-                .map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-                ))}
+              {sdrsVisiveis.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         )}
