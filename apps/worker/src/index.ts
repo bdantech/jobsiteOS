@@ -17,6 +17,7 @@ import {
   dispararSincronizarOnepay,
   dispararSincronizarCertificados,
   dispararLoteRadar,
+  motivoLoteNaoExecutavel,
   dispararAvisoCustoProtestos,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
@@ -174,9 +175,16 @@ app.post('/jobs/radar/onepay', (_req: Request, res: Response, next: NextFunction
 
 const loteRadarSchema = z.object({ lote_id: z.string().uuid() })
 
-app.post('/jobs/radar/lote', (req: Request, res: Response, next: NextFunction) => {
+app.post('/jobs/radar/lote', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { lote_id } = loteRadarSchema.parse(req.body ?? {})
+    // Recusa SÍNCRONA: o 202 desta rota é fire-and-forget, então um lote inelegível
+    // devolvia "enfileirado" e morria no log. Um 409 com o motivo chega na tela.
+    const motivo = await motivoLoteNaoExecutavel(lote_id)
+    if (motivo) {
+      res.status(409).json({ erro: motivo })
+      return
+    }
     const id = dispararLoteRadar(lote_id)
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {

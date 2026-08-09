@@ -745,6 +745,38 @@ export function dispararContatosNf(): string {
  * (excluindo por TTL), processa com o teto de orçamento, reconcilia o custo. Job
  * avulso: usa pool + service role, não a sessão dedicada.
  */
+/**
+ * Os status a partir dos quais um lote pode rodar.
+ *
+ * `interrompido` está aqui porque a execução parcial retoma de onde parou — e a falta
+ * dele custou uma tarde: a tela passou a oferecer "Executar" para lote interrompido, e
+ * este guarda continuou só com 'aprovado'. Como a rota é fire-and-forget, o worker
+ * respondia 202, a tela dizia "Execução enfileirada", e o erro morria no log do
+ * Railway. Duas listas de status executável, em dois arquivos, é a definição de regra
+ * que diverge; por isso agora é uma constante, e a rota valida com ela ANTES do 202.
+ */
+export const STATUS_LOTE_EXECUTAVEL: readonly string[] = ['aprovado', 'executando', 'interrompido']
+
+/**
+ * O motivo de o lote não poder rodar, ou null quando pode.
+ *
+ * Existe para que a recusa aconteça de forma SÍNCRONA, na resposta HTTP: um 409 com o
+ * motivo vira toast na tela, e um erro dentro do job vira uma linha de log que ninguém
+ * está lendo no minuto em que ela sai.
+ */
+export async function motivoLoteNaoExecutavel(loteId: string): Promise<string | null> {
+  const { data: lote } = await supabaseAdmin
+    .from('lotes_enriquecimento')
+    .select('status')
+    .eq('id', loteId)
+    .maybeSingle()
+  if (!lote) return 'Lote não encontrado.'
+  if (!STATUS_LOTE_EXECUTAVEL.includes(lote.status)) {
+    return `Lote não é executável no status "${lote.status}".`
+  }
+  return null
+}
+
 export function dispararLoteRadar(loteId: string): string {
   return dispararAvulso('radar-lote', async () => {
     const { data: lote, error } = await supabaseAdmin
@@ -753,8 +785,8 @@ export function dispararLoteRadar(loteId: string): string {
       .eq('id', loteId)
       .single()
     if (error || !lote) throw new Error(`Lote ${loteId} não encontrado.`)
-    if (lote.status !== 'aprovado' && lote.status !== 'executando') {
-      throw new Error(`Lote ${loteId} não está aprovado (status ${lote.status}).`)
+    if (!STATUS_LOTE_EXECUTAVEL.includes(lote.status)) {
+      throw new Error(`Lote ${loteId} não é executável (status ${lote.status}).`)
     }
     logger.info({ loteId, tipo: lote.tipo }, 'Executando lote do Radar.')
     return executarLote(loteId, escolherProcessador(lote))
