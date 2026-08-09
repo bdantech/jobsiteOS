@@ -9,6 +9,8 @@ import {
   ESTAGIOS_SDR,
   ESTAGIO_SDR_LABELS,
   TIPO_VENDEDOR_LABELS,
+  closerParaConta,
+  type CloserComTerritorio,
   type EstagioSdr,
   type TipoVendedorId,
 } from '@jobsiteos/core'
@@ -24,7 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { moverLeadAction } from '@/actions/comercial'
 import {
-  buscarLeads, buscarMotivos, buscarVendedores, comercialKeys, type LeadComEmpresa,
+  buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, comercialKeys,
+  type LeadComEmpresa,
 } from './queries'
 
 /**
@@ -55,6 +58,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     queryKey: comercialKeys.motivos('sdr_sem_fit'),
     queryFn: () => buscarMotivos('sdr_sem_fit'),
   })
+  // Territórios dos closers: é com eles que a tela SUGERE o destino da reunião.
+  const territorios = useQuery({
+    queryKey: comercialKeys.territorios(),
+    queryFn: buscarTerritoriosCloser,
+  })
 
   function recarregar() {
     void qc.invalidateQueries({ queryKey: ['comercial'] })
@@ -81,6 +89,25 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   }
 
   const closers = (vendedores.data ?? []).filter((v) => v.ativo && v.tipo === 'vendedor')
+
+  /**
+   * O closer cujo território cobre esta conta. SUGESTÃO, não imposição: o SDR pode
+   * escolher outro, e a tela deixa. Território descreve o recorte normal; a exceção
+   * (o closer que já conhece aquele dono) é justamente o que uma regra automática erraria.
+   */
+  const sugestao = agendando?.empresas
+    ? closerParaConta(
+        { uf: agendando.empresas.uf, faturamento: agendando.empresas.faturamento_anual ?? null },
+        closers.map<CloserComTerritorio>((v) => {
+          const t = (territorios.data ?? {})[v.id]
+          return {
+            vendedor_id: v.id,
+            territorio: t ?? null,
+            vendas_vivas: 0,
+          }
+        }),
+      )
+    : null
 
   return (
     <div className="space-y-4">
@@ -230,15 +257,25 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                   id="destino"
                   name="destino"
                   required
+                  defaultValue={sugestao?.vendedor_id ?? ''}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Selecione…</option>
                   {closers.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.nome} · {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
+                      {v.nome}
+                      {sugestao?.vendedor_id === v.id ? ' — sugerido pelo território' : ''}
+                      {sugestao?.vendedor_id !== v.id
+                        ? ` · ${TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}`
+                        : ''}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-muted-foreground">
+                  {sugestao
+                    ? sugestao.motivo
+                    : 'Nenhum closer cobre esta UF e faixa de faturamento — escolha à mão.'}
+                </p>
                 {closers.length === 0 && (
                   <p className="text-xs text-destructive">
                     Nenhum closer cadastrado — cadastre um vendedor em Configurações.

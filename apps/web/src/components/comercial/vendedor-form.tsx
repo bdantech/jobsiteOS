@@ -15,23 +15,171 @@ import { salvarTerritorioAction, salvarVendedorAction } from '@/actions/comercia
 import type { Tables } from '@jobsiteos/core'
 
 /**
- * Cadastro de vendedor — o formulário que faltava, e que agora escreve por RPC com
- * audit, como o resto do sistema.
+ * Cadastro de vendedor.
  *
- * Duas coisas que o formulário decide, e não o usuário:
+ * O formulário muda com o tipo, e a diferença não é cosmética — é a distinção entre as
+ * duas formas de receber trabalho:
  *
- *   NÃO EXISTE EXCLUIR. Vendedor se desativa. Apagar levaria junto a explicação de
- *   comissões já pagas — o histórico de carteira aponta para ele.
+ *   ORIGINADOR trabalha NOTA, e recebe por ESCOLHA: uma lista de empresas escolhidas a
+ *   dedo. As NFs dessas empresas são dele. Quem originou a relação continua dono dela
+ *   mesmo que a empresa mude de porte ou de estado.
  *
- *   O TERRITÓRIO É SALVO JUNTO, na mesma submissão. Separá-lo em outra tela produziria
- *   o estado que o roteador mais odeia: originador ativo com território em branco, que
- *   não casa com nada e não diz por quê.
+ *   CLOSER trabalha CONTA, e recebe por RECORTE: UF e faixa de faturamento. Quem fecha
+ *   negócio é alocado por perfil de cliente, não por relação prévia.
+ *
+ *   SDR também tem recorte, mas para a distribuição semanal — não para nota.
+ *
+ * NÃO EXISTE EXCLUIR. Vendedor se desativa. Apagar levaria junto a explicação de
+ * comissões já pagas — o histórico de carteira aponta para ele.
  */
 
 const SETTINGS_POR_TIPO: Record<TipoVendedorId, string> = {
-  sdr: 'Direção (in/out/both) e cota semanal.',
-  originador: 'Carteira explícita de empresas (definida na ficha de cada empresa).',
-  vendedor: 'Sem ajustes nesta versão — metas ficam para a fase 2.',
+  sdr: 'Recebe empresas na distribuição semanal, dentro do território e da cota.',
+  originador: 'Recebe as NFs das empresas que você escolher abaixo. Nada de território.',
+  vendedor: 'Recebe contas por território — UF e faixa de faturamento.',
+}
+
+/** Território é do closer (recorte de conta) e do SDR (recorte de distribuição). */
+const TEM_TERRITORIO: Record<TipoVendedorId, boolean> = {
+  sdr: true,
+  vendedor: true,
+  originador: false,
+}
+
+export interface EmpresaEscolhida {
+  id: string
+  razao_social: string | null
+  cnpj: string
+  uf: string | null
+  gestao_operacao: string | null
+}
+
+/**
+ * A carteira explícita do originador: as empresas cujas NFs vão para ele.
+ *
+ * Busca por nome ou CNPJ, e **recusa conta passiva**. Não é filtro de conveniência: a
+ * NF de sacado passivo é descartada pelo roteador antes de olhar carteira nenhuma, então
+ * adicionar uma passiva aqui criaria uma linha que promete trabalho e nunca entrega —
+ * e o originador só descobriria ao perceber que a nota nunca chega.
+ */
+function CarteiraOriginador({
+  escolhidas,
+  onChange,
+}: {
+  escolhidas: EmpresaEscolhida[]
+  onChange: (e: EmpresaEscolhida[]) => void
+}) {
+  const [termo, setTermo] = React.useState('')
+  const [buscando, setBuscando] = React.useState(false)
+  const [achadas, setAchadas] = React.useState<EmpresaEscolhida[]>([])
+
+  async function buscar() {
+    const t = termo.trim()
+    if (t.length < 3) return
+    setBuscando(true)
+    const digitos = t.replace(/\D/g, '')
+    const supabase = createClient()
+    const q = supabase
+      .from('empresas')
+      .select('id, razao_social, cnpj, uf, gestao_operacao')
+      .limit(20)
+    const { data } = digitos.length >= 6
+      ? await q.like('cnpj', `${digitos}%`)
+      : await q.ilike('razao_social', `%${t}%`)
+    setAchadas((data ?? []) as EmpresaEscolhida[])
+    setBuscando(false)
+  }
+
+  function adicionar(e: EmpresaEscolhida) {
+    if (e.gestao_operacao === 'passivo') return
+    if (escolhidas.some((x) => x.id === e.id)) return
+    onChange([...escolhidas, e])
+    setAchadas([])
+    setTermo('')
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border p-3">
+      <p className="text-sm font-medium">Carteira de originação</p>
+      <p className="text-xs text-muted-foreground">
+        As NFs destas empresas — como sacado OU como fornecedor — são roteadas para este
+        originador. Conta passiva não entra: a nota dela é descartada antes do roteamento.
+      </p>
+
+      <div className="flex gap-2">
+        <Input
+          value={termo}
+          onChange={(e) => setTermo(e.target.value)}
+          placeholder="Nome ou CNPJ (mín. 3 caracteres)"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              // Enter aqui NÃO pode submeter o formulário inteiro.
+              e.preventDefault()
+              void buscar()
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={() => void buscar()} disabled={buscando}>
+          {buscando ? 'Buscando…' : 'Buscar'}
+        </Button>
+      </div>
+
+      {achadas.length > 0 && (
+        <ul className="max-h-40 divide-y overflow-y-auto rounded-md border">
+          {achadas.map((e) => {
+            const passiva = e.gestao_operacao === 'passivo'
+            return (
+              <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+                <span className="min-w-0">
+                  <span className="block truncate">{e.razao_social ?? e.cnpj}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {e.uf ?? '—'}
+                    {passiva ? ' · conta PASSIVA' : ''}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 text-xs"
+                  disabled={passiva}
+                  onClick={() => adicionar(e)}
+                >
+                  {passiva ? 'Passiva' : 'Adicionar'}
+                </Button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {escolhidas.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Nenhuma empresa ainda — sem carteira, nenhuma nota é roteada para ele.
+        </p>
+      ) : (
+        <ul className="divide-y rounded-md border">
+          {escolhidas.map((e) => (
+            <li key={e.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+              <span className="min-w-0 truncate">
+                {e.razao_social ?? e.cnpj}
+                <span className="ml-1 text-xs text-muted-foreground">{e.uf ?? ''}</span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 shrink-0 text-xs"
+                onClick={() => onChange(escolhidas.filter((x) => x.id !== e.id))}
+              >
+                Remover
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 async function buscarUsuarios() {
@@ -54,6 +202,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
   const [erro, setErro] = React.useState<string | null>(null)
   const [tipo, setTipo] = React.useState<TipoVendedorId>((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
   const [ehIa, setEhIa] = React.useState(vendedor?.is_ia ?? false)
+  const [escolhidas, setEscolhidas] = React.useState<EmpresaEscolhida[]>([])
 
   const usuarios = useQuery({ queryKey: ['comercial', 'usuarios'], queryFn: buscarUsuarios, enabled: aberto })
 
@@ -62,6 +211,17 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
     setTipo((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
     setEhIa(vendedor?.is_ia ?? false)
     setErro(null)
+    // A carteira guarda só ids; a tela precisa dos nomes para ser legível.
+    const ids = ((vendedor?.settings ?? {}) as { empresas_escolhidas?: string[] }).empresas_escolhidas ?? []
+    if (ids.length === 0) {
+      setEscolhidas([])
+      return
+    }
+    void createClient()
+      .from('empresas')
+      .select('id, razao_social, cnpj, uf, gestao_operacao')
+      .in('id', ids)
+      .then(({ data }) => setEscolhidas((data ?? []) as EmpresaEscolhida[]))
   }, [aberto, vendedor])
 
   const settings = (vendedor?.settings ?? {}) as { direcao?: string; empresas_por_semana?: number }
@@ -73,6 +233,13 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
     setErro(null)
 
     const novasSettings: Record<string, unknown> = { ...(vendedor?.settings as object) }
+    if (tipo === 'originador') {
+      novasSettings.empresas_escolhidas = escolhidas.map((e) => e.id)
+    } else {
+      // Trocar de tipo apaga a carteira: um SDR com `empresas_escolhidas` pendurado é
+      // um campo invisível que volta a valer se ele virar originador de novo.
+      delete novasSettings.empresas_escolhidas
+    }
     if (tipo === 'sdr') {
       novasSettings.direcao = String(fd.get('direcao') ?? 'both')
       const cota = Number(fd.get('cota'))
@@ -97,10 +264,10 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
       return
     }
 
-    // Território na mesma submissão. Só para originador e SDR: o closer não recebe por
-    // território, ele recebe reunião agendada por alguém.
+    // Território na mesma submissão. Só para quem recebe por recorte — o originador
+    // recebe por escolha, e um território nele seria um campo que não faz nada.
     const id = r.data.id ?? vendedor?.id
-    if (id && tipo !== 'vendedor') {
+    if (id && TEM_TERRITORIO[tipo]) {
       const ufs = String(fd.get('ufs') ?? '')
         .split(',')
         .map((u) => u.trim().toUpperCase())
@@ -225,12 +392,15 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
               </div>
             )}
 
-            {tipo !== 'vendedor' && (
+            {TEM_TERRITORIO[tipo] && (
               <div className="space-y-3 rounded-md border p-3">
                 <p className="text-sm font-medium">Território</p>
                 <p className="text-xs text-muted-foreground">
-                  Em branco NÃO significa &quot;atende tudo&quot;: o roteador ignora território
-                  vazio, senão um cadastro incompleto abocanha a base inteira.
+                  {tipo === 'vendedor'
+                    ? 'Define quais contas são deste closer. É o que o SDR vê sugerido ao agendar a reunião.'
+                    : 'Recorta o que este SDR recebe na distribuição semanal.'}{' '}
+                  Em branco NÃO significa &quot;atende tudo&quot;: território vazio é ignorado,
+                  senão um cadastro incompleto abocanha a base inteira.
                 </p>
                 <div className="space-y-1.5">
                   <Label htmlFor="ufs">UFs (separadas por vírgula)</Label>
@@ -254,6 +424,13 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio }: Ven
                   </div>
                 </div>
               </div>
+            )}
+
+            {tipo === 'originador' && (
+              <CarteiraOriginador
+                escolhidas={escolhidas}
+                onChange={setEscolhidas}
+              />
             )}
 
             <label className="flex items-center gap-2 text-sm">

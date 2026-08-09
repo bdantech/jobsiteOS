@@ -35,27 +35,52 @@ recebeu toque" é uma afirmação sobre o nosso REGISTRO, não sobre o mundo: um
 por telefone que ninguém anotou aparece aqui como ausência, e marcar sozinho
 transformaria falha de anotação em perda de comissão de alguém.
 
+## Duas atribuições diferentes
+
+A distinção organiza o módulo inteiro:
+
+| | trabalha | recebe por | onde se configura |
+|---|---|---|---|
+| **Originador** | NOTA | escolha — lista de empresas a dedo | carteira, no cadastro do vendedor |
+| **Closer** | CONTA | recorte — UF + faixa de faturamento | território, no cadastro do vendedor |
+| **SDR** | LEAD | recorte, para a distribuição semanal | território + direção + cota |
+
+Quem originou a relação continua dono dela mesmo que a empresa mude de porte ou de
+estado — por isso o originador recebe por escolha. Quem fecha negócio é alocado por
+perfil de cliente — por isso o closer recebe por recorte.
+
 ## Roteamento de NFs
 
-`packages/core/src/comercial/roteamento.ts`, com testes. Precedência:
+`packages/core/src/comercial/roteamento.ts`, com testes. O critério é **um só**: a
+carteira explícita do originador (`settings.empresas_escolhidas`), casando com o sacado
+OU com o fornecedor. Sem carteira que cubra, a nota vai para a **fila sem dono**
+(`/comercial/fila`), que é resposta, não falha.
 
-1. **Carteira explícita** — `settings.empresas_escolhidas` do originador casa com o
-   sacado OU com o fornecedor. Escolha vence heurística.
-2. **Território** — UF do sacado + faixa de faturamento. Empate resolve por menor carga
-   de NFs vivas; empate de carga resolve pelo id, para ser reprodutível (um roteador não
-   determinístico faz a mesma nota trocar de dono a cada sync).
-3. **Fila sem dono** — `/comercial/fila`, para o gestor atribuir.
+**Território não roteia nota.** Uma versão anterior o usava como segundo critério, e isso
+trocava as duas atribuições de lugar: fazia o originador receber conta por região (que é
+a régua do closer) e deixava o closer sem régua nenhuma.
 
-Três exclusões, todas testadas:
+Duas exclusões, testadas:
 
 - **Sacado passivo** sai antes de tudo.
 - **`vendedor_origem = 'manual'`** não é revisto. Sem isso o gestor corrige e o próximo
   sync desfaz.
-- **Território em branco** NÃO casa com tudo. Um originador recém-criado, com cadastro
-  vazio, abocanharia a base inteira se "sem restrição" fosse lido como "aceita qualquer
-  coisa".
+
+Empate (dois originadores com a mesma empresa) entrega ao de menor carga e **denuncia o
+cadastro** no motivo; empate de carga resolve pelo id, para ser reprodutível — um
+roteador não determinístico faz a mesma nota trocar de dono a cada sync.
 
 Roda encadeado no diário da Antecipação, depois da reclassificação de faixa.
+
+## O closer de uma conta
+
+`closerParaConta()` acha o closer cujo território cobre a UF e o faturamento da empresa.
+É o que o SDR vê **sugerido** ao agendar a reunião — sugestão, não imposição: território
+descreve o recorte normal, e a exceção (o closer que já conhece aquele dono, a conta que
+pede alguém sênior) é justamente o que uma regra automática erraria.
+
+Ninguém cobre → a tela mostra a lista inteira e diz por quê, em vez de escolher "o mais
+parecido", que seria um palpite com cara de regra.
 
 ## Ciclo da comissão
 

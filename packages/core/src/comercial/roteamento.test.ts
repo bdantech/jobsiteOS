@@ -1,78 +1,78 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { rotearNota, type NotaRoteavel, type OriginadorRoteavel } from './roteamento.ts'
+import {
+  closerParaConta,
+  cobreTerritorio,
+  rotearNota,
+  type CloserComTerritorio,
+  type NotaRoteavel,
+  type OriginadorRoteavel,
+} from './roteamento.ts'
 
 /**
- * O que se protege aqui não é a busca — é a PRECEDÊNCIA e as três exclusões. Um
- * roteador que acerta 90% e entrega a nota errada nos 10% restantes é pior que a fila
- * sem dono: a fila alguém olha, a atribuição errada ninguém questiona.
+ * O que se protege aqui é a SEPARAÇÃO entre as duas atribuições, mais as exclusões.
+ *
+ * Originador trabalha NOTA e a recebe por escolha explícita; closer trabalha CONTA e a
+ * recebe por recorte de UF e faturamento. Uma versão anterior usava território para
+ * rotear nota, o que trocava as duas de lugar — os dois primeiros testes existem para
+ * que isso não volte.
  */
 
 const NOTA: NotaRoteavel = {
   sacado_empresa_id: 'sac-1',
   fornecedor_empresa_id: 'forn-1',
-  sacado_uf: 'SP',
-  sacado_faturamento: 50_000_000,
   sacado_gestao: 'prospeccao_ativa',
 }
 
 const orig = (p: Partial<OriginadorRoteavel> & { vendedor_id: string }): OriginadorRoteavel => ({
   empresas_escolhidas: [],
-  territorio: null,
   nfs_vivas: 0,
   ...p,
 })
 
-// ─── Precedência ────────────────────────────────────────────────────────────
+// ─── Nota: só carteira explícita ────────────────────────────────────────────
 
-test('carteira explícita vence território, mesmo com o territorial mais folgado', () => {
-  const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'carteira', empresas_escolhidas: ['sac-1'], nfs_vivas: 999 }),
-    orig({ vendedor_id: 'territorial', territorio: { ufs: ['SP'], faturamento_min: null, faturamento_max: null }, nfs_vivas: 0 }),
-  ])
-  assert.equal(r.vendedor_id, 'carteira')
+test('a nota vai para quem tem a empresa na carteira', () => {
+  const r = rotearNota(NOTA, [orig({ vendedor_id: 'v1', empresas_escolhidas: ['sac-1'] })])
+  assert.equal(r.vendedor_id, 'v1')
   assert.equal(r.origem, 'carteira')
 })
 
 test('a carteira casa pelo FORNECEDOR também, não só pelo sacado', () => {
   const r = rotearNota(NOTA, [orig({ vendedor_id: 'v1', empresas_escolhidas: ['forn-1'] })])
   assert.equal(r.vendedor_id, 'v1')
-  assert.equal(r.origem, 'carteira')
 })
 
-test('território casa por UF e faixa; empate resolve por menor carga', () => {
-  const t = { ufs: ['SP', 'MG'], faturamento_min: 10_000_000, faturamento_max: 100_000_000 }
+test('sem carteira que cubra, vai para a fila — território NÃO roteia nota', () => {
+  // Território é a régua do closer. Usá-lo aqui faria o originador receber conta por
+  // região, que é exatamente a inversão que este arquivo corrigiu.
+  const r = rotearNota(NOTA, [orig({ vendedor_id: 'territorial' })])
+  assert.equal(r.vendedor_id, null)
+  assert.match(r.motivo, /carteira/)
+})
+
+test('empate de carteira entrega a nota E denuncia o cadastro', () => {
   const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'cheio', territorio: t, nfs_vivas: 40 }),
-    orig({ vendedor_id: 'vazio', territorio: t, nfs_vivas: 3 }),
+    orig({ vendedor_id: 'a', empresas_escolhidas: ['sac-1'], nfs_vivas: 5 }),
+    orig({ vendedor_id: 'b', empresas_escolhidas: ['sac-1'], nfs_vivas: 1 }),
   ])
-  assert.equal(r.vendedor_id, 'vazio')
-  assert.equal(r.origem, 'territorio')
-  assert.match(r.motivo, /desempate por carga/)
+  assert.equal(r.vendedor_id, 'b')
+  assert.match(r.motivo, /2 originadores reivindicam/)
 })
 
 test('empate de carga é resolvido de forma REPRODUTÍVEL, não aleatória', () => {
-  const t = { ufs: ['SP'], faturamento_min: null, faturamento_max: null }
-  const lista = [orig({ vendedor_id: 'b', territorio: t }), orig({ vendedor_id: 'a', territorio: t })]
-  // Duas chamadas, e a ordem da lista invertida: o dono tem de ser o mesmo. Um
-  // roteador não determinístico faz a mesma nota trocar de dono a cada sync.
+  const lista = [
+    orig({ vendedor_id: 'b', empresas_escolhidas: ['sac-1'] }),
+    orig({ vendedor_id: 'a', empresas_escolhidas: ['sac-1'] }),
+  ]
+  // Um roteador não determinístico faz a mesma nota trocar de dono a cada sync.
   assert.equal(rotearNota(NOTA, lista).vendedor_id, 'a')
   assert.equal(rotearNota(NOTA, [...lista].reverse()).vendedor_id, 'a')
-})
-
-test('sem originador que cubra, vai para a fila — e o motivo diz por quê', () => {
-  const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'sul', territorio: { ufs: ['RS'], faturamento_min: null, faturamento_max: null } }),
-  ])
-  assert.equal(r.vendedor_id, null)
-  assert.match(r.motivo, /Nenhum originador cobre SP/)
 })
 
 // ─── As exclusões ───────────────────────────────────────────────────────────
 
 test('sacado PASSIVO fica fora do roteamento inteiro', () => {
-  // Passivo não é filtro visual: é a decisão de não trabalhar a conta. Rotear a NF
-  // dela seria pedir trabalho de quem não vai ser comissionado por ele.
   const r = rotearNota(
     { ...NOTA, sacado_gestao: 'passivo' },
     [orig({ vendedor_id: 'v1', empresas_escolhidas: ['sac-1'] })],
@@ -90,36 +90,65 @@ test('atribuição manual do gestor não é revista pelo roteador', () => {
   assert.equal(r.origem, 'manual')
 })
 
-test('território vazio não abocanha a base', () => {
-  // Um originador recém-criado, com o cadastro de território em branco, casaria com
-  // tudo se "sem restrição" fosse lido como "aceita qualquer coisa".
-  const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'novo', territorio: { ufs: [], faturamento_min: null, faturamento_max: null } }),
+// ─── Conta: o território é do closer ────────────────────────────────────────
+
+const closer = (p: Partial<CloserComTerritorio> & { vendedor_id: string }): CloserComTerritorio => ({
+  territorio: null,
+  vendas_vivas: 0,
+  ...p,
+})
+
+const CONTA = { uf: 'SP', faturamento: 50_000_000 }
+
+test('o closer é escolhido por UF e faixa de faturamento', () => {
+  const r = closerParaConta(CONTA, [
+    closer({ vendedor_id: 'sul', territorio: { ufs: ['RS'], faturamento_min: null, faturamento_max: null } }),
+    closer({ vendedor_id: 'sudeste', territorio: { ufs: ['SP', 'MG'], faturamento_min: 10_000_000, faturamento_max: 100_000_000 } }),
   ])
-  assert.equal(r.vendedor_id, null)
+  assert.equal(r?.vendedor_id, 'sudeste')
+})
+
+test('dois closers no mesmo recorte: desempate por carga', () => {
+  const t = { ufs: ['SP'], faturamento_min: null, faturamento_max: null }
+  const r = closerParaConta(CONTA, [
+    closer({ vendedor_id: 'cheio', territorio: t, vendas_vivas: 12 }),
+    closer({ vendedor_id: 'vazio', territorio: t, vendas_vivas: 2 }),
+  ])
+  assert.equal(r?.vendedor_id, 'vazio')
+  assert.match(r?.motivo ?? '', /desempate por carga/)
+})
+
+test('ninguém cobre: devolve null em vez de inventar um dono', () => {
+  // A tela mostra a lista inteira nesse caso. Escolher "o mais parecido" seria um
+  // palpite com cara de regra.
+  const r = closerParaConta(CONTA, [
+    closer({ vendedor_id: 'sul', territorio: { ufs: ['RS'], faturamento_min: null, faturamento_max: null } }),
+  ])
+  assert.equal(r, null)
+})
+
+test('território vazio não abocanha todas as contas', () => {
+  assert.equal(cobreTerritorio(CONTA, { ufs: [], faturamento_min: null, faturamento_max: null }), false)
+  assert.equal(closerParaConta(CONTA, [closer({ vendedor_id: 'novo', territorio: { ufs: [], faturamento_min: null, faturamento_max: null } })]), null)
 })
 
 test('faixa aberta de um lado continua sendo faixa', () => {
-  const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'grandes', territorio: { ufs: ['SP'], faturamento_min: 20_000_000, faturamento_max: null } }),
-  ])
-  assert.equal(r.vendedor_id, 'grandes')
+  assert.equal(
+    cobreTerritorio(CONTA, { ufs: ['SP'], faturamento_min: 20_000_000, faturamento_max: null }),
+    true,
+  )
 })
 
 test('faturamento desconhecido não entra em território com piso', () => {
-  // Deixar entrar faria toda empresa sem estimativa cair no território dos grandes,
-  // que é exatamente onde o erro custa mais caro.
-  const r = rotearNota({ ...NOTA, sacado_faturamento: null }, [
-    orig({ vendedor_id: 'grandes', territorio: { ufs: ['SP'], faturamento_min: 20_000_000, faturamento_max: null } }),
-  ])
-  assert.equal(r.vendedor_id, null)
-})
-
-test('duas carteiras reivindicando a mesma empresa entregam a nota E denunciam o cadastro', () => {
-  const r = rotearNota(NOTA, [
-    orig({ vendedor_id: 'a', empresas_escolhidas: ['sac-1'], nfs_vivas: 5 }),
-    orig({ vendedor_id: 'b', empresas_escolhidas: ['sac-1'], nfs_vivas: 1 }),
-  ])
-  assert.equal(r.vendedor_id, 'b')
-  assert.match(r.motivo, /2 originadores reivindicam/)
+  // Deixar entrar faria toda empresa sem estimativa cair no closer dos grandes, que é
+  // onde o erro custa mais caro.
+  assert.equal(
+    cobreTerritorio({ uf: 'SP', faturamento: null }, { ufs: ['SP'], faturamento_min: 20_000_000, faturamento_max: null }),
+    false,
+  )
+  // Mas um território só de UF aceita: não perguntou por faturamento.
+  assert.equal(
+    cobreTerritorio({ uf: 'SP', faturamento: null }, { ufs: ['SP'], faturamento_min: null, faturamento_max: null }),
+    true,
+  )
 })

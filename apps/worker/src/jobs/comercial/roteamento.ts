@@ -12,9 +12,9 @@ import { lerPainel } from '../../comercial/config.js'
  * a faixa muda com o calendário, e uma nota que entrou em faixa hoje precisa de dono
  * hoje — não na segunda-feira.
  *
- * A decisão em si mora no core, com testes. Aqui só se carrega o estado e se grava o
- * resultado, porque a pergunta "por que esta nota é minha" tem de ter a mesma resposta
- * na gravação e na tela.
+ * O critério é UM SÓ: a carteira explícita do originador. Território é a régua do
+ * CLOSER, que trabalha conta, não nota — usá-lo aqui trocaria as duas atribuições de
+ * lugar. A decisão mora no core, com testes.
  */
 
 export interface ResultadoRoteamento {
@@ -32,13 +32,6 @@ async function originadores(): Promise<OriginadorRoteavel[]> {
     .eq('ativo', true)
   if (!data?.length) return []
 
-  const ids = data.map((v) => v.id)
-  const { data: terrs } = await supabaseAdmin
-    .from('vendedor_territorios')
-    .select('vendedor_id, ufs, faturamento_min, faturamento_max')
-    .in('vendedor_id', ids)
-  const porVendedor = new Map((terrs ?? []).map((t) => [t.vendedor_id, t]))
-
   const { rows } = await pool.query<{ vendedor_id: string; n: string }>(
     `select vendedor_id, count(*) as n from notas_fiscais
      where vendedor_id is not null and estagio_funil not in ('convertida', 'perdida')
@@ -48,17 +41,9 @@ async function originadores(): Promise<OriginadorRoteavel[]> {
 
   return data.map((v) => {
     const s = (v.settings ?? {}) as { empresas_escolhidas?: string[] }
-    const t = porVendedor.get(v.id)
     return {
       vendedor_id: v.id,
       empresas_escolhidas: s.empresas_escolhidas ?? [],
-      territorio: t
-        ? {
-            ufs: (t.ufs ?? []) as string[],
-            faturamento_min: t.faturamento_min === null || t.faturamento_min === undefined ? null : Number(t.faturamento_min),
-            faturamento_max: t.faturamento_max === null || t.faturamento_max === undefined ? null : Number(t.faturamento_max),
-          }
-        : null,
       nfs_vivas: carga.get(v.id) ?? 0,
     }
   })
@@ -68,8 +53,6 @@ interface LinhaNf {
   access_key: string
   sacado_empresa_id: string | null
   fornecedor_empresa_id: string | null
-  sacado_uf: string | null
-  sacado_faturamento: string | null
   sacado_gestao: string | null
   vendedor_id: string | null
   vendedor_origem: string | null
@@ -81,12 +64,10 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
 
   const { rows } = await pool.query<LinhaNf>(`
     select nf.access_key, nf.sacado_empresa_id, nf.fornecedor_empresa_id,
-           u.uf as sacado_uf, sac.faturamento_anual as sacado_faturamento,
            sac.gestao_operacao as sacado_gestao,
            nf.vendedor_id, nf.vendedor_origem
     from notas_fiscais nf
     left join empresas sac on sac.id = nf.sacado_empresa_id
-    left join mercado_universo u on u.cnpj = nf.sacado_cnpj
     where nf.estagio_funil not in ('convertida', 'perdida')
       and nf.operavel is not false
       and coalesce(nf.vendedor_origem, '') <> 'manual'
@@ -98,8 +79,6 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
       {
         sacado_empresa_id: nf.sacado_empresa_id,
         fornecedor_empresa_id: nf.fornecedor_empresa_id,
-        sacado_uf: nf.sacado_uf,
-        sacado_faturamento: nf.sacado_faturamento === null ? null : Number(nf.sacado_faturamento),
         sacado_gestao: nf.sacado_gestao,
         vendedor_id_atual: nf.vendedor_id,
         vendedor_origem_atual: nf.vendedor_origem,
@@ -135,7 +114,7 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
     // A fila sem dono é trabalho do gestor, e trabalho que ninguém vê não é feito.
     await notificarPerfis(['Admin', 'Comercial'], {
       titulo: 'NFs sem originador',
-      corpo: `${acc.sem_dono} nota(s) viva(s) sem dono — nenhum território ou carteira as cobre.`,
+      corpo: `${acc.sem_dono} nota(s) viva(s) sem dono — nenhuma carteira de originador as cobre.`,
       url: '/comercial/fila',
     })
   }

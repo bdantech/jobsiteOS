@@ -361,8 +361,10 @@ export function ConfigComercial() {
             </Button>
           </div>
           <CardDescription>
-            Território em branco NÃO significa &quot;atende tudo&quot;: o roteador ignora
-            território vazio, senão um cadastro incompleto abocanharia a base inteira.
+            <strong>Originador</strong> recebe NOTA, por carteira de empresas escolhidas a dedo.
+            <strong> Closer</strong> recebe CONTA, por território — UF e faixa de faturamento.
+            Território em branco não significa &quot;atende tudo&quot;: vazio é ignorado, senão
+            um cadastro incompleto abocanha a base inteira.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -387,14 +389,20 @@ export function ConfigComercial() {
                     </span>
                     <span className="flex items-center gap-3">
                     <span className="text-xs text-muted-foreground">
-                      {t && ((t.ufs ?? []).length > 0 || t.faturamento_min || t.faturamento_max)
-                        ? `${(t.ufs ?? []).join(', ') || 'todas as UFs'} · ${
-                            t.faturamento_min ? brl(t.faturamento_min) : 'sem piso'
-                          } → ${t.faturamento_max ? brl(t.faturamento_max) : 'sem teto'}`
-                        : 'sem território'}
-                      {(s.empresas_escolhidas ?? []).length > 0
-                        ? ` · ${s.empresas_escolhidas?.length} na carteira explícita`
-                        : ''}
+                      {/*
+                        O que se mostra depende do tipo, porque a régua é outra: o
+                        originador só tem carteira, e um "sem território" ao lado do nome
+                        dele sugeriria um campo faltando que não existe.
+                      */}
+                      {v.tipo === 'originador'
+                        ? (s.empresas_escolhidas ?? []).length > 0
+                          ? `${s.empresas_escolhidas?.length} empresa(s) na carteira`
+                          : 'carteira vazia — nenhuma nota é roteada'
+                        : t && ((t.ufs ?? []).length > 0 || t.faturamento_min || t.faturamento_max)
+                          ? `${(t.ufs ?? []).join(', ') || 'todas as UFs'} · ${
+                              t.faturamento_min ? brl(t.faturamento_min) : 'sem piso'
+                            } → ${t.faturamento_max ? brl(t.faturamento_max) : 'sem teto'}`
+                          : 'sem território'}
                     </span>
                     <Button size="sm" variant="ghost" className="h-7 text-xs"
                       onClick={() => { setEditando(v); setAbrindoForm(true) }}>

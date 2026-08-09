@@ -18,6 +18,7 @@ export const comercialKeys = {
   comissoes: (competencia: string) => ['comercial', 'comissoes', competencia] as const,
   agenda: (vendedorId?: string | null) => ['comercial', 'agenda', vendedorId ?? 'eu'] as const,
   motivos: (contexto: string) => ['comercial', 'motivos', contexto] as const,
+  territorios: () => ['comercial', 'territorios'] as const,
   config: () => ['comercial', 'config'] as const,
 }
 
@@ -66,14 +67,20 @@ export async function buscarVendedores(): Promise<Tables<'vendedores'>[]> {
 
 /** Um lead com o nome da empresa — a lista é inútil sem ele. */
 export interface LeadComEmpresa extends Tables<'sdr_leads'> {
-  empresas: { id: string; razao_social: string | null; uf: string | null; valor_esperado_mensal: number | null } | null
+  empresas: {
+    id: string
+    razao_social: string | null
+    uf: string | null
+    valor_esperado_mensal: number | null
+    faturamento_anual: number | null
+  } | null
 }
 
 export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa[]> {
   const supabase = createClient()
   let q = supabase
     .from('sdr_leads')
-    .select('*, empresas(id, razao_social, uf, valor_esperado_mensal)')
+    .select('*, empresas(id, razao_social, uf, valor_esperado_mensal, faturamento_anual)')
     // Melhor empresa primeiro dentro do funil: a ordem da lista é a ordem de trabalho.
     .order('distribuido_em', { ascending: false })
     .limit(500)
@@ -110,6 +117,35 @@ export async function buscarMotivos(contexto: string): Promise<Tables<'motivos_p
     .order('ordem')
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+export interface TerritorioCloser {
+  ufs: readonly string[]
+  faturamento_min: number | null
+  faturamento_max: number | null
+}
+
+/**
+ * Territórios por vendedor, indexados por id. Um mapa, e não uma lista, porque o único
+ * uso é "qual o território deste closer" — e um `find` por card de reunião seria uma
+ * varredura por linha da tela.
+ */
+export async function buscarTerritoriosCloser(): Promise<Record<string, TerritorioCloser>> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('vendedor_territorios')
+    .select('vendedor_id, ufs, faturamento_min, faturamento_max')
+  if (error) throw new Error(error.message)
+  return Object.fromEntries(
+    (data ?? []).map((t) => [
+      t.vendedor_id,
+      {
+        ufs: (t.ufs ?? []) as string[],
+        faturamento_min: t.faturamento_min === null ? null : Number(t.faturamento_min),
+        faturamento_max: t.faturamento_max === null ? null : Number(t.faturamento_max),
+      },
+    ]),
+  )
 }
 
 export interface NfSemDono {
