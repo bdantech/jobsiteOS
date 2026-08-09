@@ -34,6 +34,7 @@ import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
 import { FaturamentoEquipe } from './faturamento-equipe'
 import { CreditoCard } from '@/components/credito/credito-card'
+import { SecaoComercial } from '@/components/comercial/secao-comercial'
 import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
@@ -279,6 +280,12 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                   faturamentoEstimado={data.faturamento_anual}
                   creditoCalculadoEm={data.credito_calculado_em}
                 />
+                {/*
+                 * Comercial depois do Crédito, e pelo mesmo motivo da ordem acima: a
+                 * decisão ativo × passivo se toma olhando quanto a conta rende e quem
+                 * já a trabalha, não antes de saber as duas coisas.
+                 */}
+                <SecaoComercial empresaId={data.id} />
                 <EmpresaForm empresa={data} />
               </TabsContent>
 

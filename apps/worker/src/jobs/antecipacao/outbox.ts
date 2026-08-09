@@ -72,6 +72,8 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
     return acc
   }
 
+  const passivos = await sacadosPassivos()
+
   // Round-robin por conta de WhatsApp, contínuo dentro da execução: distribuir o
   // volume entre os números é o que evita queimar um só quando os envios ligarem.
   let rr = 0
@@ -95,7 +97,9 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
         continue
       }
 
-      const notas = await notasDoFornecedor(f.fornecedor_cnpj, faixa)
+      const notas = await notasDoFornecedor(f.fornecedor_cnpj, faixa, passivos)
+      // Zero notas aqui inclui o caso em que TODAS eram de sacado passivo: o
+      // fornecedor simplesmente não tem o que ser abordado nesta faixa.
       if (notas.length === 0) continue
 
       const vars = {
@@ -194,7 +198,25 @@ async function fornecedoresElegiveis(faixa: Faixa): Promise<FornecedorElegivel[]
   )
 }
 
-async function notasDoFornecedor(cnpj: string, faixa: Faixa) {
+/**
+ * Os sacados marcados como PASSIVOS (04g §1).
+ *
+ * Passivo tem efeito real, e este é o mais concreto deles: a nota de um sacado passivo
+ * não gera abordagem. Sem isto, "passivo" seria um rótulo que não muda nada, e o
+ * fornecedor continuaria recebendo mensagem sobre uma conta que a casa decidiu não
+ * trabalhar — pior, uma conta que já antecipa sozinha.
+ *
+ * Um conjunto carregado uma vez: são dezenas de empresas contra milhares de notas.
+ */
+async function sacadosPassivos(): Promise<Set<string>> {
+  const { data } = await supabaseAdmin
+    .from('empresas')
+    .select('cnpj')
+    .eq('gestao_operacao', 'passivo')
+  return new Set((data ?? []).map((e) => e.cnpj))
+}
+
+async function notasDoFornecedor(cnpj: string, faixa: Faixa, passivos: ReadonlySet<string>) {
   const { data } = await supabaseAdmin
     .from('notas_funil')
     .select('access_key, valor, receita_esperada, sacado_nome, sacado_cnpj, contato_fornecedor')
@@ -202,7 +224,9 @@ async function notasDoFornecedor(cnpj: string, faixa: Faixa) {
     .eq('faixa', faixa)
     .in('estagio_funil', [...ESTAGIOS_ABERTOS])
     .limit(200)
-  return (data ?? []).filter((n): n is typeof n & { access_key: string } => Boolean(n.access_key))
+  return (data ?? [])
+    .filter((n): n is typeof n & { access_key: string } => Boolean(n.access_key))
+    .filter((n) => !n.sacado_cnpj || !passivos.has(n.sacado_cnpj))
 }
 
 /**

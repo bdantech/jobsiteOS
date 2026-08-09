@@ -2777,7 +2777,15 @@ export type Database = {
           valor?: number
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "comissao_lancamentos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comissao_regras: {
         Row: {
@@ -2882,7 +2890,29 @@ export type Database = {
           ultimo_toque_em?: string | null
           vendedor_destino_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sdr_leads_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_vendedor_destino_id_fkey"
+            columns: ["vendedor_destino_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendas: {
         Row: {
@@ -2927,7 +2957,22 @@ export type Database = {
           sdr_lead_id?: string | null
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendas_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedor_acessos: {
         Row: {
@@ -2969,7 +3014,22 @@ export type Database = {
           papel?: string
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedor_carteira_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_carteira_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedor_eventos: {
         Row: {
@@ -3014,7 +3074,22 @@ export type Database = {
           venda_id?: string | null
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedor_eventos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedor_ics_tokens: {
         Row: {
