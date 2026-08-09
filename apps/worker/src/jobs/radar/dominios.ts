@@ -3,7 +3,10 @@ import { fetch } from 'undici'
 // Caminhos ESPECÍFICOS, nunca o barrel do core: `src/index.js` reexporta o registry,
 // que importa `zod-to-json-schema` — dependência que o worker não tem.
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { dominioDeEmail } from '../../../../../packages/core/src/radar/dominio.js'
+import {
+  dominioDeEmail,
+  motivoDescarteDominio,
+} from '../../../../../packages/core/src/radar/dominio.js'
 import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
 import type { Tables } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
@@ -51,8 +54,22 @@ function gerarCandidatos(razao?: string | null, fantasia?: string | null): strin
   return [...cands].slice(0, 8)
 }
 
-/** DNS → MX → CNPJ na página. Retorna null se o domínio nem resolve. */
+/**
+ * DNS → MX → CNPJ na página. Retorna null se o domínio nem resolve.
+ *
+ * Antes de gastar DNS e HTTP, o descarte: o domínio do contador PASSA em tudo isto —
+ * existe, responde, tem MX, às vezes até traz o CNPJ do cliente na página de clientes.
+ * Validar mais forte nunca ia resolver, porque o problema não é o domínio ser falso, é
+ * ele ser de outra empresa. O mesmo guarda vale para as quatro origens da cascata,
+ * inclusive o que o Claude devolve.
+ */
 async function validar(dominio: string, cnpj: string): Promise<Omit<Achado, 'origem'> | null> {
+  const descarte = motivoDescarteDominio(dominio)
+  if (descarte) {
+    logger.info({ cnpj, dominio, motivo: descarte }, 'Domínio descartado antes de validar.')
+    return null
+  }
+
   try {
     await dns.resolve(dominio)
   } catch {

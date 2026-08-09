@@ -11,14 +11,97 @@
 /**
  * Provedores de e-mail que NÃO dizem nada sobre a empresa. A raiz do domínio (antes do
  * primeiro ponto) é o que se compara, para pegar `gmail.com` e `gmail.com.br` de uma vez.
+ *
+ * A segunda metade da lista (e os erros de digitação logo abaixo) não foi imaginada:
+ * saiu de contar, no dump da Receita, quantas RAÍZES DE CNPJ DIFERENTES declaram cada
+ * host. Um host que 400 empresas sem relação nenhuma informam à Receita não é o
+ * domínio de nenhuma delas — é o provedor de e-mail de todas.
  */
 export const PROVEDORES_EMAIL_GENERICOS: readonly string[] = [
   'gmail', 'hotmail', 'outlook', 'live', 'yahoo', 'uol', 'terra', 'bol', 'ig', 'globo',
   'r7', 'msn', 'icloud', 'aol', 'protonmail', 'proton', 'zipmail', 'oi', 'superig',
   'itelefonica', 'me', 'mac', 'gmx', 'yandex', 'zoho', 'mail',
+  // Provedores e webmails brasileiros, por ordem de aparição no dump.
+  'brturbo', 'veloxmail', 'uai', 'uaivip', 'netsite', 'ibest', 'onda', 'sercomtel',
+  'email', 'ymail', 'globomail', 'pop', 'netuno', 'dglnet', 'com4',
 ]
 
-const GENERICOS = new Set(PROVEDORES_EMAIL_GENERICOS)
+/**
+ * Erros de digitação dos dois maiores provedores. Não é preciosismo: são ~950 empresas
+ * no dump que ficariam com `gmai.com` gravado como domínio corporativo — e um domínio
+ * que não existe some no DNS, o que faz o enriquecimento devolver "sem dados" para
+ * sempre em vez de dizer que o e-mail era pessoal.
+ */
+export const ERROS_DE_DIGITACAO_GENERICOS: readonly string[] = [
+  'gmai', 'gamil', 'gmal', 'gmil', 'gmial', 'gamail', 'gmaill', 'hotmai', 'homail',
+  'hotmial', 'hotmal', 'yahho', 'yaho',
+]
+
+/**
+ * Hosts que são o próprio "não sei": alguém precisava preencher um campo obrigatório e
+ * preencheu. `contato.com.br` aparece em 237 raízes de CNPJ diferentes — é o que se
+ * digita quando o formulário exige um e-mail e o endereço real é `contato@` alguma
+ * coisa que a pessoa não lembrava.
+ */
+export const HOSTS_PLACEHOLDER: readonly string[] = ['contato', 'xxx', 'teste', 'exemplo', 'example', 'naotem', 'semail']
+
+const GENERICOS = new Set([...PROVEDORES_EMAIL_GENERICOS, ...ERROS_DE_DIGITACAO_GENERICOS])
+const PLACEHOLDERS = new Set(HOSTS_PLACEHOLDER)
+
+// ─── Contabilidade ──────────────────────────────────────────────────────────
+
+/**
+ * O e-mail que a CONTABILIDADE cadastrou na abertura da empresa.
+ *
+ * É o caso mais comum de domínio errado que passa em toda validação: o domínio existe,
+ * responde HTTP, tem MX — só não é da empresa. Enriquecer por ele traz o headcount e os
+ * contatos do escritório contábil, e o número chega à tela com a mesma cara de um dado
+ * apurado. No dump da Receita são 39.472 empresas com um domínio assim declarado.
+ *
+ * Os tokens são deliberadamente curtos (`contab`, `contad`) e deliberadamente NÃO
+ * incluem `cont` sozinho. `cont` pegaria `contextoengenharia`, `contrutoraf5`,
+ * `contagas` e `contatoincorporadora` — construtoras de verdade, medidas no dump. O
+ * preço de não pegar `contalex` e `contasur` (escritórios cujo nome não diz que são)
+ * é menor que o de apagar o domínio certo de uma construtora.
+ */
+export const TOKENS_CONTABILIDADE: readonly string[] = ['contab', 'contad', 'conteis']
+
+/**
+ * `.cnt.br` é reservado pelo registro.br a CONTABILISTAS — exige registro no CRC. Não é
+ * heurística: quem tem esse domínio provou ser um escritório contábil para consegui-lo.
+ */
+export const SUFIXOS_CONTABILIDADE: readonly string[] = ['.cnt.br']
+
+export function ehDominioDeContabilidade(host: string): boolean {
+  const h = host.toLowerCase()
+  if (SUFIXOS_CONTABILIDADE.some((s) => h.endsWith(s))) return true
+  return TOKENS_CONTABILIDADE.some((t) => h.includes(t))
+}
+
+/** Por que este host não serve como domínio da empresa — ou null quando serve. */
+export type MotivoDescarteDominio = 'provedor_generico' | 'placeholder' | 'contabilidade'
+
+export const MOTIVO_DESCARTE_DOMINIO_LABELS: Record<MotivoDescarteDominio, string> = {
+  provedor_generico: 'E-mail pessoal (provedor genérico)',
+  placeholder: 'Endereço de preenchimento, não da empresa',
+  contabilidade: 'Domínio de escritório contábil',
+}
+
+/**
+ * O guarda único da cascata. Vale para qualquer origem — e-mail da Receita, e-mail de
+ * contato, heurística, busca do Claude —, porque as quatro conseguem chegar no domínio
+ * do contador, e cada uma tinha o seu próprio jeito de não perceber.
+ */
+export function motivoDescarteDominio(
+  host: string | null | undefined,
+): MotivoDescarteDominio | null {
+  const h = normalizarDominio(host)
+  if (!h) return null // não é domínio: quem chamou já trata
+  if (ehProvedorGenerico(h)) return 'provedor_generico'
+  if (ehPlaceholder(h)) return 'placeholder'
+  if (ehDominioDeContabilidade(h)) return 'contabilidade'
+  return null
+}
 
 /**
  * O host puro: sem esquema, sem caminho, sem porta, sem `www.`, minúsculo.
@@ -55,10 +138,17 @@ function ehProvedorGenerico(host: string): boolean {
   return partes.length <= 3 && GENERICOS.has(partes[0] as string)
 }
 
+/** Mesmo limite de rótulos: `contato.construtora.com.br` é um subdomínio de verdade. */
+function ehPlaceholder(host: string): boolean {
+  const partes = host.split('.')
+  return partes.length <= 3 && PLACEHOLDERS.has(partes[0] as string)
+}
+
 /**
  * O domínio corporativo de um e-mail, ou null quando ele não diz nada — endereço
- * malformado ou provedor genérico. Null é resposta, não falha: um contato no Gmail é
- * um contato válido cujo e-mail simplesmente não identifica a empresa.
+ * malformado, provedor genérico, placeholder ou escritório contábil. Null é resposta,
+ * não falha: um contato no Gmail é um contato válido cujo e-mail simplesmente não
+ * identifica a empresa.
  */
 export function dominioDeEmail(email: string | null | undefined): string | null {
   if (!email) return null
@@ -66,7 +156,7 @@ export function dominioDeEmail(email: string | null | undefined): string | null 
   if (arroba.length !== 2) return null
   const host = normalizarDominio(arroba[1])
   if (!host) return null
-  return ehProvedorGenerico(host) ? null : host
+  return motivoDescarteDominio(host) === null ? host : null
 }
 
 // ─── O que os contatos dizem sobre o domínio salvo ──────────────────────────

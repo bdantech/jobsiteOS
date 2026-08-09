@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   dominioDeEmail,
+  ehDominioDeContabilidade,
+  motivoDescarteDominio,
   normalizarDominio,
   sugerirDominiosPorContato,
 } from './dominio.ts'
@@ -51,6 +53,58 @@ test('e-mail malformado devolve null em vez de inventar domínio', () => {
   assert.equal(dominioDeEmail('fulano'), null)
   assert.equal(dominioDeEmail('a@b@c.com'), null)
   assert.equal(dominioDeEmail('fulano@'), null)
+})
+
+// ─── Contabilidade ──────────────────────────────────────────────────────────
+//
+// O caso que motivou tudo: a contabilidade abre a empresa e cadastra o próprio e-mail
+// na Receita. O domínio existe, responde, tem MX — só é de outra empresa. Validar mais
+// forte nunca resolveria; só o NOME denuncia.
+
+test('domínio de escritório contábil é descartado', () => {
+  assert.equal(dominioDeEmail('fiscal@contabilmaestro.com.br'), null)
+  assert.equal(dominioDeEmail('joao@ca-contadores.com.br'), null)
+  assert.equal(dominioDeEmail('x@assessoriacontabilsilva.com.br'), null)
+  assert.equal(dominioDeEmail('x@contabsc.com.br'), null)
+})
+
+test('.cnt.br cai sempre: o registro.br só concede a contabilista com CRC', () => {
+  assert.equal(dominioDeEmail('contato@escritaonline.cnt.br'), null)
+  assert.equal(ehDominioDeContabilidade('qualquercoisa.cnt.br'), true)
+})
+
+/**
+ * O motivo de `cont` sozinho estar FORA da lista. Estas quatro são construtoras reais,
+ * medidas no dump da Receita — um token mais curto apagaria o domínio certo delas para
+ * pegar alguns escritórios a mais.
+ */
+test('construtora que começa com "cont" NÃO é confundida com contabilidade', () => {
+  assert.equal(dominioDeEmail('obra@contextoengenharia.com'), 'contextoengenharia.com')
+  assert.equal(dominioDeEmail('obra@contrutoraf5.com.br'), 'contrutoraf5.com.br')
+  assert.equal(dominioDeEmail('obra@contagas.com.br'), 'contagas.com.br')
+  assert.equal(dominioDeEmail('obra@controlsegsistemas.com.br'), 'controlsegsistemas.com.br')
+})
+
+test('erros de digitação de provedor não viram domínio corporativo', () => {
+  // Sem isto o domínio gravado é um host que não existe: o DNS falha e o
+  // enriquecimento devolve "sem dados" para sempre, como se a empresa fosse obscura.
+  assert.equal(dominioDeEmail('fulano@gmai.com'), null)
+  assert.equal(dominioDeEmail('fulano@gamil.com'), null)
+  assert.equal(dominioDeEmail('fulano@hotmai.com'), null)
+})
+
+test('placeholder de formulário é descartado', () => {
+  assert.equal(dominioDeEmail('contato@contato.com.br'), null)
+  assert.equal(dominioDeEmail('a@xxx.com.br'), null)
+  // Mas um subdomínio de verdade sobrevive: são quatro rótulos, não um placeholder.
+  assert.equal(dominioDeEmail('a@contato.construtora.com.br'), 'contato.construtora.com.br')
+})
+
+test('o motivo do descarte é dito, não só o null', () => {
+  assert.equal(motivoDescarteDominio('gmail.com'), 'provedor_generico')
+  assert.equal(motivoDescarteDominio('contato.com.br'), 'placeholder')
+  assert.equal(motivoDescarteDominio('contabilmaestro.com.br'), 'contabilidade')
+  assert.equal(motivoDescarteDominio('acme.com.br'), null)
 })
 
 // ─── sugerirDominiosPorContato ──────────────────────────────────────────────
