@@ -1,4 +1,10 @@
-import { ORIGEM_METRICA_LABELS, crescimento12m, type OrigemMetrica, type Tables } from '@jobsiteos/core'
+import {
+  ORIGEM_METRICA_LABELS,
+  anoReferenciaMetrica,
+  crescimento12m,
+  type OrigemMetrica,
+  type Tables,
+} from '@jobsiteos/core'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingDown, TrendingUp } from 'lucide-react-native'
 import * as React from 'react'
@@ -53,6 +59,25 @@ function rotuloOrigem(o: string | null): string {
   return ORIGEM_METRICA_LABELS[o as OrigemMetrica] ?? o
 }
 
+/**
+ * A que ano o número da ficha se refere — que não é o dia em que ele foi lido.
+ *
+ * O cliente declara hoje o faturamento de 2022, e quem está com ele na frente é
+ * exatamente quem não pode ler "04/08/2026" como o ano do número.
+ */
+function anoVigente(serie: Metrica[], metrica: string, origem: string | null): number | null {
+  if (!origem) return null
+  const anos = serie
+    .filter((m) => m.metrica === metrica && m.origem === origem)
+    .map(anoReferenciaMetrica)
+    .filter((a): a is number => a !== null)
+  return anos.length > 0 ? Math.max(...anos) : null
+}
+
+function rotuloAnoEData(ano: number | null, em: string | null): string {
+  return ano === null ? `lido em ${data(em)}` : `ref. ${ano} · lido em ${data(em)}`
+}
+
 export function FaturamentoEquipeBlock({ empresa }: { empresa: Empresa }) {
   const { colors } = useTheme()
 
@@ -100,7 +125,10 @@ export function FaturamentoEquipeBlock({ empresa }: { empresa: Empresa }) {
               </Badge>
             ) : null}
             <Text variant="muted" className="text-[11px]">
-              {data(empresa.faturamento_atualizado_em)}
+              {rotuloAnoEData(
+                anoVigente(serie, 'faturamento_anual', empresa.faturamento_origem),
+                empresa.faturamento_atualizado_em,
+              )}
             </Text>
           </View>
         </View>
@@ -130,7 +158,10 @@ export function FaturamentoEquipeBlock({ empresa }: { empresa: Empresa }) {
               <Text className="text-[10px]">{rotuloOrigem(empresa.funcionarios_origem)}</Text>
             </Badge>
             <Text variant="muted" className="text-[11px]">
-              {data(empresa.funcionarios_atualizado_em)}
+              {rotuloAnoEData(
+                anoVigente(serie, 'funcionarios', empresa.funcionarios_origem),
+                empresa.funcionarios_atualizado_em,
+              )}
             </Text>
           </View>
         </View>

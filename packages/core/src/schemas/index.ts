@@ -155,7 +155,9 @@ export const declararMetricaSchema = z.object({
     .max(2100)
     .optional()
     .nullable()
-    .describe('Ano de referência do faturamento declarado.'),
+    // Vale para as duas métricas. Omitir cai no último ano fechado (o mesmo que o
+    // estimador preenche), porque é a declaração DATADA que apaga o chute daquele ano.
+    .describe('Ano de referência do valor declarado. Sem ele, o último ano fechado.'),
 })
 export type DeclararMetricaInput = z.infer<typeof declararMetricaSchema>
 

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  anoReferenciaEstimativa,
+  anoReferenciaMetrica,
   aplicarModelos,
   calibrarEstimador,
   crescimento12m,
+  ehEstimativa,
   estimarFaturamento,
   mediaGeometricaPonderada,
   mediana,
@@ -50,6 +53,44 @@ test('origem melhor vence, e mesma origem mais recente também', () => {
 test('sem valor vigente, qualquer origem entra', () => {
   assert.equal(origemVence('bracket_simples', null), true)
   assert.equal(origemVence('modelo', undefined), true)
+})
+
+// ─── Ano de referência ──────────────────────────────────────────────────────
+
+test('estimativa preenche o último ano FECHADO, não o ano corrente', () => {
+  // Em agosto de 2026 ninguém sabe quanto a empresa vai faturar em 2026 — nem ela.
+  assert.equal(anoReferenciaEstimativa(new Date('2026-08-08T12:00:00Z')), 2025)
+  // E vale o ano inteiro: em dezembro o ano corrente continua não tendo fechado.
+  assert.equal(anoReferenciaEstimativa(new Date('2026-12-30T12:00:00Z')), 2025)
+})
+
+test('o ano explícito manda sobre a data de captura', () => {
+  // O caso real: cliente declara em 2026 o faturamento de 2022. A data da captura
+  // diz quando ele falou; só `ano` diz sobre o que ele falou.
+  assert.equal(
+    anoReferenciaMetrica({
+      detalhes: { ano: 2022 },
+      capturado_em: '2026-08-04T10:00:00Z',
+      origem: 'declarado_cliente',
+    }),
+    2022,
+  )
+})
+
+test('sem ano explícito: medição descreve o momento, estimativa o ano fechado', () => {
+  const capturado_em = '2026-08-08T12:00:00Z'
+  assert.equal(anoReferenciaMetrica({ capturado_em, origem: 'apollo' }), 2026)
+  assert.equal(anoReferenciaMetrica({ capturado_em, origem: 'modelo' }), 2025)
+  assert.equal(anoReferenciaMetrica({ capturado_em, origem: 'bracket_simples' }), 2025)
+})
+
+test('só modelo e faixa do Simples contam como estimativa', () => {
+  assert.equal(ehEstimativa('modelo'), true)
+  assert.equal(ehEstimativa('bracket_simples'), true)
+  // `lista` é ruim, mas é alguém afirmando um número — não um chute nosso.
+  assert.equal(ehEstimativa('lista'), false)
+  assert.equal(ehEstimativa('publicacao'), false)
+  assert.equal(ehEstimativa(null), false)
 })
 
 // ─── Combinação ─────────────────────────────────────────────────────────────

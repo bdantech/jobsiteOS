@@ -70,6 +70,11 @@ const RANK_ORIGEM: Record<OrigemMetrica, number> = {
  * Sem esta regra, o job mensal de estimativa apagaria o faturamento que o cliente
  * declarou na reunião da semana passada, em silêncio, todo mês.
  */
+/** Menor é melhor; origem desconhecida perde de qualquer leitura de verdade. */
+export function rankOrigem(origem: string | null | undefined): number {
+  return RANK_ORIGEM[origem as OrigemMetrica] ?? 99
+}
+
 export function origemVence(nova: string | null | undefined, vigente: string | null | undefined): boolean {
   if (!vigente) return true
   const r1 = RANK_ORIGEM[nova as OrigemMetrica]
@@ -77,6 +82,57 @@ export function origemVence(nova: string | null | undefined, vigente: string | n
   if (r1 === undefined) return false
   if (r2 === undefined) return true
   return r1 <= r2
+}
+
+// ─── Ano de referência ──────────────────────────────────────────────────────
+
+/** As origens que são um CHUTE. As outras são alguém afirmando um número. */
+export const ORIGENS_ESTIMADAS: readonly OrigemMetrica[] = ['modelo', 'bracket_simples']
+
+export function ehEstimativa(origem: string | null | undefined): boolean {
+  return ORIGENS_ESTIMADAS.includes(origem as OrigemMetrica)
+}
+
+/**
+ * A que ANO uma estimativa se refere.
+ *
+ * Faturamento anual é um número de ano FECHADO: em agosto de 2026 ninguém — nem o
+ * dono da empresa — sabe quanto ela vai faturar em 2026. O estimador lê os sinais de
+ * hoje (headcount, MRR) e responde a pergunta que o cliente responderia se
+ * perguntassem: "quanto vocês faturaram no ano passado?". Então é esse o ano que ele
+ * preenche, e é por isso que o formulário de declaração também já vem preenchido com
+ * ele.
+ *
+ * Sem um ano explícito, estimativa e declaração viravam duas respostas sem data para
+ * a mesma pergunta, e a tela mostrava as duas lado a lado sem como distinguir.
+ */
+export function anoReferenciaEstimativa(agora: Date = new Date()): number {
+  return agora.getFullYear() - 1
+}
+
+/**
+ * O ano de referência de uma leitura qualquer da série.
+ *
+ * `detalhes.ano` é a resposta sempre que existe — é o ano que alguém confirmou na
+ * importação ou digitou na declaração. O fallback é para as leituras gravadas antes
+ * de o ano ser explícito: uma medição (Apollo, por exemplo) descreve o momento em que
+ * foi feita; uma estimativa descreve o último ano fechado daquele momento.
+ *
+ * Espelhado em SQL por public.app_ano_referencia_metrica (migração 0087) — a
+ * alternativa seria a função do banco importar TypeScript.
+ */
+export function anoReferenciaMetrica(m: {
+  detalhes?: unknown
+  capturado_em: string
+  origem: string | null
+}): number | null {
+  const d = m.detalhes as { ano?: unknown } | null | undefined
+  const explicito = typeof d?.ano === 'number' ? d.ano : Number(d?.ano)
+  if (Number.isInteger(explicito) && explicito > 1900) return explicito
+
+  const capturado = new Date(m.capturado_em)
+  if (Number.isNaN(capturado.getTime())) return null
+  return capturado.getFullYear() - (ehEstimativa(m.origem) ? 1 : 0)
 }
 
 // ─── Os modelos ─────────────────────────────────────────────────────────────

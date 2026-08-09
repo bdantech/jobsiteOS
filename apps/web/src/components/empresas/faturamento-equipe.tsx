@@ -6,7 +6,11 @@ import { toast } from 'sonner'
 import { Banknote, Globe, History, RefreshCw, TrendingDown, TrendingUp, Users } from 'lucide-react'
 import {
   ORIGEM_METRICA_LABELS,
+  anoReferenciaEstimativa,
+  anoReferenciaMetrica,
   crescimento12m,
+  ehEstimativa,
+  rankOrigem,
   type OrigemMetrica,
   type Tables,
 } from '@jobsiteos/core'
@@ -96,6 +100,20 @@ function Sparkline({ pontos }: { pontos: number[] }) {
   )
 }
 
+/**
+ * "ref. 2022 · lido em 04/08/2026". As duas datas, porque elas discordam com
+ * frequência — o cliente declara hoje o faturamento de três anos atrás — e mostrar
+ * só a segunda faz o número parecer atual.
+ */
+function AnoEData({ ano, em }: { ano: number | null; em: string | null }) {
+  return (
+    <span className="text-[11px] text-muted-foreground">
+      {ano === null ? null : <span className="font-medium tabular-nums">ref. {ano} · </span>}
+      lido em {data(em)}
+    </span>
+  )
+}
+
 function Variacao({ valor }: { valor: number | null }) {
   if (valor === null) return null
   const pct = (valor * 100).toFixed(0)
@@ -116,6 +134,100 @@ function Variacao({ valor }: { valor: number | null }) {
   )
 }
 
+/**
+ * A leitura que responde por um ano: melhor origem primeiro, e entre iguais a mais
+ * recente. É a mesma ordem que decide o valor vigente na ficha — só aplicada ano a
+ * ano, em vez de uma vez para a empresa inteira.
+ */
+function melhorPorAno(pontos: Metrica[]): { ano: number; leitura: Metrica }[] {
+  const porAno = new Map<number, Metrica>()
+  for (const p of pontos) {
+    const ano = anoReferenciaMetrica(p)
+    if (ano === null) continue
+    const atual = porAno.get(ano)
+    if (
+      !atual ||
+      rankOrigem(p.origem) < rankOrigem(atual.origem) ||
+      (rankOrigem(p.origem) === rankOrigem(atual.origem) &&
+        Date.parse(p.capturado_em) > Date.parse(atual.capturado_em))
+    ) {
+      porAno.set(ano, p)
+    }
+  }
+  return [...porAno.entries()]
+    .map(([ano, leitura]) => ({ ano, leitura }))
+    .sort((a, b) => a.ano - b.ano)
+}
+
+/**
+ * Barras por ANO de referência, não por data de captura.
+ *
+ * A distinção não é cosmética: o cliente declara em 2026 o faturamento de 2022, e o
+ * ranking publica em 2025 os números de 2023 e 2024. Ordenar pela captura desenharia
+ * a curva da nossa coleta de dados, que não é a curva de nada que aconteceu na empresa.
+ *
+ * Estimativa aparece esmaecida e tracejada. O ano em que ela convive com um valor
+ * informado é raro por construção (o valor informado apaga a estimativa daquele ano),
+ * mas anos vizinhos misturam os dois — e uma barra estimada com a mesma cara de uma
+ * medida é a forma mais silenciosa de um palpite virar fato.
+ */
+function GraficoPorAno({
+  pontos,
+  formatar,
+}: {
+  pontos: Metrica[]
+  formatar: (v: number) => string
+}) {
+  const anos = melhorPorAno(pontos)
+  if (anos.length === 0) return null
+
+  const max = Math.max(...anos.map((a) => Number(a.leitura.valor)), 1)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
+        {anos.map(({ ano, leitura }) => {
+          const valor = Number(leitura.valor)
+          const estimado = ehEstimativa(leitura.origem)
+          return (
+            <div key={ano} className="flex w-16 shrink-0 flex-col items-center gap-1">
+              <span className="text-[10px] tabular-nums text-muted-foreground">
+                {formatar(valor)}
+              </span>
+              <div className="flex h-24 w-full items-end">
+                <div
+                  className={cn(
+                    'w-full rounded-t',
+                    estimado
+                      ? 'border border-dashed border-primary/60 bg-primary/20'
+                      : 'bg-primary',
+                  )}
+                  style={{ height: `${Math.max(3, (valor / max) * 100)}%` }}
+                  title={`${ano}: ${formatar(valor)} — ${rotuloOrigem(leitura.origem)}`}
+                />
+              </div>
+              <span className="text-xs font-medium tabular-nums">{ano}</span>
+            </div>
+          )
+        })}
+      </div>
+      <p className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-primary" aria-hidden />
+          informado
+        </span>
+        <span className="flex items-center gap-1">
+          <span
+            className="inline-block h-2 w-3 rounded-sm border border-dashed border-primary/60 bg-primary/20"
+            aria-hidden
+          />
+          estimado
+        </span>
+      </p>
+    </div>
+  )
+}
+
 function HistoricoDialog({
   aberto,
   onOpenChange,
@@ -129,33 +241,55 @@ function HistoricoDialog({
   pontos: Metrica[]
   formatar: (v: number) => string
 }) {
+  // Do ano mais recente para o mais antigo; dentro do ano, a leitura mais nova primeiro.
+  const ordenados = React.useMemo(
+    () =>
+      [...pontos].sort((a, b) => {
+        const anoA = anoReferenciaMetrica(a) ?? 0
+        const anoB = anoReferenciaMetrica(b) ?? 0
+        if (anoA !== anoB) return anoB - anoA
+        return Date.parse(b.capturado_em) - Date.parse(a.capturado_em)
+      }),
+    [pontos],
+  )
+
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>
-            Cada linha é uma leitura, com a origem de onde veio. Nada aqui é sobrescrito — a
-            série guarda inclusive as leituras que perderam para uma origem melhor.
+            Cada linha é uma leitura, com o <strong>ano a que se refere</strong> e a origem de
+            onde veio — e os dois são diferentes da data em que a leitura entrou aqui.
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-96 space-y-4 overflow-y-auto">
           {pontos.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma leitura ainda.</p>
           ) : (
-            <ul className="divide-y">
-              {pontos.map((p) => (
-                <li key={p.id} className="flex items-baseline justify-between gap-3 py-2">
-                  <span className="font-medium tabular-nums">{formatar(Number(p.valor))}</span>
-                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="text-[10px]">
-                      {rotuloOrigem(p.origem)}
-                    </Badge>
-                    {data(p.capturado_em)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <GraficoPorAno pontos={pontos} formatar={formatar} />
+              <ul className="divide-y border-t">
+                {ordenados.map((p) => (
+                  <li key={p.id} className="flex items-baseline justify-between gap-3 py-2">
+                    <span className="flex items-baseline gap-2">
+                      <Badge variant="secondary" className="text-[10px] tabular-nums">
+                        {anoReferenciaMetrica(p) ?? '—'}
+                      </Badge>
+                      <span className="font-medium tabular-nums">{formatar(Number(p.valor))}</span>
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="text-[10px]">
+                        {rotuloOrigem(p.origem)}
+                      </Badge>
+                      <span title="Quando esta leitura entrou na base">
+                        lido em {data(p.capturado_em)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       </DialogContent>
@@ -189,7 +323,7 @@ function DeclararDialog({
       empresa_id: empresaId,
       metrica,
       valor: String(fd.get('valor') ?? ''),
-      ano: ehFaturamento ? String(fd.get('ano') ?? '') : undefined,
+      ano: String(fd.get('ano') ?? ''),
     })
     setSalvando(false)
     if (!r.ok) {
@@ -211,7 +345,8 @@ function DeclararDialog({
             </DialogTitle>
             <DialogDescription>
               O que o cliente informou. Fica no topo da hierarquia de origens: nenhuma
-              estimativa sobrescreve, e é isto que calibra o modelo para todo o resto da base.
+              estimativa sobrescreve, a estimativa que existia para o ano declarado é
+              apagada, e é isto que calibra o modelo para todo o resto da base.
             </DialogDescription>
           </DialogHeader>
 
@@ -220,19 +355,24 @@ function DeclararDialog({
               <Label htmlFor="valor">{ehFaturamento ? 'Faturamento anual (R$)' : 'Funcionários'}</Label>
               <Input id="valor" name="valor" type="number" min={0} step={ehFaturamento ? '0.01' : '1'} required />
             </div>
-            {ehFaturamento && (
-              <div className="space-y-1.5">
-                <Label htmlFor="ano">Ano de referência</Label>
-                <Input
-                  id="ano"
-                  name="ano"
-                  type="number"
-                  min={2000}
-                  max={2100}
-                  placeholder={String(new Date().getFullYear() - 1)}
-                />
-              </div>
-            )}
+            {/*
+              O ano vale para as duas métricas e vem PREENCHIDO com o último ano
+              fechado: é o ano que o estimador tenta adivinhar, então declarar sem ano
+              deixava a declaração e o chute sobre o mesmo período convivendo na ficha
+              sem como distinguir. Preenchido, a declaração apaga o chute daquele ano.
+            */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ano">Ano de referência</Label>
+              <Input
+                id="ano"
+                name="ano"
+                type="number"
+                min={2000}
+                max={2100}
+                required
+                defaultValue={String(anoReferenciaEstimativa())}
+              />
+            </div>
           </div>
 
           {erro ? <p className="pb-2 text-sm text-destructive">{erro}</p> : null}
@@ -295,6 +435,25 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
   function recarregar() {
     for (const chave of chaves) void qc.invalidateQueries({ queryKey: chave })
   }
+
+  /**
+   * O ano do número que está NA FICHA — não o ano em que ele foi lido.
+   *
+   * Sem isto o cartão mostrava "R$ 1,17 bi · Declarado · 04/08/2026" para um
+   * faturamento de 2022, e a data ao lado do valor era lida como o ano do valor.
+   * Procura entre as leituras da origem vigente e fica com a mais recente delas.
+   */
+  const anoVigente = React.useCallback(
+    (pontos: Metrica[], origem: string | null) => {
+      if (!origem) return null
+      const anos = pontos
+        .filter((p) => p.origem === origem)
+        .map(anoReferenciaMetrica)
+        .filter((a): a is number => a !== null)
+      return anos.length > 0 ? Math.max(...anos) : null
+    },
+    [],
+  )
 
   const porMetrica = React.useMemo(() => {
     const f = serie.filter((m) => m.metrica === 'faturamento_anual')
@@ -448,7 +607,10 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
                     {props.faturamentoConfianca}
                   </Badge>
                 )}
-                <span className="text-[11px] text-muted-foreground">{data(props.faturamentoEm)}</span>
+                <AnoEData
+                  ano={anoVigente(porMetrica.faturamento_anual, props.faturamentoOrigem)}
+                  em={props.faturamentoEm}
+                />
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
@@ -490,7 +652,10 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
                 <Badge variant="outline" className="text-[10px]">
                   {rotuloOrigem(props.funcionariosOrigem)}
                 </Badge>
-                <span className="text-[11px] text-muted-foreground">{data(props.funcionariosEm)}</span>
+                <AnoEData
+                  ano={anoVigente(porMetrica.funcionarios, props.funcionariosOrigem)}
+                  em={props.funcionariosEm}
+                />
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button

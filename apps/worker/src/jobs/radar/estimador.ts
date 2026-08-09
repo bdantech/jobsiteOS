@@ -2,6 +2,7 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
   MODELOS,
+  anoReferenciaEstimativa,
   calibrarEstimador,
   estimarFaturamento,
   origemVence,
@@ -170,11 +171,36 @@ export async function calibrarEstimadorJob(): Promise<ResultadoCalibracaoJob> {
 
 export interface ResultadoEstimativaJob {
   versao: number | null
+  /** O ano que as estimativas desta rodada preenchem. */
+  ano_referencia: number
   avaliadas: number
   estimadas: number
   gravadas: number
   sem_sinal: number
+  /** Empresas puladas porque o ano de referência já tem valor real. */
+  ja_sabidas: number
   motivo?: string
+}
+
+/**
+ * Os CNPJs cujo faturamento do ano de referência já é SABIDO — declarado pelo cliente
+ * ou publicado num ranking.
+ *
+ * Um conjunto carregado de uma vez, e não uma consulta por empresa: o loop já faz uma
+ * ida ao banco por linha, e a resposta aqui é a mesma para 5 mil delas.
+ */
+async function cnpjsComValorReal(ano: number): Promise<Set<string>> {
+  const { rows } = await pool.query<{ cnpj: string }>(
+    `
+    select distinct m.cnpj
+    from empresa_metricas m
+    where m.metrica = 'faturamento_anual'
+      and m.origem in ('declarado_cliente', 'publicacao')
+      and public.app_ano_referencia_metrica(m.detalhes, m.capturado_em, m.origem) = $1
+  `,
+    [ano],
+  )
+  return new Set(rows.map((r) => r.cnpj))
 }
 
 /**
@@ -186,6 +212,7 @@ export interface ResultadoEstimativaJob {
  */
 export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
   const cfg = await lerConfigFaturamento()
+  const ano = anoReferenciaEstimativa()
 
   const { data: versaoAtiva } = await supabaseAdmin
     .from('estimador_versoes')
@@ -200,17 +227,34 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
     // preencheria a base inteira de números plausíveis e errados — e plausível é
     // exatamente o que ninguém questiona.
     logger.warn('Estimativa abortada: nenhuma versão ativa do estimador.')
-    return { versao: null, avaliadas: 0, estimadas: 0, gravadas: 0, sem_sinal: 0, motivo: 'sem_calibracao' }
+    return {
+      versao: null,
+      ano_referencia: ano,
+      avaliadas: 0,
+      estimadas: 0,
+      gravadas: 0,
+      sem_sinal: 0,
+      ja_sabidas: 0,
+      motivo: 'sem_calibracao',
+    }
   }
 
   const coef = versaoAtiva.coeficientes as unknown as Coeficientes
   const acc: ResultadoEstimativaJob = {
     versao: versaoAtiva.versao,
+    ano_referencia: ano,
     avaliadas: 0,
     estimadas: 0,
     gravadas: 0,
     sem_sinal: 0,
+    ja_sabidas: 0,
   }
+
+  // Quem já nos contou (ou publicou) o faturamento deste ano não precisa de chute.
+  // E não é só ruído na tela: são justamente os declarantes que formam a régua da
+  // calibração — gravar um palpite ao lado da verdade que o calibrou não acrescenta
+  // nada e ainda aparece na ficha competindo com ela.
+  const sabidos = await cnpjsComValorReal(ano)
 
   const { rows } = await pool.query<LinhaSinais>(`
     select
@@ -235,6 +279,11 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
 
   for (const linha of rows) {
     acc.avaliadas++
+
+    if (sabidos.has(linha.cnpj)) {
+      acc.ja_sabidas++
+      continue
+    }
 
     const r = estimarFaturamento(
       {
@@ -284,6 +333,10 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
       origem: r.origem,
       confianca: r.confianca,
       detalhes: {
+        // O ano que esta estimativa preenche. Sem ele, a série mistura "R$ 83M
+        // declarado (2025)" com "R$ 154M estimado (?)" e a ficha mostra as duas com a
+        // mesma cara de número atual.
+        ano,
         versao_estimador: versaoAtiva.versao,
         modelos: r.modelos.map((m) => ({ id: m.id, valor: Math.round(m.valor), peso: Number(m.peso.toFixed(3)) })),
         // As famílias INDEPENDENTES que sustentaram a confiança. Sem isto, uma
@@ -309,8 +362,8 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
         titulo: 'Faturamento reestimado',
         resumo:
           anterior === null
-            ? `Estimativa inicial: ${moeda(r.valor)} (${r.confianca}).`
-            : `Faturamento estimado: ${moeda(anterior)} → ${moeda(r.valor)} (${r.confianca}).`,
+            ? `Estimativa inicial para ${ano}: ${moeda(r.valor)} (${r.confianca}).`
+            : `Faturamento estimado para ${ano}: ${moeda(anterior)} → ${moeda(r.valor)} (${r.confianca}).`,
         url: linha.empresa_id ? `/empresas/${linha.empresa_id}` : undefined,
         de: anterior,
         para: r.valor,
