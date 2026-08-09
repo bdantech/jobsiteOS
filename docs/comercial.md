@@ -139,15 +139,28 @@ Agendar cria, na mesma transação, o card no funil do closer e o evento de cale
 dois. Uma reunião agendada que não aparece no funil de quem vai atendê-la é uma reunião
 que ninguém preparou.
 
-**Closer** (`vendas`): reunião agendada → … → onboarding → ganho. Perder exige motivo em
-qualquer estágio — o CHECK do banco recusa `perdido` sem motivo.
+**Closer** (`vendas`): reunião agendada → reagendada → aguardando documentação → em
+análise de crédito → proposta enviada → preparação do MOU → MOU assinado → onboarding.
 
-A decisão da seguradora (04d) move o card sozinha: **aprovada** → proposta enviada,
-**negada** → perdido com "Crédito negado". **Parcial não anda**: metade do limite pode ser
-ótimo ou inviável, e essa leitura é de quem está na mesa.
+**Ganho e perdido não são etapas** — são `situacao` (em_andamento | ganho | perdido), e
+não movem o card. Um negócio ganho pode estar em onboarding, e é lá que o trabalho
+continua; como coluna, "ganho" tirava o card da etapa onde o trabalho acontece justamente
+quando ele passou a exigir trabalho de verdade.
 
-`ganho` promove a empresa a cliente e **abre** a pergunta ativo/passivo — não responde por
-ela.
+Ganhar promove a empresa a cliente e **abre** a pergunta ativo/passivo — não responde por
+ela. Perder exige motivo (CHECK no banco) e deixa o card onde está: o estágio é o que diz
+até onde a venda chegou antes de morrer.
+
+**Ganho continua no funil até a primeira operação.** Ganho sem operar ainda é trabalho
+(onboarding, cadastro, primeira nota), e é aí que um negócio fechado morre por falta de
+acompanhamento. O job diário detecta a primeira antecipação convertida da empresa — dos
+dois lados, como sacado ou como fornecedor — depois do ganho, preenche
+`primeira_operacao_em` e o card some sozinho. Rotina não mora em funil.
+
+A decisão da seguradora (04d) age sozinha: **aprovada** move o estágio para proposta
+enviada, **negada** muda a situação para perdido com "Crédito negado" e deixa o estágio
+onde está. **Parcial não anda**: metade do limite pode ser ótimo ou inviável, e essa
+leitura é de quem está na mesa.
 
 ## Distribuição semanal
 

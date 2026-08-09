@@ -25,7 +25,11 @@ import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/comissoes.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
 import { sugerirPassivosJob } from './comercial/passivos.js'
-import { rotearNotasJob, vendedoresSemAtividadeJob } from './comercial/roteamento.js'
+import {
+  detectarPrimeiraOperacaoJob,
+  rotearNotasJob,
+  vendedoresSemAtividadeJob,
+} from './comercial/roteamento.js'
 import {
   avisarCustoProtestos,
   criarProcessadorProtestos,
@@ -911,7 +915,10 @@ export function dispararSlaComercial(): string {
   return dispararAvulso('comercial-sla', async () => {
     const sla = await slaLeadsJob()
     const inativos = await vendedoresSemAtividadeJob()
-    return { sla, inativos }
+    // Diário, e não no sync: a operação pode chegar a qualquer hora, e o card sair do
+    // funil no dia seguinte é rápido o bastante para algo que já está ganho.
+    const operando = await detectarPrimeiraOperacaoJob()
+    return { sla, inativos, operando }
   })
 }
 

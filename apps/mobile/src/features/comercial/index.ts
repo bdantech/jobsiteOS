@@ -92,6 +92,8 @@ export function useLeads() {
 export interface VendaMobile {
   id: string
   estagio: string
+  situacao: string
+  primeira_operacao_em: string | null
   empresas: { id: string; razao_social: string | null; uf: string | null } | null
 }
 
@@ -101,8 +103,10 @@ export function useVendas() {
     queryFn: async (): Promise<VendaMobile[]> => {
       const { data, error } = await supabase
         .from('vendas')
-        .select('id, estagio, empresas(id, razao_social, uf)')
-        .not('estagio', 'in', '("ganho","perdido")')
+        .select('id, estagio, situacao, primeira_operacao_em, empresas(id, razao_social, uf)')
+        // O que ainda é assunto: em andamento, ou ganho que não operou.
+        .neq('situacao', 'perdido')
+        .is('primeira_operacao_em', null)
         .order('atualizada_em', { ascending: false })
         .limit(100)
       if (error) throw new Error(error.message)
@@ -133,10 +137,9 @@ export function proximoEstagioSdr(atual: string): EstagioSdr | null {
 }
 
 export function proximoEstagioVenda(atual: string): EstagioVenda | null {
-  const ordem: readonly EstagioVenda[] = ESTAGIOS_VENDA.filter((e) => e !== 'perdido')
-  if (atual === 'em_analise_credito' || atual === 'ganho' || atual === 'perdido') return null
-  const i = ordem.indexOf(atual as EstagioVenda)
-  return i >= 0 && i < ordem.length - 1 ? (ordem[i + 1] as EstagioVenda) : null
+  if (atual === 'em_analise_credito') return null
+  const i = ESTAGIOS_VENDA.indexOf(atual as EstagioVenda)
+  return i >= 0 && i < ESTAGIOS_VENDA.length - 1 ? (ESTAGIOS_VENDA[i + 1] as EstagioVenda) : null
 }
 
 export function useMover() {

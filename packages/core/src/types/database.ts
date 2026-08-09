@@ -2933,6 +2933,10 @@ export type Database = {
           criada_em: string
           empresa_id: string
           estagio: string
+          ganho_em: string | null
+          primeira_operacao_em: string | null
+          primeira_operacao_id: number | null
+          situacao: string
           id: string
           perdido_em: string | null
           perdido_motivo: string | null
@@ -2945,6 +2949,10 @@ export type Database = {
           criada_em?: string
           empresa_id: string
           estagio?: string
+          ganho_em?: string | null
+          primeira_operacao_em?: string | null
+          primeira_operacao_id?: number | null
+          situacao?: string
           gestao_definida_em?: string | null
           gestao_definida_por?: string | null
           gestao_operacao?: string | null
@@ -2960,6 +2968,10 @@ export type Database = {
           criada_em?: string
           empresa_id?: string
           estagio?: string
+          ganho_em?: string | null
+          primeira_operacao_em?: string | null
+          primeira_operacao_id?: number | null
+          situacao?: string
           gestao_definida_em?: string | null
           gestao_definida_por?: string | null
           gestao_operacao?: string | null

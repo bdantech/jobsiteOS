@@ -106,6 +106,14 @@ export const MOTIVO_ENCERRAMENTO_LEAD_LABELS: Record<MotivoEncerramentoLead, str
 
 // ─── Funil do vendedor ──────────────────────────────────────────────────────
 
+/*
+ * O estágio diz ONDE o negócio está. Ganho e perdido NÃO estão aqui — são situação.
+ *
+ * Um negócio ganho pode estar em onboarding, e é lá que o trabalho continua. Como
+ * coluna, "ganho" tirava o card da etapa onde o trabalho acontece e o punha numa caixa
+ * de troféus — quem tocava o onboarding perdia o card de vista no momento em que ele
+ * passou a exigir trabalho de verdade.
+ */
 export const ESTAGIOS_VENDA = [
   'reuniao_agendada',
   'reuniao_reagendada',
@@ -115,8 +123,6 @@ export const ESTAGIOS_VENDA = [
   'preparacao_mou',
   'mou_assinado',
   'onboarding',
-  'ganho',
-  'perdido',
 ] as const
 export type EstagioVenda = (typeof ESTAGIOS_VENDA)[number]
 
@@ -129,26 +135,47 @@ export const ESTAGIO_VENDA_LABELS: Record<EstagioVenda, string> = {
   preparacao_mou: 'Preparação do MOU',
   mou_assinado: 'MOU assinado',
   onboarding: 'Onboarding',
+}
+
+export const SITUACOES_VENDA = ['em_andamento', 'ganho', 'perdido'] as const
+export type SituacaoVenda = (typeof SITUACOES_VENDA)[number]
+
+export const SITUACAO_VENDA_LABELS: Record<SituacaoVenda, string> = {
+  em_andamento: 'Em andamento',
   ganho: 'Ganho',
   perdido: 'Perdido',
 }
 
-export const ESTAGIOS_VENDA_ENCERRADOS: readonly EstagioVenda[] = ['ganho', 'perdido']
-
-export function vendaEstaViva(estagio: string): boolean {
-  return !(ESTAGIOS_VENDA_ENCERRADOS as readonly string[]).includes(estagio)
+/**
+ * O que ainda é assunto do comercial.
+ *
+ * Perdido sai. Ganho CONTINUA no funil até a primeira operação — porque ganho sem
+ * operação ainda é trabalho (onboarding, primeira nota, cadastro), e é justamente aí que
+ * um negócio fechado morre por falta de acompanhamento. Depois da primeira antecipação
+ * convertida vira rotina, e rotina não mora em funil.
+ */
+export function vendaNoFunil(v: {
+  situacao: string
+  primeira_operacao_em?: string | null
+}): boolean {
+  return v.situacao !== 'perdido' && !v.primeira_operacao_em
 }
 
 /**
- * A decisão da seguradora move o card sozinha — menos quando ela é parcial.
+ * O que a decisão da seguradora faz com o card — menos quando ela é parcial.
  *
  * Aprovada e negada são inequívocas, e deixar o vendedor mover à mão só adiciona atraso
  * entre a decisão e a próxima ação. Parcial não é: metade do limite pedido pode ser
  * ótimo ou inviável dependendo da operação, e essa leitura é de quem está na mesa.
+ *
+ * Note que aprovada move o ESTÁGIO e negada muda a SITUAÇÃO: aprovar é seguir adiante,
+ * negar é encerrar onde está.
  */
-export function estagioAposDecisaoCredito(decisao: string): EstagioVenda | null {
-  if (decisao === 'aprovada') return 'proposta_enviada'
-  if (decisao === 'negada') return 'perdido'
+export function efeitoDaDecisaoCredito(
+  decisao: string,
+): { estagio?: EstagioVenda; situacao?: SituacaoVenda } | null {
+  if (decisao === 'aprovada') return { estagio: 'proposta_enviada' }
+  if (decisao === 'negada') return { situacao: 'perdido' }
   return null
 }
 
@@ -204,14 +231,20 @@ export const moverLeadSchema = z
   })
 export type MoverLeadInput = z.infer<typeof moverLeadSchema>
 
+/** Mover de estágio, mudar a situação, ou os dois. São coisas independentes. */
 export const moverVendaSchema = z
   .object({
     venda_id: uuid,
-    estagio: z.enum(ESTAGIOS_VENDA),
+    estagio: z.enum(ESTAGIOS_VENDA).optional(),
+    situacao: z.enum(SITUACOES_VENDA).optional(),
     perdido_motivo: uuid.nullable().optional(),
     analise_credito_id: uuid.nullable().optional(),
   })
-  .refine((v) => v.estagio !== 'perdido' || !!v.perdido_motivo, {
+  .refine((v) => v.estagio !== undefined || v.situacao !== undefined, {
+    message: 'Informe o estágio, a situação, ou os dois.',
+    path: ['estagio'],
+  })
+  .refine((v) => v.situacao !== 'perdido' || !!v.perdido_motivo, {
     message: 'Perder exige motivo.',
     path: ['perdido_motivo'],
   })

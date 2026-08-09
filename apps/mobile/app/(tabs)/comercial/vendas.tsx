@@ -63,6 +63,9 @@ export default function FunilVendasScreen() {
                 <Badge variant="outline"><Text className="text-[10px]">{item.empresas.uf}</Text></Badge>
               ) : null}
             </View>
+            {item.situacao === 'ganho' ? (
+              <Badge variant="outline"><Text className="text-[10px]">Ganho</Text></Badge>
+            ) : null}
             {item.estagio === 'em_analise_credito' ? (
               <Text variant="muted" className="text-[11px]">
                 Aguardando a seguradora. O card anda sozinho quando ela decidir.

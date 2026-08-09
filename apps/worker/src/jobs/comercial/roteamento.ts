@@ -180,3 +180,55 @@ export async function vendedoresSemAtividadeJob(): Promise<{ avisados: number }>
 
   return { avisados: rows.length }
 }
+
+/**
+ * A primeira operação do cliente novo — o que tira o card do funil.
+ *
+ * Ganho sem operação ainda é trabalho: onboarding, cadastro, primeira nota. É justamente
+ * aí que um negócio fechado morre por falta de acompanhamento, e por isso o card CONTINUA
+ * visível. Depois da primeira antecipação convertida vira rotina, e rotina não mora em
+ * funil — some sozinho, sem ninguém ter de arquivar nada.
+ *
+ * Conta como operação a antecipação em que a empresa aparece dos DOIS lados: ela pode ter
+ * sido vendida como sacado (as notas dos fornecedores dela) ou como fornecedor (as notas
+ * dela). Olhar só um lado deixaria metade dos negócios ganhos presa no funil para sempre.
+ */
+export async function detectarPrimeiraOperacaoJob(): Promise<{ marcadas: number }> {
+  const { rows } = await pool.query<{ id: string; empresa_id: string; nome: string | null; op: number }>(
+    `
+    update vendas v set
+      primeira_operacao_em = pr.convertida_em,
+      primeira_operacao_id = pr.id_externo,
+      atualizada_em = now()
+    from (
+      select e.id as empresa_id, a.id_externo, a.convertida_em,
+             row_number() over (partition by e.id order by a.convertida_em) as rn
+      from empresas e
+      join antecipacoes a
+        on (a.sacado_cnpj = e.cnpj or a.fornecedor_cnpj = e.cnpj)
+      where a.convertida_em is not null and a.regrediu_em is null
+    ) pr
+    join empresas emp on emp.id = pr.empresa_id
+    where v.empresa_id = pr.empresa_id
+      and pr.rn = 1
+      and v.situacao = 'ganho'
+      and v.primeira_operacao_em is null
+      -- Só o que aconteceu DEPOIS do ganho: uma operação anterior é história de outro
+      -- ciclo, e marcaria o card como rotina antes de o onboarding ter acontecido.
+      and pr.convertida_em >= coalesce(v.ganho_em, v.criada_em)
+    returning v.id, v.empresa_id, emp.razao_social as nome, pr.id_externo as op
+  `,
+  )
+
+  for (const r of rows) {
+    await emitirEvento(r.empresa_id, EVENTO_TIPOS.VENDA_GANHA, {
+      titulo: 'Cliente novo operando',
+      resumo: `Primeira antecipação convertida (#${r.op}). O negócio saiu do funil — agora é rotina.`,
+      url: `/empresas/${r.empresa_id}`,
+      venda_id: r.id,
+    })
+  }
+
+  logger.info({ marcadas: rows.length }, 'Primeiras operações detectadas.')
+  return { marcadas: rows.length }
+}

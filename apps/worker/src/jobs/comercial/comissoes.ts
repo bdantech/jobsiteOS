@@ -264,7 +264,7 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
     .from('vendas')
     .select('id, empresa_id, estagio')
     .eq('analise_credito_id', analiseId)
-    .not('estagio', 'in', '("ganho","perdido")')
+    .eq('situacao', 'em_andamento')
   if (!vendas?.length) return 0
 
   if (decisao === 'aprovada_parcial') {
@@ -300,14 +300,20 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
   }
 
   for (const v of vendas) {
+    // Aprovada move o ESTÁGIO (seguir adiante); negada muda a SITUAÇÃO e deixa o estágio
+    // onde está — é ele que diz até onde o negócio chegou antes de morrer.
     await supabaseAdmin
       .from('vendas')
-      .update({
-        estagio: aprovada ? 'proposta_enviada' : 'perdido',
-        perdido_motivo: aprovada ? null : motivoId,
-        perdido_em: aprovada ? null : new Date().toISOString(),
-        atualizada_em: new Date().toISOString(),
-      })
+      .update(
+        aprovada
+          ? { estagio: 'proposta_enviada', atualizada_em: new Date().toISOString() }
+          : {
+              situacao: 'perdido',
+              perdido_motivo: motivoId,
+              perdido_em: new Date().toISOString(),
+              atualizada_em: new Date().toISOString(),
+            },
+      )
       .eq('id', v.id)
 
     await emitirEvento(v.empresa_id, aprovada ? EVENTO_TIPOS.VENDA_ESTAGIO_ALTERADO : EVENTO_TIPOS.VENDA_PERDIDA, {

@@ -5,7 +5,10 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChevronRight } from 'lucide-react'
-import { ESTAGIOS_VENDA, ESTAGIO_VENDA_LABELS, type EstagioVenda } from '@jobsiteos/core'
+import {
+  ESTAGIOS_VENDA, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS, vendaNoFunil,
+  type EstagioVenda, type SituacaoVenda,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,25 +24,29 @@ import {
 } from './queries'
 
 /**
- * Funil do closer. Kanban com avanço de um clique e uma única fricção deliberada:
- * PERDER exige motivo.
+ * Funil do closer.
  *
- * A fricção é o ponto do funil. Sem motivo obrigatório, "perdido" vira lixeira — e a
+ * O ESTÁGIO diz onde o negócio está; GANHO e PERDIDO são situação, e não movem o card.
+ * Um negócio ganho pode estar em onboarding — e é lá que o trabalho continua. Como
+ * coluna, "ganho" tirava o card da etapa onde o trabalho acontece justamente quando ele
+ * passou a exigir trabalho de verdade.
+ *
+ * Ganho CONTINUA no funil até a primeira operação. Depois dela some sozinho: já está
+ * ganho e operando, e rotina não mora em funil.
+ *
+ * Uma fricção deliberada: PERDER exige motivo. Sem ela, "perdido" vira lixeira — e a
  * pergunta que mais importa depois de um trimestre ruim ("por que estamos perdendo?")
- * fica sem resposta justamente porque foi fácil demais responder na hora.
+ * fica sem resposta porque foi fácil demais responder na hora.
  *
- * `em_analise_credito` não avança por aqui: quem move é a decisão da seguradora (04d),
- * pelo worker. Aprovada vai para proposta, negada encerra com "Crédito negado", parcial
- * fica parada de propósito.
+ * `em_analise_credito` não avança por clique: quem move é a decisão da seguradora (04d).
+ * Aprovada vai para proposta, negada encerra onde está, parcial fica parada de propósito.
  */
-
-const ORDEM = ESTAGIOS_VENDA.filter((e) => e !== 'perdido')
 
 /** O próximo passo natural. Null = não se avança daqui por clique. */
 function proximo(e: EstagioVenda): EstagioVenda | null {
-  if (e === 'em_analise_credito' || e === 'ganho' || e === 'perdido') return null
-  const i = ORDEM.indexOf(e)
-  return i >= 0 && i < ORDEM.length - 1 ? (ORDEM[i + 1] as EstagioVenda) : null
+  if (e === 'em_analise_credito') return null
+  const i = ESTAGIOS_VENDA.indexOf(e)
+  return i >= 0 && i < ESTAGIOS_VENDA.length - 1 ? (ESTAGIOS_VENDA[i + 1] as EstagioVenda) : null
 }
 
 export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
@@ -47,6 +54,9 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [perdendo, setPerdendo] = React.useState<VendaComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
+  // Fora do funil = perdido, ou ganho que já operou. Escondidos por padrão: o kanban é
+  // a fila de trabalho, e nenhum dos dois pede trabalho.
+  const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
   const vendas = useQuery({ queryKey: comercialKeys.vendas(vendedorId), queryFn: () => buscarVendas(vendedorId) })
@@ -55,18 +65,38 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
     queryFn: () => buscarMotivos('funil_vendedor'),
   })
 
-  async function mover(v: VendaComEmpresa, estagio: EstagioVenda, extra: Record<string, unknown> = {}) {
+  async function mover(v: VendaComEmpresa, estagio: EstagioVenda) {
     setAgindo(true)
-    const r = await moverVendaAction({ venda_id: v.id, estagio, ...extra })
+    const r = await moverVendaAction({ venda_id: v.id, estagio })
+    setAgindo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return false
+    }
+    toast.success(`Movido para ${ESTAGIO_VENDA_LABELS[estagio]}.`)
+    void qc.invalidateQueries({ queryKey: ['comercial'] })
+    return true
+  }
+
+  /** Ganhar ou perder. NÃO move o card — o estágio diz onde o negócio está. */
+  async function encerrar(v: VendaComEmpresa, situacao: SituacaoVenda, motivo?: string) {
+    setAgindo(true)
+    const r = await moverVendaAction({
+      venda_id: v.id,
+      situacao,
+      perdido_motivo: motivo ?? null,
+    })
     setAgindo(false)
     if (!r.ok) {
       toast.error(r.message)
       return false
     }
     toast.success(
-      estagio === 'ganho'
-        ? 'Venda ganha. Falta definir se a conta será ativa ou passiva na ficha da empresa.'
-        : `Movido para ${ESTAGIO_VENDA_LABELS[estagio]}.`,
+      situacao === 'ganho'
+        ? 'Venda ganha — a empresa virou cliente. Falta definir se a conta será ativa ou passiva na ficha dela.'
+        : situacao === 'perdido'
+          ? 'Venda perdida. O card fica onde estava, e é isso que diz até onde ela chegou.'
+          : 'Negócio reaberto.',
     )
     void qc.invalidateQueries({ queryKey: ['comercial'] })
     return true
@@ -74,8 +104,11 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
 
   if (vendas.isPending) return <Skeleton className="h-96 w-full" />
 
+  const visiveis = (vendas.data ?? []).filter((v) => mostrarEncerrados || vendaNoFunil(v))
+  const foraDoFunil = (vendas.data ?? []).filter((v) => !vendaNoFunil(v)).length
+
   const porEstagio = new Map<string, VendaComEmpresa[]>()
-  for (const v of vendas.data ?? []) porEstagio.set(v.estagio, [...(porEstagio.get(v.estagio) ?? []), v])
+  for (const v of visiveis) porEstagio.set(v.estagio, [...(porEstagio.get(v.estagio) ?? []), v])
 
   return (
     <div className="space-y-4">
@@ -83,10 +116,21 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
         <div>
           <h1 className="text-2xl font-semibold">Funil de vendas</h1>
           <p className="text-sm text-muted-foreground">
-            {(vendas.data ?? []).length} card(s). Perder exige motivo; a análise de crédito move o
-            card sozinha quando a seguradora decide.
+            {visiveis.length} card(s). Ganho e perdido são situação, não coluna — o card fica
+            onde está. Ganho só sai do funil quando o cliente faz a primeira operação.
           </p>
         </div>
+        <div className="flex items-center gap-3">
+        {foraDoFunil > 0 && (
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={mostrarEncerrados}
+              onChange={(e) => setMostrarEncerrados(e.target.checked)}
+            />
+            Mostrar {foraDoFunil} fora do funil
+          </label>
+        )}
         {ehGestor && (
           <Select value={vendedorId ?? 'todos'} onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}>
             <SelectTrigger className="w-56">
@@ -102,6 +146,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
             </SelectContent>
           </Select>
         )}
+        </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -122,34 +167,76 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                     <p className="py-4 text-center text-xs text-muted-foreground">—</p>
                   ) : (
                     itens.map((v) => (
-                      <div key={v.id} className="space-y-1.5 rounded-md border p-2 text-sm">
+                      <div
+                        key={v.id}
+                        className={`space-y-1.5 rounded-md border p-2 text-sm ${
+                          v.situacao === 'perdido' || v.primeira_operacao_em ? 'opacity-60' : ''
+                        }`}
+                      >
                         <Link
                           href={v.empresas ? `/empresas/${v.empresas.id}` : '#'}
                           className="block font-medium hover:underline"
                         >
                           {v.empresas?.razao_social ?? 'Empresa'}
                         </Link>
-                        {v.empresas?.uf ? (
-                          <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
-                        ) : null}
-                        {coluna === 'em_analise_credito' && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {v.empresas?.uf ? (
+                            <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
+                          ) : null}
+                          {/* Situação no card, não na coluna: o negócio tem as duas coisas. */}
+                          {v.situacao === 'ganho' ? (
+                            <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
+                              {SITUACAO_VENDA_LABELS.ganho}
+                            </Badge>
+                          ) : v.situacao === 'perdido' ? (
+                            <Badge variant="destructive" className="text-[10px]">
+                              {SITUACAO_VENDA_LABELS.perdido}
+                            </Badge>
+                          ) : null}
+                          {v.primeira_operacao_em ? (
+                            <Badge variant="secondary" className="text-[10px]">Já operando</Badge>
+                          ) : null}
+                        </div>
+                        {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
                           <p className="text-[11px] text-muted-foreground">
                             Aguardando a seguradora. O card anda sozinho quando ela decidir.
                           </p>
                         )}
+                        {v.situacao === 'ganho' && !v.primeira_operacao_em && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Ganho, sem operar ainda — sai do funil na primeira antecipação.
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-1 pt-0.5">
-                          {seguinte && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                              onClick={() => void mover(v, seguinte)}>
-                              {ESTAGIO_VENDA_LABELS[seguinte]}
-                              <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                            </Button>
-                          )}
-                          {coluna !== 'ganho' && coluna !== 'perdido' && (
+                          {v.situacao === 'perdido' ? (
                             <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                              onClick={() => setPerdendo(v)}>
-                              Perdi
+                              onClick={() => void encerrar(v, 'em_andamento')}>
+                              Reabrir
                             </Button>
+                          ) : (
+                            <>
+                              {/* Avançar o estágio vale mesmo já ganho: onboarding é
+                                  trabalho, e é a etapa que o card ainda percorre. */}
+                              {seguinte && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => void mover(v, seguinte)}>
+                                  {ESTAGIO_VENDA_LABELS[seguinte]}
+                                  <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+                                </Button>
+                              )}
+                              {v.situacao === 'em_andamento' && (
+                                <>
+                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void encerrar(v, 'ganho')}>
+                                    Ganhei
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => setPerdendo(v)}>
+                                    Perdi
+                                  </Button>
+                                </>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -169,15 +256,17 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
               e.preventDefault()
               if (!perdendo) return
               const motivo = String(new FormData(e.currentTarget).get('motivo') ?? '')
-              const ok = await mover(perdendo, 'perdido', { perdido_motivo: motivo })
+              const ok = await encerrar(perdendo, 'perdido', motivo)
               if (ok) setPerdendo(null)
             }}
           >
             <DialogHeader>
               <DialogTitle>Marcar como perdida</DialogTitle>
               <DialogDescription>
-                O motivo é obrigatório. É a única coisa que sobra de uma venda perdida — e a
-                única que responde &quot;por que estamos perdendo?&quot; três meses depois.
+                O card fica <strong>onde está</strong> — é o estágio que diz até onde a venda
+                chegou antes de morrer. O motivo é obrigatório: é a única coisa que sobra de
+                uma venda perdida, e a única que responde &quot;por que estamos perdendo?&quot;
+                três meses depois.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
