@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
-import { isAdmin, requireSessionContext } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import { contextoComercial } from '@/lib/comercial'
 
 // A tela lê o funil do usuário logado; renderizar estático congelaria a contagem.
 export const dynamic = 'force-dynamic'
@@ -22,17 +21,12 @@ const FUNIL_DO_TIPO: Record<string, string> = {
 }
 
 export default async function Pagina() {
-  const context = await requireSessionContext()
-  const supabase = await createClient()
-  const { data: vendedor } = await supabase
-    .from('vendedores')
-    .select('tipo')
-    .eq('usuario_id', context.usuario.id)
-    .eq('ativo', true)
-    .maybeSingle()
+  const { vendedor, ehGestor } = await contextoComercial()
 
   const destino = vendedor?.tipo ? FUNIL_DO_TIPO[vendedor.tipo] : undefined
   // Gestor sem cadastro de vendedor administra o módulo — para ele o painel É a tela
-  // inicial, porque o trabalho dele é olhar o trabalho dos outros.
-  redirect(destino ?? (isAdmin(context) || !vendedor ? '/comercial/painel' : '/comercial/comissoes'))
+  // inicial, porque o trabalho dele é olhar o trabalho dos outros. Quem não é gestor nem
+  // vendedor cadastrado ainda tem a própria comissão, que é a única coisa que existe
+  // para ele até alguém completar o cadastro.
+  redirect(destino ?? (ehGestor ? '/comercial/painel' : '/comercial/comissoes'))
 }

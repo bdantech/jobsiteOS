@@ -232,10 +232,10 @@ o funil**:
 
 | tipo | abas, nesta ordem |
 |---|---|
-| **SDR** | Funil de reuniões · Calendário · Comissão |
-| **Originador** | Funil de NFs · Empresas da carteira · Comissão |
-| **Closer** | Funil de vendas · Calendário · Comissão · Passivas na carteira |
-| **Gestor** | tudo acima, mais Fila sem dono, Painel e Configurações |
+| **SDR** | Funil de Reuniões · Calendário · Comissão |
+| **Originador** | Funil de NFs · Empresas da Carteira · Comissão |
+| **Closer** | Funil de Vendas · Calendário · Comissão · Passivas na Carteira |
+| **Gestor** | tudo acima, mais Fila sem Dono, Painel e Configurações |
 
 A ordem não é estética. Estas abas são o dia de trabalho de alguém, e o dia começa no
 funil: é lá que está a próxima ação. Calendário, comissão e carteira são consulta — abrir
@@ -259,6 +259,50 @@ NFs vivas (empresa sem nota viva é cadastro que não virou trabalho), o closer 
 antecipado no mês (é literalmente o insumo da comissão dele). Nenhuma das duas se edita
 ali — carteira se monta em Configurações ou na ficha da empresa, e um terceiro lugar seria
 mais um jeito de a mesma decisão divergir.
+
+## Os dois funis usam a forma da esteira
+
+Reuniões e Vendas têm o mesmo layout da esteira de crédito (04d §4.4): um cartão só,
+cabeçalho com título/descrição/ações, kanban em colunas leves e **tabela como
+alternativa**. A forma é a mesma porque a pergunta é a mesma — "onde está cada coisa, e o
+que falta nela" — e duas telas que respondem à mesma pergunta com layouts diferentes
+obrigam a pessoa a reaprender a ler a cada troca de módulo.
+
+Herdam também o que a esteira **não** faz: nada de arrastar-e-soltar. Lá porque metade dos
+estágios pertence à seguradora; aqui porque perder exige motivo, e um gesto de arrastar
+que abre um diálogo obrigatório é pior que um botão.
+
+E o tom do card conta a situação antes de qualquer leitura: verde para ganho e para lead
+com fit, vermelho para perdido e sem fit, cinza para encerrado sem toque.
+
+## Perfis
+
+Seis perfis, três deles do Comercial:
+
+| perfil | módulos | é gestor? |
+|---|---|---|
+| **SDR** | comercial, empresas, notificacoes | não |
+| **Originador** | comercial, **antecipacao**, empresas, notificacoes | não |
+| **Closer** | comercial, empresas, notificacoes | não |
+| **Comercial** | antecipacao, comercial, empresas | **sim** |
+| **Admin** | todos | **sim** |
+
+Antes destes três, quem tivesse o módulo era gestor por definição — `app_gestor_comercial()`
+responde sim para Admin e Comercial, e gestor vê todos os funis, muda carteira e aprova
+comissão. Ou seja, a separação por tipo e a visibilidade cruzada estavam implementadas e
+não eram exercidas por ninguém: não havia como existir um vendedor que NÃO fosse gestor.
+
+`empresas` entra nos três porque todo card dos funis linka para a Company 360 — é lá que
+se julga a conta e, para o closer, se decide ativo × passivo. Sem o módulo, o link
+principal da tela de trabalho devolve "sem acesso". `antecipacao` só no originador: a nota
+vive sob a RLS daquele módulo e o funil de NFs é a tela principal dele. `credito` fica fora
+de todos, inclusive do closer — a venda passa por análise, mas o card anda sozinho quando a
+seguradora decide, e ler o parecer é trabalho de quem opera crédito.
+
+Consequência no código: "é gestor?" passou a vir de `contextoComercial()` em
+`lib/comercial.ts`, que pergunta ao banco. A conta local de antes (`isAdmin(context) ||
+!vendedor`) era verdadeira enquanto só Admin e Comercial tinham o módulo, e passaria a
+tratar como gestor um closer ainda não cadastrado como vendedor.
 
 ## Permissões
 

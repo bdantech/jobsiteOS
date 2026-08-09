@@ -8,6 +8,9 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
+ * Os rótulos seguem título: toda palavra em maiúscula menos preposição ("Funil de
+ * Reuniões", "Fila sem Dono"). É uma barra de navegação, não uma frase.
+ *
  * Navegação do Comercial. Ao contrário dos outros módulos, o que aparece aqui depende
  * do TIPO do vendedor logado — e a ORDEM também: o funil é sempre a primeira aba.
  *
@@ -36,8 +39,8 @@ interface ItemNav {
 }
 
 const ITENS: readonly ItemNav[] = [
-  { href: '/comercial/sdr', label: 'Funil de reuniões', icon: Target, tipos: ['sdr'] },
-  { href: '/comercial/vendas', label: 'Funil de vendas', icon: Users, tipos: ['vendedor'] },
+  { href: '/comercial/sdr', label: 'Funil de Reuniões', icon: Target, tipos: ['sdr'] },
+  { href: '/comercial/vendas', label: 'Funil de Vendas', icon: Users, tipos: ['vendedor'] },
   { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
@@ -46,9 +49,9 @@ const ITENS: readonly ItemNav[] = [
     label: 'Carteira',
     icon: Briefcase,
     tipos: ['originador', 'vendedor'],
-    labelPorTipo: { originador: 'Empresas da carteira', vendedor: 'Passivas na carteira' },
+    labelPorTipo: { originador: 'Empresas da Carteira', vendedor: 'Passivas na Carteira' },
   },
-  { href: '/comercial/fila', label: 'Fila sem dono', icon: Inbox, somenteGestor: true },
+  { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true },
   { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },
 ]

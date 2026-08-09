@@ -4,44 +4,55 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronRight, LayoutGrid, Table2 } from 'lucide-react'
 import {
   ESTAGIOS_VENDA, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS, vendaNoFunil,
   type EstagioVenda, type SituacaoVenda,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { moverVendaAction } from '@/actions/comercial'
+import { cn } from '@/lib/utils'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   type VendaComEmpresa,
 } from './queries'
 
 /**
- * Funil do closer.
+ * Funil do closer — mesma forma da esteira de crédito (04d §4.4): um cartão só, kanban
+ * por estágio, tabela como alternativa.
+ *
+ * A forma é a mesma porque a pergunta é a mesma — "onde está cada coisa, e o que falta
+ * nela" — e duas telas que respondem à mesma pergunta com layouts diferentes obrigam a
+ * pessoa a reaprender a ler a cada troca de módulo.
+ *
+ * NÃO tem arrastar-e-soltar, pelo mesmo motivo da esteira: perder exige motivo, e um
+ * gesto de arrastar que abre um diálogo obrigatório é pior que um botão.
  *
  * O ESTÁGIO diz onde o negócio está; GANHO e PERDIDO são situação, e não movem o card.
  * Um negócio ganho pode estar em onboarding — e é lá que o trabalho continua. Como
  * coluna, "ganho" tirava o card da etapa onde o trabalho acontece justamente quando ele
- * passou a exigir trabalho de verdade.
- *
- * Ganho CONTINUA no funil até a primeira operação. Depois dela some sozinho: já está
- * ganho e operando, e rotina não mora em funil.
- *
- * Uma fricção deliberada: PERDER exige motivo. Sem ela, "perdido" vira lixeira — e a
- * pergunta que mais importa depois de um trimestre ruim ("por que estamos perdendo?")
- * fica sem resposta porque foi fácil demais responder na hora.
+ * passou a exigir trabalho de verdade. Ganho CONTINUA no funil até a primeira operação;
+ * depois dela some sozinho, porque rotina não mora em funil.
  *
  * `em_analise_credito` não avança por clique: quem move é a decisão da seguradora (04d).
  * Aprovada vai para proposta, negada encerra onde está, parcial fica parada de propósito.
  */
+
+/** O tom do card conta a situação antes de qualquer leitura — como na esteira. */
+const SITUACAO_CLASSE: Record<SituacaoVenda, string> = {
+  em_andamento: '',
+  ganho: 'border-emerald-500/40 bg-emerald-500/5',
+  perdido: 'border-destructive/40 bg-destructive/5',
+}
 
 /** O próximo passo natural. Null = não se avança daqui por clique. */
 function proximo(e: EstagioVenda): EstagioVenda | null {
@@ -53,6 +64,7 @@ function proximo(e: EstagioVenda): EstagioVenda | null {
 export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   const qc = useQueryClient()
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
+  const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
   const [perdendo, setPerdendo] = React.useState<VendaComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
   // Fora do funil = perdido, ou ganho que já operou. Escondidos por padrão: o kanban é
@@ -73,6 +85,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
   const closersVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'vendedor')
   const mostrarSeletor = ehGestor || closersVisiveis.length > 1
+  const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
 
   async function mover(v: VendaComEmpresa, estagio: EstagioVenda) {
     setAgindo(true)
@@ -111,150 +124,244 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
     return true
   }
 
-  if (vendas.isPending) return <Skeleton className="h-96 w-full" />
+  if (vendas.isPending) return <Skeleton className="h-96 w-full rounded-lg" />
 
-  const visiveis = (vendas.data ?? []).filter((v) => mostrarEncerrados || vendaNoFunil(v))
-  const foraDoFunil = (vendas.data ?? []).filter((v) => !vendaNoFunil(v)).length
+  if (vendas.isError) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+          <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden />
+          <p className="text-sm text-muted-foreground">
+            {vendas.error instanceof Error ? vendas.error.message : 'Erro ao carregar o funil.'}
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const todas = vendas.data ?? []
+  const visiveis = todas.filter((v) => mostrarEncerrados || vendaNoFunil(v))
+  const foraDoFunil = todas.filter((v) => !vendaNoFunil(v)).length
 
   const porEstagio = new Map<string, VendaComEmpresa[]>()
   for (const v of visiveis) porEstagio.set(v.estagio, [...(porEstagio.get(v.estagio) ?? []), v])
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Funil de vendas</h1>
-          <p className="text-sm text-muted-foreground">
-            {visiveis.length} card(s). Ganho e perdido são situação, não coluna — o card fica
-            onde está. Ganho só sai do funil quando o cliente faz a primeira operação.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-        {foraDoFunil > 0 && (
-          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={mostrarEncerrados}
-              onChange={(e) => setMostrarEncerrados(e.target.checked)}
-            />
-            Mostrar {foraDoFunil} fora do funil
-          </label>
-        )}
-        {mostrarSeletor && (
-          <Select value={vendedorId ?? 'todos'} onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Todos os vendedores" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os vendedores</SelectItem>
-              {closersVisiveis.map((v) => (
-                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <CardTitle className="text-base">Funil de Vendas</CardTitle>
+              <CardDescription>
+                {visiveis.length} negócio(s). <strong>Ganho e perdido são situação, não
+                coluna</strong> — o card fica onde está, e é o estágio que diz até onde ele
+                chegou. Ganho só sai do funil na primeira operação do cliente.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {foraDoFunil > 0 && (
+                <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={mostrarEncerrados}
+                    onChange={(e) => setMostrarEncerrados(e.target.checked)}
+                  />
+                  Mostrar {foraDoFunil} fora do funil
+                </label>
+              )}
+              {mostrarSeletor && (
+                <Select value={vendedorId ?? 'todos'} onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Todos os vendedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os vendedores</SelectItem>
+                    {closersVisiveis.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVista(vista === 'kanban' ? 'tabela' : 'kanban')}
+              >
+                {vista === 'kanban' ? (
+                  <>
+                    <Table2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                    Tabela
+                  </>
+                ) : (
+                  <>
+                    <LayoutGrid className="mr-1 h-3.5 w-3.5" aria-hidden />
+                    Kanban
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {ESTAGIOS_VENDA.map((coluna) => {
-          const itens = porEstagio.get(coluna) ?? []
-          const seguinte = proximo(coluna)
-          return (
-            <div key={coluna} className="w-72 shrink-0">
-              <Card className="h-full">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-baseline justify-between text-sm">
-                    {ESTAGIO_VENDA_LABELS[coluna]}
-                    <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {itens.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">—</p>
-                  ) : (
-                    itens.map((v) => (
-                      <div
-                        key={v.id}
-                        className={`space-y-1.5 rounded-md border p-2 text-sm ${
-                          v.situacao === 'perdido' || v.primeira_operacao_em ? 'opacity-60' : ''
-                        }`}
-                      >
+        <CardContent>
+          {todas.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Nenhum negócio ainda.</p>
+              <p className="mt-1">
+                As vendas nascem quando um SDR agenda a reunião — o card cai aqui já no funil
+                do closer destino.
+              </p>
+            </div>
+          ) : vista === 'kanban' ? (
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {ESTAGIOS_VENDA.map((coluna) => {
+                const itens = porEstagio.get(coluna) ?? []
+                const seguinte = proximo(coluna)
+                return (
+                  <div key={coluna} className="w-64 shrink-0 space-y-2">
+                    <div className="flex items-baseline justify-between gap-2 border-b pb-1">
+                      <p className="text-xs font-medium">{ESTAGIO_VENDA_LABELS[coluna]}</p>
+                      <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {itens.map((v) => (
+                        <div
+                          key={v.id}
+                          className={cn(
+                            'space-y-1.5 rounded-md border p-2 text-sm',
+                            SITUACAO_CLASSE[v.situacao as SituacaoVenda],
+                            v.primeira_operacao_em && 'opacity-70',
+                          )}
+                        >
+                          <Link
+                            href={v.empresas ? `/empresas/${v.empresas.id}` : '#'}
+                            className="line-clamp-2 font-medium hover:underline"
+                          >
+                            {v.empresas?.razao_social ?? 'Empresa'}
+                          </Link>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {v.empresas?.uf ? (
+                              <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
+                            ) : null}
+                            {/* Situação no card, não na coluna: o negócio tem as duas coisas. */}
+                            {v.situacao !== 'em_andamento' ? (
+                              <Badge
+                                variant={v.situacao === 'perdido' ? 'destructive' : 'default'}
+                                className={cn(
+                                  'text-[10px]',
+                                  v.situacao === 'ganho' &&
+                                    'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
+                                )}
+                              >
+                                {SITUACAO_VENDA_LABELS[v.situacao as SituacaoVenda]}
+                              </Badge>
+                            ) : null}
+                            {v.primeira_operacao_em ? (
+                              <Badge variant="secondary" className="text-[10px]">Já operando</Badge>
+                            ) : null}
+                          </div>
+                          {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Aguardando a seguradora. O card anda sozinho quando ela decidir.
+                            </p>
+                          )}
+                          {v.situacao === 'ganho' && !v.primeira_operacao_em && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Ganho, sem operar ainda — sai do funil na primeira antecipação.
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {v.situacao === 'perdido' ? (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                onClick={() => void encerrar(v, 'em_andamento')}>
+                                Reabrir
+                              </Button>
+                            ) : (
+                              <>
+                                {/* Avançar o estágio vale mesmo já ganho: onboarding é
+                                    trabalho, e é a etapa que o card ainda percorre. */}
+                                {seguinte && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void mover(v, seguinte)}>
+                                    {ESTAGIO_VENDA_LABELS[seguinte]}
+                                    <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+                                  </Button>
+                                )}
+                                {v.situacao === 'em_andamento' && (
+                                  <>
+                                    <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                      onClick={() => void encerrar(v, 'ganho')}>
+                                      Ganhei
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                      onClick={() => setPerdendo(v)}>
+                                      Perdi
+                                    </Button>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {itens.length === 0 && (
+                        <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
+                          vazio
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Estágio</TableHead>
+                    <TableHead>Situação</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead>Atualizada</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visiveis.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell className="max-w-[20rem]">
                         <Link
                           href={v.empresas ? `/empresas/${v.empresas.id}` : '#'}
-                          className="block font-medium hover:underline"
+                          className="text-sm font-medium hover:underline"
                         >
                           {v.empresas?.razao_social ?? 'Empresa'}
                         </Link>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {v.empresas?.uf ? (
-                            <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
-                          ) : null}
-                          {/* Situação no card, não na coluna: o negócio tem as duas coisas. */}
-                          {v.situacao === 'ganho' ? (
-                            <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
-                              {SITUACAO_VENDA_LABELS.ganho}
-                            </Badge>
-                          ) : v.situacao === 'perdido' ? (
-                            <Badge variant="destructive" className="text-[10px]">
-                              {SITUACAO_VENDA_LABELS.perdido}
-                            </Badge>
-                          ) : null}
-                          {v.primeira_operacao_em ? (
-                            <Badge variant="secondary" className="text-[10px]">Já operando</Badge>
-                          ) : null}
-                        </div>
-                        {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Aguardando a seguradora. O card anda sozinho quando ela decidir.
-                          </p>
-                        )}
-                        {v.situacao === 'ganho' && !v.primeira_operacao_em && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Ganho, sem operar ainda — sai do funil na primeira antecipação.
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {v.situacao === 'perdido' ? (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                              onClick={() => void encerrar(v, 'em_andamento')}>
-                              Reabrir
-                            </Button>
-                          ) : (
-                            <>
-                              {/* Avançar o estágio vale mesmo já ganho: onboarding é
-                                  trabalho, e é a etapa que o card ainda percorre. */}
-                              {seguinte && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => void mover(v, seguinte)}>
-                                  {ESTAGIO_VENDA_LABELS[seguinte]}
-                                  <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                                </Button>
-                              )}
-                              {v.situacao === 'em_andamento' && (
-                                <>
-                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void encerrar(v, 'ganho')}>
-                                    Ganhei
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => setPerdendo(v)}>
-                                    Perdi
-                                  </Button>
-                                </>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
+                        <p className="text-xs text-muted-foreground">{v.empresas?.uf ?? '—'}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="whitespace-nowrap text-[11px]">
+                          {ESTAGIO_VENDA_LABELS[v.estagio as EstagioVenda] ?? v.estagio}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {SITUACAO_VENDA_LABELS[v.situacao as SituacaoVenda] ?? v.situacao}
+                        {v.primeira_operacao_em ? ' · já operando' : ''}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {nomePorId.get(v.vendedor_id) ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-xs tabular-nums text-muted-foreground">
+                        {new Date(v.atualizada_em).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          )
-        })}
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={perdendo !== null} onOpenChange={(v) => !v && setPerdendo(null)}>
         <DialogContent className="sm:max-w-md">

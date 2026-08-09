@@ -4,19 +4,20 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarPlus, ChevronRight } from 'lucide-react'
+import { AlertTriangle, CalendarPlus, ChevronRight, LayoutGrid, Table2 } from 'lucide-react'
 import {
   ESTAGIOS_SDR,
   ESTAGIO_SDR_LABELS,
   TIPO_VENDEDOR_LABELS,
   closerParaConta,
+  rotuloFit,
   type CloserComTerritorio,
   type EstagioSdr,
   type TipoVendedorId,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -24,7 +25,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { moverLeadAction } from '@/actions/comercial'
+import { cn } from '@/lib/utils'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
   comercialKeys,
@@ -32,7 +35,12 @@ import {
 } from './queries'
 
 /**
- * Funil de reuniões do SDR — kanban por estágio.
+ * Funil de reuniões do SDR — mesma forma da esteira de crédito (04d §4.4): um cartão só,
+ * kanban por estágio, tabela como alternativa.
+ *
+ * A forma é a mesma porque a pergunta é a mesma — "onde está cada coisa, e o que falta
+ * nela" — e duas telas que respondem à mesma pergunta com layouts diferentes obrigam a
+ * pessoa a reaprender a ler a cada troca de módulo.
  *
  * O estágio diz ONDE o lead está; o FIT é um julgamento sobre a empresa, e não move o
  * card. Marcar sem fit encerra o lead onde ele está, e é isso que dá a informação que
@@ -41,18 +49,28 @@ import {
  *
  * Duas ações pedem mais que um clique, e isso é deliberado: **sem fit** exige motivo, e
  * **agendar** exige data e closer. Tudo o mais é um clique só — um funil onde mover
- * custa três telas é um funil que fica desatualizado.
+ * custa três telas é um funil que fica desatualizado. É a mesma razão de não haver
+ * arrastar-e-soltar aqui nem na esteira.
  */
 
 const brl = (n: number | null | undefined) =>
   n === null || n === undefined ? '—' : Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
-/** As colunas do kanban, na ordem do trabalho. Encerrados ficam no fim. */
+/** As colunas do kanban, na ordem do trabalho. */
 const COLUNAS = ESTAGIOS_SDR
+
+/** O tom do card conta o julgamento antes de qualquer leitura — como na esteira. */
+function classeDoLead(l: LeadComEmpresa): string {
+  if (l.fit === false) return 'border-destructive/40 bg-destructive/5'
+  if (l.encerrado_em) return 'border-muted-foreground/30 bg-muted/40'
+  if (l.fit === true) return 'border-emerald-500/40 bg-emerald-500/5'
+  return ''
+}
 
 export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   const qc = useQueryClient()
   const [sdrId, setSdrId] = React.useState<string | null>(null)
+  const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
   const [agendando, setAgendando] = React.useState<LeadComEmpresa | null>(null)
   const [semFit, setSemFit] = React.useState<LeadComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
@@ -79,6 +97,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
   const sdrsVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'sdr')
   const mostrarSeletor = ehGestor || sdrsVisiveis.length > 1
+  const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
 
   function recarregar() {
     void qc.invalidateQueries({ queryKey: ['comercial'] })
@@ -111,10 +130,24 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     return true
   }
 
-  if (leads.isPending) return <Skeleton className="h-96 w-full" />
+  if (leads.isPending) return <Skeleton className="h-96 w-full rounded-lg" />
 
-  const visiveis = (leads.data ?? []).filter((l) => mostrarEncerrados || !l.encerrado_em)
-  const encerrados = (leads.data ?? []).filter((l) => l.encerrado_em).length
+  if (leads.isError) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+          <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden />
+          <p className="text-sm text-muted-foreground">
+            {leads.error instanceof Error ? leads.error.message : 'Erro ao carregar o funil.'}
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const todos = leads.data ?? []
+  const visiveis = todos.filter((l) => mostrarEncerrados || !l.encerrado_em)
+  const encerrados = todos.filter((l) => l.encerrado_em).length
 
   const porEstagio = new Map<string, LeadComEmpresa[]>()
   for (const l of visiveis) {
@@ -144,167 +177,249 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Funil de reuniões</h1>
-          <p className="text-sm text-muted-foreground">
-            {visiveis.length} lead(s). Fit é um julgamento sobre a empresa, não uma etapa —
-            marcar sem fit encerra o lead onde ele está.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-        {encerrados > 0 && (
-          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={mostrarEncerrados}
-              onChange={(e) => setMostrarEncerrados(e.target.checked)}
-            />
-            Mostrar {encerrados} encerrado(s)
-          </label>
-        )}
-        {mostrarSeletor && (
-          <Select value={sdrId ?? 'todos'} onValueChange={(v) => setSdrId(v === 'todos' ? null : v)}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Todos os SDRs" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os SDRs</SelectItem>
-              {sdrsVisiveis.map((v) => (
-                <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <CardTitle className="text-base">Funil de Reuniões</CardTitle>
+              <CardDescription>
+                {visiveis.length} lead(s). <strong>Fit é um julgamento sobre a empresa, não
+                uma etapa</strong> — marcar sem fit encerra o lead onde ele está, e é isso que
+                diz até onde ele chegou antes de morrer.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {encerrados > 0 && (
+                <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={mostrarEncerrados}
+                    onChange={(e) => setMostrarEncerrados(e.target.checked)}
+                  />
+                  Mostrar {encerrados} encerrado(s)
+                </label>
+              )}
+              {mostrarSeletor && (
+                <Select value={sdrId ?? 'todos'} onValueChange={(v) => setSdrId(v === 'todos' ? null : v)}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Todos os SDRs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os SDRs</SelectItem>
+                    {sdrsVisiveis.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVista(vista === 'kanban' ? 'tabela' : 'kanban')}
+              >
+                {vista === 'kanban' ? (
+                  <>
+                    <Table2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                    Tabela
+                  </>
+                ) : (
+                  <>
+                    <LayoutGrid className="mr-1 h-3.5 w-3.5" aria-hidden />
+                    Kanban
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {COLUNAS.map((coluna) => {
-          const itens = porEstagio.get(coluna) ?? []
-          return (
-            <div key={coluna} className="w-72 shrink-0">
-              <Card className="h-full">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-baseline justify-between text-sm">
-                    {ESTAGIO_SDR_LABELS[coluna]}
-                    <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {itens.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">—</p>
-                  ) : (
-                    itens.map((l) => (
-                      <div
-                        key={l.id}
-                        className={`space-y-1.5 rounded-md border p-2 text-sm ${l.encerrado_em ? 'opacity-60' : ''}`}
-                      >
+        <CardContent>
+          {todos.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Nenhum lead ainda.</p>
+              <p className="mt-1">
+                A distribuição semanal roda na segunda de manhã e enche esta fila; inbound entra
+                por criação manual.
+              </p>
+            </div>
+          ) : vista === 'kanban' ? (
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {COLUNAS.map((coluna) => {
+                const itens = porEstagio.get(coluna) ?? []
+                return (
+                  <div key={coluna} className="w-64 shrink-0 space-y-2">
+                    <div className="flex items-baseline justify-between gap-2 border-b pb-1">
+                      <p className="text-xs font-medium">{ESTAGIO_SDR_LABELS[coluna]}</p>
+                      <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {itens.map((l) => (
+                        <div
+                          key={l.id}
+                          className={cn(
+                            'space-y-1.5 rounded-md border p-2 text-sm',
+                            classeDoLead(l),
+                            l.encerrado_em && 'opacity-70',
+                          )}
+                        >
+                          <Link
+                            href={l.empresas ? `/empresas/${l.empresas.id}` : '#'}
+                            className="line-clamp-2 font-medium hover:underline"
+                          >
+                            {l.empresas?.razao_social ?? 'Empresa'}
+                          </Link>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
+                            {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
+                            {l.fit === true ? (
+                              <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
+                                Com fit
+                              </Badge>
+                            ) : l.fit === false ? (
+                              <Badge variant="destructive" className="text-[10px]">Sem fit</Badge>
+                            ) : null}
+                            {l.encerrado_motivo === 'expirado' ? (
+                              <Badge variant="secondary" className="text-[10px]">Expirado</Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-xs tabular-nums text-muted-foreground">
+                            {brl(l.empresas?.valor_esperado_mensal)}/mês esperado
+                          </p>
+                          {/*
+                            Só os próximos passos plausíveis, e o julgamento do fit em
+                            separado. Um menu com os seis estágios transformaria "mover"
+                            numa decisão, quando é um registro. Lead encerrado não mostra
+                            ação nenhuma além de reabrir — oferecer "agendar" num lead
+                            morto é convidar ao erro.
+                          */}
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {l.encerrado_em ? (
+                              l.encerrado_motivo === 'sem_fit' ? (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => void julgar(l, true)}>
+                                  Reabrir (era engano)
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">
+                                  Encerrado sem toque — volta na próxima distribuição.
+                                </span>
+                              )
+                            ) : (
+                              <>
+                                {coluna === 'a_contatar' && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void mover(l, 'em_conversa')}>
+                                    Em conversa
+                                  </Button>
+                                )}
+                                {coluna === 'em_conversa' && (
+                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => setAgendando(l)}>
+                                    <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Agendar
+                                  </Button>
+                                )}
+                                {coluna === 'reuniao_agendada' && (
+                                  <>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                      onClick={() => void mover(l, 'reuniao_realizada')}>
+                                      Realizada
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                      onClick={() => void mover(l, 'no_show')}>
+                                      No-show
+                                    </Button>
+                                  </>
+                                )}
+                                {coluna === 'no_show' && (
+                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => setAgendando(l)}>
+                                    <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Reagendar
+                                  </Button>
+                                )}
+                                {coluna === 'reuniao_realizada' && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void mover(l, 'qualificada')}>
+                                    Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+                                  </Button>
+                                )}
+                                {/* Julgar fit: disponível de em_conversa em diante. */}
+                                {coluna !== 'a_contatar' && l.fit !== true && (
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void julgar(l, true)}>
+                                    Com fit
+                                  </Button>
+                                )}
+                                {coluna !== 'a_contatar' && (
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => setSemFit(l)}>
+                                    Sem fit
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {itens.length === 0 && (
+                        <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
+                          vazio
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Estágio</TableHead>
+                    <TableHead>Fit</TableHead>
+                    <TableHead className="text-right">Esperado/mês</TableHead>
+                    <TableHead>SDR</TableHead>
+                    <TableHead>Reunião</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visiveis.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell className="max-w-[20rem]">
                         <Link
                           href={l.empresas ? `/empresas/${l.empresas.id}` : '#'}
-                          className="block font-medium hover:underline"
+                          className="text-sm font-medium hover:underline"
                         >
                           {l.empresas?.razao_social ?? 'Empresa'}
                         </Link>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                          {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
-                          {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
-                          {l.fit === true ? (
-                            <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
-                              Com fit
-                            </Badge>
-                          ) : l.fit === false ? (
-                            <Badge variant="destructive" className="text-[10px]">Sem fit</Badge>
-                          ) : null}
-                          {l.encerrado_motivo === 'expirado' ? (
-                            <Badge variant="secondary" className="text-[10px]">Expirado</Badge>
-                          ) : null}
-                          <span className="tabular-nums">{brl(l.empresas?.valor_esperado_mensal)}/mês esperado</span>
-                        </div>
-                        {/*
-                          Só os próximos passos plausíveis. Um menu com os nove estágios
-                          transformaria "mover" numa decisão, quando é um registro.
-                        */}
-                        {/*
-                          Só os próximos passos plausíveis, e o julgamento do fit em
-                          separado. Lead encerrado não mostra ação nenhuma além de
-                          reabrir — oferecer "agendar" num lead morto é convidar ao erro.
-                        */}
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {l.encerrado_em ? (
-                            l.encerrado_motivo === 'sem_fit' ? (
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => void julgar(l, true)}>
-                                Reabrir (era engano)
-                              </Button>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground">
-                                Encerrado sem toque — volta na próxima distribuição.
-                              </span>
-                            )
-                          ) : (
-                            <>
-                              {coluna === 'a_contatar' && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => void mover(l, 'em_conversa')}>
-                                  Em conversa
-                                </Button>
-                              )}
-                              {coluna === 'em_conversa' && (
-                                <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => setAgendando(l)}>
-                                  <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Agendar
-                                </Button>
-                              )}
-                              {coluna === 'reuniao_agendada' && (
-                                <>
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void mover(l, 'reuniao_realizada')}>
-                                    Realizada
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void mover(l, 'no_show')}>
-                                    No-show
-                                  </Button>
-                                </>
-                              )}
-                              {coluna === 'no_show' && (
-                                <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => setAgendando(l)}>
-                                  <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Reagendar
-                                </Button>
-                              )}
-                              {coluna === 'reuniao_realizada' && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => void mover(l, 'qualificada')}>
-                                  Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                                </Button>
-                              )}
-                              {/* Julgar fit: disponível de em_conversa em diante. */}
-                              {coluna !== 'a_contatar' && l.fit !== true && (
-                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => void julgar(l, true)}>
-                                  Com fit
-                                </Button>
-                              )}
-                              {coluna !== 'a_contatar' && (
-                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => setSemFit(l)}>
-                                  Sem fit
-                                </Button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
+                        <p className="text-xs text-muted-foreground">{l.empresas?.uf ?? '—'}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="whitespace-nowrap text-[11px]">
+                          {ESTAGIO_SDR_LABELS[l.estagio as EstagioSdr] ?? l.estagio}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">{rotuloFit(l.fit)}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {brl(l.empresas?.valor_esperado_mensal)}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {nomePorId.get(l.sdr_id) ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-xs tabular-nums text-muted-foreground">
+                        {l.reuniao_em ? new Date(l.reuniao_em).toLocaleString('pt-BR', {
+                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                        }) : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          )
-        })}
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Agendar ── */}
       <Dialog open={agendando !== null} onOpenChange={(v) => !v && setAgendando(null)}>

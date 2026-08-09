@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { isAdmin, requireSessionContext } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import { contextoComercial } from '@/lib/comercial'
 import { FilaSemDono } from '@/components/comercial/fila-sem-dono'
 
-export const metadata: Metadata = { title: 'Fila sem dono' }
+export const metadata: Metadata = { title: 'Fila sem Dono' }
 export const dynamic = 'force-dynamic'
 
 /**
@@ -13,11 +12,8 @@ export const dynamic = 'force-dynamic'
  * entrar.
  */
 export default async function Pagina() {
-  const context = await requireSessionContext()
-  const supabase = await createClient()
-  const { data: vendedor } = await supabase
-    .from('vendedores').select('id').eq('usuario_id', context.usuario.id).eq('ativo', true).maybeSingle()
-  if (!isAdmin(context) && vendedor) redirect('/comercial')
+  const { ehGestor } = await contextoComercial()
+  if (!ehGestor) redirect('/comercial')
 
   return <FilaSemDono />
 }

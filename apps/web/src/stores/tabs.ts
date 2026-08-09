@@ -39,6 +39,21 @@ export interface Tab {
    * caminho, que é o que a palavra "voltar" promete.
    */
   anterior?: RotaAnterior
+  /**
+   * O href COMPLETO da rota atual (com query), quando a página se dá ao trabalho de
+   * dizer qual é.
+   *
+   * Existe para o "voltar", e só para ele. `route` continua sendo pathname puro — a
+   * regra do topo deste arquivo não se dobra: `useSearchParams` forçaria Suspense em
+   * toda página, e uma aba cujo route discorda da barra de endereço dessincroniza a cada
+   * filtro. Mas uma tela com abas internas (Empresas → Clientes Onepay) é um LUGAR
+   * diferente para quem navegou, e voltar para a primeira aba é voltar para outro lugar.
+   * Quem tem esse problema se anuncia; ninguém mais paga por ele.
+   *
+   * Traz o título junto porque `<title>` não muda com aba interna: sem ele o botão diria
+   * "Empresas" e levaria a "Clientes Onepay" — um voltar que mente sobre o destino.
+   */
+  rotaCompleta?: RotaAnterior
 }
 
 export interface TabsState {
@@ -56,6 +71,8 @@ export interface TabsState {
   /** Points the active tab at `route` — or creates one when there is no active tab. */
   syncRoute: (route: string, fallbackTitle: string) => void
   renameActiveTab: (title: string) => void
+  /** A página diz qual é o href (e o nome) do lugar exato onde a pessoa está agora. */
+  marcarRotaCompleta: (href: string, titulo: string) => void
   reorderTabs: (activeId: string, overId: string) => void
   /** Drops restored tabs whose module the user no longer has (perfil changed). */
   pruneTabs: (isAllowed: (route: string) => boolean) => void
@@ -106,7 +123,8 @@ function isTab(value: unknown): value is Tab {
     typeof candidate.title === 'string' &&
     typeof candidate.route === 'string' &&
     candidate.route.startsWith('/') &&
-    (candidate.anterior === undefined || isRotaAnterior(candidate.anterior))
+    (candidate.anterior === undefined || isRotaAnterior(candidate.anterior)) &&
+    (candidate.rotaCompleta === undefined || isRotaAnterior(candidate.rotaCompleta))
   )
 }
 
@@ -183,13 +201,48 @@ function createTabsStore(userId: string) {
           // O título guardado é o que a página ANTERIOR realmente se chamava (já
           // renomeado pelo <title> dela), não o palpite do registry — é o que faz o
           // botão dizer "Sacados a prospectar" em vez de "Antecipação".
-          const anterior: RotaAnterior = { route: active.route, title: active.title }
+          //
+          // E o href guardado é o completo, quando a página anterior o declarou: voltar
+          // para /empresas depois de sair de /empresas?tab=clientes cai na aba errada, e
+          // "voltar" que aterrissa noutro lugar é pior que voltar nenhum.
+          const anterior: RotaAnterior =
+            active.rotaCompleta ?? { route: active.route, title: active.title }
+
+          /*
+           * `rotaCompleta` morre com a rota que a declarou — mantê-la faria o voltar da
+           * PRÓXIMA página apontar para a query da anterior.
+           *
+           * Exceto quando ela já fala do destino: a página que se anuncia faz isso num
+           * efeito, e efeito de filho roda antes de efeito de pai. Se o RouteSync
+           * (que mora na casca) sincronizasse depois, ele apagaria a marca que a página
+           * acabou de pôr — e o voltar voltaria a mentir, de forma intermitente.
+           */
+          const marcaEhDoDestino = active.rotaCompleta?.route.split('?')[0] === route
 
           set({
             tabs: tabs.map((tab) =>
-              tab.id === active.id ? { ...tab, route, title: fallbackTitle, anterior } : tab,
+              tab.id === active.id
+                ? {
+                    ...tab,
+                    route,
+                    title: fallbackTitle,
+                    anterior,
+                    rotaCompleta: marcaEhDoDestino ? tab.rotaCompleta : undefined,
+                  }
+                : tab,
             ),
           })
+        },
+
+        marcarRotaCompleta: (href, titulo) => {
+          if (!href.startsWith('/') || href.startsWith('//')) return
+          set((state) => ({
+            tabs: state.tabs.map((tab) =>
+              tab.id === state.activeTabId && tab.rotaCompleta?.route !== href
+                ? { ...tab, rotaCompleta: { route: href, title: titulo } }
+                : tab,
+            ),
+          }))
         },
 
         renameActiveTab: (title) => {

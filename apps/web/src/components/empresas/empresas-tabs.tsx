@@ -5,6 +5,7 @@ import { Building2, ChartPie, Lock, Wallet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesOnepay } from '@/components/radar/clientes-onepay'
+import { useTabsHydrated, useTabsStoreApi } from '@/components/shell/tabs-store-provider'
 import { EmpresasLista } from './empresas-lista'
 import { OnepayAnalyticsTab } from './onepay-analytics'
 
@@ -15,6 +16,11 @@ import { OnepayAnalyticsTab } from './onepay-analytics'
  *
  * A aba ativa vive na query `?tab=` para o link vindo do Radar (/radar/clientes →
  * /empresas?tab=clientes) cair na aba certa. A troca atualiza a URL sem recarregar.
+ *
+ * E ANUNCIA a URL completa para a aba do app. Sem isso, quem abria um cliente daqui e
+ * clicava em "voltar" caía na aba Empresas: o store guarda pathnames (regra do topo de
+ * stores/tabs.ts), e `/empresas` sem a query é literalmente outra tela. Cada aba interna
+ * é um lugar diferente para quem navegou, e voltar tem de devolver ao lugar de onde saiu.
  */
 const ABAS = ['todas', 'clientes', 'analise'] as const
 type Aba = (typeof ABAS)[number]
@@ -39,8 +45,24 @@ function RequerRadar() {
   )
 }
 
+/** O lugar que cada aba representa — é isto que "voltar" promete devolver. */
+const LUGAR_DA_ABA: Record<Aba, { href: string; titulo: string }> = {
+  todas: { href: '/empresas', titulo: 'Empresas' },
+  clientes: { href: '/empresas?tab=clientes', titulo: 'Clientes Onepay' },
+  analise: { href: '/empresas?tab=analise', titulo: 'Análise Onepay' },
+}
+
 export function EmpresasTabs({ temRadar, abaInicial }: { temRadar: boolean; abaInicial?: string }) {
   const [aba, setAba] = React.useState<Aba>(ehAba(abaInicial) ? abaInicial : 'todas')
+  const store = useTabsStoreApi()
+  const hidratado = useTabsHydrated()
+
+  // Antes da hidratação não há aba ativa para marcar; depois dela, toda troca reanuncia.
+  React.useEffect(() => {
+    if (!hidratado) return
+    const lugar = LUGAR_DA_ABA[aba]
+    store.getState().marcarRotaCompleta(lugar.href, lugar.titulo)
+  }, [aba, hidratado, store])
 
   function trocar(v: string) {
     if (!ehAba(v)) return
