@@ -22,6 +22,10 @@ import { sincronizarCertificados } from './radar/certificados.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
+import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/comissoes.js'
+import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
+import { sugerirPassivosJob } from './comercial/passivos.js'
+import { rotearNotasJob, vendedoresSemAtividadeJob } from './comercial/roteamento.js'
 import {
   avisarCustoProtestos,
   criarProcessadorProtestos,
@@ -74,6 +78,11 @@ export type TipoJob =
   | 'radar-lote'
   | 'protestos-mensal'
   | 'protestos-aviso-custo'
+  | 'comercial-distribuir'
+  | 'comercial-sla'
+  | 'comercial-passivos'
+  | 'comercial-comissoes'
+  | 'comercial-rotear'
   | 'protestos-empresa'
   | 'contatos-empresa'
   | 'certificados'
@@ -551,7 +560,10 @@ export function dispararAntecipacaoDiario(): string {
     // por criação o fecham, e é de graça — o upsert é idempotente por id_externo.
     const antecipacoes = await sincronizarAntecipacoesComIngestao(15)
     const outbox = await gerarOutbox()
-    return { varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox }
+    // Roteamento DEPOIS da reclassificação: a faixa muda com o calendário, e uma nota
+    // que entrou em faixa hoje precisa de dono hoje — não na segunda que vem.
+    const roteamento = await rotearNotasJob()
+    return { varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox, roteamento }
   })
 }
 
@@ -882,3 +894,40 @@ export function dispararExpirarAnalises(): string {
 export function dispararPerfilRecalcular(): string {
   return dispararAvulso('perfil-recalcular', async (client) => recalcularPerfil(client))
 }
+
+// ─── Comercial (Prompt 04g) ──────────────────────────────────────────────────
+
+/**
+ * Distribuição semanal de empresas para os SDRs. Segunda de manhã, e não domingo à
+ * noite: um lead que chega quando ninguém está trabalhando já nasce com um dia de SLA
+ * queimado.
+ */
+export function dispararDistribuirSdr(): string {
+  return dispararAvulso('comercial-distribuir', async () => distribuirSdrJob())
+}
+
+/** Diário: devolve ao pool o lead que ninguém tocou, e cobra quem não moveu nada. */
+export function dispararSlaComercial(): string {
+  return dispararAvulso('comercial-sla', async () => {
+    const sla = await slaLeadsJob()
+    const inativos = await vendedoresSemAtividadeJob()
+    return { sla, inativos }
+  })
+}
+
+/** Mensal: quem parece ser conta passiva. Sugere e notifica — nunca muda sozinho. */
+export function dispararSugerirPassivos(): string {
+  return dispararAvulso('comercial-passivos', async () => sugerirPassivosJob())
+}
+
+/** Mensal: fecha a competência anterior. O gestor aprova antes de pagar. */
+export function dispararApurarComissoes(competencia?: string): string {
+  return dispararAvulso('comercial-comissoes', async () => apurarComissoesJob(competencia))
+}
+
+/** Roteia as NFs vivas para os originadores. Encadeado no diário da Antecipação. */
+export function dispararRotearNotas(): string {
+  return dispararAvulso('comercial-rotear', async () => rotearNotasJob())
+}
+
+export { aplicarDecisaoCreditoEmVendas }

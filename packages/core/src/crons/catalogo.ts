@@ -120,6 +120,38 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/credito/sync',
   },
   {
+    path: '/api/cron/comercial-distribuir',
+    nome: 'Distribuição semanal de SDR',
+    moduloId: 'comercial',
+    descricao:
+      'Distribui empresas da fonte configurada (SOM por padrão) para os SDRs de saída, ordenadas por valor esperado mensal e respeitando território, carga e carência de "sem fit". Segunda de manhã, e não domingo à noite: lead que chega quando ninguém trabalha já nasce com um dia de SLA queimado. SDR de entrada NÃO entra aqui — o canal de inbound é do Prompt 05.',
+    destino: 'POST /jobs/comercial/distribuir-sdr',
+  },
+  {
+    path: '/api/cron/comercial-sla',
+    nome: 'SLA de leads e inatividade',
+    moduloId: 'comercial',
+    descricao:
+      'Devolve ao pool o lead "a contatar" parado além do SLA (7 dias por padrão) e avisa gestores sobre vendedor sem nenhum movimento em N dias ÚTEIS — corridos fariam o alerta disparar toda terça por causa do fim de semana, e alerta que não importa é alerta que ninguém lê.',
+    destino: 'POST /jobs/comercial/sla-leads',
+  },
+  {
+    path: '/api/cron/comercial-comissoes',
+    nome: 'Apuração de comissões',
+    moduloId: 'comercial',
+    descricao:
+      'Dia 1: fecha a competência anterior. Cada lançamento consulta a regra vigente e o dono da carteira NA DATA DO EVENTO — trocar carteira ou tabela hoje não reescreve o mês passado. Antecipação que regrediu vira estorno espelhado. Nada sai como pago: o gestor aprova antes.',
+    destino: 'POST /jobs/comercial/apurar-comissoes',
+  },
+  {
+    path: '/api/cron/comercial-passivos',
+    nome: 'Candidatas a conta passiva',
+    moduloId: 'comercial',
+    descricao:
+      'Dia 2, depois da apuração: aponta clientes que antecipam sozinhos e não receberam toque nosso na janela. SUGERE e notifica — nunca muda. "Sem toque" é afirmação sobre o nosso registro, não sobre o mundo, e marcar sozinho transformaria falha de anotação em perda de comissão de alguém.',
+    destino: 'POST /jobs/comercial/sugerir-passivos',
+  },
+  {
     path: '/api/cron/perfil-recalcular',
     nome: 'Perfil dos Clientes',
     moduloId: 'mercado',

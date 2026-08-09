@@ -976,6 +976,9 @@ export type Database = {
           erp_detalhes: Json
           erp_mrr: number | null
           estagio: string
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
           faturamento_anual: number | null
           faturamento_atualizado_em: string | null
           patrimonio_atualizado_em: string | null
@@ -1032,6 +1035,9 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
           patrimonio_atualizado_em?: string | null
@@ -1088,6 +1094,9 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
           patrimonio_atualizado_em?: string | null
@@ -2033,6 +2042,9 @@ export type Database = {
           taxa_usada: number | null
           tipo: string
           valor: number
+          vendedor_definido_em: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
           vencimento: string | null
           vencimento_origem: string | null
           natureza_operacao: string | null
@@ -2133,6 +2145,9 @@ export type Database = {
           taxa_usada?: number | null
           tipo?: string
           valor?: number
+          vendedor_definido_em?: string | null
+          vendedor_id?: string | null
+          vendedor_origem?: string | null
           vencimento?: string | null
           vencimento_origem?: string | null
           natureza_operacao?: string | null
@@ -2698,7 +2713,392 @@ export type Database = {
           },
         ]
       }
+      comercial_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: []
+      }
+      comissao_lancamentos: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          competencia: string
+          criado_em: string
+          descricao: string | null
+          id: string
+          origem_id: string
+          origem_tipo: string
+          regra_id: string | null
+          status: string
+          valor: number
+          vendedor_id: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          competencia: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          origem_id: string
+          origem_tipo: string
+          regra_id?: string | null
+          status?: string
+          valor: number
+          vendedor_id: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          competencia?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          origem_id?: string
+          origem_tipo?: string
+          regra_id?: string | null
+          status?: string
+          valor?: number
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      comissao_regras: {
+        Row: {
+          criada_em: string
+          criada_por: string | null
+          id: string
+          parametros: Json
+          tipo_vendedor: string
+          vendedor_id: string | null
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        Insert: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          parametros: Json
+          tipo_vendedor: string
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de: string
+        }
+        Update: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          parametros?: Json
+          tipo_vendedor?: string
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de?: string
+        }
+        Relationships: []
+      }
+      motivos_perda: {
+        Row: {
+          ativo: boolean
+          contexto: string
+          id: string
+          motivo: string
+          ordem: number
+        }
+        Insert: {
+          ativo?: boolean
+          contexto: string
+          id?: string
+          motivo: string
+          ordem?: number
+        }
+        Update: {
+          ativo?: boolean
+          contexto?: string
+          id?: string
+          motivo?: string
+          ordem?: number
+        }
+        Relationships: []
+      }
+      sdr_leads: {
+        Row: {
+          atualizado_em: string
+          distribuido_em: string
+          empresa_id: string
+          estagio: string
+          id: string
+          origem: string
+          reuniao_em: string | null
+          sdr_id: string
+          sem_fit_motivo: string | null
+          ultimo_toque_em: string | null
+          vendedor_destino_id: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          distribuido_em?: string
+          empresa_id: string
+          estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          origem: string
+          reuniao_em?: string | null
+          sdr_id: string
+          sem_fit_motivo?: string | null
+          ultimo_toque_em?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          distribuido_em?: string
+          empresa_id?: string
+          estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          origem?: string
+          reuniao_em?: string | null
+          sdr_id?: string
+          sem_fit_motivo?: string | null
+          ultimo_toque_em?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Relationships: []
+      }
+      vendas: {
+        Row: {
+          analise_credito_id: string | null
+          atualizada_em: string
+          criada_em: string
+          empresa_id: string
+          estagio: string
+          id: string
+          perdido_em: string | null
+          perdido_motivo: string | null
+          sdr_lead_id: string | null
+          vendedor_id: string
+        }
+        Insert: {
+          analise_credito_id?: string | null
+          atualizada_em?: string
+          criada_em?: string
+          empresa_id: string
+          estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          perdido_em?: string | null
+          perdido_motivo?: string | null
+          sdr_lead_id?: string | null
+          vendedor_id: string
+        }
+        Update: {
+          analise_credito_id?: string | null
+          atualizada_em?: string
+          criada_em?: string
+          empresa_id?: string
+          estagio?: string
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          perdido_em?: string | null
+          perdido_motivo?: string | null
+          sdr_lead_id?: string | null
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedor_acessos: {
+        Row: {
+          pode_ver_vendedor_id: string
+          vendedor_id: string
+        }
+        Insert: {
+          pode_ver_vendedor_id: string
+          vendedor_id: string
+        }
+        Update: {
+          pode_ver_vendedor_id?: string
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedor_carteira: {
+        Row: {
+          ate: string | null
+          desde: string
+          empresa_id: string
+          id: string
+          papel: string
+          vendedor_id: string
+        }
+        Insert: {
+          ate?: string | null
+          desde?: string
+          empresa_id: string
+          id?: string
+          papel: string
+          vendedor_id: string
+        }
+        Update: {
+          ate?: string | null
+          desde?: string
+          empresa_id?: string
+          id?: string
+          papel?: string
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedor_eventos: {
+        Row: {
+          cancelado_em: string | null
+          criado_em: string
+          criado_por: string | null
+          duracao_min: number
+          empresa_id: string | null
+          id: string
+          inicio_em: string
+          sdr_lead_id: string | null
+          tipo: string
+          titulo: string
+          venda_id: string | null
+          vendedor_id: string
+        }
+        Insert: {
+          cancelado_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_min?: number
+          empresa_id?: string | null
+          id?: string
+          inicio_em: string
+          sdr_lead_id?: string | null
+          tipo?: string
+          titulo: string
+          venda_id?: string | null
+          vendedor_id: string
+        }
+        Update: {
+          cancelado_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_min?: number
+          empresa_id?: string | null
+          id?: string
+          inicio_em?: string
+          sdr_lead_id?: string | null
+          tipo?: string
+          titulo?: string
+          venda_id?: string | null
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedor_ics_tokens: {
+        Row: {
+          criado_em: string
+          revogado_em: string | null
+          token: string
+          vendedor_id: string
+        }
+        Insert: {
+          criado_em?: string
+          revogado_em?: string | null
+          token: string
+          vendedor_id: string
+        }
+        Update: {
+          criado_em?: string
+          revogado_em?: string | null
+          token?: string
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedor_territorios: {
+        Row: {
+          faturamento_max: number | null
+          faturamento_min: number | null
+          ufs: string[]
+          vendedor_id: string
+        }
+        Insert: {
+          faturamento_max?: number | null
+          faturamento_min?: number | null
+          ufs?: string[]
+          vendedor_id: string
+        }
+        Update: {
+          faturamento_max?: number | null
+          faturamento_min?: number | null
+          ufs?: string[]
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      vendedores: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          email_remetente: string | null
+          id: string
+          is_ia: boolean
+          nome: string
+          settings: Json
+          tipo: string
+          usuario_id: string | null
+          whatsapp_conta_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          email_remetente?: string | null
+          id?: string
+          is_ia?: boolean
+          nome: string
+          settings?: Json
+          tipo: string
+          usuario_id?: string | null
+          whatsapp_conta_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          email_remetente?: string | null
+          id?: string
+          is_ia?: boolean
+          nome?: string
+          settings?: Json
+          tipo?: string
+          usuario_id?: string | null
+          whatsapp_conta_id?: string | null
+        }
+        Relationships: []
+      }
     }
+
     Views: {
       analise_vigente: {
         Row: {
@@ -3360,6 +3760,9 @@ export type Database = {
           valor: number
           vencimento: string | null
           vencimento_origem: string | null
+          vendedor_definido_em: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
           natureza_operacao: string | null
           operavel: boolean
           operavel_manual: boolean | null
@@ -3666,6 +4069,17 @@ export type Database = {
         Args: { p_grupo_id: string }
         Returns: Json
       }
+      app_definir_carteira: { Args: { p: Json }; Returns: Json }
+      app_definir_gestao_operacao: { Args: { p: Json }; Returns: Json }
+      app_mover_lead_sdr: { Args: { p: Json }; Returns: Json }
+      app_mover_venda: { Args: { p: Json }; Returns: Json }
+      app_atribuir_nf: { Args: { p: Json }; Returns: undefined }
+      app_mudar_status_comissao: { Args: { p: Json }; Returns: number }
+      app_gerar_token_ics: { Args: { p: Json }; Returns: string }
+      app_vendedor_atual: { Args: never; Returns: string }
+      app_gestor_comercial: { Args: never; Returns: boolean }
+      app_pode_ver_vendedor: { Args: { p_vendedor_id: string }; Returns: boolean }
+      comercial_resumo_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
       radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_onepay_analytics: { Args: never; Returns: Json }
       radar_onepay_clientes: {

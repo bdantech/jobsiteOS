@@ -105,6 +105,20 @@ export const EVENTO_TIPOS = {
   PERFIL_RECALCULADO: 'perfil.recalculado',
   PERFIL_SUGESTAO_ACEITA: 'perfil.sugestao_aceita',
   PERFIL_SUGESTAO_DESCARTADA: 'perfil.sugestao_descartada',
+
+  // Estrutura Comercial (04g)
+  CLIENTE_GESTAO_ALTERADA: 'cliente.gestao_alterada',
+  SDR_LEAD_DISTRIBUIDO: 'sdr.lead_distribuido',
+  SDR_SEM_FIT: 'sdr.sem_fit',
+  SDR_REUNIAO_AGENDADA: 'sdr.reuniao_agendada',
+  SDR_NO_SHOW: 'sdr.no_show',
+  SDR_LEAD_EXPIRADO: 'sdr.lead_expirado',
+  VENDA_ESTAGIO_ALTERADO: 'venda.estagio_alterado',
+  VENDA_PERDIDA: 'venda.perdida',
+  VENDA_GANHA: 'venda.ganha',
+  COMISSAO_APURADA: 'comissao.apurada',
+  COMISSAO_APROVADA: 'comissao.aprovada',
+  VENDEDOR_SEM_ATIVIDADE: 'vendedor.sem_atividade',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -180,6 +194,18 @@ export const EVENTO_LABELS: Record<string, string> = {
   'perfil.recalculado': 'Perfil dos Clientes recalculado',
   'perfil.sugestao_aceita': 'Sugestão do perfil aceita',
   'perfil.sugestao_descartada': 'Sugestão do perfil descartada',
+  'cliente.gestao_alterada': 'Gestão da conta alterada',
+  'sdr.lead_distribuido': 'Lead distribuído',
+  'sdr.sem_fit': 'Lead sem fit',
+  'sdr.reuniao_agendada': 'Reunião agendada',
+  'sdr.no_show': 'No-show na reunião',
+  'sdr.lead_expirado': 'Lead expirado e devolvido ao pool',
+  'venda.estagio_alterado': 'Venda mudou de estágio',
+  'venda.perdida': 'Venda perdida',
+  'venda.ganha': 'Venda ganha',
+  'comissao.apurada': 'Comissão apurada',
+  'comissao.aprovada': 'Comissão aprovada',
+  'vendedor.sem_atividade': 'Vendedor sem atividade',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

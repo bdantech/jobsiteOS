@@ -214,6 +214,33 @@ export async function dispararAvisoCustoProtestos(): Promise<DispararJobResultad
   return postar('/jobs/radar/protestos-aviso', {}, 'radar-protestos-aviso')
 }
 
+// ─── Comercial (Prompt 04g) ─────────────────────────────────────────────────
+
+/** Segunda de manhã: distribui empresas para os SDRs de saída. */
+export async function dispararDistribuirSdr(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/distribuir-sdr', {}, 'comercial-distribuir')
+}
+
+/** Diário: SLA dos leads parados + vendedores sem movimento. */
+export async function dispararSlaComercial(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/sla-leads', {}, 'comercial-sla')
+}
+
+/** Mensal: candidatas a conta passiva. Sugere; não muda nada. */
+export async function dispararSugerirPassivos(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/sugerir-passivos', {}, 'comercial-passivos')
+}
+
+/** Mensal: fecha a competência anterior de comissão. */
+export async function dispararApurarComissoes(competencia?: string): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/apurar-comissoes', { competencia }, 'comercial-comissoes')
+}
+
+/** Reroteia as NFs vivas. Também roda encadeado no diário da Antecipação. */
+export async function dispararRotearNotas(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/rotear-nfs', {}, 'comercial-rotear')
+}
+
 /**
  * Radar (§5): protestos sob demanda de uma empresa (+ SPEs do grupo criadas a partir de
  * um ano). Ação PAGA — a autorização e a confirmação de custo ficam no caller (a aba

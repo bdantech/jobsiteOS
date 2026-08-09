@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { adminModule } from './modules/admin.js'
 import { antecipacaoModule } from './modules/antecipacao.js'
+import { comercialModule } from './modules/comercial.js'
 import { creditoModule } from './modules/credito.js'
 import { empresasModule } from './modules/empresas.js'
 import { mercadoModule } from './modules/mercado.js'
@@ -27,6 +28,9 @@ export const MODULES: readonly AppModule[] = [
   // Crédito depois de Antecipação: a pergunta "quanto de limite este sacado sustenta"
   // só existe porque a nota dele passou pelo funil.
   creditoModule,
+  // Comercial fecha a sequência de Operações: Mercado acha a empresa, Antecipação
+  // encontra a nota, Crédito diz quanto ela sustenta — e é aqui que alguém vende.
+  comercialModule,
   empresasModule,
   adminModule,
   notificacoesModule,

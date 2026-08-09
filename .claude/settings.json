@@ -10,7 +10,6 @@
       "TodoWrite",
       "WebFetch",
       "WebSearch",
-
       "mcp__supabase__list_projects",
       "mcp__supabase__list_organizations",
       "mcp__supabase__get_project",
@@ -30,34 +29,13 @@
       "mcp__supabase__execute_sql",
       "mcp__supabase__apply_migration",
       "mcp__supabase__deploy_edge_function",
-
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
-
-      "Bash(ls:*)",
-      "Bash(pwd)",
-      "Bash(find:*)",
-      "Bash(rg:*)",
-      "Bash(grep:*)",
-      "Bash(which:*)",
-      "Bash(file:*)",
-      "Bash(wc:*)",
-      "Bash(mkdir:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git log:*)",
-      "Bash(git show:*)",
-      "Bash(git branch:*)",
-      "Bash(npm install:*)",
-      "Bash(npm run:*)",
-      "Bash(npm test:*)",
-      "Bash(npm ci:*)",
-      "Bash(pnpm install:*)",
-      "Bash(pnpm run:*)",
-      "Bash(npx tsc:*)",
-      "Bash(npx supabase:*)",
-      "Bash(node:*)",
-      "Bash(python3:*)"
+      "Bash",
+      "mcp__supabase",
+      "mcp__context7",
+      "Agent",
+      "Skill"
     ],
     "deny": [
       "Read(.env)",
@@ -67,9 +45,22 @@
       "Read(**/.env.local)",
       "Read(**/.env.production)",
       "Bash(sudo:*)",
-      "Bash(rm -rf:*)",
       "Bash(curl:*)",
-      "Bash(chmod 777:*)"
+      "Bash(chmod 777:*)",
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(unlink:*)",
+      "Bash(truncate:*)",
+      "Bash(shred:*)",
+      "Bash(mv:*)",
+      "Bash(git clean:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout --:*)",
+      "Bash(git restore:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git branch -D:*)",
+      "Bash(dropdb:*)"
     ]
   }
 }

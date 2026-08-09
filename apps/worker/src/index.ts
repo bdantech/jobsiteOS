@@ -19,6 +19,11 @@ import {
   dispararLoteRadar,
   motivoLoteNaoExecutavel,
   dispararAvisoCustoProtestos,
+  dispararDistribuirSdr,
+  dispararSlaComercial,
+  dispararSugerirPassivos,
+  dispararApurarComissoes,
+  dispararRotearNotas,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
   dispararContatosEmpresa,
@@ -187,6 +192,54 @@ app.post('/jobs/radar/lote', async (req: Request, res: Response, next: NextFunct
     }
     const id = dispararLoteRadar(lote_id)
     res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Comercial (Prompt 04g) ─────────────────────────────────────────────────
+
+app.post('/jobs/comercial/distribuir-sdr', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararDistribuirSdr(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/sla-leads', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararSlaComercial(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/sugerir-passivos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararSugerirPassivos(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const apurarSchema = z.object({
+  // AAAA-MM-01. Omitido = mês anterior, que é o caso do cron.
+  competencia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+})
+
+app.post('/jobs/comercial/apurar-comissoes', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { competencia } = apurarSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararApurarComissoes(competencia), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/rotear-nfs', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararRotearNotas(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

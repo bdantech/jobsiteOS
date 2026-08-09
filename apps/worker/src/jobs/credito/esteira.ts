@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { lerConfigCredito } from '../../credito/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
+import { aplicarDecisaoCreditoEmVendas } from '../comercial/comissoes.js'
 import { atradius } from './atradius.js'
 import { recalcularScoresDeCnpjs } from './potencial.js'
 
@@ -180,6 +181,13 @@ async function aplicarDecisao(
       cnpj,
       analise_id: analiseId,
     })
+  }
+
+  // O card do funil comercial (04g §5) anda junto com a decisão. Aprovada e negada
+  // são inequívocas e ficam mais caras quanto mais demoram; parcial NÃO anda sozinha,
+  // e a própria função devolve 0 nesse caso.
+  if (d.estagio === 'aprovada' || d.estagio === 'negada' || d.estagio === 'aprovada_parcial') {
+    await aplicarDecisaoCreditoEmVendas(analiseId, d.estagio)
   }
 
   // Evento próprio, e não um caso dentro de "atualizada": a seguradora CORTANDO
