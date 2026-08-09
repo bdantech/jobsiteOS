@@ -211,3 +211,89 @@ export const CAMADAS_DA_FONTE: Record<FonteDistribuicao, readonly string[]> = {
   som_sam: ['som', 'sam'],
   som_sam_tam: ['som', 'sam', 'tam'],
 }
+
+// ─── Cadastro (04g §9 — a tela escreve por RPC, com audit) ──────────────────
+
+export const salvarVendedorSchema = z
+  .object({
+    id: uuid.optional(),
+    nome: z.string().trim().min(2, 'Nome muito curto.'),
+    tipo: z.enum(TIPOS_VENDEDOR),
+    usuario_id: uuid.nullable().optional(),
+    is_ia: z.boolean().default(false),
+    whatsapp_conta_id: uuid.nullable().optional(),
+    email_remetente: z.string().email('E-mail inválido.').nullable().optional().or(z.literal('')),
+    settings: z.record(z.unknown()).default({}),
+    ativo: z.boolean().default(true),
+  })
+  // O mesmo CHECK da tabela, aqui só para a mensagem chegar no campo certo.
+  .refine((v) => !!v.usuario_id || v.is_ia, {
+    message: 'Escolha o usuário, ou marque como vendedor de IA.',
+    path: ['usuario_id'],
+  })
+export type SalvarVendedorInput = z.infer<typeof salvarVendedorSchema>
+
+export const salvarTerritorioSchema = z
+  .object({
+    vendedor_id: uuid,
+    ufs: z.array(z.string().trim().length(2, 'UF tem 2 letras.')).default([]),
+    faturamento_min: z.number().nonnegative().nullable().optional(),
+    faturamento_max: z.number().nonnegative().nullable().optional(),
+  })
+  .refine((v) => !v.faturamento_min || !v.faturamento_max || v.faturamento_min <= v.faturamento_max, {
+    message: 'O mínimo não pode ser maior que o máximo.',
+    path: ['faturamento_max'],
+  })
+export type SalvarTerritorioInput = z.infer<typeof salvarTerritorioSchema>
+
+/**
+ * Parâmetros por tipo. SDR é valor por reunião; os outros dois, por milhão.
+ *
+ * Validar aqui evita o erro silencioso mais caro deste módulo: gravar
+ * `valor_por_reuniao` numa regra de originador faz o cálculo não achar o parâmetro,
+ * devolver null, e a pessoa simplesmente não receber — sem erro nenhum.
+ */
+export const salvarRegraSchema = z
+  .object({
+    tipo_vendedor: z.enum(TIPOS_VENDEDOR),
+    vendedor_id: uuid.nullable().optional(),
+    valor: z.number().positive('O valor tem de ser positivo.'),
+    vigente_de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  })
+  .transform((v) => ({
+    tipo_vendedor: v.tipo_vendedor,
+    vendedor_id: v.vendedor_id ?? null,
+    vigente_de: v.vigente_de,
+    parametros:
+      v.tipo_vendedor === 'sdr' ? { valor_por_reuniao: v.valor } : { valor_por_milhao: v.valor },
+  }))
+export type SalvarRegraInput = z.input<typeof salvarRegraSchema>
+
+/** O nome do parâmetro que cada tipo usa — a tela rotula o campo com isto. */
+export const PARAMETRO_DA_REGRA: Record<TipoVendedorId, { chave: string; rotulo: string }> = {
+  sdr: { chave: 'valor_por_reuniao', rotulo: 'Valor por reunião agendada' },
+  originador: { chave: 'valor_por_milhao', rotulo: 'Valor por milhão convertido' },
+  vendedor: { chave: 'valor_por_milhao', rotulo: 'Valor por milhão de volume passivo' },
+}
+
+export const salvarAcessoSchema = z.object({
+  vendedor_id: uuid,
+  pode_ver_vendedor_id: uuid,
+  conceder: z.boolean().default(true),
+})
+export type SalvarAcessoInput = z.infer<typeof salvarAcessoSchema>
+
+export const salvarConfigSchema = z.object({
+  chave: z.enum(['distribuicao', 'painel', 'passivos', 'comissao']),
+  valor: z.record(z.unknown()),
+})
+export type SalvarConfigInput = z.infer<typeof salvarConfigSchema>
+
+export const salvarMotivoSchema = z.object({
+  id: uuid.optional(),
+  contexto: z.enum(['funil_vendedor', 'sdr_sem_fit']),
+  motivo: z.string().trim().min(2),
+  ordem: z.number().int().optional(),
+  ativo: z.boolean().optional(),
+})
+export type SalvarMotivoInput = z.infer<typeof salvarMotivoSchema>

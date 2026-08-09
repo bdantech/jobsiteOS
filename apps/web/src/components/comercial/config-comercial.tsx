@@ -1,30 +1,37 @@
 'use client'
 
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Plus } from 'lucide-react'
 import {
-  FONTE_DISTRIBUICAO_LABELS, ORIGEM_LANCAMENTO_LABELS, PAPEL_CARTEIRA_LABELS,
-  TIPO_VENDEDOR_LABELS, type FonteDistribuicao, type TipoVendedorId,
+  FONTES_DISTRIBUICAO, FONTE_DISTRIBUICAO_LABELS, PARAMETRO_DA_REGRA, TIPOS_VENDEDOR,
+  TIPO_VENDEDOR_LABELS, type FonteDistribuicao, type TipoVendedorId, type Tables,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { salvarConfigAction, salvarMotivoAction, salvarRegraAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
+import { VendedorForm } from './vendedor-form'
 
 /**
- * Configurações do Comercial — LEITURA nesta versão.
+ * Configurações do Comercial: quem vende, com qual território, por quanto.
  *
- * Mostrar antes de deixar editar é deliberado: as três coisas desta tela (quem vende,
- * qual território, quanto paga) são exatamente as que, mal preenchidas, fazem o
- * roteamento entregar nota errada e a comissão pagar valor errado. E as duas primeiras
- * já têm RPC de escrita (`app_definir_carteira`) usada pela ficha da empresa.
+ * São as três coisas que, mal preenchidas, fazem o roteamento entregar nota errada e a
+ * comissão pagar valor errado — então tudo aqui escreve por RPC com audit_log, e a
+ * mensagem de erro vem do banco em português em vez de virar violação de constraint.
  *
- * O que falta aqui é o CRUD de vendedor e de regra, e ele fica de fora com o mesmo
- * critério do resto do sistema: escrita passa por RPC com auditoria, e cadastrar
- * vendedor pela tela sem isso seria a única porta do módulo sem rastro. Enquanto isso,
- * o cadastro é por migração/SQL — que é auditável e raro (um vendedor novo por mês, não
- * por hora).
+ * Não há EXCLUIR em lugar nenhum desta tela. Vendedor se desativa, regra se substitui
+ * (a nova encerra a anterior na véspera), motivo se inativa. Apagar qualquer um dos três
+ * levaria junto a explicação de uma comissão já paga.
  */
 
 const brl = (n: unknown) =>
@@ -46,9 +53,197 @@ async function buscarConfig() {
   }
 }
 
+/**
+ * Campo que salva no BLUR, não a cada tecla.
+ *
+ * Salvar por tecla mandaria "2", "25", "250" ao banco e o job pegaria o número do meio
+ * se rodasse no instante errado. Salvar só quando o valor mudou evita gravar (e auditar)
+ * um clique que não mudou nada.
+ */
+function CampoNumero({
+  rotulo, valor, onSalvar, disabled,
+}: {
+  rotulo: string
+  valor: number
+  onSalvar: (n: number) => void
+  disabled?: boolean
+}) {
+  const [texto, setTexto] = React.useState(String(valor))
+  React.useEffect(() => setTexto(String(valor)), [valor])
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-muted-foreground">{rotulo}</dt>
+      <dd>
+        <Input
+          aria-label={rotulo}
+          type="number"
+          min={1}
+          value={texto}
+          disabled={disabled}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => {
+            const n = Number(texto)
+            if (!Number.isFinite(n) || n <= 0) return setTexto(String(valor))
+            if (n !== valor) onSalvar(n)
+          }}
+          className="h-8 w-24 text-right tabular-nums"
+        />
+      </dd>
+    </div>
+  )
+}
+
+function CampoBool({
+  rotulo, valor, onSalvar, disabled, nota,
+}: {
+  rotulo: string
+  valor: boolean
+  onSalvar: (b: boolean) => void
+  disabled?: boolean
+  nota?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-muted-foreground">
+        {rotulo}
+        {nota ? <span className="block text-xs">{nota}</span> : null}
+      </dt>
+      <dd>
+        <input
+          aria-label={rotulo}
+          type="checkbox"
+          checked={valor}
+          disabled={disabled}
+          onChange={(e) => onSalvar(e.target.checked)}
+        />
+      </dd>
+    </div>
+  )
+}
+
+/**
+ * Nova regra de comissão.
+ *
+ * O campo de valor muda de rótulo com o tipo, e isso não é polimento: gravar
+ * `valor_por_reuniao` numa regra de originador faz o cálculo não achar o parâmetro,
+ * devolver null, e a pessoa simplesmente não receber — sem erro nenhum, sem linha na
+ * folha, sem ninguém saber por quê. O schema no core monta o parâmetro certo pelo tipo.
+ */
+function NovaRegraDialog({
+  aberto, onOpenChange, vendedores, onSalvo,
+}: {
+  aberto: boolean
+  onOpenChange: (v: boolean) => void
+  vendedores: readonly Tables<'vendedores'>[]
+  onSalvo: () => void
+}) {
+  const [tipo, setTipo] = React.useState<TipoVendedorId>('sdr')
+  const [salvando, setSalvando] = React.useState(false)
+  const [erro, setErro] = React.useState<string | null>(null)
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const fd = new FormData(e.currentTarget)
+            setSalvando(true)
+            setErro(null)
+            const r = await salvarRegraAction({
+              tipo_vendedor: tipo,
+              vendedor_id: String(fd.get('vendedor_id') ?? '') || null,
+              valor: Number(fd.get('valor')),
+              vigente_de: String(fd.get('vigente_de') ?? '') || undefined,
+            })
+            setSalvando(false)
+            if (!r.ok) return setErro(r.message)
+            toast.success('Regra criada. A anterior foi encerrada na véspera.')
+            onOpenChange(false)
+            onSalvo()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Nova regra de comissão</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="tipo_regra">Tipo de vendedor</Label>
+              <select
+                id="tipo_regra"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as TipoVendedorId)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {TIPOS_VENDEDOR.map((t) => (
+                  <option key={t} value={t}>{TIPO_VENDEDOR_LABELS[t]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="vendedor_id_regra">Aplicar a</Label>
+              <select
+                id="vendedor_id_regra"
+                name="vendedor_id"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos deste tipo (regra padrão)</option>
+                {vendedores.filter((v) => v.tipo === tipo && v.ativo).map((v) => (
+                  <option key={v.id} value={v.id}>{v.nome} (override pessoal)</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="valor">{PARAMETRO_DA_REGRA[tipo].rotulo} (R$)</Label>
+              <Input id="valor" name="valor" type="number" min={1} step="0.01" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="vigente_de">Vigente a partir de</Label>
+              <Input
+                id="vigente_de"
+                name="vigente_de"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Competências já apuradas continuam com a regra que valia nelas.
+              </p>
+            </div>
+          </div>
+          {erro ? <p className="pb-2 text-sm text-destructive">{erro}</p> : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Criar regra'}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ConfigComercial() {
+  const qc = useQueryClient()
   const dados = useQuery({ queryKey: comercialKeys.config(), queryFn: buscarConfig })
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
+  const [editando, setEditando] = React.useState<Tables<'vendedores'> | null>(null)
+  const [abrindoForm, setAbrindoForm] = React.useState(false)
+  const [novaRegra, setNovaRegra] = React.useState(false)
+  const [salvando, setSalvando] = React.useState(false)
+
+  function recarregar() {
+    void qc.invalidateQueries({ queryKey: ['comercial'] })
+  }
+
+  /** Salva UM campo da config. O RPC faz merge, então mandar só o que mudou é seguro. */
+  async function salvarCampo(chave: string, valor: Record<string, unknown>) {
+    setSalvando(true)
+    const r = await salvarConfigAction({ chave, valor })
+    setSalvando(false)
+    if (!r.ok) return toast.error(r.message)
+    toast.success('Configuração salva.')
+    recarregar()
+  }
 
   if (dados.isPending || vendedores.isPending) return <Skeleton className="h-96 w-full" />
 
@@ -63,8 +258,9 @@ export function ConfigComercial() {
       <div>
         <h1 className="text-2xl font-semibold">Configurações do Comercial</h1>
         <p className="text-sm text-muted-foreground">
-          O que decide roteamento, distribuição e pagamento. Alterações são por migração —
-          escrita sem rastro nestas três coisas é como uma comissão muda sem ninguém saber.
+          O que decide roteamento, distribuição e pagamento. Toda mudança aqui vai para o
+          audit_log — nestas três coisas, escrita sem rastro é como uma comissão muda sem
+          ninguém saber.
         </p>
       </div>
 
@@ -76,22 +272,40 @@ export function ConfigComercial() {
           </CardHeader>
           <CardContent>
             <dl className="space-y-1.5 text-sm">
-              <div className="flex justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <dt className="text-muted-foreground">Fonte</dt>
-                <dd>{FONTE_DISTRIBUICAO_LABELS[String(dist.fonte) as FonteDistribuicao] ?? String(dist.fonte)}</dd>
+                <dd>
+                  <select
+                    aria-label="Fonte da distribuição"
+                    disabled={salvando}
+                    value={String(dist.fonte ?? 'som')}
+                    onChange={(e) => void salvarCampo('distribuicao', { fonte: e.target.value })}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    {FONTES_DISTRIBUICAO.map((f) => (
+                      <option key={f} value={f}>{FONTE_DISTRIBUICAO_LABELS[f as FonteDistribuicao]}</option>
+                    ))}
+                  </select>
+                </dd>
               </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Empresas por SDR/semana</dt>
-                <dd className="tabular-nums">{String(dist.empresas_por_semana ?? '—')}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">SLA do lead a contatar</dt>
-                <dd className="tabular-nums">{String(dist.sla_lead_dias ?? '—')} dias</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Carência após &quot;sem fit&quot;</dt>
-                <dd className="tabular-nums">{String(dist.sem_fit_carencia_dias ?? '—')} dias</dd>
-              </div>
+              <CampoNumero
+                rotulo="Empresas por SDR/semana"
+                valor={Number(dist.empresas_por_semana ?? 25)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('distribuicao', { empresas_por_semana: n })}
+              />
+              <CampoNumero
+                rotulo="SLA do lead a contatar (dias)"
+                valor={Number(dist.sla_lead_dias ?? 7)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('distribuicao', { sla_lead_dias: n })}
+              />
+              <CampoNumero
+                rotulo="Carência após sem fit (dias)"
+                valor={Number(dist.sem_fit_carencia_dias ?? 90)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('distribuicao', { sem_fit_carencia_dias: n })}
+              />
             </dl>
           </CardContent>
         </Card>
@@ -102,26 +316,37 @@ export function ConfigComercial() {
           </CardHeader>
           <CardContent>
             <dl className="space-y-1.5 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Leaderboard</dt>
-                <dd>{painel.leaderboard ? 'Ligado' : 'Desligado'}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Alerta de inatividade</dt>
-                <dd className="tabular-nums">{String(painel.sem_atividade_dias_uteis ?? '—')} dias úteis</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Passivo: mínimo de antecipações</dt>
-                <dd className="tabular-nums">{String(passivos.min_antecipacoes ?? '—')}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Passivo: janela</dt>
-                <dd className="tabular-nums">{String(passivos.janela_meses ?? '—')} meses</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted-foreground">Estorno de no-show</dt>
-                <dd>{comissao.estorno_no_show ? 'Ligado' : 'Desligado'}</dd>
-              </div>
+              <CampoBool
+                rotulo="Leaderboard"
+                valor={Boolean(painel.leaderboard)}
+                disabled={salvando}
+                onSalvar={(b) => void salvarCampo('painel', { leaderboard: b })}
+              />
+              <CampoNumero
+                rotulo="Alerta de inatividade (dias úteis)"
+                valor={Number(painel.sem_atividade_dias_uteis ?? 5)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('painel', { sem_atividade_dias_uteis: n })}
+              />
+              <CampoNumero
+                rotulo="Passivo: mínimo de antecipações"
+                valor={Number(passivos.min_antecipacoes ?? 4)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('passivos', { min_antecipacoes: n })}
+              />
+              <CampoNumero
+                rotulo="Passivo: janela (meses)"
+                valor={Number(passivos.janela_meses ?? 2)}
+                disabled={salvando}
+                onSalvar={(n) => void salvarCampo('passivos', { janela_meses: n })}
+              />
+              <CampoBool
+                rotulo="Estorno de no-show"
+                valor={Boolean(comissao.estorno_no_show)}
+                disabled={salvando}
+                onSalvar={(b) => void salvarCampo('comissao', { estorno_no_show: b })}
+                nota="Ligado, o no-show gera lançamento negativo automático."
+              />
             </dl>
           </CardContent>
         </Card>
@@ -129,7 +354,12 @@ export function ConfigComercial() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Vendedores e territórios</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Vendedores e territórios</CardTitle>
+            <Button size="sm" onClick={() => { setEditando(null); setAbrindoForm(true) }}>
+              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden /> Novo vendedor
+            </Button>
+          </div>
           <CardDescription>
             Território em branco NÃO significa &quot;atende tudo&quot;: o roteador ignora
             território vazio, senão um cadastro incompleto abocanharia a base inteira.
@@ -155,6 +385,7 @@ export function ConfigComercial() {
                       {v.is_ia ? <Badge className="text-[10px]">IA</Badge> : null}
                       {s.direcao ? <Badge variant="secondary" className="text-[10px]">{s.direcao}</Badge> : null}
                     </span>
+                    <span className="flex items-center gap-3">
                     <span className="text-xs text-muted-foreground">
                       {t && ((t.ufs ?? []).length > 0 || t.faturamento_min || t.faturamento_max)
                         ? `${(t.ufs ?? []).join(', ') || 'todas as UFs'} · ${
@@ -164,6 +395,11 @@ export function ConfigComercial() {
                       {(s.empresas_escolhidas ?? []).length > 0
                         ? ` · ${s.empresas_escolhidas?.length} na carteira explícita`
                         : ''}
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs"
+                      onClick={() => { setEditando(v); setAbrindoForm(true) }}>
+                      Editar
+                    </Button>
                     </span>
                   </li>
                 )
@@ -175,9 +411,15 @@ export function ConfigComercial() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Regras de comissão</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Regras de comissão</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setNovaRegra(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden /> Nova regra
+            </Button>
+          </div>
           <CardDescription>
-            Regra tem VIGÊNCIA: mudar o valor hoje não reprecifica o que já foi apurado.
+            Regra tem VIGÊNCIA: mudar o valor hoje não reprecifica o que já foi apurado. A
+            regra nova encerra a anterior na véspera — cada período tem exatamente uma.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -217,17 +459,48 @@ export function ConfigComercial() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-1.5">
           {(dados.data?.motivos ?? []).map((m) => (
-            <Badge key={m.id} variant={m.contexto === 'sdr_sem_fit' ? 'secondary' : 'outline'} className="text-[11px]">
-              {m.motivo}
-            </Badge>
+            <button
+              key={m.id}
+              type="button"
+              title={m.ativo ? 'Clique para desativar' : 'Clique para reativar'}
+              disabled={salvando}
+              onClick={async () => {
+                setSalvando(true)
+                const r = await salvarMotivoAction({ id: m.id, contexto: m.contexto, motivo: m.motivo, ativo: !m.ativo })
+                setSalvando(false)
+                if (!r.ok) return toast.error(r.message)
+                recarregar()
+              }}
+            >
+              <Badge
+                variant={m.contexto === 'sdr_sem_fit' ? 'secondary' : 'outline'}
+                className={m.ativo ? 'text-[11px]' : 'text-[11px] line-through opacity-50'}
+              >
+                {m.motivo}
+              </Badge>
+            </button>
           ))}
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Papéis de carteira: {Object.values(PAPEL_CARTEIRA_LABELS).join(' · ')}. Origens de lançamento:{' '}
-        {Object.values(ORIGEM_LANCAMENTO_LABELS).join(' · ')}.
+        Motivo inativo continua nas estatísticas antigas — desativar tira da lista de escolha,
+        não do histórico.
       </p>
+
+      <VendedorForm
+        aberto={abrindoForm}
+        onOpenChange={setAbrindoForm}
+        vendedor={editando}
+        territorio={editando ? (terrPorVendedor.get(editando.id) ?? null) : null}
+      />
+
+      <NovaRegraDialog
+        aberto={novaRegra}
+        onOpenChange={setNovaRegra}
+        vendedores={vendedores.data ?? []}
+        onSalvo={recarregar}
+      />
     </div>
   )
 }

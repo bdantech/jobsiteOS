@@ -2,6 +2,12 @@ import type { Json } from '../types/database.js'
 import type { Supabase } from '../registry/types.js'
 import {
   atribuirNfSchema,
+  salvarAcessoSchema,
+  salvarConfigSchema,
+  salvarMotivoSchema,
+  salvarRegraSchema,
+  salvarTerritorioSchema,
+  salvarVendedorSchema,
   definirCarteiraSchema,
   definirGestaoSchema,
   moverLeadSchema,
@@ -65,4 +71,47 @@ export async function gerarTokenIcs(supabase: Supabase, vendedorId?: string) {
   })
   if (error) throw new Error(error.message)
   return data as unknown as string
+}
+
+// ─── Cadastro ───────────────────────────────────────────────────────────────
+
+export async function salvarVendedor(supabase: Supabase, input: unknown) {
+  const dados = salvarVendedorSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_vendedor', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function salvarTerritorio(supabase: Supabase, input: unknown) {
+  const dados = salvarTerritorioSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_territorio', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function salvarComissaoRegra(supabase: Supabase, input: unknown) {
+  const dados = salvarRegraSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_comissao_regra', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function salvarAcessoVendedor(supabase: Supabase, input: unknown) {
+  const dados = salvarAcessoSchema.parse(input)
+  const { error } = await supabase.rpc('app_salvar_acesso_vendedor', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+}
+
+export async function salvarComercialConfig(supabase: Supabase, input: unknown) {
+  const dados = salvarConfigSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_comercial_config', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function salvarMotivoPerda(supabase: Supabase, input: unknown) {
+  const dados = salvarMotivoSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_motivo_perda', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
 }

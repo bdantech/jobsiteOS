@@ -158,15 +158,34 @@ de gestor, e nenhuma das duas acontece entre uma reunião e outra.
 
 ## O que ficou de fora
 
-- **CRUD de vendedor e de regra de comissão pela tela.** A tela de Configurações mostra
-  tudo e não edita. Cadastrar vendedor é raro (um por mês, não por hora) e é a única
-  porta do módulo que ficaria sem rastro de auditoria; enquanto não houver RPC com audit,
-  é por migração.
 - **Toggle "ocultar NFs de sacados passivos" no funil de NFs.** O efeito real do passivo
   (sem outbox, sem roteamento) está implementado; o filtro visual precisa de
   `gestao_operacao` na view `notas_funil`, que é uma migração de view inteira.
 - Envio real de mensagens, automação do vendedor de IA, OAuth do Google Calendar, metas e
   forecast, comissão de gestor — todos Prompt 05+, como o próprio 04g define.
+
+## Cadastro (Configurações)
+
+Vendedor, território, regra de comissão e motivos são editáveis na tela, por RPC com
+`audit_log` — mesma disciplina do resto do sistema.
+
+Não há **excluir** em lugar nenhum: vendedor se desativa, regra se substitui, motivo se
+inativa. Apagar qualquer um dos três levaria junto a explicação de uma comissão já paga.
+
+Três decisões que a tela toma por quem usa:
+
+- **Território é salvo junto com o vendedor**, na mesma submissão. Em telas separadas, o
+  estado mais provável é originador ativo com território em branco — que não casa com
+  nada e não diz por quê.
+- **Regra nova encerra a anterior na véspera.** A busca por vigência já resolveria a
+  sobreposição pela data de início, mas duas regras vigentes ao mesmo tempo é o estado
+  que faz alguém conferir a folha e não conseguir explicar o número.
+- **O campo de valor muda de rótulo com o tipo.** Gravar `valor_por_reuniao` numa regra
+  de originador faz o cálculo não achar o parâmetro, devolver null, e a pessoa
+  simplesmente não receber — sem erro, sem linha na folha.
+
+Os campos de configuração salvam no **blur**, não a cada tecla: salvar por tecla mandaria
+`2`, `25`, `250` ao banco, e o job pegaria o número do meio se rodasse no instante errado.
 
 ## Ponte para o Prompt 05
 

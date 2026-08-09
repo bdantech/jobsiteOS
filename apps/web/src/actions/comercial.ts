@@ -9,6 +9,12 @@ import {
   moverLeadSdr,
   moverVenda,
   mudarStatusComissao,
+  salvarAcessoVendedor,
+  salvarComercialConfig,
+  salvarComissaoRegra,
+  salvarMotivoPerda,
+  salvarTerritorio,
+  salvarVendedor,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
@@ -113,6 +119,82 @@ export async function gerarTokenIcsAction(vendedorId?: string): Promise<ActionRe
   try {
     const token = await gerarTokenIcs(supabase, vendedorId)
     return { ok: true, data: { token } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+// ─── Cadastro ───────────────────────────────────────────────────────────────
+//
+// Todas revalidam `/comercial/admin`: a tela é lida em servidor no primeiro paint, e
+// sem isso o cadastro novo só aparece no refresh seguinte.
+
+export async function salvarVendedorAction(input: unknown): Promise<ActionResult<{ id: string | null }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const v = (await salvarVendedor(supabase, input)) as { id?: string } | null
+    revalidatePath('/comercial/admin')
+    return { ok: true, data: { id: v?.id ?? null } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function salvarTerritorioAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarTerritorio(supabase, input)
+    revalidatePath('/comercial/admin')
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function salvarRegraAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarComissaoRegra(supabase, input)
+    revalidatePath('/comercial/admin')
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function salvarAcessoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarAcessoVendedor(supabase, input)
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function salvarConfigAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarComercialConfig(supabase, input)
+    revalidatePath('/comercial/admin')
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function salvarMotivoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarMotivoPerda(supabase, input)
+    revalidatePath('/comercial/admin')
+    return { ok: true, data: { ok: true } }
   } catch (error) {
     return falha(error)
   }

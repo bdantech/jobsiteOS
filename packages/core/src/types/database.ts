@@ -4144,6 +4144,12 @@ export type Database = {
         Args: { p_grupo_id: string }
         Returns: Json
       }
+      app_salvar_vendedor: { Args: { p: Json }; Returns: Json }
+      app_salvar_territorio: { Args: { p: Json }; Returns: Json }
+      app_salvar_comissao_regra: { Args: { p: Json }; Returns: Json }
+      app_salvar_acesso_vendedor: { Args: { p: Json }; Returns: undefined }
+      app_salvar_comercial_config: { Args: { p: Json }; Returns: Json }
+      app_salvar_motivo_perda: { Args: { p: Json }; Returns: Json }
       app_definir_carteira: { Args: { p: Json }; Returns: Json }
       app_definir_gestao_operacao: { Args: { p: Json }; Returns: Json }
       app_mover_lead_sdr: { Args: { p: Json }; Returns: Json }
