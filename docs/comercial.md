@@ -113,8 +113,20 @@ que ninguém aprovou.
 
 ## Os dois funis
 
-**SDR** (`sdr_leads`): a contatar → em conversa → com fit → reunião agendada → realizada →
-qualificada. Saídas: sem fit (motivo obrigatório), no-show, desqualificada.
+**SDR** (`sdr_leads`): a contatar → em conversa → reunião agendada → no-show → reunião
+realizada → qualificada. A ordem é a do que acontece: no-show vem depois de agendar e
+antes de sentar, não numa caixa de descarte no fim.
+
+**Fit não é etapa.** É um julgamento sobre a empresa (`fit boolean`, null = não
+avaliado), feito depois do contato, e que continua valendo em qualquer estágio seguinte.
+Como coluna, ele apagava a informação de até onde o lead tinha chegado: quem morreu antes
+do primeiro contato e quem morreu depois de uma reunião viravam a mesma linha no mesmo
+lugar — e essa distância é justamente o que revisa a régua do Mercado.
+
+Marcar **sem fit** exige motivo e **encerra o lead onde ele está** (`encerrado_em` +
+`encerrado_motivo = 'sem_fit'`), sem mexer no estágio. Marcar com fit num lead encerrado
+por engano o reabre. Julgar fit em quem nunca foi contatado é recusado: não é julgamento,
+é descarte, e vira estatística que mente sobre a régua.
 
 Agendar cria, na mesma transação, o card no funil do closer e o evento de calendário dos
 dois. Uma reunião agendada que não aparece no funil de quem vai atendê-la é uma reunião
@@ -146,9 +158,11 @@ resposta ou interesse", e esse canal não existe até o Prompt 05. Inventar um p
 encheria a fila de quem trabalha inbound com empresa fria. Ele recebe por criação manual
 (`origem = 'inbound'`) até lá.
 
-**SLA**: lead `a_contatar` parado além de 7 dias vira `desqualificada` e volta ao pool —
-não é deletado, porque o histórico de que a empresa passou pela mão de alguém é o que
-explica por que ela reaparece na semana seguinte.
+**SLA**: lead `a_contatar` parado além de 7 dias é encerrado com motivo `expirado` e
+volta ao pool. O estágio não muda — "morreu em a_contatar" é o dado, e diz que ninguém
+falou com a empresa, não que ela não presta (que é o que um estágio "desqualificada"
+dizia). Expirado **não tem carência**: a empresa continua boa, quem não trabalhou foi a
+gente.
 
 ## Calendário
 

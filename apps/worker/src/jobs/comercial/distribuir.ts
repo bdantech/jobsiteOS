@@ -67,7 +67,7 @@ async function sdrsDisponiveis(cotaPadrao: number): Promise<SdrDisponivel[]> {
   // receber mais 25 só porque é segunda-feira.
   const { rows } = await pool.query<{ sdr_id: string; n: string }>(
     `select sdr_id, count(*) as n from sdr_leads
-     where estagio not in ('sem_fit', 'desqualificada', 'qualificada')
+     where encerrado_em is null and estagio <> 'qualificada'
      group by sdr_id`,
   )
   const carga = new Map(rows.map((r) => [r.sdr_id, Number(r.n)]))
@@ -131,8 +131,12 @@ export async function distribuirSdrJob(): Promise<ResultadoDistribuicao> {
         select 1 from sdr_leads l
         where l.empresa_id = e.id
           and (
-            l.estagio not in ('sem_fit', 'desqualificada', 'qualificada')
-            or (l.estagio = 'sem_fit' and l.atualizado_em > now() - ($2 || ' days')::interval)
+            -- Lead vivo: dois SDRs na mesma porta é pior que ninguém.
+            (l.encerrado_em is null and l.estagio <> 'qualificada')
+            -- Recusado há pouco: bater de novo em 30 dias queima a marca e gasta a vez
+            -- de outra empresa. Expirado NÃO tem carência — ninguém falou com ela.
+            or (l.encerrado_motivo = 'sem_fit'
+                and l.encerrado_em > now() - ($2 || ' days')::interval)
           )
       )
     order by e.valor_esperado_mensal desc nulls last, e.faturamento_anual desc nulls last
@@ -194,19 +198,24 @@ export interface ResultadoSla {
 /**
  * Lead `a_contatar` parado além do SLA volta ao pool.
  *
- * "Volta ao pool" aqui é `desqualificada` + evento, não deleção: o histórico de que
- * aquela empresa passou pela mão de alguém e não foi trabalhada é justamente o dado
- * que explica por que ela reaparece na distribuição da semana seguinte.
+ * Encerra com motivo `expirado` e NÃO mexe no estágio: o card fica onde morreu, e
+ * "morreu em a_contatar" é o dado — diz que ninguém falou com a empresa, não que ela
+ * não presta. Um estágio "desqualificada" dizia a segunda coisa.
+ *
+ * Também não há carência: expirado volta à distribuição na semana seguinte, porque a
+ * empresa continua boa; quem não trabalhou foi a gente.
  */
 export async function slaLeadsJob(): Promise<ResultadoSla> {
   const cfg = await lerDistribuicao()
 
   const { rows } = await pool.query<{ id: string; empresa_id: string; sdr_id: string; nome: string | null }>(
     `
-    update sdr_leads l set estagio = 'desqualificada', atualizado_em = now()
+    update sdr_leads l set
+      encerrado_em = now(), encerrado_motivo = 'expirado', atualizado_em = now()
     from empresas e
     where l.empresa_id = e.id
       and l.estagio = 'a_contatar'
+      and l.encerrado_em is null
       and coalesce(l.ultimo_toque_em, l.distribuido_em) < now() - ($1 || ' days')::interval
     returning l.id, l.empresa_id, l.sdr_id, e.razao_social as nome
   `,

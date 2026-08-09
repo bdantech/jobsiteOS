@@ -23,7 +23,7 @@ export default function FunilSdrScreen() {
   const { colors } = useTheme()
   const [movendo, setMovendo] = useState<string | null>(null)
   const { data, isPending, isError, refetch, isRefetching } = useLeads()
-  const { moverLead } = useMover()
+  const { moverLead, marcarComFit } = useMover()
 
   if (isPending) {
     return (
@@ -65,6 +65,9 @@ export default function FunilSdrScreen() {
               {item.empresas?.uf ? (
                 <Badge variant="outline"><Text className="text-[10px]">{item.empresas.uf}</Text></Badge>
               ) : null}
+              {item.fit === true ? (
+                <Badge variant="outline"><Text className="text-[10px]">Com fit</Text></Badge>
+              ) : null}
               {item.reuniao_em ? (
                 <Text variant="muted" className="text-[11px]">
                   {new Date(item.reuniao_em).toLocaleString('pt-BR', {
@@ -91,9 +94,25 @@ export default function FunilSdrScreen() {
               </Button>
             ) : (
               <Text variant="muted" className="text-[11px]">
-                O próximo passo daqui (agendar, sem fit) pede data ou motivo — faça na web.
+                O próximo passo daqui é agendar, que pede data e closer — faça na web.
               </Text>
             )}
+            {item.estagio !== 'a_contatar' && item.fit !== true ? (
+              <Button
+                variant="ghost"
+                disabled={movendo === item.id}
+                onPress={async () => {
+                  setMovendo(item.id)
+                  try {
+                    await marcarComFit(item.id)
+                  } finally {
+                    setMovendo(null)
+                  }
+                }}
+              >
+                <Text>Marcar com fit</Text>
+              </Button>
+            ) : null}
           </Card>
         )
       }}

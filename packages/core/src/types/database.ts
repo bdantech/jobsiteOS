@@ -2850,6 +2850,10 @@ export type Database = {
           distribuido_em: string
           empresa_id: string
           estagio: string
+          encerrado_em: string | null
+          encerrado_motivo: string | null
+          fit: boolean | null
+          fit_definido_em: string | null
           id: string
           origem: string
           reuniao_em: string | null
@@ -2863,6 +2867,10 @@ export type Database = {
           distribuido_em?: string
           empresa_id: string
           estagio?: string
+          encerrado_em?: string | null
+          encerrado_motivo?: string | null
+          fit?: boolean | null
+          fit_definido_em?: string | null
           gestao_definida_em?: string | null
           gestao_definida_por?: string | null
           gestao_operacao?: string | null
@@ -2879,6 +2887,10 @@ export type Database = {
           distribuido_em?: string
           empresa_id?: string
           estagio?: string
+          encerrado_em?: string | null
+          encerrado_motivo?: string | null
+          fit?: boolean | null
+          fit_definido_em?: string | null
           gestao_definida_em?: string | null
           gestao_definida_por?: string | null
           gestao_operacao?: string | null

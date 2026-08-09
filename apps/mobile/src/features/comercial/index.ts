@@ -65,6 +65,8 @@ export interface LeadMobile {
   id: string
   estagio: string
   reuniao_em: string | null
+  fit: boolean | null
+  encerrado_em: string | null
   empresas: { id: string; razao_social: string | null; uf: string | null } | null
 }
 
@@ -74,9 +76,11 @@ export function useLeads() {
     queryFn: async (): Promise<LeadMobile[]> => {
       const { data, error } = await supabase
         .from('sdr_leads')
-        .select('id, estagio, reuniao_em, empresas(id, razao_social, uf)')
-        // Vivos primeiro e mais recentes no topo: no celular ninguém rola cem cards.
-        .not('estagio', 'in', '("sem_fit","desqualificada","qualificada")')
+        .select('id, estagio, reuniao_em, fit, encerrado_em, empresas(id, razao_social, uf)')
+        // Só o que pede trabalho: no celular ninguém rola cem cards, e lead encerrado
+        // não pede nada.
+        .is('encerrado_em', null)
+        .neq('estagio', 'qualificada')
         .order('distribuido_em', { ascending: false })
         .limit(100)
       if (error) throw new Error(error.message)
@@ -110,16 +114,19 @@ export function useVendas() {
 /**
  * O próximo passo de um lead, e só ele.
  *
- * No celular o avanço é um botão, não um menu: escolher entre nove estágios com o
- * polegar, na rua, é como um card acaba no lugar errado. As saídas que exigem motivo
- * (sem fit, perdido) NÃO aparecem aqui de propósito — elas pedem uma escolha em lista,
- * e essa escolha é melhor feita na web.
+ * No celular o avanço é um botão, não um menu: escolher entre seis estágios com o
+ * polegar, na rua, é como um card acaba no lugar errado.
+ *
+ * `em_conversa` não avança daqui: o passo seguinte é AGENDAR, que exige data e closer —
+ * e escolher os dois no celular, entre uma reunião e outra, é como se marca reunião no
+ * horário errado. Marcar SEM FIT também fica na web, porque exige motivo, e motivo
+ * escolhido às pressas vira sempre "Outro".
  */
 export function proximoEstagioSdr(atual: string): EstagioSdr | null {
   const fluxo: Partial<Record<EstagioSdr, EstagioSdr>> = {
     a_contatar: 'em_conversa',
-    em_conversa: 'com_fit',
     reuniao_agendada: 'reuniao_realizada',
+    no_show: 'reuniao_realizada',
     reuniao_realizada: 'qualificada',
   }
   return fluxo[atual as EstagioSdr] ?? null
@@ -143,6 +150,15 @@ export function useMover() {
     await qc.invalidateQueries({ queryKey: ['comercial'] })
   }
 
+  /** Só "com fit": sem fit exige motivo, e isso é escolha de lista — fica na web. */
+  async function marcarComFit(leadId: string) {
+    const { error } = await supabase.rpc('app_mover_lead_sdr', {
+      p: { lead_id: leadId, fit: true } as never,
+    })
+    if (error) throw new Error(error.message)
+    await qc.invalidateQueries({ queryKey: ['comercial'] })
+  }
+
   async function moverVenda(vendaId: string, estagio: EstagioVenda) {
     const { error } = await supabase.rpc('app_mover_venda', {
       p: { venda_id: vendaId, estagio } as never,
@@ -151,7 +167,7 @@ export function useMover() {
     await qc.invalidateQueries({ queryKey: ['comercial'] })
   }
 
-  return { moverLead, moverVenda }
+  return { moverLead, marcarComFit, moverVenda }
 }
 
 export { ESTAGIOS_SDR, ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS }

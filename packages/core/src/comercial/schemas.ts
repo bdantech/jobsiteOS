@@ -44,40 +44,64 @@ export const PAPEL_CARTEIRA_LABELS: Record<PapelCarteira, string> = {
 }
 
 // ─── Funil de SDR ───────────────────────────────────────────────────────────
-// A ordem É a coluna do kanban. `sem_fit`, `no_show` e `desqualificada` ficam no fim
-// porque são saídas, não etapas — misturá-las na sequência faria a régua de progresso
-// mentir sobre onde o lead está.
-
+/*
+ * A ordem É a coluna do kanban, e ela segue o que ACONTECE: `no_show` vem logo depois de
+ * `reuniao_agendada` porque é a coisa que acontece depois de agendar e antes de sentar.
+ *
+ * Fit NÃO está aqui. Ele é um julgamento sobre a empresa, feito depois do contato, e
+ * continua valendo em qualquer etapa seguinte — um lead pode ter fit e ainda estar em
+ * conversa. Como coluna, ele apagava a informação de até onde o lead tinha chegado:
+ * quem morreu antes do primeiro contato e quem morreu depois de uma reunião viravam a
+ * mesma linha no mesmo lugar.
+ */
 export const ESTAGIOS_SDR = [
   'a_contatar',
   'em_conversa',
-  'com_fit',
   'reuniao_agendada',
+  'no_show',
   'reuniao_realizada',
   'qualificada',
-  'no_show',
-  'sem_fit',
-  'desqualificada',
 ] as const
 export type EstagioSdr = (typeof ESTAGIOS_SDR)[number]
 
 export const ESTAGIO_SDR_LABELS: Record<EstagioSdr, string> = {
   a_contatar: 'A contatar',
   em_conversa: 'Em conversa',
-  com_fit: 'Com fit',
   reuniao_agendada: 'Reunião agendada',
+  no_show: 'No-show',
   reuniao_realizada: 'Reunião realizada',
   qualificada: 'Qualificada',
-  no_show: 'No-show',
-  sem_fit: 'Sem fit',
-  desqualificada: 'Desqualificada',
 }
 
-/** Saiu do funil: não conta como carga do SDR nem volta na distribuição. */
-export const ESTAGIOS_SDR_ENCERRADOS: readonly EstagioSdr[] = ['sem_fit', 'desqualificada', 'qualificada']
+/** O julgamento sobre a empresa. `null` é um estado real: ainda não se falou com ela. */
+export type Fit = boolean | null
 
-export function leadEstaVivo(estagio: string): boolean {
-  return !(ESTAGIOS_SDR_ENCERRADOS as readonly string[]).includes(estagio)
+export const FIT_LABELS: Record<'sim' | 'nao' | 'indefinido', string> = {
+  sim: 'Com fit',
+  nao: 'Sem fit',
+  indefinido: 'Fit não avaliado',
+}
+
+export function rotuloFit(fit: Fit): string {
+  return fit === true ? FIT_LABELS.sim : fit === false ? FIT_LABELS.nao : FIT_LABELS.indefinido
+}
+
+/**
+ * Lead vivo: ninguém o encerrou e ele ainda não chegou ao fim natural do funil.
+ *
+ * `qualificada` é fim: o lead cumpriu o que tinha de cumprir e virou reunião do closer.
+ * Não conta como carga do SDR, e a empresa não volta para a distribuição.
+ */
+export function leadEstaVivo(lead: { estagio: string; encerrado_em?: string | null }): boolean {
+  return !lead.encerrado_em && lead.estagio !== 'qualificada'
+}
+
+export const MOTIVOS_ENCERRAMENTO_LEAD = ['sem_fit', 'expirado'] as const
+export type MotivoEncerramentoLead = (typeof MOTIVOS_ENCERRAMENTO_LEAD)[number]
+
+export const MOTIVO_ENCERRAMENTO_LEAD_LABELS: Record<MotivoEncerramentoLead, string> = {
+  sem_fit: 'Sem fit',
+  expirado: 'Expirado sem toque',
 }
 
 // ─── Funil do vendedor ──────────────────────────────────────────────────────
@@ -148,17 +172,29 @@ export const definirCarteiraSchema = z.object({
 })
 export type DefinirCarteiraInput = z.infer<typeof definirCarteiraSchema>
 
+/**
+ * Mover de estágio, julgar o fit, ou os dois na mesma chamada.
+ *
+ * `estagio` e `fit` são ambos opcionais porque são coisas independentes: marcar sem fit
+ * não move o card (o estágio é o que diz até onde ele chegou), e mover não obriga a
+ * julgar.
+ */
 export const moverLeadSchema = z
   .object({
     lead_id: uuid,
-    estagio: z.enum(ESTAGIOS_SDR),
+    estagio: z.enum(ESTAGIOS_SDR).optional(),
+    fit: z.boolean().optional(),
     sem_fit_motivo: uuid.nullable().optional(),
     reuniao_em: z.string().datetime({ offset: true }).nullable().optional(),
     vendedor_destino_id: uuid.nullable().optional(),
   })
-  // As duas validações que o banco também faz. Aqui existem para a mensagem chegar ao
+  // As validações que o banco também faz. Aqui existem para a mensagem chegar ao
   // formulário no campo certo, em vez de voltar como exceção genérica do Postgres.
-  .refine((v) => v.estagio !== 'sem_fit' || !!v.sem_fit_motivo, {
+  .refine((v) => v.estagio !== undefined || v.fit !== undefined, {
+    message: 'Informe o estágio, o fit, ou os dois.',
+    path: ['estagio'],
+  })
+  .refine((v) => v.fit !== false || !!v.sem_fit_motivo, {
     message: 'Sem fit exige motivo.',
     path: ['sem_fit_motivo'],
   })

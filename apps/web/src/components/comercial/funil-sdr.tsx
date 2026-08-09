@@ -33,10 +33,14 @@ import {
 /**
  * Funil de reuniões do SDR — kanban por estágio.
  *
- * Duas saídas exigem mais que um clique, e isso é deliberado: **sem fit** pede motivo
- * (é o dado que diz por que a régua do Mercado está errada, e alimenta o Perfil 04f) e
- * **agendar** pede data e vendedor destino. Tudo o mais é um clique só — um funil onde
- * mover custa três telas é um funil que fica desatualizado.
+ * O estágio diz ONDE o lead está; o FIT é um julgamento sobre a empresa, e não move o
+ * card. Marcar sem fit encerra o lead onde ele está, e é isso que dá a informação que
+ * antes se perdia: um lead que morreu antes do primeiro contato e um que morreu depois
+ * de uma reunião contam coisas diferentes sobre a régua do Mercado.
+ *
+ * Duas ações pedem mais que um clique, e isso é deliberado: **sem fit** exige motivo, e
+ * **agendar** exige data e closer. Tudo o mais é um clique só — um funil onde mover
+ * custa três telas é um funil que fica desatualizado.
  */
 
 const brl = (n: number | null | undefined) =>
@@ -51,6 +55,9 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   const [agendando, setAgendando] = React.useState<LeadComEmpresa | null>(null)
   const [semFit, setSemFit] = React.useState<LeadComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
+  // Encerrados escondidos por padrão: o kanban é a fila de trabalho, e o que morreu não
+  // pede trabalho. O toggle existe porque revisar as mortes é o uso da semana seguinte.
+  const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
   const leads = useQuery({ queryKey: comercialKeys.leads(sdrId), queryFn: () => buscarLeads(sdrId) })
@@ -81,10 +88,27 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     return true
   }
 
+  /** Julgar o fit. NÃO move o card — o estágio continua dizendo até onde ele chegou. */
+  async function julgar(lead: LeadComEmpresa, fit: boolean, motivo?: string) {
+    setAgindo(true)
+    const r = await moverLeadAction({ lead_id: lead.id, fit, sem_fit_motivo: motivo ?? null })
+    setAgindo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return false
+    }
+    toast.success(fit ? 'Marcado com fit.' : 'Marcado sem fit — o lead foi encerrado aqui.')
+    recarregar()
+    return true
+  }
+
   if (leads.isPending) return <Skeleton className="h-96 w-full" />
 
+  const visiveis = (leads.data ?? []).filter((l) => mostrarEncerrados || !l.encerrado_em)
+  const encerrados = (leads.data ?? []).filter((l) => l.encerrado_em).length
+
   const porEstagio = new Map<string, LeadComEmpresa[]>()
-  for (const l of leads.data ?? []) {
+  for (const l of visiveis) {
     porEstagio.set(l.estagio, [...(porEstagio.get(l.estagio) ?? []), l])
   }
 
@@ -115,9 +139,21 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
         <div>
           <h1 className="text-2xl font-semibold">Funil de reuniões</h1>
           <p className="text-sm text-muted-foreground">
-            {(leads.data ?? []).length} lead(s). Sem fit exige motivo — é ele que ensina a régua.
+            {visiveis.length} lead(s). Fit é um julgamento sobre a empresa, não uma etapa —
+            marcar sem fit encerra o lead onde ele está.
           </p>
         </div>
+        <div className="flex items-center gap-3">
+        {encerrados > 0 && (
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={mostrarEncerrados}
+              onChange={(e) => setMostrarEncerrados(e.target.checked)}
+            />
+            Mostrar {encerrados} encerrado(s)
+          </label>
+        )}
         {ehGestor && (
           <Select value={sdrId ?? 'todos'} onValueChange={(v) => setSdrId(v === 'todos' ? null : v)}>
             <SelectTrigger className="w-56">
@@ -133,6 +169,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
             </SelectContent>
           </Select>
         )}
+        </div>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -152,7 +189,10 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                     <p className="py-4 text-center text-xs text-muted-foreground">—</p>
                   ) : (
                     itens.map((l) => (
-                      <div key={l.id} className="space-y-1.5 rounded-md border p-2 text-sm">
+                      <div
+                        key={l.id}
+                        className={`space-y-1.5 rounded-md border p-2 text-sm ${l.encerrado_em ? 'opacity-60' : ''}`}
+                      >
                         <Link
                           href={l.empresas ? `/empresas/${l.empresas.id}` : '#'}
                           className="block font-medium hover:underline"
@@ -161,53 +201,92 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                         </Link>
                         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                           {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
+                          {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
+                          {l.fit === true ? (
+                            <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
+                              Com fit
+                            </Badge>
+                          ) : l.fit === false ? (
+                            <Badge variant="destructive" className="text-[10px]">Sem fit</Badge>
+                          ) : null}
+                          {l.encerrado_motivo === 'expirado' ? (
+                            <Badge variant="secondary" className="text-[10px]">Expirado</Badge>
+                          ) : null}
                           <span className="tabular-nums">{brl(l.empresas?.valor_esperado_mensal)}/mês esperado</span>
                         </div>
                         {/*
                           Só os próximos passos plausíveis. Um menu com os nove estágios
                           transformaria "mover" numa decisão, quando é um registro.
                         */}
+                        {/*
+                          Só os próximos passos plausíveis, e o julgamento do fit em
+                          separado. Lead encerrado não mostra ação nenhuma além de
+                          reabrir — oferecer "agendar" num lead morto é convidar ao erro.
+                        */}
                         <div className="flex flex-wrap gap-1 pt-0.5">
-                          {coluna === 'a_contatar' && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                              onClick={() => void mover(l, 'em_conversa')}>
-                              Em conversa
-                            </Button>
-                          )}
-                          {(coluna === 'a_contatar' || coluna === 'em_conversa') && (
-                            <>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => void mover(l, 'com_fit')}>
-                                Com fit
-                              </Button>
+                          {l.encerrado_em ? (
+                            l.encerrado_motivo === 'sem_fit' ? (
                               <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => setSemFit(l)}>
-                                Sem fit
+                                onClick={() => void julgar(l, true)}>
+                                Reabrir (era engano)
                               </Button>
-                            </>
-                          )}
-                          {coluna === 'com_fit' && (
-                            <Button size="sm" className="h-7 text-xs" disabled={agindo} onClick={() => setAgendando(l)}>
-                              <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Agendar
-                            </Button>
-                          )}
-                          {coluna === 'reuniao_agendada' && (
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground">
+                                Encerrado sem toque — volta na próxima distribuição.
+                              </span>
+                            )
+                          ) : (
                             <>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => void mover(l, 'reuniao_realizada')}>
-                                Realizada
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => void mover(l, 'no_show')}>
-                                No-show
-                              </Button>
+                              {coluna === 'a_contatar' && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => void mover(l, 'em_conversa')}>
+                                  Em conversa
+                                </Button>
+                              )}
+                              {coluna === 'em_conversa' && (
+                                <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => setAgendando(l)}>
+                                  <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Agendar
+                                </Button>
+                              )}
+                              {coluna === 'reuniao_agendada' && (
+                                <>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void mover(l, 'reuniao_realizada')}>
+                                    Realizada
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                    onClick={() => void mover(l, 'no_show')}>
+                                    No-show
+                                  </Button>
+                                </>
+                              )}
+                              {coluna === 'no_show' && (
+                                <Button size="sm" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => setAgendando(l)}>
+                                  <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Reagendar
+                                </Button>
+                              )}
+                              {coluna === 'reuniao_realizada' && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => void mover(l, 'qualificada')}>
+                                  Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+                                </Button>
+                              )}
+                              {/* Julgar fit: disponível de em_conversa em diante. */}
+                              {coluna !== 'a_contatar' && l.fit !== true && (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => void julgar(l, true)}>
+                                  Com fit
+                                </Button>
+                              )}
+                              {coluna !== 'a_contatar' && (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
+                                  onClick={() => setSemFit(l)}>
+                                  Sem fit
+                                </Button>
+                              )}
                             </>
-                          )}
-                          {coluna === 'reuniao_realizada' && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                              onClick={() => void mover(l, 'qualificada')}>
-                              Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                            </Button>
                           )}
                         </div>
                       </div>
@@ -299,15 +378,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               e.preventDefault()
               if (!semFit) return
               const motivo = String(new FormData(e.currentTarget).get('motivo') ?? '')
-              const ok = await mover(semFit, 'sem_fit', { sem_fit_motivo: motivo })
+              const ok = await julgar(semFit, false, motivo)
               if (ok) setSemFit(null)
             }}
           >
             <DialogHeader>
               <DialogTitle>Marcar sem fit</DialogTitle>
               <DialogDescription>
-                O motivo é obrigatório e vira estatística: é ele que diz se a régua do Mercado
-                está trazendo empresa errada, e por qual razão.
+                Encerra o lead <strong>onde ele está</strong> — o card não muda de coluna, e é
+                isso que diz até onde ele chegou antes de morrer. O motivo é obrigatório e vira
+                estatística: é ele que diz se a régua do Mercado traz empresa errada, e por quê.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
