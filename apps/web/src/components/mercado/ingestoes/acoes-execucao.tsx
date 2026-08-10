@@ -20,6 +20,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ingestoesKeys } from './queries'
@@ -27,6 +28,12 @@ import { JOBS_DO_WORKER, type JobDoWorker } from './constants'
 
 /**
  * Every button that talks to the worker.
+ *
+ * "Recalcular SPEs" mora no mesmo dropdown das importações, abaixo de um separador:
+ * é o mesmo gesto ("rodar algo no worker"), com uma diferença que a linha marca — as
+ * fontes acima buscam dado novo, esta recalcula sobre o que já está ingerido. Ela existe
+ * porque SPEs, grupos e métricas só rodavam encadeados na importação da Receita: 100
+ * milhões de linhas e quatro horas para refazer um cálculo de minutos.
  *
  * The disabled states below are a courtesy, not a control: the server action
  * re-checks admin, "fallback only after a failure" and "one run per fonte" against
@@ -82,6 +89,15 @@ export function ExecutarAgora({
   fontesBloqueadas: ReadonlySet<string>
 }) {
   const { disparar, pendente } = useDisparar()
+  const [recalculando, setRecalculando] = React.useState(false)
+
+  async function recalcular() {
+    setRecalculando(true)
+    const r = await recalcularDerivadasAction()
+    setRecalculando(false)
+    if (!r.ok) return toast.error(r.message)
+    toast.success(r.message)
+  }
 
   return (
     <DropdownMenu>
@@ -116,42 +132,36 @@ export function ExecutarAgora({
             </DropdownMenuItem>
           )
         })}
+
+        {/*
+          Separado das fontes acima porque é outra categoria de coisa: as de cima
+          BUSCAM dado novo (horas, gigabytes, fonte externa); esta só recalcula sobre o
+          que já está aqui (minutos, sem rede). Misturar sem a linha faria "Recalcular"
+          parecer mais uma importação — e é justamente o oposto dela.
+        */}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={recalculando}
+          onSelect={() => {
+            void recalcular()
+          }}
+        >
+          <div className="flex flex-col">
+            <span className="flex items-center gap-2">
+              {recalculando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Sigma className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Recalcular SPEs
+            </span>
+            <span className="text-xs text-muted-foreground">
+              E os grupos econômicos, sem reimportar
+            </span>
+          </div>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-/**
- * Recalcular derivadas — SPEs, grupos econômicos e métricas — sem reimportar.
- *
- * Elas só rodavam encadeadas na importação da Receita: 100 milhões de linhas e quatro
- * horas para refazer um cálculo de minutos. O dia em que isso doeu foi 10/08/2026, quando
- * a Receita mudou o formato do sócio PJ e o grafo de grupos desabou — sem este botão, a
- * saída seria esperar a importação do mês seguinte.
- */
-export function RecalcularDerivadas() {
-  const [pendente, setPendente] = React.useState(false)
-
-  return (
-    <Button
-      variant="outline"
-      disabled={pendente}
-      title="Recalcula SPEs, grupos econômicos e métricas sobre o que já está ingerido."
-      onClick={async () => {
-        setPendente(true)
-        const r = await recalcularDerivadasAction()
-        setPendente(false)
-        if (!r.ok) return toast.error(r.message)
-        toast.success(r.message)
-      }}
-    >
-      {pendente ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-      ) : (
-        <Sigma className="mr-2 h-4 w-4" aria-hidden />
-      )}
-      Recalcular derivadas
-    </Button>
   )
 }
 
