@@ -197,12 +197,31 @@ export function efeitoDaDecisaoCredito(
 
 const uuid = z.string().uuid()
 
-export const definirGestaoSchema = z.object({
-  empresa_id: uuid,
-  gestao_operacao: z.enum(GESTOES_OPERACAO).nullable(),
-  /** Obrigatório ao marcar passiva: passiva sem gestor é conta órfã com rótulo. */
-  vendedor_gestao_id: uuid.nullable().optional(),
-})
+/**
+ * Cada escolha tem um dono diferente, e é por isso que são dois campos:
+ *
+ *   prospecção ativa → ORIGINADOR, que recebe as NFs da conta
+ *   passivo          → CLOSER, que gere a conta e recebe pelo volume dela
+ *
+ * O originador é opcional: dá para declarar a conta ativa antes de decidir quem a
+ * trabalha, e forçar a escolha aqui faria alguém escolher qualquer um só para salvar.
+ * O gestor da passiva NÃO é — passiva sem gestor é conta órfã com rótulo.
+ */
+export const definirGestaoSchema = z
+  .object({
+    empresa_id: uuid,
+    gestao_operacao: z.enum(GESTOES_OPERACAO).nullable(),
+    vendedor_gestao_id: uuid.nullable().optional(),
+    vendedor_originacao_id: uuid.nullable().optional(),
+  })
+  .refine((v) => v.gestao_operacao !== 'passivo' || !!v.vendedor_gestao_id, {
+    message: 'Conta passiva precisa de um closer que a gere.',
+    path: ['vendedor_gestao_id'],
+  })
+  .refine((v) => !v.vendedor_originacao_id || v.gestao_operacao === 'prospeccao_ativa', {
+    message: 'Originador só se define em conta de prospecção ativa.',
+    path: ['vendedor_originacao_id'],
+  })
 export type DefinirGestaoInput = z.infer<typeof definirGestaoSchema>
 
 /**

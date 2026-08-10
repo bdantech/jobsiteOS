@@ -67,6 +67,11 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   const qc = useQueryClient()
   const [editando, setEditando] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
+  // A escolha vive em estado porque o CAMPO SEGUINTE depende dela: conta ativa pede
+  // originador, conta passiva pede closer. Um formulário estático mostrava sempre o
+  // campo do passivo, e quem marcava "ativa" via um seletor vazio de gente que não
+  // existe naquele papel — e concluía, com razão, que a tela estava quebrada.
+  const [escolha, setEscolha] = React.useState<'' | GestaoOperacao>('')
 
   const chave = ['comercial', 'empresa', empresaId] as const
   const { data } = useQuery({ queryKey: chave, queryFn: () => buscarComercialDaEmpresa(empresaId) })
@@ -82,19 +87,38 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   // oferecer o botão aqui seria oferecer um erro.
   const podeDefinirGestao = aceitaGestaoOperacao({ estagio: data.gestao?.estagio })
 
+  const ativos = (vendedores.data ?? []).filter((v) => v.ativo)
+  const originadores = ativos.filter((v) => v.tipo === 'originador')
+  const closers = ativos.filter((v) => v.tipo === 'vendedor')
+
+  /** O dono vigente num papel — o seletor abre já apontando para ele. */
+  function donoAtual(papel: PapelCarteira): string | null {
+    return vigentes.find((c) => c.papel === papel)?.vendedores?.id ?? null
+  }
+
+  function abrir() {
+    setEscolha(gestao ?? '')
+    setEditando(true)
+  }
+
   async function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    const nova = String(fd.get('gestao') ?? '')
     setSalvando(true)
     const r = await definirGestaoAction({
       empresa_id: empresaId,
-      gestao_operacao: nova === '' ? null : nova,
-      vendedor_gestao_id: nova === 'passivo' ? String(fd.get('gestor') ?? '') : null,
+      gestao_operacao: escolha === '' ? null : escolha,
+      vendedor_gestao_id: escolha === 'passivo' ? String(fd.get('gestor') ?? '') || null : null,
+      vendedor_originacao_id:
+        escolha === 'prospeccao_ativa' ? String(fd.get('originador') ?? '') || null : null,
     })
     setSalvando(false)
     if (!r.ok) return toast.error(r.message)
-    toast.success('Gestão da conta atualizada.')
+    toast.success(
+      escolha === 'prospeccao_ativa' && fd.get('originador')
+        ? 'Conta ativa e originador definido — as NFs dela (e das SPEs do grupo) vão para ele.'
+        : 'Gestão da conta atualizada.',
+    )
     setEditando(false)
     void qc.invalidateQueries({ queryKey: chave })
   }
@@ -124,7 +148,7 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
               </Badge>
             ) : null}
             {podeDefinirGestao ? (
-              <Button size="sm" variant="outline" onClick={() => setEditando(true)}>
+              <Button size="sm" variant="outline" onClick={abrir}>
                 Definir gestão
               </Button>
             ) : null}
@@ -230,7 +254,8 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
                 <select
                   id="gestao"
                   name="gestao"
-                  defaultValue={gestao ?? ''}
+                  value={escolha}
+                  onChange={(e) => setEscolha(e.target.value as '' | GestaoOperacao)}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Não definido</option>
@@ -238,24 +263,53 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
                   <option value="passivo">{GESTAO_OPERACAO_LABELS.passivo}</option>
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="gestor">Vendedor que gere (obrigatório se passiva)</Label>
-                <select
-                  id="gestor"
-                  name="gestor"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Selecione…</option>
-                  {(vendedores.data ?? [])
-                    .filter((v) => v.ativo && v.tipo === 'vendedor')
-                    .map((v) => (
+
+              {/* Conta ativa entrega NOTA: o dono é o originador. */}
+              {escolha === 'prospeccao_ativa' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="originador">Originador desta conta (opcional)</Label>
+                  <select
+                    id="originador"
+                    name="originador"
+                    defaultValue={donoAtual('originacao') ?? ''}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Deixar sem dono por enquanto</option>
+                    {originadores.map((v) => (
                       <option key={v.id} value={v.id}>{v.nome}</option>
                     ))}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  Passiva sem gestor é conta órfã com rótulo — o banco recusa.
-                </p>
-              </div>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {originadores.length === 0
+                      ? 'Nenhum originador ativo cadastrado — cadastre um em Comercial › Configurações.'
+                      : 'As NFs desta empresa, e as das SPEs do grupo dela, passam a ser roteadas para ele. Escolher outro troca o dono.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Conta passiva entrega VOLUME: o dono é o closer que a gere. */}
+              {escolha === 'passivo' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="gestor">Closer que gere a conta</Label>
+                  <select
+                    id="gestor"
+                    name="gestor"
+                    required
+                    defaultValue={donoAtual('gestao_passiva') ?? ''}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Selecione…</option>
+                    {closers.map((v) => (
+                      <option key={v.id} value={v.id}>{v.nome}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {closers.length === 0
+                      ? 'Nenhum closer ativo cadastrado — sem ele o banco recusa marcar a conta como passiva.'
+                      : 'Passiva sem gestor é conta órfã com rótulo — o banco recusa. O volume dela vira a comissão dele.'}
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditando(false)}>Cancelar</Button>
