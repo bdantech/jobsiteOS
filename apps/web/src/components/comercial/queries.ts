@@ -186,6 +186,25 @@ export async function buscarCarteira(vendedorId?: string | null): Promise<Cartei
   }
 }
 
+/**
+ * Quantas NFs vivas a carteira de um originador alcança AGORA.
+ *
+ * Responde "meu link pegou?" na hora, sem esperar o roteamento. É diferente de "quantas
+ * mudaram de dono", que só se sabe depois do job — e é a pergunta que a pessoa
+ * realmente faz ao salvar.
+ */
+export async function buscarAlcanceCarteira(
+  vendedorId: string,
+): Promise<{ nfs_vivas: number; via_spe: number }> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_alcance_da_carteira', {
+    p_vendedor_id: vendedorId,
+  })
+  if (error) throw new Error(error.message)
+  const r = (data ?? {}) as { nfs_vivas?: number; via_spe?: number }
+  return { nfs_vivas: r.nfs_vivas ?? 0, via_spe: r.via_spe ?? 0 }
+}
+
 export async function buscarMotivos(contexto: string): Promise<Tables<'motivos_perda'>[]> {
   const supabase = createClient()
   const { data, error } = await supabase

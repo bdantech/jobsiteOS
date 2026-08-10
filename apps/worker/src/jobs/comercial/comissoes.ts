@@ -117,29 +117,64 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
     if (l) { lancamentos.push(l); acc.reunioes++ } else acc.sem_regra++
   }
 
-  // ── Originador: NFs convertidas, atribuídas a quem era dono NA DATA ──
+  /*
+   * ── Originador: NFs convertidas, atribuídas a quem era dono NA DATA ──
+   *
+   * A régua tem de ser a MESMA do roteamento, e não era: aqui se olhava só
+   * `fornecedor_empresa_id`, enquanto o roteamento olha os dois lados da nota e ainda
+   * sobe para a holding quando a contraparte é SPE. Duas réguas para "de quem é esta
+   * nota" significam a tela mostrar a nota no funil de um vendedor e a folha pagar outro
+   * — ou, no caso mais comum, não pagar ninguém.
+   *
+   * Os candidatos vêm em ORDEM DE PRECEDÊNCIA, a mesma de `rotearNota`: quem tem a
+   * empresa direto ganha de quem a alcança pela SPE. O primeiro candidato com dono
+   * vigente na data leva.
+   */
+  interface Candidata { id: string; nome: string | null }
   const { rows: convertidas } = await pool.query<{
     id_externo: number; convertida_em: string; gross_value: string | null;
-    empresa_id: string | null; empresa: string | null
+    candidatas: (Candidata | null)[]
   }>(
     `select a.id_externo, a.convertida_em, a.gross_value,
-            e.id as empresa_id, e.razao_social as empresa
+            jsonb_build_array(
+              case when cf.id is not null then jsonb_build_object('id', cf.id, 'nome', cf.razao_social) end,
+              case when cs.id is not null then jsonb_build_object('id', cs.id, 'nome', cs.razao_social) end,
+              case when hs.id is not null then jsonb_build_object('id', hs.id, 'nome', hs.razao_social) end,
+              case when hf.id is not null then jsonb_build_object('id', hf.id, 'nome', hf.razao_social) end
+            ) as candidatas
      from antecipacoes a
      left join notas_fiscais nf on nf.access_key = a.access_key_casada
-     left join empresas e on e.id = nf.fornecedor_empresa_id
+     -- Direto pelos dois lados. A NF casada é a fonte preferida; quando ela falta, o
+     -- CNPJ da própria antecipação ainda resolve a empresa.
+     left join empresas cf on cf.id = coalesce(nf.fornecedor_empresa_id,
+                                               (select id from empresas where cnpj = a.fornecedor_cnpj))
+     left join empresas cs on cs.id = coalesce(nf.sacado_empresa_id,
+                                               (select id from empresas where cnpj = a.sacado_cnpj))
+     -- E a holding, quando a contraparte é SPE de um grupo cliente.
+     left join empresas hs on hs.id = public.app_holding_do_sacado(a.sacado_cnpj)
+     left join empresas hf on hf.id = public.app_holding_do_sacado(a.fornecedor_cnpj)
      where a.convertida_em >= $1 and a.convertida_em < $2 and a.regrediu_em is null`,
     [de, ate],
   )
   for (const c of convertidas) {
-    if (!c.empresa_id) continue
-    const dono = donoNaData(carteira, c.empresa_id, 'originacao', c.convertida_em)
+    // `jsonb_build_array` devolve nulls nas posições vazias; a ordem é a precedência.
+    const candidatas = (c.candidatas ?? []).filter((x): x is Candidata => !!x?.id)
+    let dono: string | null = null
+    let empresa: string | null = null
+    for (const cand of candidatas) {
+      dono = donoNaData(carteira, cand.id, 'originacao', c.convertida_em)
+      if (dono) {
+        empresa = cand.nome
+        break
+      }
+    }
     if (!dono) continue
     const l = comissaoNfConvertida(regraDe(dono, c.convertida_em), {
       antecipacao_id: String(c.id_externo),
       vendedor_id: dono,
       convertida_em: c.convertida_em,
       gross_value: Number(c.gross_value ?? 0),
-      empresa: c.empresa ?? '—',
+      empresa: empresa ?? '—',
     })
     if (l) { lancamentos.push(l); acc.nfs++ } else acc.sem_regra++
   }

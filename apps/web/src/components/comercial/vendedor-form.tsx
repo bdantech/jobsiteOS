@@ -13,10 +13,12 @@ import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import {
   definirCarteiraPassivaAction,
+  rotearNotasAction,
   salvarAcessoAction,
   salvarTerritorioAction,
   salvarVendedorAction,
 } from '@/actions/comercial'
+import { buscarAlcanceCarteira } from './queries'
 import type { Tables } from '@jobsiteos/core'
 
 /**
@@ -484,6 +486,40 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
         setErro(a.message)
         return
       }
+    }
+
+    /*
+     * Carteira de originador mexida: reroteia agora e diz o que ela alcança.
+     *
+     * A conta é feita ANTES de esperar o job — ela responde "meu link pegou?", que é a
+     * pergunta real, e responde na hora. "Quantas mudaram de dono" só se saberia depois
+     * do roteamento, e obrigar a pessoa a esperar por um número que ela não pediu é
+     * trocar uma dúvida curta por uma espera longa.
+     *
+     * Nada aqui pode falhar o salvamento: a carteira já está no banco.
+     */
+    if (tipo === 'originador') {
+      const [alcance, roteou] = await Promise.all([
+        buscarAlcanceCarteira(id).catch(() => null),
+        rotearNotasAction(),
+      ])
+      setSalvando(false)
+      void qc.invalidateQueries({ queryKey: ['comercial'] })
+      onOpenChange(false)
+
+      const naoEnfileirou = roteou.ok && !roteou.data.enfileirado
+      if (alcance === null) {
+        toast.success('Carteira salva.')
+      } else if (alcance.nfs_vivas === 0) {
+        toast.success('Carteira salva — nenhuma NF viva nestas empresas por enquanto.')
+      } else {
+        toast.success(
+          `Carteira salva: ${alcance.nfs_vivas} NF(s) viva(s) alcançada(s)` +
+            (alcance.via_spe > 0 ? `, ${alcance.via_spe} via SPE do grupo` : '') +
+            (naoEnfileirou ? '. O reroteamento não começou — rode em Ingestões.' : '. Reroteando…'),
+        )
+      }
+      return
     }
 
     setSalvando(false)

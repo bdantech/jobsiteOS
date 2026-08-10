@@ -156,6 +156,53 @@ pede alguém sênior) é justamente o que uma regra automática erraria.
 Ninguém cobre → a tela mostra a lista inteira e diz por quê, em vez de escolher "o mais
 parecido", que seria um palpite com cara de regra.
 
+## Uma carteira de originação, não duas
+
+Havia duas com o mesmo nome e leitores diferentes:
+
+| onde | escrita por | lida por |
+|---|---|---|
+| `vendedores.settings.empresas_escolhidas` | o formulário | o **roteamento** |
+| `vendedor_carteira` papel `originacao` | `app_definir_carteira` — **nenhuma tela** | a **comissão** |
+
+Consequência medida: zero linhas de `originacao` na tabela, e portanto
+`donoNaData(..., 'originacao', ...)` devolvendo null para toda antecipação convertida. **A
+comissão do originador nunca foi paga** — sem erro nenhum: o job contava a linha como "sem
+regra" e seguia. É o pior formato de bug possível, porque a tela que a pessoa olha para
+conferir (o funil de NFs, alimentado pelo `settings`) mostra o trabalho acontecendo normal.
+
+Agora `app_salvar_vendedor` **espelha** `settings` em `vendedor_carteira`, na mesma
+transação. `settings` continua sendo o que a tela edita — editar um conjunto é natural ali
+— e a tabela é a forma temporal, a única que responde "quem era dono na data da conversão".
+
+Três regras no espelho:
+
+- **Recusa em vez de roubar.** Empresa já vigente com outro originador devolve o nome de
+  quem tem. Passar de mão é duas operações de propósito: tirar de um e dar a outro são duas
+  decisões, e uma delas costuma ser a que ninguém queria.
+- **Conta passiva não entra**, nem que esteja no `settings` — senão a mesma operação pagaria
+  o originador (NF convertida) e o closer (volume). O gatilho de `gestao_operacao` fecha as
+  vigências de `originacao` quando a conta vira passiva.
+- **O backfill começa hoje.** `jsonb` não guarda histórico, então não há data real de
+  entrada; inventar uma retroativa criaria vigência para um período em que a decisão talvez
+  não existisse. O que converteu antes não gera comissão — conservador e honesto.
+
+E a comissão passou a usar a **mesma régua do roteamento**: os dois lados da nota, com
+rollup para a holding quando a contraparte é SPE, na mesma ordem de precedência (direto
+ganha de SPE). Antes olhava só `fornecedor_empresa_id`.
+
+## Quando o link surte efeito
+
+O roteamento é uma **varredura completa**, não incremental: toda rodada reavalia cada nota
+viva. Linkar uma empresa hoje traz o histórico inteiro dela, não só o que sincronizar
+depois. Ficam de fora `convertida`/`perdida` (encerrada não é trabalho) e
+`vendedor_origem = 'manual'` (decisão humana não se revisa).
+
+Salvar a carteira de um originador **dispara o roteamento na hora** e a tela diz quantas
+NFs vivas a carteira alcança — com a fatia que vem por SPE. O alcance é calculado na hora
+porque responde "meu link pegou?", que é a pergunta real; "quantas mudaram de dono" só se
+saberia depois do job, e trocaria uma dúvida curta por uma espera longa.
+
 ## Ciclo da comissão
 
 ```

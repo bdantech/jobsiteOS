@@ -4190,7 +4190,9 @@ export type Database = {
       app_pode_ver_vendedor: { Args: { p_vendedor_id: string }; Returns: boolean }
       comercial_resumo_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
       comercial_carteira_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
+      comercial_alcance_da_carteira: { Args: { p_vendedor_id: string }; Returns: Json }
       comercial_vendedores_visiveis: { Args: never; Returns: Json }
+      app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
       radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_onepay_analytics: { Args: never; Returns: Json }
       radar_onepay_clientes: {

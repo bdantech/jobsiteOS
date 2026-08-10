@@ -19,6 +19,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { dispararRotearNotas } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -157,6 +158,27 @@ export async function salvarVendedorAction(input: unknown): Promise<ActionResult
   } catch (error) {
     return falha(error)
   }
+}
+
+/**
+ * Reroteia as NFs vivas agora, em vez de esperar o diário.
+ *
+ * Chamado depois de mexer na carteira de um originador. Sem isto a pessoa linka a
+ * empresa, abre o funil de NFs, não vê nada e conclui que o link não pegou — e no dia
+ * seguinte aparecem centenas de notas de uma vez. É o pior dos dois mundos: parece
+ * quebrado na hora e parece mágica depois.
+ *
+ * Devolve `enfileirado: false` em vez de estourar quando o worker não responde: a
+ * carteira JÁ foi salva, e transformar "o reroteamento não começou" em erro de
+ * salvamento faria a pessoa salvar de novo achando que perdeu o trabalho.
+ */
+export async function rotearNotasAction(): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro as ActionResult<never>
+  const r = await dispararRotearNotas()
+  return r.ok
+    ? { ok: true, data: { enfileirado: true } }
+    : { ok: true, data: { enfileirado: false, aviso: r.message } }
 }
 
 export async function salvarTerritorioAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
