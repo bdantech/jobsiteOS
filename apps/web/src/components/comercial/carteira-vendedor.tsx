@@ -13,6 +13,12 @@ import { buscarCarteira, buscarVendedoresVisiveis, comercialKeys } from './queri
 /**
  * A carteira de um vendedor — as empresas que são dele, e o número que prova por quê.
  *
+ * A unidade da carteira é a HOLDING, e o que ela arrasta são as SPEs do grupo econômico
+ * dela. Numa construtora é contra a SPE que se fatura, então tanto o volume quanto as
+ * notas contam o grupo inteiro. A tela mostra as duas coisas — quantas SPEs existem e
+ * quantas operações vieram por elas — porque um número que triplica sem explicação é um
+ * número que ninguém confia.
+ *
  * São duas carteiras diferentes, e a diferença é o que o vendedor recebe:
  *
  *   ORIGINAÇÃO  a empresa entrega NOTA. A coluna que importa é quantas NFs vivas ela tem
@@ -112,8 +118,9 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
             </div>
             <CardDescription>
               Contas que antecipam sozinhas. O volume delas no mês é o que gera a comissão —
-              não há NF roteada nem funil. Para mudar quem gere, edite o vendedor em
-              Configurações ou a conta na ficha da empresa.
+              não há NF roteada nem funil. Conta <strong>a holding e as SPEs do grupo
+              dela</strong>: é contra a SPE que a obra fatura. Para mudar quem gere, edite o
+              vendedor em Configurações ou a conta na ficha da empresa.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -128,6 +135,7 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                     <tr className="border-b text-left text-xs text-muted-foreground">
                       <th scope="col" className="px-3 py-2 font-normal">Empresa</th>
                       <th scope="col" className="px-3 py-2 font-normal">UF</th>
+                      <th scope="col" className="px-3 py-2 text-right font-normal">SPEs</th>
                       <th scope="col" className="px-3 py-2 font-normal">Gere desde</th>
                       <th scope="col" className="px-3 py-2 text-right font-normal">Volume no mês</th>
                     </tr>
@@ -149,10 +157,21 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                           ) : null}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">{p.uf ?? '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {p.spes || '—'}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
                           {new Date(p.desde).toLocaleDateString('pt-BR')}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{brl(p.volume_mes)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {brl(p.volume_mes)}
+                          {/* De onde veio o volume. Sem isto, um valor que triplicou parece erro. */}
+                          {p.operacoes_via_spe > 0 ? (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {p.operacoes_via_spe} via SPE
+                            </span>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -168,9 +187,9 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Empresas da carteira</CardTitle>
             <CardDescription>
-              As NFs destas empresas — como sacado ou como fornecedor — são roteadas para
-              este originador. Empresa sem NF viva não está entregando trabalho: vale
-              revisar se ela ainda pertence à carteira.
+              As NFs destas empresas — como sacado ou como fornecedor, <strong>e as das SPEs
+              do grupo delas</strong> — são roteadas para este originador. Empresa sem NF viva
+              não está entregando trabalho: vale revisar se ela ainda pertence à carteira.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -186,6 +205,7 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                       <th scope="col" className="px-3 py-2 font-normal">Empresa</th>
                       <th scope="col" className="px-3 py-2 font-normal">UF</th>
                       <th scope="col" className="px-3 py-2 font-normal">Situação</th>
+                      <th scope="col" className="px-3 py-2 text-right font-normal">SPEs</th>
                       <th scope="col" className="px-3 py-2 text-right font-normal">NFs vivas</th>
                     </tr>
                   </thead>
@@ -208,6 +228,9 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                           ) : (
                             'prospecção ativa'
                           )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {e.spes || '—'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{e.nfs_vivas}</td>
                       </tr>

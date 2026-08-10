@@ -152,3 +152,75 @@ test('faturamento desconhecido não entra em território com piso', () => {
     true,
   )
 })
+
+// ─── A conta é a holding E as SPEs dela ─────────────────────────────────────
+//
+// O caso que motivou tudo: uma construtora fatura contra a SPE da obra, não contra o
+// CNPJ dela. Medido no banco antes da mudança: 3.148 notas vivas contra clientes e
+// outras 1.112 contra SPEs desses mesmos clientes, que nunca chegavam a ninguém.
+
+/** Nota emitida contra a SPE de um grupo — a SPE não está na carteira de ninguém. */
+const NOTA_SPE: NotaRoteavel = {
+  sacado_empresa_id: 'spe-obra-7',
+  fornecedor_empresa_id: 'forn-1',
+  sacado_grupo_spe: 'grupo-pride',
+  sacado_gestao: 'prospeccao_ativa',
+}
+
+test('a nota da SPE vai para quem escolheu a HOLDING dela', () => {
+  const r = rotearNota(NOTA_SPE, [
+    orig({ vendedor_id: 'v1', empresas_escolhidas: ['holding-pride'], grupos_escolhidos: ['grupo-pride'] }),
+  ])
+  assert.equal(r.vendedor_id, 'v1')
+  assert.match(r.motivo, /SPE de uma holding/)
+})
+
+test('grupo que ninguém escolheu não roteia — não basta ser SPE de alguém', () => {
+  const r = rotearNota(NOTA_SPE, [
+    orig({ vendedor_id: 'v1', empresas_escolhidas: ['holding-outra'], grupos_escolhidos: ['grupo-outro'] }),
+  ])
+  assert.equal(r.vendedor_id, null)
+})
+
+test('originador sem grupos_escolhidos não regride — só não alcança SPE', () => {
+  // O campo é opcional: um chamador antigo continua roteando pela carteira direta.
+  const r = rotearNota(NOTA_SPE, [orig({ vendedor_id: 'v1', empresas_escolhidas: ['spe-obra-7'] })])
+  assert.equal(r.vendedor_id, 'v1')
+  assert.match(r.motivo, /Carteira explícita do originador/)
+})
+
+test('quem tem a empresa DIRETO ganha de quem a alcança pela SPE', () => {
+  /*
+   * Um grupo pode ter dois clientes, e a SPE de um pode ser sacada numa nota cujo
+   * fornecedor é o outro. Sem a precedência, a nota iria para o dono do grupo em vez do
+   * dono da empresa escrita nela — e o vendedor veria o nome do próprio cliente na nota
+   * sem entender por que ela não é dele.
+   */
+  const r = rotearNota(NOTA_SPE, [
+    orig({ vendedor_id: 'do-grupo', grupos_escolhidos: ['grupo-pride'], nfs_vivas: 0 }),
+    orig({ vendedor_id: 'do-fornecedor', empresas_escolhidas: ['forn-1'], nfs_vivas: 99 }),
+  ])
+  // Vence mesmo com carga muito maior: precedência não é desempate.
+  assert.equal(r.vendedor_id, 'do-fornecedor')
+  assert.match(r.motivo, /Carteira explícita do originador/)
+})
+
+test('sacado passivo continua fora, e o rótulo vem da holding', () => {
+  // A SPE não tem gestão própria; quem carrega o passivo é a holding. Ler o campo da SPE
+  // devolveria nulo e a nota entraria em carteira como se a conta fosse ativa.
+  const r = rotearNota(
+    { ...NOTA_SPE, sacado_gestao: 'passivo' },
+    [orig({ vendedor_id: 'v1', empresas_escolhidas: ['holding-pride'], grupos_escolhidos: ['grupo-pride'] })],
+  )
+  assert.equal(r.vendedor_id, null)
+  assert.match(r.motivo, /PASSIVA/)
+})
+
+test('duas holdings do mesmo grupo em carteiras diferentes: entrega uma e denuncia', () => {
+  const r = rotearNota(NOTA_SPE, [
+    orig({ vendedor_id: 'a', grupos_escolhidos: ['grupo-pride'], nfs_vivas: 5 }),
+    orig({ vendedor_id: 'b', grupos_escolhidos: ['grupo-pride'], nfs_vivas: 1 }),
+  ])
+  assert.equal(r.vendedor_id, 'b')
+  assert.match(r.motivo, /2 originadores reivindicam/)
+})

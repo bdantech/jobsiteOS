@@ -139,8 +139,12 @@ export interface PassivaNaCarteira {
   faturamento_anual: number | null
   desde: string
   gestao_operacao: string | null
-  /** Volume antecipado no mês corrente. É o número que vira comissão. */
+  /** SPEs no grupo econômico da holding — o tamanho do que ela arrasta. */
+  spes: number
+  /** Volume antecipado no mês corrente, da holding E das SPEs. Vira comissão. */
   volume_mes: number
+  /** Quantas dessas operações vieram por uma SPE, não pelo CNPJ da holding. */
+  operacoes_via_spe: number
 }
 
 export interface EmpresaDeOriginacao {
@@ -150,6 +154,7 @@ export interface EmpresaDeOriginacao {
   uf: string | null
   estagio: string
   gestao_operacao: string | null
+  spes: number
   nfs_vivas: number
 }
 

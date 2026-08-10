@@ -144,14 +144,32 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
     if (l) { lancamentos.push(l); acc.nfs++ } else acc.sem_regra++
   }
 
-  // ── Vendedor: volume das passivas que ele geria NAQUELE mês ──
+  /*
+   * ── Vendedor: volume das passivas que ele geria NAQUELE mês ──
+   *
+   * O sacado é a SPE; a conta é a holding. Antes esta consulta casava
+   * `empresas.cnpj = a.sacado_cnpj`, o que só encontrava a operação faturada contra o
+   * CNPJ da própria holding — medido em agosto/2026: R$ 1,88 mi encontrados e R$ 1,35 mi
+   * ignorados, 42% do volume que deveria remunerar a gestão.
+   *
+   * `app_holding_do_sacado` devolve UMA holding por sacado, e é o mesmo que o roteamento
+   * de NF usa. O "uma" importa aqui mais que em qualquer lugar: existe um grupo com dois
+   * clientes, e sem o desempate a mesma antecipação apareceria na conta dos dois.
+   */
   const { rows: volumes } = await pool.query<{
-    empresa_id: string; empresa: string | null; volume: string
+    empresa_id: string; empresa: string | null; volume: string; via_spe: string
   }>(
-    `select e.id as empresa_id, e.razao_social as empresa, coalesce(sum(a.gross_value), 0) as volume
-     from antecipacoes a
-     join empresas e on e.cnpj = a.sacado_cnpj
-     where a.convertida_em >= $1 and a.convertida_em < $2 and a.regrediu_em is null
+    `with dona as (
+       select a.id_externo, a.gross_value, a.sacado_cnpj,
+              public.app_holding_do_sacado(a.sacado_cnpj) as empresa_id
+       from antecipacoes a
+       where a.convertida_em >= $1 and a.convertida_em < $2 and a.regrediu_em is null
+     )
+     select d.empresa_id, e.razao_social as empresa,
+            coalesce(sum(d.gross_value), 0) as volume,
+            count(*) filter (where d.sacado_cnpj <> e.cnpj) as via_spe
+     from dona d
+     join empresas e on e.id = d.empresa_id
      group by 1, 2`,
     [de, ate],
   )
@@ -166,6 +184,7 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
       competencia,
       volume: Number(v.volume),
       empresa: v.empresa ?? '—',
+      operacoes_via_spe: Number(v.via_spe ?? 0),
     })
     if (l) { lancamentos.push(l); acc.volumes++ } else acc.sem_regra++
   }

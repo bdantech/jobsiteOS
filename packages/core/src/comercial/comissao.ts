@@ -178,22 +178,41 @@ export function comissaoNfConvertida(
   }
 }
 
-/** Vendedor: por milhão antecipado no mês pelas contas passivas que ele gere. */
+/**
+ * Vendedor: por milhão antecipado no mês pelas contas passivas que ele gere.
+ *
+ * O volume é o da HOLDING E DAS SPEs dela — numa construtora é contra a SPE que se
+ * fatura, e somar só o CNPJ da holding deixava a maior parte de fora. Por isso a
+ * descrição diz quantas operações vieram por SPE: um valor que triplicou de um mês para
+ * o outro é o tipo de linha que alguém contesta, e a resposta tem de estar na própria
+ * linha, não numa consulta que só quem escreveu o job sabe fazer.
+ */
 export function comissaoVolumePassivo(
   regra: RegraComissao | null,
-  evento: { vendedor_id: string; empresa_id: string; competencia: string; volume: number; empresa: string },
+  evento: {
+    vendedor_id: string
+    empresa_id: string
+    competencia: string
+    volume: number
+    empresa: string
+    operacoes_via_spe?: number
+  },
 ): Lancamento | null {
   const porMilhao = numero(regra?.parametros?.valor_por_milhao)
   if (regra === null || porMilhao === null || porMilhao <= 0) return null
   if (!(evento.volume > 0)) return null
 
+  const viaSpe = evento.operacoes_via_spe ?? 0
   return {
     vendedor_id: evento.vendedor_id,
     competencia: evento.competencia,
     origem_tipo: 'volume_passivo',
     // Agregado mensal: a chave é (empresa, mês), e é ela que torna o job idempotente.
     origem_id: `volume:${evento.empresa_id}:${evento.competencia.slice(0, 7)}`,
-    descricao: `Volume de conta passiva — ${evento.empresa}`,
+    descricao:
+      viaSpe > 0
+        ? `Volume de conta passiva — ${evento.empresa} (${viaSpe} operação(ões) via SPE)`
+        : `Volume de conta passiva — ${evento.empresa}`,
     valor: arredondar((evento.volume / 1_000_000) * porMilhao),
     regra_id: regra.id,
   }

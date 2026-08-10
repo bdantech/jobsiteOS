@@ -20,6 +20,17 @@
  * usava território como segundo critério para NF, e isso trocava as duas coisas de
  * lugar: fazia o originador receber conta por região (que é a régua do closer) e
  * deixava o closer sem régua nenhuma.
+ *
+ * ── A conta é a holding E as SPEs dela ──
+ *
+ * Uma construtora não é um CNPJ: é uma holding com dezenas de SPEs, e é contra a SPE que
+ * se fatura. Escolher a holding na carteira e receber só as notas emitidas contra o CNPJ
+ * dela entregava um quarto do trabalho — medido: 3.148 notas vivas contra clientes e
+ * outras 1.112 contra SPEs desses mesmos clientes, que nunca chegavam a ninguém.
+ *
+ * Por isso a carteira casa por DOIS caminhos: a empresa escolhida, e o grupo econômico
+ * dela quando a contraparte é uma SPE. Só `is_spe` sobe pelo grupo — o grupo também junta
+ * empresas operacionais irmãs, que são contas próprias e podem ter dono próprio.
  */
 
 export type OrigemDono = 'carteira' | 'manual'
@@ -34,6 +45,13 @@ export interface OriginadorRoteavel {
   vendedor_id: string
   /** `settings.empresas_escolhidas`: a carteira explícita, por empresa_id. */
   empresas_escolhidas: readonly string[]
+  /**
+   * Os grupos econômicos das empresas escolhidas — é por aqui que as SPEs delas entram.
+   *
+   * Derivado da carteira, nunca escolhido à mão: um grupo na carteira sem a holding
+   * correspondente seria uma atribuição que ninguém consegue explicar ao vendedor.
+   */
+  grupos_escolhidos?: readonly string[]
   /** NFs vivas hoje. Só desempata quando dois reivindicam a mesma empresa. */
   nfs_vivas: number
 }
@@ -41,7 +59,20 @@ export interface OriginadorRoteavel {
 export interface NotaRoteavel {
   sacado_empresa_id: string | null
   fornecedor_empresa_id: string | null
-  /** `gestao_operacao` do SACADO. 'passivo' tira a nota do roteamento inteiro. */
+  /**
+   * Grupo econômico do sacado/fornecedor, preenchido SÓ quando ele é uma SPE.
+   *
+   * Vem nulo para empresa operacional mesmo que ela tenha grupo: quem decide se o vínculo
+   * conta é quem monta a consulta, e a regra é "holding e suas SPEs" — não "tudo que
+   * divide sócio".
+   */
+  sacado_grupo_spe?: string | null
+  fornecedor_grupo_spe?: string | null
+  /**
+   * `gestao_operacao` do sacado — da HOLDING dele, quando o sacado é uma SPE. 'passivo'
+   * tira a nota do roteamento inteiro, e o rótulo mora na holding: a SPE não tem gestão
+   * própria, e ler o campo dela devolveria nulo para toda conta passiva do grupo.
+   */
   sacado_gestao: string | null
   /** Dono atual e como ele chegou lá: 'manual' é decisão humana e não se revisa. */
   vendedor_id_atual?: string | null
@@ -82,11 +113,27 @@ export function rotearNota(
     return SEM_DONO('Sacado é conta PASSIVA: não entra em carteira de originação.')
   }
 
-  const porCarteira = originadores.filter(
-    (o) =>
+  /** A empresa está na carteira dele — direto, ou por ser SPE de uma holding escolhida. */
+  function alcanca(o: OriginadorRoteavel): 'direto' | 'spe' | null {
+    if (
       (nota.sacado_empresa_id !== null && o.empresas_escolhidas.includes(nota.sacado_empresa_id)) ||
-      (nota.fornecedor_empresa_id !== null && o.empresas_escolhidas.includes(nota.fornecedor_empresa_id)),
-  )
+      (nota.fornecedor_empresa_id !== null && o.empresas_escolhidas.includes(nota.fornecedor_empresa_id))
+    ) {
+      return 'direto'
+    }
+    const grupos = o.grupos_escolhidos ?? []
+    if (
+      (nota.sacado_grupo_spe != null && grupos.includes(nota.sacado_grupo_spe)) ||
+      (nota.fornecedor_grupo_spe != null && grupos.includes(nota.fornecedor_grupo_spe))
+    ) {
+      return 'spe'
+    }
+    return null
+  }
+
+  const porCarteira = originadores
+    .map((o) => ({ o, via: alcanca(o) }))
+    .filter((x): x is { o: OriginadorRoteavel; via: 'direto' | 'spe' } => x.via !== null)
 
   if (porCarteira.length === 0) {
     // Fila do gestor. É resposta, não falha — e uma fila comprida por muito tempo diz
@@ -94,16 +141,28 @@ export function rotearNota(
     return SEM_DONO('Nenhum originador tem esta empresa na carteira.')
   }
 
-  // Dois donos para a mesma empresa é erro de cadastro, não de roteamento. Escolher o
-  // de menor carga é arbitrário mas estável, e o motivo denuncia a duplicidade.
-  const escolhido = menorCarga(porCarteira)
+  /*
+   * Quem tem a empresa DIRETO ganha de quem a alcança pela SPE.
+   *
+   * O caso é real: um grupo pode ter dois clientes, e a SPE de um deles pode ser sacada
+   * numa nota cujo fornecedor é o outro. Sem a precedência, a nota iria para o dono do
+   * grupo em vez de para o dono da empresa que está escrita nela — e o vendedor olharia
+   * a nota, veria o nome do próprio cliente, e não entenderia por que ela não é dele.
+   */
+  const diretos = porCarteira.filter((x) => x.via === 'direto')
+  const candidatos = diretos.length > 0 ? diretos : porCarteira
+  const via = candidatos[0]?.via
+  const escolhido = menorCarga(candidatos.map((x) => x.o))
+
   return {
     vendedor_id: escolhido.vendedor_id,
     origem: 'carteira',
     motivo:
-      porCarteira.length > 1
-        ? `Carteira explícita — ${porCarteira.length} originadores reivindicam esta empresa; conferir cadastro.`
-        : 'Carteira explícita do originador.',
+      candidatos.length > 1
+        ? `Carteira explícita — ${candidatos.length} originadores reivindicam esta empresa; conferir cadastro.`
+        : via === 'spe'
+          ? 'Carteira explícita: SPE de uma holding do originador.'
+          : 'Carteira explícita do originador.',
   }
 }
 

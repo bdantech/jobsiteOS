@@ -94,8 +94,10 @@ const REGUA_ORIGINACAO: ReguaCarteira = {
   explicacao: (
     <>
       As NFs destas empresas — como sacado OU como fornecedor — são roteadas para este
-      originador. A busca só mostra <strong>cliente em prospecção ativa</strong>: quem não é
-      cliente não emite nota no funil, e a nota de passivo é descartada antes do roteamento.
+      originador, <strong>e junto vêm as das SPEs do grupo econômico delas</strong>: numa
+      construtora é contra a SPE da obra que se fatura. A busca só mostra{' '}
+      <strong>cliente em prospecção ativa</strong>: quem não é cliente não emite nota no
+      funil, e a nota de passivo é descartada antes do roteamento.
     </>
   ),
   vazio: 'Nenhuma empresa ainda — sem carteira, nenhuma nota é roteada para ele.',
@@ -117,9 +119,11 @@ const REGUA_PASSIVAS: ReguaCarteira = {
   explicacao: (
     <>
       Contas que antecipam sozinhas e que este closer mantém. O <strong>volume antecipado
-      por elas no mês</strong> é o que gera a comissão dele — não há NF roteada nem funil.
-      Entrar aqui marca a empresa como passiva; sair devolve a gestão a &quot;não
-      definido&quot;, porque parar de gerir não é decidir prospectar.
+      no mês pela holding e pelas SPEs do grupo dela</strong> é o que gera a comissão — não
+      há NF roteada nem funil. Escolha a holding: as SPEs entram sozinhas, e escolhê-las uma
+      a uma criaria uma carteira que envelhece a cada obra nova. Entrar aqui marca a empresa
+      como passiva; sair devolve a gestão a &quot;não definido&quot;, porque parar de gerir
+      não é decidir prospectar.
     </>
   ),
   vazio: 'Nenhuma conta passiva — a comissão por volume dele será zero.',

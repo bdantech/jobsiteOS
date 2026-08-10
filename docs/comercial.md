@@ -42,7 +42,7 @@ Efeitos reais de `passivo`:
 | Não gera outbox | `sacadosPassivos()` em `outbox.ts` filtra as notas antes de montar a mensagem |
 | Fora da carteira de originação | `rotearNota()` devolve sem dono antes de qualquer regra |
 | Fora da distribuição de SDR | o SQL de candidatas exclui `gestao_operacao = 'passivo'` |
-| Entra na comissão de volume | `vendedor_carteira` papel `gestao_passiva` |
+| Entra na comissão de volume | `vendedor_carteira` papel `gestao_passiva` — somando a holding E as SPEs |
 
 **Nunca muda sozinho.** O job mensal (`comercial/sugerir-passivos`) aponta candidatos e
 notifica; quem aceita é gente, na seção Comercial da Company 360. O motivo é que "não
@@ -84,6 +84,44 @@ conjunto das empresas cuja nota pode de fato ser roteada: quem não é cliente n
 nota no funil, e a de passivo é descartada antes do roteamento. Empresa já escolhida que
 deixa de ser elegível continua na lista, **marcada** — tirá-la sozinho seria decidir por
 quem cadastrou, e a marca é o que faz alguém revisar.
+
+## A conta é a holding E as SPEs dela
+
+Uma construtora não é um CNPJ: é uma holding com dezenas de SPEs, e **é contra a SPE que
+se fatura**. O módulo inteiro tratava "empresa" como CNPJ, e o preço disso, medido no
+banco antes da correção:
+
+| | pelo CNPJ da holding | pelas SPEs do grupo |
+|---|---|---|
+| volume antecipado (comissão de gestão) | R$ 1.882.263 | **R$ 1.347.408** |
+| NFs vivas (carteira de originação) | 3.148 | **1.112** |
+
+O caso extremo é VL Construtora: **706 notas vivas, todas contra SPEs**. Um originador que
+escolhesse a VL na carteira recebia zero.
+
+Uma função resolve o vínculo, e uma só — `app_holding_do_sacado(cnpj)`. Ela decide dinheiro
+(comissão de volume) e trabalho (carteira de NF), e duas cópias divergentes pagariam uma
+coisa e mostrariam outra, com o agravante de quem confere olhar a tela e achar que bate.
+
+Três decisões dentro dela:
+
+- **Só cliente ou ex-cliente pode ser a dona.** A primeira versão dizia "se o sacado é uma
+  empresa cadastrada, é dela a operação" e não funcionou: 13 sacados são SPEs que TÊM linha
+  própria em `empresas`, com `estagio = 'mercado'`. O casamento direto vencia, a SPE virava
+  dona de si mesma, e a função devolvia um id que não está na carteira de ninguém — zero
+  linhas mudariam e o bug pareceria corrigido.
+- **Só sobe pelo grupo quando o sacado é `is_spe`.** O grupo econômico também junta
+  empresas operacionais irmãs, que são contas próprias com dono próprio. Dos 29 casos
+  observados, 28 são SPE e 1 é irmã operacional.
+- **Uma holding por sacado, sempre.** Há um grupo com dois clientes (ATW Instalações e One
+  Construction); sem o desempate a mesma antecipação pagaria comissão duas vezes.
+
+No roteamento, quem tem a empresa **direto** ganha de quem a alcança pela SPE — senão uma
+nota cujo fornecedor é o cliente A e cujo sacado é SPE do cliente B iria para B, e A veria
+o nome do próprio cliente numa nota que não é dele.
+
+E `sacado_gestao` passa a vir da holding: a SPE não tem gestão própria, então ler o campo
+dela devolvia nulo e a nota de uma conta PASSIVA entrava em carteira como se fosse ativa.
 
 ## Roteamento de NFs
 

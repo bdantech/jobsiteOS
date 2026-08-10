@@ -39,11 +39,30 @@ async function originadores(): Promise<OriginadorRoteavel[]> {
   )
   const carga = new Map(rows.map((r) => [r.vendedor_id, Number(r.n)]))
 
+  // O grupo de cada empresa escolhida, numa consulta só. É o que faz a SPE da holding
+  // cair na carteira de quem escolheu a holding — sem isto, escolher uma construtora
+  // entrega as notas do CNPJ dela e deixa as das obras dela sem dono.
+  const escolhidas = [
+    ...new Set(
+      data.flatMap((v) => ((v.settings ?? {}) as { empresas_escolhidas?: string[] }).empresas_escolhidas ?? []),
+    ),
+  ]
+  const grupoDaEmpresa = new Map<string, string>()
+  if (escolhidas.length > 0) {
+    const { rows: gs } = await pool.query<{ id: string; grupo_id: string | null }>(
+      `select id, grupo_id from empresas where id = any($1::uuid[]) and grupo_id is not null`,
+      [escolhidas],
+    )
+    for (const g of gs) if (g.grupo_id) grupoDaEmpresa.set(g.id, g.grupo_id)
+  }
+
   return data.map((v) => {
     const s = (v.settings ?? {}) as { empresas_escolhidas?: string[] }
+    const ids = s.empresas_escolhidas ?? []
     return {
       vendedor_id: v.id,
-      empresas_escolhidas: s.empresas_escolhidas ?? [],
+      empresas_escolhidas: ids,
+      grupos_escolhidos: [...new Set(ids.map((id) => grupoDaEmpresa.get(id)).filter((g): g is string => !!g))],
       nfs_vivas: carga.get(v.id) ?? 0,
     }
   })
@@ -53,6 +72,8 @@ interface LinhaNf {
   access_key: string
   sacado_empresa_id: string | null
   fornecedor_empresa_id: string | null
+  sacado_grupo_spe: string | null
+  fornecedor_grupo_spe: string | null
   sacado_gestao: string | null
   vendedor_id: string | null
   vendedor_origem: string | null
@@ -62,12 +83,28 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
   const lista = await originadores()
   const acc: ResultadoRoteamento = { avaliadas: 0, atribuidas: 0, sem_dono: 0, por_origem: {} }
 
+  /*
+   * `sacado_gestao` sai da HOLDING, não do sacado.
+   *
+   * Antes vinha de `empresas` pelo `sacado_empresa_id`, e para uma SPE isso devolve nulo
+   * (ou a linha de mercado da própria SPE, que nunca tem gestão). Consequência: a nota
+   * emitida contra a SPE de uma conta PASSIVA passava pela guarda de passivo como se a
+   * conta fosse ativa — e ia parar na carteira de um originador que não deveria trabalhá-la.
+   *
+   * `app_holding_do_sacado` é a mesma função que a comissão usa. Uma régua só para
+   * "de quem é esta operação": duas divergiriam, e a divergência sairia em dinheiro.
+   */
   const { rows } = await pool.query<LinhaNf>(`
     select nf.access_key, nf.sacado_empresa_id, nf.fornecedor_empresa_id,
-           sac.gestao_operacao as sacado_gestao,
+           case when su.is_spe then su.grupo_id end as sacado_grupo_spe,
+           case when fu.is_spe then fu.grupo_id end as fornecedor_grupo_spe,
+           hold.gestao_operacao as sacado_gestao,
            nf.vendedor_id, nf.vendedor_origem
     from notas_fiscais nf
-    left join empresas sac on sac.id = nf.sacado_empresa_id
+    left join mercado_universo su on su.cnpj = nf.sacado_cnpj
+    left join mercado_universo fu on fu.cnpj = nf.fornecedor_cnpj
+    left join lateral (select public.app_holding_do_sacado(nf.sacado_cnpj) as id) h on true
+    left join empresas hold on hold.id = h.id
     where nf.estagio_funil not in ('convertida', 'perdida')
       and nf.operavel is not false
       and coalesce(nf.vendedor_origem, '') <> 'manual'
@@ -79,6 +116,8 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
       {
         sacado_empresa_id: nf.sacado_empresa_id,
         fornecedor_empresa_id: nf.fornecedor_empresa_id,
+        sacado_grupo_spe: nf.sacado_grupo_spe,
+        fornecedor_grupo_spe: nf.fornecedor_grupo_spe,
         sacado_gestao: nf.sacado_gestao,
         vendedor_id_atual: nf.vendedor_id,
         vendedor_origem_atual: nf.vendedor_origem,
@@ -192,6 +231,11 @@ export async function vendedoresSemAtividadeJob(): Promise<{ avisados: number }>
  * Conta como operação a antecipação em que a empresa aparece dos DOIS lados: ela pode ter
  * sido vendida como sacado (as notas dos fornecedores dela) ou como fornecedor (as notas
  * dela). Olhar só um lado deixaria metade dos negócios ganhos presa no funil para sempre.
+ *
+ * E conta também a operação da SPE dela: a construtora que acabou de virar cliente estreia
+ * faturando pela obra, não pelo CNPJ da holding. Sem isso o card ficaria em onboarding para
+ * sempre num cliente que já está operando — e o funil passaria a mentir justamente sobre a
+ * conta que deu certo.
  */
 export async function detectarPrimeiraOperacaoJob(): Promise<{ marcadas: number }> {
   const { rows } = await pool.query<{ id: string; empresa_id: string; nome: string | null; op: number }>(
@@ -205,7 +249,9 @@ export async function detectarPrimeiraOperacaoJob(): Promise<{ marcadas: number 
              row_number() over (partition by e.id order by a.convertida_em) as rn
       from empresas e
       join antecipacoes a
-        on (a.sacado_cnpj = e.cnpj or a.fornecedor_cnpj = e.cnpj)
+        on (a.sacado_cnpj = e.cnpj
+            or a.fornecedor_cnpj = e.cnpj
+            or public.app_holding_do_sacado(a.sacado_cnpj) = e.id)
       where a.convertida_em is not null and a.regrediu_em is null
     ) pr
     join empresas emp on emp.id = pr.empresa_id
