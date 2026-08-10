@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { AcoesReexecucao, ExecutarAgora } from './acoes-execucao'
+import { AcoesReexecucao, ExecutarAgora, RecalcularDerivadas } from './acoes-execucao'
 import { TODOS, isJobDoWorker } from './constants'
 import { formatContador, formatDataHora, formatDuracao } from './format'
 import { IngestaoDetalheDialog } from './ingestao-detalhe-dialog'
@@ -185,6 +185,7 @@ export function IngestoesLista({ podeExecutar }: { podeExecutar: boolean }) {
               aria-hidden
             />
           </Button>
+          {podeExecutar && <RecalcularDerivadas />}
           {podeExecutar && <ExecutarAgora fontesBloqueadas={emExecucao} />}
         </div>
       </div>

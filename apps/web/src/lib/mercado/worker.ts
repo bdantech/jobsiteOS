@@ -35,6 +35,18 @@ const ROTAS: Record<'receita_cnpj' | 'cno' | 'onepay_nf', string> = {
  */
 const ROTA_RECLASSIFICAR = '/jobs/reclassificar'
 
+/**
+ * SPEs + grupos econômicos + métricas, sem reimportar nada.
+ *
+ * Fica fora de ROTAS pelo mesmo motivo da reclassificação: não é uma ingestão, é um
+ * recálculo sobre o que já foi ingerido. Existe porque essas três derivadas só rodavam
+ * encadeadas na importação da Receita — 100 milhões de linhas e quatro horas para
+ * refazer um cálculo de minutos. Quando o grafo de grupos sai errado (e ele saiu, em
+ * 10/08/2026, quando a Receita mudou o formato do sócio PJ), reimportar tudo era a
+ * única saída.
+ */
+const ROTA_DERIVADAS = '/jobs/metricas'
+
 /** The subset of `mercado_ingestoes.fonte` the worker can actually run. */
 export type JobWorker = keyof typeof ROTAS
 
@@ -237,6 +249,10 @@ export async function dispararApurarComissoes(competencia?: string): Promise<Dis
 }
 
 /** Reroteia as NFs vivas. Também roda encadeado no diário da Antecipação. */
+export async function dispararDerivadas(): Promise<DispararJobResultado> {
+  return postar(ROTA_DERIVADAS, {}, 'derivadas')
+}
+
 export async function dispararRotearNotas(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/rotear-nfs', {}, 'comercial-rotear')
 }

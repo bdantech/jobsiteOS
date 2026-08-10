@@ -74,15 +74,31 @@ export interface ResultadoGrupos {
 }
 
 export async function montarGrupos(client: pg.Client): Promise<ResultadoGrupos> {
-  // Edges: sócio-PJ (mãe) → participada (filha). Both ends must exist in the
-  // universe, otherwise the "group" would have a member we know nothing about.
+  /*
+   * Edges: sócio-PJ (mãe) → participada (filha). Both ends must exist in the
+   * universe, otherwise the "group" would have a member we know nothing about.
+   *
+   * O documento do sócio PJ vem em 8 OU 14 dígitos, e aceitar os dois não é
+   * tolerância — é a diferença entre ter grafo e não ter. A Receita publicava o CNPJ
+   * completo; no dump de 10/08/2026 passou a publicar só a RAIZ, do mesmo jeito que já
+   * mascarava CPF. O filtro exigia 14 e descartou 131.716 das 140.960 arestas em
+   * silêncio: a Pride perdeu 79 dos 80 vínculos e caiu de 398 membros para 23, e o
+   * grafo inteiro foi de dezenas de milhares de membros para 4.902.
+   *
+   * Nada disso apareceu como erro. A ingestão terminou "concluida", as derivadas
+   * rodaram, e o único sintoma foi um número menor num lugar que ninguém confere
+   * diariamente. Aceitar os dois tamanhos é seguro porque o algoritmo só usa
+   * `left(digitos, 8)` — a raiz — nos dois casos.
+   */
   const { rows: arestas } = await client.query<Aresta>(
     `select distinct
        left(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g'), 8) as mae,
        left(s.cnpj, 8) as filha
      from mercado_socios s
      where s.tipo_socio = 'PJ'
-       and length(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g')) = 14
+       -- 8 = raiz (formato novo), 14 = CNPJ completo (formato antigo). O que a
+       -- máscara de CPF produz ('***000000**' → 6 dígitos) fica de fora dos dois.
+       and length(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g')) in (8, 14)
        and left(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g'), 8) <> left(s.cnpj, 8)
        and exists (
          select 1 from mercado_universo m

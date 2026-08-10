@@ -3,8 +3,9 @@
 import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronDown, LifeBuoy, Loader2, Play, RotateCw } from 'lucide-react'
+import { ChevronDown, LifeBuoy, Loader2, Play, RotateCw, Sigma } from 'lucide-react'
 import { FONTE_INGESTAO_LABELS } from '@jobsiteos/core'
+import { recalcularDerivadasAction } from '@/actions/mercado-derivadas'
 import { dispararIngestaoAction } from '@/actions/mercado-worker'
 import { Button } from '@/components/ui/button'
 import {
@@ -117,6 +118,40 @@ export function ExecutarAgora({
         })}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/**
+ * Recalcular derivadas — SPEs, grupos econômicos e métricas — sem reimportar.
+ *
+ * Elas só rodavam encadeadas na importação da Receita: 100 milhões de linhas e quatro
+ * horas para refazer um cálculo de minutos. O dia em que isso doeu foi 10/08/2026, quando
+ * a Receita mudou o formato do sócio PJ e o grafo de grupos desabou — sem este botão, a
+ * saída seria esperar a importação do mês seguinte.
+ */
+export function RecalcularDerivadas() {
+  const [pendente, setPendente] = React.useState(false)
+
+  return (
+    <Button
+      variant="outline"
+      disabled={pendente}
+      title="Recalcula SPEs, grupos econômicos e métricas sobre o que já está ingerido."
+      onClick={async () => {
+        setPendente(true)
+        const r = await recalcularDerivadasAction()
+        setPendente(false)
+        if (!r.ok) return toast.error(r.message)
+        toast.success(r.message)
+      }}
+    >
+      {pendente ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+      ) : (
+        <Sigma className="mr-2 h-4 w-4" aria-hidden />
+      )}
+      Recalcular derivadas
+    </Button>
   )
 }
 

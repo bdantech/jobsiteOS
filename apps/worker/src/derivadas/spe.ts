@@ -34,7 +34,10 @@ export async function detectarSpes(client: pg.ClientBase): Promise<number> {
        join mercado_universo mae
          on mae.cnpj_raiz = left(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g'), 8)
        where s.tipo_socio = 'PJ'
-         and length(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g')) = 14
+         -- 8 = raiz (formato publicado a partir de 10/08/2026), 14 = CNPJ completo.
+         -- Exigir 14 descartava 93% dos vínculos e derrubou 31.508 SPEs de uma vez;
+         -- ver a nota extensa em derivadas/grupos.ts.
+         and length(regexp_replace(s.cpf_cnpj_socio, '\\D', '', 'g')) in (8, 14)
          and mae.cnae_grupos && array['41', '42', '43']
          -- a company is not its own parent
          and mae.cnpj_raiz <> left(s.cnpj, 8)
