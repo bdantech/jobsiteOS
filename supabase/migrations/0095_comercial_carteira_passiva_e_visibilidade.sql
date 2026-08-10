@@ -384,6 +384,12 @@ create or replace view public.notas_funil as
            FROM notas_fiscais n2
           WHERE n2.fornecedor_cnpj = nf.fornecedor_cnpj AND n2.tipo = 'NFe'::text AND n2.numero ~ '^[0-9]{1,9}$'::text) fnf ON true;
 
+-- `create or replace view` NÃO preserva reloptions, e sem esta linha a view roda com as
+-- permissões do OWNER e ignora a RLS de `notas_fiscais` — qualquer usuário logado leria
+-- todas as notas. Faltou aqui na aplicação original; corrigido no banco pelo 0099, e
+-- reafirmado aqui para que um replay limpo nunca passe por um estado aberto.
+alter view public.notas_funil set (security_invoker = on);
+
 -- ─── §5 A carteira de um vendedor, com o número que decide a comissão ───────
 --
 -- Uma RPC e não quatro consultas: a tela de carteira precisa juntar carteira temporal,

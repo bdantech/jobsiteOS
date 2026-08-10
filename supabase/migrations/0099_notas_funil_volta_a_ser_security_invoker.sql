@@ -1,0 +1,24 @@
+-- 0099 — `notas_funil` volta a ser security_invoker. Regressão minha, no 0095.
+--
+-- `create or replace view` NÃO preserva reloptions. A view nasceu em 0046 com
+-- `security_invoker = true`, e todas as migrações que a recriaram (0058, 0059, 0061,
+-- 0065, 0066) reafirmam a opção logo abaixo do create — a convenção existe exatamente
+-- porque a opção se perde. O 0095 recriou a view para acrescentar `vendedor_id`,
+-- `vendedor_origem` e `sacado_gestao_operacao`, e foi o único que não reafirmou.
+--
+-- Efeito: de 09/08 até esta correção, a view rodava com as permissões do OWNER e
+-- ignorava a RLS de `notas_fiscais`. Como `authenticated` tem select na view, qualquer
+-- usuário logado lia as 28.626 notas independentemente de ter o módulo `antecipacao`.
+-- Medido no usuário afetado (perfil Closer, sem o módulo): `notas_fiscais` devolvia 0
+-- linhas — a RLS da TABELA estava certa o tempo todo — e `notas_funil` devolvia 28.626.
+--
+-- Foi assim que apareceu: o originador reclamou que o funil dele estava VAZIO. A tela
+-- recusava a entrada corretamente (o perfil não tem `antecipacao`), e por baixo o dado
+-- estava aberto. O sintoma visível era o oposto do problema real.
+--
+-- O que faz esta classe de bug ser silenciosa: nada quebra. Ninguém recebe erro, a tela
+-- de quem TEM o módulo funciona igual, e a única evidência é uma consulta que devolve
+-- linhas demais para quem ninguém pensou em testar. O linter do Supabase pega
+-- (`security_definer_view`) — e não pegava mais, porque a checagem não estava no caminho.
+
+alter view public.notas_funil set (security_invoker = on);
