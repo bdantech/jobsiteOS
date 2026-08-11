@@ -266,15 +266,23 @@ export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
 }
 
 /**
- * Teto da lista de fornecedores a prospectar.
+ * Teto da lista de fornecedores a prospectar. Dimensionado para NÃO morder.
  *
- * Aqui o teto MORDE, e de propósito: são 5.512 fornecedores na janela de 90 dias
- * contra 279 construtoras do outro lado. Trazer todos custaria megabytes para uma
- * cauda que ninguém liga — 2.700 deles emitiram uma única nota. A ordem do servidor
- * é por número de notas, então o que vem é o topo real; a tela avisa que a
- * ordenação por qualquer outra coluna vale sobre esse recorte.
+ * Era 500, e cortava lead bom em silêncio. O caso que expôs: DIAGRAMA AR
+ * CONDICIONADO emitiu UMA nota de R$ 644 mil para um sacado aprovado — 14º maior
+ * valor da lista inteira, e 1.233º em número de notas. Truncar por contagem de
+ * notas a deixava fora da tela.
+ *
+ * O problema é estrutural, não daquele CNPJ: 826 dos 1.808 fornecedores têm
+ * exatamente uma nota e somam R$ 9,4 mi. Ordenar por qualquer outra coluna sobre um
+ * recorte feito por contagem responde a pergunta errada, e o aviso no rodapé
+ * explicava o defeito em vez de corrigi-lo.
+ *
+ * 1.808 linhas são 741 kB numa leitura só — barato o bastante para trazer tudo e
+ * deixar a ordenação do cliente valer sobre a lista inteira. O teto continua aqui
+ * como rede: se a janela de 90 dias crescer além dele, a tela volta a avisar.
  */
-export const LIMITE_PROSPECTAR_FORNECEDORES = 500
+export const LIMITE_PROSPECTAR_FORNECEDORES = 3000
 
 export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspectar[]> {
   const supabase = createClient()

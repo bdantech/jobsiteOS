@@ -544,10 +544,17 @@ subconjunto das suas notas. Na 0101 esse `not exists` custava 1,2 s, e por isso 
 morava num `having bool_or(...)` sobre as linhas filtradas; com o recorte por crédito o
 conjunto caiu de 17.050 para 5.887 linhas e o anti-join sai por **240 ms**.
 
-**O teto morde aqui, e a tela diz isso.** A leitura traz os 500 de maior número de notas.
-Reordenar por valor no cliente responde "quem factura mais **entre os que mais emitem**",
-e o rodapé da tabela avisa. `notas_operaveis` (a regra de natureza, `0061`) é a armadilha
-da tela: fornecedor com volume alto e **zero** notas que a operação consegue atender.
+**O teto foi dimensionado para não morder.** Era 500, recortando por número de notas, e
+isso escondia lead bom: DIAGRAMA AR CONDICIONADO emitiu **uma** nota de R$ 644 mil para um
+sacado aprovado — 14º maior valor da lista e 1.233º em contagem de notas, portanto fora da
+tela. Não era daquele CNPJ: **826 dos 1.808** fornecedores têm exatamente uma nota e somam
+R$ 9,4 mi. Truncar por contagem e depois deixar o usuário ordenar por valor responde a
+pergunta errada, e o aviso no rodapé explicava o defeito em vez de corrigi-lo. A lista
+inteira são 741 kB numa leitura só; o teto virou 3.000 e existe como rede.
+
+Com 1.808 linhas a tela ganhou **busca por nome ou CNPJ** (dígitos só, como a de clientes
+Onepay). `notas_operaveis` (a regra de natureza, `0061`) segue sendo a armadilha da tela:
+fornecedor com volume alto e **zero** notas que a operação consegue atender.
 
 RLS: nenhuma policy nova. A de `mercado_universo` (`0060`) já cobre `fornecedor_cnpj`
 explicitamente, não só o sacado.

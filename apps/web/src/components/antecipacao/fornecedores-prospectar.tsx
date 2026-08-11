@@ -4,11 +4,12 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, ExternalLink, Factory, UserPlus } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Factory, Search, UserPlus } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { promoverFornecedorAction } from '@/actions/antecipacao'
@@ -21,6 +22,7 @@ import {
   type FornecedorProspectar,
 } from './queries'
 import {
+  combinaBusca,
   localDe,
   ordenarFornecedoresProspectar,
   situacaoPreocupa,
@@ -53,6 +55,7 @@ import { CabecalhoOrdenavel } from './tabela-ordenavel'
 export function FornecedoresProspectar() {
   const qc = useQueryClient()
   const [promovendo, setPromovendo] = React.useState<string | null>(null)
+  const [termo, setTermo] = React.useState('')
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: antecipacaoKeys.prospectarFornecedores(),
@@ -62,8 +65,15 @@ export function FornecedoresProspectar() {
   const { prefs, ordenarPor } = usePreferenciasFornecedoresProspectar()
 
   const linhas = React.useMemo(
-    () => (data ? ordenarFornecedoresProspectar(data, prefs.coluna, prefs.dir) : []),
-    [data, prefs.coluna, prefs.dir],
+    () =>
+      data
+        ? ordenarFornecedoresProspectar(
+            data.filter((f) => combinaBusca(f, termo)),
+            prefs.coluna,
+            prefs.dir,
+          )
+        : [],
+    [data, termo, prefs.coluna, prefs.dir],
   )
 
   /**
@@ -139,6 +149,31 @@ export function FornecedoresProspectar() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
+          {/*
+           * Busca antes da tabela: são 1.808 linhas, e o padrão ordena por número de
+           * notas — quem procura UM fornecedor pelo nome não deveria rolar até achar.
+           */}
+          <div className="flex flex-wrap items-center gap-3 border-y border-border p-3">
+            <div className="relative min-w-64 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ"
+                className="pl-9"
+                aria-label="Buscar fornecedores a prospectar"
+              />
+            </div>
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {termo.trim()
+                ? `${formatarInteiro(linhas.length)} de ${formatarInteiro(data.length)}`
+                : `${formatarInteiro(data.length)} fornecedor(es)`}
+            </span>
+          </div>
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -178,7 +213,7 @@ export function FornecedoresProspectar() {
                     dir={prefs.dir}
                     onClick={ordenarPor}
                     className="text-right"
-                    title="Sacados cadastrados distintos contra os quais ele emite — cada um é uma porta de entrada."
+                    title="Sacados com crédito aprovado, distintos, contra os quais ele emite — cada um é uma porta de entrada."
                   >
                     Sacados
                   </CabecalhoOrdenavel>
@@ -206,9 +241,17 @@ export function FornecedoresProspectar() {
                 {linhas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="py-12 text-center text-sm text-muted-foreground">
-                      Nenhum fornecedor nesta condição nos últimos 90 dias. A lista se enche quando
-                      o sync trouxer notas emitidas contra sacados com crédito aprovado por um CNPJ
-                      que ainda não está na plataforma.
+                      {termo.trim() ? (
+                        // Lista vazia por BUSCA e lista vazia por falta de dado são
+                        // dois problemas diferentes, e mandam para lugares diferentes.
+                        <>Nenhum fornecedor para “{termo.trim()}”.</>
+                      ) : (
+                        <>
+                          Nenhum fornecedor nesta condição nos últimos 90 dias. A lista se enche
+                          quando o sync trouxer notas emitidas contra sacados com crédito aprovado
+                          por um CNPJ que ainda não está na plataforma.
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 )}
@@ -293,14 +336,14 @@ export function FornecedoresProspectar() {
           </div>
 
           {data.length >= LIMITE_PROSPECTAR_FORNECEDORES && (
-            // Diferente da lista de sacados, aqui o teto encosta SEMPRE: são milhares
-            // de fornecedores na janela. Dizer isso não é rodapé jurídico — sem a
-            // frase, ordenar por valor parece responder "quem factura mais" quando
-            // responde "quem factura mais entre os que mais emitem".
+            // O teto foi dimensionado para NÃO encostar (3.000 contra 1.808 hoje). Se
+            // encostar, o aviso importa mais do que antes: o recorte é feito por
+            // contagem de notas, e foi assim que um lead de R$ 644 mil com uma nota só
+            // ficou fora da tela quando o teto era 500.
             <p className="border-t px-4 py-3 text-xs text-muted-foreground">
-              Mostrando os {formatarInteiro(LIMITE_PROSPECTAR_FORNECEDORES)} fornecedores que mais
-              emitiram nos últimos 90 dias. A ordenação vale sobre esse recorte, não sobre a lista
-              inteira.
+              A lista bateu no teto de {formatarInteiro(LIMITE_PROSPECTAR_FORNECEDORES)}{' '}
+              fornecedores, recortados pelos que mais emitiram. Quem emitiu poucas notas de valor
+              alto pode ter ficado de fora — vale subir o teto.
             </p>
           )}
         </CardContent>

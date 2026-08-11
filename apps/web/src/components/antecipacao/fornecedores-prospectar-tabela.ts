@@ -47,6 +47,25 @@ export function localDe(f: FornecedorProspectar): string {
 }
 
 /**
+ * Busca por nome ou CNPJ. Existe porque a lista tem 1.808 linhas: sem ela, achar um
+ * fornecedor específico é rolar a tela procurando a olho.
+ *
+ * O CNPJ é comparado só por DÍGITOS — quem cola "66.872.185/0001-32" de outro
+ * sistema não deveria ter de apagar a pontuação, e quem digita "66872185" também
+ * acha. Mesma regra da busca de clientes Onepay, de propósito: duas buscas que se
+ * comportam diferente viram duas convenções.
+ */
+export function combinaBusca(f: FornecedorProspectar, termo: string): boolean {
+  const t = termo.trim().toLowerCase()
+  if (!t) return true
+
+  const digitos = t.replace(/\D/g, '')
+  if (digitos.length >= 3 && (f.fornecedor_cnpj ?? '').includes(digitos)) return true
+
+  return (f.fornecedor_nome ?? '').toLowerCase().includes(t)
+}
+
+/**
  * Situação cadastral que NÃO é "ativa" desqualifica o lead antes da ligação. São 22
  * dos 5.512, e `null` (fornecedor fora de `mercado_universo`) não é um deles: não
  * saber não é o mesmo que estar inapta.
