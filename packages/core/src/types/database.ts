@@ -3277,6 +3277,41 @@ export type Database = {
         }
         Relationships: []
       }
+      antecipacao_sacados_com_credito: {
+        Row: {
+          aprovacao_propria: boolean | null
+          cnpj: string | null
+        }
+        Relationships: []
+      }
+      clientes_onepay_lista: {
+        Row: {
+          anticipations_last_2m: number | null
+          atualizado_em: string | null
+          available_limit: number | null
+          cnpj: string | null
+          consumed_limit: number | null
+          consumed_pct: number | null
+          consumed_pct_2m: number | null
+          credit_limit: number | null
+          days_without_anticipation: number | null
+          empresa_id: string | null
+          faturamento_anual: number | null
+          faturamento_confianca: string | null
+          gestao_operacao: string | null
+          grupo_id: string | null
+          gross_value_last_2m: number | null
+          last_anticipation: string | null
+          nome: string | null
+          onepay_company_id: number | null
+          operation_status: string | null
+          primeira_vez_visto: string | null
+          protesto_grupo_cnpjs: number | null
+          protesto_grupo_valor: number | null
+          status: string | null
+        }
+        Relationships: []
+      }
       mercado_explorador: {
         Row: {
           camada: string | null

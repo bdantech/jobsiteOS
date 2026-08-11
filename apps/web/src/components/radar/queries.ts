@@ -1,4 +1,11 @@
-import { resolverParaJson, type Camada, type Grupo, type Json, type Tables } from '@jobsiteos/core'
+import {
+  resolverParaJson,
+  type Camada,
+  type Grupo,
+  type Json,
+  type Tables,
+  type Views,
+} from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 
 /**
@@ -189,15 +196,22 @@ export async function buscarItensPorStatus(loteId: string, status: string): Prom
   })
 }
 
-export async function buscarClientesOnepay(): Promise<Tables<'clientes_onepay'>[]> {
+export type ClienteOnepay = Views<'clientes_onepay_lista'>
+
+/**
+ * A view (0102), e não a tabela: protesto do GRUPO, faturamento e gestão vivem em
+ * `empresas`/`protestos_atual`, e resolver isso em três consultas separadas na tela
+ * daria três momentos diferentes do mesmo cliente.
+ */
+export async function buscarClientesOnepay(): Promise<ClienteOnepay[]> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('clientes_onepay')
+    .from('clientes_onepay_lista')
     .select('*')
     .order('days_without_anticipation', { ascending: false, nullsFirst: false })
     .limit(500)
   if (error) throw new Error(error.message)
-  return data ?? []
+  return (data ?? []) as ClienteOnepay[]
 }
 
 export async function buscarSupressao(): Promise<Tables<'supressao'>[]> {

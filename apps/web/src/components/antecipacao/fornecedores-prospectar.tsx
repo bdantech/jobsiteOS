@@ -29,14 +29,19 @@ import {
 import { CabecalhoOrdenavel } from './tabela-ordenavel'
 
 /**
- * Fornecedores a prospectar — quem emite para os sacados que JÁ são nossos e ainda
- * não está na plataforma.
+ * Fornecedores a prospectar — quem emite para os sacados que JÁ podem operar e
+ * ainda não está na plataforma.
  *
  * É a lista de "sacados a prospectar" com o funil invertido, e o que qualifica o
- * lead aqui é o outro lado da nota: o sacado já ser cadastrado significa relação
- * conhecida, limite analisado, e alguém que atende quando o vendedor liga citando o
- * nome dele. Não há filtro de CNAE — não é o setor do fornecedor que diz se ele é
- * oportunidade, é contra quem ele emite.
+ * lead aqui é o outro lado da nota: o sacado ter CRÉDITO APROVADO. Não há filtro de
+ * CNAE — não é o setor do fornecedor que diz se ele é oportunidade, é contra quem
+ * ele emite.
+ *
+ * "Cadastrado" não bastava, e a 0102 mediu o estrago: 70% da lista original eram
+ * notas contra empresas que estão na plataforma mas não têm limite aprovado. Para
+ * essas não há operação a oferecer — o lead não era lead. A aprovação vale também
+ * quando está noutro CNPJ do grupo (holding ou SPE): são 18 dos 78 sacados, e
+ * exigi-la no CNPJ da nota os descartaria em silêncio.
  *
  * Ranqueado por NÚMERO DE NOTAS, não por valor: quem emite 40 notas no trimestre
  * para uma construtora nossa tem fluxo recorrente para antecipar. Uma nota grande e
@@ -119,9 +124,11 @@ export function FornecedoresProspectar() {
             <CardTitle className="text-base">Fornecedores a prospectar</CardTitle>
           </div>
           <CardDescription>
-            Quem emitiu NF nos <strong>últimos 90 dias</strong> contra sacados que{' '}
-            <strong>já estão</strong> na plataforma e ainda <strong>não está</strong>. Ordenado por
-            número de notas — clique em qualquer cabeçalho para reordenar.
+            Quem emitiu NF nos <strong>últimos 90 dias</strong> contra sacados com{' '}
+            <strong>crédito aprovado</strong> (no próprio CNPJ ou no grupo, holding ou SPE) e ainda{' '}
+            <strong>não está</strong> na plataforma. Só essas notas contam: quem emite 100 e 6 para
+            sacado aprovado aparece com 6. Ordenado por número de notas — clique em qualquer
+            cabeçalho para reordenar.
             {data.length > 0 ? (
               <>
                 {' '}
@@ -200,8 +207,8 @@ export function FornecedoresProspectar() {
                   <TableRow>
                     <TableCell colSpan={9} className="py-12 text-center text-sm text-muted-foreground">
                       Nenhum fornecedor nesta condição nos últimos 90 dias. A lista se enche quando
-                      o sync trouxer notas emitidas contra sacados já cadastrados por um CNPJ que
-                      ainda não está na plataforma.
+                      o sync trouxer notas emitidas contra sacados com crédito aprovado por um CNPJ
+                      que ainda não está na plataforma.
                     </TableCell>
                   </TableRow>
                 )}

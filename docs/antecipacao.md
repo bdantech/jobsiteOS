@@ -493,33 +493,61 @@ A tela irmã. Lá o lead é a construtora que **recebe** e não é nossa; aqui �
 para as construtoras que já são nossas:
 
 ```sql
-where sacado_cadastrado
-  and emitida_em >= now() - interval '90 days'
+from notas_funil f
+  join antecipacao_sacados_com_credito cc on cc.cnpj = f.sacado_cnpj
+where emitida_em >= now() - interval '90 days'
+  and not exists (select 1 from notas_fiscais n2
+                  where n2.fornecedor_cnpj = f.fornecedor_cnpj and n2.fornecedor_cadastrado)
 group by fornecedor_cnpj
-having not bool_or(fornecedor_cadastrado)
 ```
 
-**O que qualifica o lead é o sacado já ser cadastrado**, e ele faz aqui o que o CNAE faz
-na outra lista: separa oportunidade de ruído. Um fornecedor que emite contra construtora
-nossa tem o caminho já aberto do outro lado — limite analisado, relação conhecida, sacado
-que atende o telefone. Sem esse recorte a lista viraria "todo CNPJ que já emitiu uma nota".
-Não há portão de CNAE: não é o setor do fornecedor que diz se ele é oportunidade.
+**O que qualifica o lead é o sacado ter crédito aprovado**, e ele faz aqui o que o CNAE
+faz na outra lista: separa oportunidade de ruído. Sem esse recorte a lista viraria "todo
+CNPJ que já emitiu uma nota". Não há portão de CNAE: não é o setor do fornecedor que diz
+se ele é oportunidade.
+
+### "Cadastrado" não bastava (0102)
+
+A primeira versão usou `sacado_cadastrado`, e a base mostrou o tamanho do erro:
+
+| Sacado na janela de 90 dias | Notas | Sacados |
+|---|---:|---:|
+| cadastrado + `APPROVED` | 5.199 | 56 |
+| cadastrado + **sem análise** | **12.069** | 172 |
+
+Sete de cada dez linhas eram fornecedores emitindo contra empresas que estão na
+plataforma mas **não têm limite aprovado** — para essas não existe operação a oferecer.
+A lista caiu de 5.512 para 1.808 fornecedores, e os contadores por fornecedor passaram a
+contar só as notas que interessam: quem emite 100 notas e 6 para sacado aprovado aparece
+com 6, não com 100.
+
+**Holding ou SPE.** A aprovação nem sempre está no CNPJ da nota: em **18 dos 78** sacados
+que entram, o crédito foi aprovado noutro CNPJ do mesmo grupo — a holding cliente cuja
+SPE aparece na nota, o caso que a `0097` modelou. Exigir a aprovação no CNPJ da nota os
+descartaria em silêncio. É o que a view `antecipacao_sacados_com_credito` resolve, e ela
+acha o grupo por **`mercado_universo`, não por `empresas`**: a policy de `mercado_universo`
+já libera para quem tem `antecipacao` as linhas cujo CNPJ aparece nas suas notas, enquanto
+passar por `empresas` exigiria outro módulo — e o custo de errar aí é a tela vir vazia sem
+dizer por quê.
+
+O `bool_or(credit_status = 'APPROVED')` é por **sacado**, não por nota: a análise costuma
+chegar depois das primeiras notas, e exigir o flag em cada linha faria o mesmo sacado ser
+aprovado numa nota e desconhecido na anterior.
 
 **A janela de 90 dias vive na view, não na tela.** Como a lista é ordenada por *volume de
 notas*, deixar a janela aberta premiaria o passado: quem emitiu muito no ano passado e
 parou passaria na frente de quem está emitindo agora.
 
-**O "não cadastrado" é decidido no grupo, não na linha** (`having not bool_or(...)`). O
-flag vem do endpoint por nota, e dois CNPJs da janela aparecem `true` numa nota e `false`
-noutra. Filtrar por linha deixaria os dois na lista, com as contagens erradas por baixo.
-De quebra é 4× mais barato que o `not exists` equivalente — 300 ms contra 1,2 s — porque
-não há anti-join.
+**O "não cadastrado" do fornecedor vale sobre todas as notas dele**, não só as que
+passaram no filtro — estar na plataforma é propriedade do fornecedor, não de um
+subconjunto das suas notas. Na 0101 esse `not exists` custava 1,2 s, e por isso a regra
+morava num `having bool_or(...)` sobre as linhas filtradas; com o recorte por crédito o
+conjunto caiu de 17.050 para 5.887 linhas e o anti-join sai por **240 ms**.
 
-**O teto morde aqui, e a tela diz isso.** São 5.512 fornecedores na janela contra 279
-construtoras do outro lado; a leitura traz os 500 de maior número de notas. Reordenar por
-valor no cliente responde "quem factura mais **entre os que mais emitem**", e o rodapé da
-tabela avisa. `notas_operaveis` (a regra de natureza, `0061`) é a armadilha da tela: 85
-fornecedores têm volume alto e **zero** notas que a operação consegue atender.
+**O teto morde aqui, e a tela diz isso.** A leitura traz os 500 de maior número de notas.
+Reordenar por valor no cliente responde "quem factura mais **entre os que mais emitem**",
+e o rodapé da tabela avisa. `notas_operaveis` (a regra de natureza, `0061`) é a armadilha
+da tela: fornecedor com volume alto e **zero** notas que a operação consegue atender.
 
 RLS: nenhuma policy nova. A de `mercado_universo` (`0060`) já cobre `fornecedor_cnpj`
 explicitamente, não só o sacado.
@@ -627,7 +655,10 @@ e é **ignorada** no aplicar, não zerada.
     `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
   - `0065`: `sacado_camada` em `notas_funil` e na lista a prospectar
   - `0101`: `antecipacao_fornecedores_a_prospectar` — o espelho: quem **emite** contra
-    sacado cadastrado nos últimos 90 dias e não está na plataforma
+    sacado nosso nos últimos 90 dias e não está na plataforma
+  - `0102`: `antecipacao_sacados_com_credito` (aprovação própria ou do grupo holding/SPE)
+    passa a ser o qualificador da lista acima — "cadastrado" era 70% ruído. Mais
+    `clientes_onepay_lista` (protesto do grupo, faturamento, gestão)
   - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
   - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
   - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
