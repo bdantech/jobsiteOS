@@ -217,6 +217,46 @@ chance que a própria seguradora acabou de desmentir.
 existir. Os dois caminhos usam a mesma função de pontuar (`pontuarLote`), então não há
 onde a renormalização divergir.
 
+## Potencial de aumento de limite (0103)
+
+A cadeia da 0073 corre no sentido da PROSPECÇÃO: faturamento → limite potencial → quanto
+vale um prospect. Apontada para a **carteira existente**, a mesma conta responde outra
+pergunta: *em quem concedemos pouco para o tamanho que ele tem?*
+
+O card vive em **Empresas → Análise**, primeiro da aba — os outros blocos descrevem a
+carteira, este diz o que fazer com ela.
+
+**A régua é o nosso próprio comportamento**, não uma política escrita. `ratio_limite` é a
+**mediana de `credit_limit ÷ faturamento_declarado`** medida na carteira real: hoje
+**1,83%**, sobre 27 clientes declarantes. Um cliente muito abaixo dela não fere uma regra
+— está sendo tratado diferente dos comparáveis dele, e isso é uma pergunta que alguém
+consegue responder. A tela imprime a mediana e o `n` no cabeçalho: um "espaço" sem a régua
+ao lado é um número que ninguém confere.
+
+Na base atual: **14 clientes com espaço**, R$ 25,5 mi somados, e **4 em 100% de consumo**.
+Esses quatro são o caso mais nítido — pararam de operar por causa do nosso teto, não por
+falta de demanda. O extremo é a CONSTRUTORA ATERPA: fatura R$ 816 mi, tem R$ 150 mil de
+limite (0,02%, cerca de 100× abaixo da nossa mediana) e score 71 na faixa alta.
+
+**A forma é um dumbbell** — dois pontos por empresa e a barra entre eles. É o desenho de
+"de X para Y por item", e a barra *é* a oportunidade, o que faz a lista se ordenar sozinha.
+Um gráfico de dispersão mostraria a correlação melhor e a ação pior: a pergunta aqui não é
+"existe correlação?", é "em quem eu mexo primeiro?". Concedido é ponto **sólido** (é fato),
+potencial é **vazado** (é estimativa) — dar o mesmo peso visual aos dois é como um número
+calibrado vira uma promessa.
+
+**Duas honestidades que a tela precisa dizer em voz alta:**
+
+- **O potencial tem teto** (`cap_pct_faturamento` 15% + `cap_absoluto` R$ 5 mi). Quem bate
+  nele aparece com espaço **menor** que o real — e é justamente o topo da lista. Um aviso
+  conta quantas empresas estão nessa situação.
+- **A confiança do limite é herdada do faturamento** (0073). Se o faturamento é estimado, o
+  potencial é o mesmo chute com outra unidade; a linha mostra "confiança média/baixa" ao
+  lado do nome quando não é alta.
+
+Quem não tem faturamento **ou** limite conhecido não entra: sem os dois não há comparação a
+fazer, e um espaço calculado sobre faturamento nulo seria ruído com cara de oportunidade.
+
 ## Onde está o quê
 
 - **Banco**: migração `0073` (tabelas, RLS, RPCs, bucket `analise-docs`, view

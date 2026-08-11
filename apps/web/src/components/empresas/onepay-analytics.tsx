@@ -37,6 +37,7 @@ import {
   type OnepayAnalytics,
 } from './queries'
 import { GraficoTempoProtestos, extrairProtestos } from './protestos-serie'
+import { PotencialLimite } from './potencial-limite'
 
 const pctDe = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 1000) / 10 : 0)
 const fmtPct = (p: number) => `${p.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -803,6 +804,13 @@ export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
         {data.total.toLocaleString('pt-BR')} cliente(s) Onepay. Clique num segmento para ver as
         empresas, ou num cliente dos rankings de protesto para ver a evolução no tempo.
       </p>
+      {/*
+       * Primeiro de todos, e de propósito: os outros blocos descrevem a carteira, este
+       * aponta o que fazer com ela. Um card acionável embaixo de cinco descritivos é um
+       * card que ninguém rola até.
+       */}
+      <PotencialLimite />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <MapaRegioes porRegiao={data.por_regiao} onAbrir={setFiltro} />
         <CamadasClientes porCamada={data.por_camada} total={data.total} onAbrir={setFiltro} />

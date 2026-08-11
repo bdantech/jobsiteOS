@@ -1,4 +1,4 @@
-import type { Estagio, Json, Tables, TipoEmpresa } from '@jobsiteos/core'
+import type { Estagio, Json, Tables, TipoEmpresa, Views } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 import { resumoDoEvento } from './format'
 
@@ -75,6 +75,7 @@ export const empresasKeys = {
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null, afiancadas = false) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin, afiancadas] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+  potencialLimite: () => ['empresas', 'potencial-limite'] as const,
   custoProtestos: () => ['empresas', 'custo-protestos'] as const,
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
   onepayClientesFiltrados: (dimensao: string, valor: string) =>
@@ -474,4 +475,56 @@ export async function buscarEventos(empresaId: string): Promise<EventoComAtor[]>
     resumo: resumoDoEvento(evento.payload),
     ator_nome: evento.ator_usuario_id ? (nomes.get(evento.ator_usuario_id) ?? null) : null,
   }))
+}
+
+// ─── Potencial de aumento de limite ─────────────────────────────────────────
+
+export type PotencialLimite = Views<'empresas_potencial_limite'>
+
+export interface PotencialLimiteDados {
+  empresas: PotencialLimite[]
+  /**
+   * A MEDIANA de limite/faturamento da carteira real — o nosso comportamento de
+   * concessão, não uma política escrita. É a régua contra a qual cada cliente é
+   * comparado, e por isso vem junto: um "espaço" sem a régua ao lado é um número
+   * que ninguém consegue conferir.
+   */
+  ratioMediano: number | null
+  nDeclarantes: number
+  calibradoEm: string | null
+}
+
+export async function buscarPotencialLimite(): Promise<PotencialLimiteDados> {
+  const supabase = createClient()
+
+  const [lista, calibracao] = await Promise.all([
+    supabase
+      .from('empresas_potencial_limite')
+      .select('*')
+      .order('espaco', { ascending: false, nullsFirst: false })
+      .limit(500),
+    // `credito_versoes` libera para quem tem `credito` OU `radar` — e esta aba já
+    // exige radar, então a régua chega junto com a lista.
+    supabase
+      .from('credito_versoes')
+      .select('coeficientes, n_amostras_por_tipo, calibrado_em')
+      .eq('ativa', true)
+      .order('calibrado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (lista.error) throw new Error(lista.error.message)
+
+  const coef = (calibracao.data?.coeficientes ?? null) as {
+    ratio_limite?: { global?: number | null }
+    n_declarantes?: number | null
+  } | null
+
+  return {
+    empresas: (lista.data ?? []) as PotencialLimite[],
+    ratioMediano: coef?.ratio_limite?.global ?? null,
+    nDeclarantes: Number(coef?.n_declarantes ?? 0),
+    calibradoEm: calibracao.data?.calibrado_em ?? null,
+  }
 }

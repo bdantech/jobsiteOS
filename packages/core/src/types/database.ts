@@ -3284,6 +3284,29 @@ export type Database = {
         }
         Relationships: []
       }
+      empresas_potencial_limite: {
+        Row: {
+          cnpj: string | null
+          consumed_pct: number | null
+          days_without_anticipation: number | null
+          empresa_id: string | null
+          espaco: number | null
+          faturamento_anual: number | null
+          faturamento_confianca: string | null
+          gross_value_last_2m: number | null
+          limite_concedido: number | null
+          limite_confianca: string | null
+          limite_disponivel: number | null
+          limite_potencial: number | null
+          nome: string | null
+          ratio_concedido: number | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          tipo: string | null
+        }
+        Relationships: []
+      }
       clientes_onepay_lista: {
         Row: {
           anticipations_last_2m: number | null
