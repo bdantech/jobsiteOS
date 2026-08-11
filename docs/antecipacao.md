@@ -487,6 +487,43 @@ nenhuma. Ordenar por camada usa **proximidade de virar cliente** (SOM, SAM, TAM,
 universo), não alfabeto: por texto sairia "sam, som, tam, universo", que não quer dizer
 nada.
 
+## Fornecedores a prospectar: a mesma pergunta pelo outro lado da nota (0101)
+
+A tela irmã. Lá o lead é a construtora que **recebe** e não é nossa; aqui é quem **emite**
+para as construtoras que já são nossas:
+
+```sql
+where sacado_cadastrado
+  and emitida_em >= now() - interval '90 days'
+group by fornecedor_cnpj
+having not bool_or(fornecedor_cadastrado)
+```
+
+**O que qualifica o lead é o sacado já ser cadastrado**, e ele faz aqui o que o CNAE faz
+na outra lista: separa oportunidade de ruído. Um fornecedor que emite contra construtora
+nossa tem o caminho já aberto do outro lado — limite analisado, relação conhecida, sacado
+que atende o telefone. Sem esse recorte a lista viraria "todo CNPJ que já emitiu uma nota".
+Não há portão de CNAE: não é o setor do fornecedor que diz se ele é oportunidade.
+
+**A janela de 90 dias vive na view, não na tela.** Como a lista é ordenada por *volume de
+notas*, deixar a janela aberta premiaria o passado: quem emitiu muito no ano passado e
+parou passaria na frente de quem está emitindo agora.
+
+**O "não cadastrado" é decidido no grupo, não na linha** (`having not bool_or(...)`). O
+flag vem do endpoint por nota, e dois CNPJs da janela aparecem `true` numa nota e `false`
+noutra. Filtrar por linha deixaria os dois na lista, com as contagens erradas por baixo.
+De quebra é 4× mais barato que o `not exists` equivalente — 300 ms contra 1,2 s — porque
+não há anti-join.
+
+**O teto morde aqui, e a tela diz isso.** São 5.512 fornecedores na janela contra 279
+construtoras do outro lado; a leitura traz os 500 de maior número de notas. Reordenar por
+valor no cliente responde "quem factura mais **entre os que mais emitem**", e o rodapé da
+tabela avisa. `notas_operaveis` (a regra de natureza, `0061`) é a armadilha da tela: 85
+fornecedores têm volume alto e **zero** notas que a operação consegue atender.
+
+RLS: nenhuma policy nova. A de `mercado_universo` (`0060`) já cobre `fornecedor_cnpj`
+explicitamente, não só o sacado.
+
 **RLS não mudou.** `notas_funil` é `security_invoker` e a policy de 0060 já libera, para
 quem tem `antecipacao`, as linhas de `mercado_universo` cujo CNPJ aparece numa nota que a
 pessoa pode ler. Camada é mais uma coluna **dessas mesmas linhas**; o recorte de 0060 é
@@ -578,7 +615,7 @@ e é **ignorada** no aplicar, não zerada.
 
 ## Onde está o quê
 
-- **Banco**: migrations `0045`–`0061`, `0065`–`0068`, `0077`–`0079`.
+- **Banco**: migrations `0045`–`0061`, `0065`–`0068`, `0077`–`0079`, `0101`.
   - `notas_fiscais` (chave natural `access_key`) + `nota_itens` + `credito_snapshots`
   - `faixa_regras` (versionadas, uma ativa por faixa) + `faixa_disparos`
   - `whatsapp_contas` (token no **Vault**) + `mensagens_outbox`
@@ -589,6 +626,8 @@ e é **ignorada** no aplicar, não zerada.
   - views: `notas_funil` (a superfície única), `antecipacao_fornecedores`,
     `antecipacao_sacados`, `antecipacao_sacados_a_prospectar` (recorte por CNAE)
   - `0065`: `sacado_camada` em `notas_funil` e na lista a prospectar
+  - `0101`: `antecipacao_fornecedores_a_prospectar` — o espelho: quem **emite** contra
+    sacado cadastrado nos últimos 90 dias e não está na plataforma
   - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
   - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
   - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
@@ -613,7 +652,8 @@ e é **ignorada** no aplicar, não zerada.
   `calibrar-economia`, `reclassificar`, `outbox`, `lookup-cadastral`, `contatos-nf`,
   `supressoes`; config em `apps/worker/src/antecipacao/`.
 - **Web** (`apps/web/src/app/(app)/antecipacao/` + `components/antecipacao/`): Kanban,
-  por sacado, sacados a prospectar, **antecipações + fila de revisão**, métricas por
+  por sacado, sacados a prospectar, **fornecedores a prospectar**, **antecipações + fila
+  de revisão**, métricas por
   faixa, regras de faixa, disparos, Outbox, contas WhatsApp, settings (com a calibração
   da carteira no topo).
 - **Mobile** (`apps/mobile/app/(tabs)/antecipacao/` + `src/features/antecipacao/`):

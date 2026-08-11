@@ -3226,6 +3226,24 @@ export type Database = {
         }
         Relationships: []
       }
+      antecipacao_fornecedores_a_prospectar: {
+        Row: {
+          fornecedor_cnae_principal: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_municipio: string | null
+          fornecedor_nome: string | null
+          fornecedor_situacao_cadastral: string | null
+          fornecedor_uf: string | null
+          notas: number | null
+          notas_operaveis: number | null
+          primeira_nota_em: string | null
+          sacados: number | null
+          ultima_nota_em: string | null
+          valor_agregado: number | null
+        }
+        Relationships: []
+      }
       antecipacao_sacados: {
         Row: {
           available_limit: number | null

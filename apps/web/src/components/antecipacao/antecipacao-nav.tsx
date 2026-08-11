@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Building2,
   ChartPie,
+  Factory,
   HandCoins,
   Inbox,
   KanbanSquare,
@@ -36,6 +37,9 @@ const ITENS: readonly ItemNav[] = [
   { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
   { href: '/antecipacao/sacados', label: 'Por Sacado', icon: Building2 },
   { href: '/antecipacao/prospectar', label: 'Sacados a Prospectar', icon: Sparkles },
+  // Ao lado da irmã de propósito: são a mesma pergunta pelos dois lados da nota —
+  // quem RECEBE e não é nosso, quem EMITE para quem já é.
+  { href: '/antecipacao/prospectar-fornecedores', label: 'Fornecedores a Prospectar', icon: Factory },
   { href: '/antecipacao/antecipacoes', label: 'Antecipações', icon: HandCoins },
   { href: '/antecipacao/metricas', label: 'Métricas', icon: ChartPie },
   { href: '/antecipacao/faixas', label: 'Regras de Faixa', icon: SlidersHorizontal, somenteAdmin: true },
@@ -55,8 +59,15 @@ export function AntecipacaoNav({ ehAdmin }: { ehAdmin: boolean }) {
       className="mb-6 flex gap-1 overflow-x-auto border-b border-border pb-px"
     >
       {itens.map((item) => {
+        // O casamento é por SEGMENTO, não por prefixo de string. Com `startsWith`
+        // cru, `/antecipacao/prospectar-fornecedores` acendia também a aba
+        // `/antecipacao/prospectar` — duas abas ativas ao mesmo tempo. A barra no
+        // fim é o que separa "rota filha" de "rota com nome parecido"; as fichas
+        // (`/sacados/[cnpj]`) continuam acendendo a aba pai como antes.
         const ativo =
-          item.href === '/antecipacao' ? pathname === '/antecipacao' : pathname.startsWith(item.href)
+          item.href === '/antecipacao'
+            ? pathname === '/antecipacao'
+            : pathname === item.href || pathname.startsWith(`${item.href}/`)
         const Icon = item.icon
         return (
           <Link

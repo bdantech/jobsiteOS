@@ -16,6 +16,7 @@ export type NotaFunil = Views<'notas_funil'>
 export type FornecedorFunil = Views<'antecipacao_fornecedores'>
 export type SacadoFunil = Views<'antecipacao_sacados'>
 export type SacadoProspectar = Views<'antecipacao_sacados_a_prospectar'>
+export type FornecedorProspectar = Views<'antecipacao_fornecedores_a_prospectar'>
 
 export const antecipacaoKeys = {
   all: ['antecipacao'] as const,
@@ -26,6 +27,7 @@ export const antecipacaoKeys = {
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
   prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
   prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
+  prospectarFornecedores: () => [...antecipacaoKeys.all, 'prospectar-fornecedores'] as const,
   sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   regras: (faixa: Faixa) => [...antecipacaoKeys.all, 'regras', faixa] as const,
   disparos: () => [...antecipacaoKeys.all, 'disparos'] as const,
@@ -261,6 +263,31 @@ export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
     .limit(LIMITE_PROSPECTAR)
   if (error) throw error
   return (data ?? []) as SacadoProspectar[]
+}
+
+/**
+ * Teto da lista de fornecedores a prospectar.
+ *
+ * Aqui o teto MORDE, e de propósito: são 5.512 fornecedores na janela de 90 dias
+ * contra 279 construtoras do outro lado. Trazer todos custaria megabytes para uma
+ * cauda que ninguém liga — 2.700 deles emitiram uma única nota. A ordem do servidor
+ * é por número de notas, então o que vem é o topo real; a tela avisa que a
+ * ordenação por qualquer outra coluna vale sobre esse recorte.
+ */
+export const LIMITE_PROSPECTAR_FORNECEDORES = 500
+
+export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspectar[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('antecipacao_fornecedores_a_prospectar')
+    .select('*')
+    // A ordem do PEDIDO: quem mais emitiu contra sacado nosso, primeiro. É também
+    // a que decide quais 500 sobrevivem ao teto — trocá-la aqui mudaria a lista,
+    // não só a apresentação dela.
+    .order('notas', { ascending: false, nullsFirst: false })
+    .limit(LIMITE_PROSPECTAR_FORNECEDORES)
+  if (error) throw error
+  return (data ?? []) as FornecedorProspectar[]
 }
 
 /**
