@@ -556,6 +556,21 @@ Com 1.808 linhas a tela ganhou **busca por nome ou CNPJ** (dígitos só, como a 
 Onepay). `notas_operaveis` (a regra de natureza, `0061`) segue sendo a armadilha da tela:
 fornecedor com volume alto e **zero** notas que a operação consegue atender.
 
+**O `.limit()` não é a última palavra — a leitura é paginada.** Subir o teto de 500 para
+3.000 trouxe 1.000 linhas, não 1.808: o PostgREST tem um teto próprio por resposta (1.000
+por padrão no Supabase) e **ignora em silêncio** um `.limit()` maior — não erra, não avisa,
+devolve menos. É o pior formato possível de bug, porque a tela mostrou *mais* fornecedores
+do que antes e pareceu resolvida enquanto o lead da 1.233ª posição continuava fora.
+
+Por isso `buscarFornecedoresAProspectar` roda um laço de `.range()`. Dois detalhes que
+parecem cosméticos e não são:
+
+- **O desempate no `order by` é obrigatório.** 826 fornecedores empatam em uma nota; sem
+  uma segunda chave (`fornecedor_cnpj`), o banco pode devolvê-los em ordens diferentes a
+  cada página, e a paginação passa a repetir linhas e pular outras.
+- **O laço avança pelo que veio, não pelo que foi pedido.** Tratar resposta curta como
+  "acabou" pararia no meio da lista se o teto do servidor fosse menor que a página.
+
 RLS: nenhuma policy nova. A de `mercado_universo` (`0060`) já cobre `fornecedor_cnpj`
 explicitamente, não só o sacado.
 

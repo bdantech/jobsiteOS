@@ -284,18 +284,46 @@ export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
  */
 export const LIMITE_PROSPECTAR_FORNECEDORES = 3000
 
+/**
+ * O tamanho da página. NÃO é escolha de gosto: o PostgREST tem um teto próprio de
+ * linhas por resposta (1.000 por padrão no Supabase) e **ignora em silêncio** um
+ * `.limit()` maior — não erra, não avisa, só devolve menos.
+ *
+ * Foi assim que subir o teto de 500 para 3.000 trouxe 1.000 linhas em vez das 1.808:
+ * mais fornecedores do que antes, o suficiente para parecer resolvido, e ainda sem o
+ * lead de R$ 644 mil que estava na 1.233ª posição.
+ */
+const PAGINA_PROSPECTAR = 1000
+
 export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspectar[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('antecipacao_fornecedores_a_prospectar')
-    .select('*')
-    // A ordem do PEDIDO: quem mais emitiu contra sacado nosso, primeiro. É também
-    // a que decide quais 500 sobrevivem ao teto — trocá-la aqui mudaria a lista,
-    // não só a apresentação dela.
-    .order('notas', { ascending: false, nullsFirst: false })
-    .limit(LIMITE_PROSPECTAR_FORNECEDORES)
-  if (error) throw error
-  return (data ?? []) as FornecedorProspectar[]
+  const linhas: FornecedorProspectar[] = []
+
+  let inicio = 0
+  while (inicio < LIMITE_PROSPECTAR_FORNECEDORES) {
+    const fim = Math.min(inicio + PAGINA_PROSPECTAR, LIMITE_PROSPECTAR_FORNECEDORES) - 1
+    const { data, error } = await supabase
+      .from('antecipacao_fornecedores_a_prospectar')
+      .select('*')
+      // A ordem do PEDIDO: quem mais emitiu contra sacado aprovado, primeiro.
+      .order('notas', { ascending: false, nullsFirst: false })
+      // O DESEMPATE É OBRIGATÓRIO, não cosmético. 826 fornecedores empatam em uma
+      // nota; sem uma segunda chave, o banco pode devolvê-los em ordens diferentes
+      // a cada página e a paginação passa a repetir linhas e pular outras.
+      .order('fornecedor_cnpj', { ascending: true })
+      .range(inicio, fim)
+    if (error) throw error
+
+    const pagina = (data ?? []) as FornecedorProspectar[]
+    if (pagina.length === 0) break
+    linhas.push(...pagina)
+
+    // Avança pelo que VEIO, não pelo que foi pedido: se o teto do servidor for menor
+    // que a página, tratar a resposta curta como "acabou" pararia no meio da lista.
+    inicio += pagina.length
+  }
+
+  return linhas
 }
 
 /**
