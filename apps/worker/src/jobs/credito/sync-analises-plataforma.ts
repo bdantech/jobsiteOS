@@ -99,6 +99,20 @@ export interface ResultadoAnalises {
    * de páginas realmente necessárias.
    */
   paginacao: { page: number; pageSize: number | null; totalPages: number | null; total: number | null; itens: number }[]
+  /**
+   * Quantas análises vieram de cada `status`, ANTES de qualquer recorte nosso.
+   *
+   * Existe porque a especificação errou o vocabulário uma vez: previa
+   * `approved | expired` e a fonte devolve `approved | blocked`. Um censo no meta da
+   * ingestão transforma "quais status existem?" numa pergunta que se responde
+   * olhando a tela, em vez de um curl com credencial de produção.
+   */
+  recebido_por_status: Record<string, number>
+  /**
+   * CNPJs distintos vistos na corrida. Comparado com `itens`, denuncia se a fonte
+   * está entregando uma análise por empresa (74/74 na primeira carga) ou o histórico.
+   */
+  cnpjs_distintos: number
 }
 
 const PAGE_SIZE = 200
@@ -156,6 +170,8 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     snapshots_credito: 0,
     status_alterados: 0,
     paginacao: [],
+    recebido_por_status: {},
+    cnpjs_distintos: 0,
   }
 
   /** Os CNPJs tocados nesta corrida. A classificação só olha para eles. */
@@ -164,6 +180,8 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
   let page = 1
   let totalPages = 1
   do {
+    // `role=drawee` é a chamada certa e fica como está: sem ela viriam as análises de
+    // cedente, e cedente não é cliente neste sentido.
     const url = `${base}/api/v1/credit-analyses?role=drawee&page=${page}&pageSize=${PAGE_SIZE}`
     const resp = await requisitarJson<RespostaAnalises>(url, {
       headers: autorizacao(),
@@ -182,6 +200,13 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
 
     for (const item of itensDaPagina) {
       acc.itens++
+
+      // O censo do que a fonte devolve, antes de qualquer recorte nosso. É ele que
+      // responde, na página de Ingestões, QUAIS status existem de verdade — foi assim
+      // que `blocked` apareceu no lugar do `expired` que a especificação previa.
+      const st = (item.analysis?.status ?? 'sem_status').trim().toLowerCase()
+      acc.recebido_por_status[st] = (acc.recebido_por_status[st] ?? 0) + 1
+
       const r = await gravarAnalise(item)
       if (!r) continue
       acc.analises_upsert++
@@ -208,6 +233,7 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
   } while (page <= totalPages)
 
   acc.paginas = totalPages
+  acc.cnpjs_distintos = cnpjs.size
 
   for (const cnpj of cnpjs) {
     const r = await classificar(cnpj, hoje)

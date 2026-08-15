@@ -294,6 +294,26 @@ job passou a **criar a ficha** (espelhando `resolverEmpresa` do 03, derivadas do
 incluídas), já nascendo em `ex_cliente` — passar por `cliente` acenderia, por um instante,
 um cliente que não existe.
 
+### Uma análise por empresa: o que a fonte expõe (e o que não)
+
+Depois da correção do vocabulário, ainda faltavam saídas. A contagem denuncia o porquê:
+**74 análises para 74 CNPJs e 74 `company.id` — exatamente uma por empresa**, com
+`analysis.id` indo de 5 a 578. A plataforma tem centenas de análises; o endpoint entrega
+uma.
+
+`role=drawee` está correto e não se mexe nele: sem o filtro viriam as análises de
+cedente, e cedente não é cliente neste sentido. A conclusão que sobra é que **a fonte
+expõe a análise ATUAL de cada empresa**, não o histórico — então `expired`/`reproved` de
+análises antigas não estão atrás de um parâmetro nosso, e a lista de ex-clientes fica
+limitada a quem tem a análise corrente em estado terminal. Ampliar isso depende da
+plataforma (um parâmetro de histórico, ou outro endpoint).
+
+Enquanto isso, o resultado carrega um **censo por status** do que a fonte devolveu, antes
+de qualquer recorte, mais `cnpjs_distintos` ao lado de `itens`. Os dois juntos respondem,
+na página de Ingestões e sem credencial de produção, se apareceu status novo e se a fonte
+passou a mandar mais de uma análise por empresa. Foi errando o vocabulário uma vez
+(`expired` que não existe) que esse instrumento virou necessário.
+
 **A paginação não era o problema, mas ficou conferível.** 74 itens em 2 páginas com
 `pageSize=200` pedido só fecha se o servidor ignora o nosso tamanho e usa o dele (50) —
 dedução, não prova. O resultado passou a gravar o envelope de cada página (`page`,
