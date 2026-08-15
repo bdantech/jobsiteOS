@@ -137,44 +137,83 @@ function ChipsInput({
   )
 }
 
+/**
+ * A partir de quantas opções a checklist precisa de busca. Doze cabem na tela e se
+ * varrem com o olho; as 92 naturezas jurídicas, não — sem filtro, escolher "S.A.
+ * Fechada" é rolar um paredão de botões procurando o rótulo certo.
+ */
+const OPCOES_ATE_SEM_BUSCA = 12
+
+/** O rótulo de uma opção, quando o valor gravado é um código que ninguém lê. */
+function rotuloDe(variavel: VariavelCatalogo, opcao: string): string {
+  return variavel.rotulos?.[opcao] ?? opcao
+}
+
 /** enum + (em / não em): a checklist beats a free-text chip that can be misspelled. */
 function OpcoesMultiplas({
+  variavel,
   opcoes,
   valores,
   onChange,
   disabled,
 }: {
+  variavel: VariavelCatalogo
   opcoes: readonly string[]
   valores: readonly unknown[]
   onChange: (valores: unknown[]) => void
   disabled?: boolean
 }) {
+  const [busca, setBusca] = React.useState('')
   const selecionados = new Set(valores.map(String))
 
+  const termo = busca.trim().toLowerCase()
+  const visiveis = opcoes.filter((o) => {
+    // O selecionado NUNCA some com a busca: um chip aceso que desaparece parece
+    // ter sido desmarcado, e a pessoa clica de novo achando que não pegou.
+    if (selecionados.has(o)) return true
+    if (!termo) return true
+    return o.toLowerCase().includes(termo) || rotuloDe(variavel, o).toLowerCase().includes(termo)
+  })
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {opcoes.map((opcao) => {
-        const ativo = selecionados.has(opcao)
-        return (
-          <Button
-            key={opcao}
-            type="button"
-            size="sm"
-            variant={ativo ? 'default' : 'outline'}
-            disabled={disabled}
-            aria-pressed={ativo}
-            onClick={() =>
-              onChange(
-                ativo
-                  ? valores.filter((v) => String(v) !== opcao)
-                  : [...valores.map(String), opcao],
-              )
-            }
-          >
-            {opcao}
-          </Button>
-        )
-      })}
+    <div className="space-y-2">
+      {opcoes.length > OPCOES_ATE_SEM_BUSCA && (
+        <Input
+          value={busca}
+          onChange={(event) => setBusca(event.target.value)}
+          placeholder={`Filtrar ${opcoes.length} opções`}
+          disabled={disabled}
+          aria-label={`Filtrar opções de ${variavel.label}`}
+        />
+      )}
+      <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto">
+        {visiveis.length === 0 && (
+          <p className="text-sm text-muted-foreground">Nenhuma opção para “{busca.trim()}”.</p>
+        )}
+        {visiveis.map((opcao) => {
+          const ativo = selecionados.has(opcao)
+          return (
+            <Button
+              key={opcao}
+              type="button"
+              size="sm"
+              variant={ativo ? 'default' : 'outline'}
+              disabled={disabled}
+              aria-pressed={ativo}
+              className="h-auto whitespace-normal py-1 text-left"
+              onClick={() =>
+                onChange(
+                  ativo
+                    ? valores.filter((v) => String(v) !== opcao)
+                    : [...valores.map(String), opcao],
+                )
+              }
+            >
+              {rotuloDe(variavel, opcao)}
+            </Button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -227,6 +266,7 @@ export function ValorInput({ variavel, operador, valor, onChange, disabled }: Va
     if (variavel.tipo === 'enum' && variavel.opcoes) {
       return (
         <OpcoesMultiplas
+          variavel={variavel}
           opcoes={variavel.opcoes}
           valores={valores}
           onChange={onChange}
@@ -265,7 +305,8 @@ export function ValorInput({ variavel, operador, valor, onChange, disabled }: Va
       const opcoes = variavel.opcoes ?? []
       return (
         <Select
-          value={comoTexto(valor)}
+          // '' é um valor selecionado para o Radix, e o placeholder não apareceria.
+          value={comoTexto(valor) || undefined}
           onValueChange={onChange}
           disabled={disabled || opcoes.length === 0}
         >
@@ -275,7 +316,7 @@ export function ValorInput({ variavel, operador, valor, onChange, disabled }: Va
           <SelectContent>
             {opcoes.map((opcao) => (
               <SelectItem key={opcao} value={opcao}>
-                {opcao}
+                {rotuloDe(variavel, opcao)}
               </SelectItem>
             ))}
           </SelectContent>

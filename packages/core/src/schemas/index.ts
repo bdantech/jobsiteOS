@@ -5,6 +5,7 @@ import { isValidCnpj, normalizeCnpj } from './cnpj.js'
 import { normalizarDominio } from '../radar/dominio.js'
 
 export * from './cnpj.js'
+export * from './natureza-juridica.js'
 
 // ─── Domain vocabulary ──────────────────────────────────────────────────────
 // Mirrors the CHECK constraints in migration 0001. Keep both in sync: the DB is

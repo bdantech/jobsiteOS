@@ -103,6 +103,16 @@ export interface VariavelCatalogo {
   coluna?: string
   /** Allowed values, for `enum`. */
   opcoes?: readonly string[]
+  /**
+   * Human labels for `opcoes`, when the stored value is a code nobody reads.
+   *
+   * The value is what gets written into the rule and compiled to SQL, so it has to
+   * stay the code — natureza jurídica `2062` survives a relabelling of the RFB
+   * table, "Sociedade Empresária Limitada" does not. But a dropdown of 92 numbers
+   * is unusable, so the UI (and `descrever`) look the label up here. Absent ⇒ the
+   * value IS the label, which is the case for every enum that stores a slug.
+   */
+  rotulos?: Readonly<Record<string, string>>
   descricao?: string
   /**
    * Derived variables do not map 1:1 onto a column — they rewrite the condition
@@ -963,13 +973,17 @@ export function criarFiltroEngine(catalogo: readonly VariavelCatalogo[]): Filtro
       const label = v?.label ?? no.variavel
       const op = OPERADOR_LABELS[no.operador]
 
+      // A regra descrita é lida por gente (resumo do card, log da reclassificação).
+      // "Natureza jurídica é igual a 2062" só faz sentido para quem decorou a tabela.
+      const legivel = (valor: unknown) => v?.rotulos?.[String(valor)] ?? String(valor)
+
       if (OPERADORES_SEM_VALOR.includes(no.operador)) return `${label} ${op}`
       if (Array.isArray(no.valor)) {
         return no.operador === 'entre'
           ? `${label} ${op} ${no.valor[0]} e ${no.valor[1]}`
-          : `${label} ${op} ${no.valor.join(', ')}`
+          : `${label} ${op} ${no.valor.map(legivel).join(', ')}`
       }
-      return `${label} ${op} ${String(no.valor)}`
+      return `${label} ${op} ${legivel(no.valor)}`
     },
   }
 }

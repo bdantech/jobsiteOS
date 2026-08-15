@@ -1,4 +1,8 @@
 import {
+  NATUREZA_JURIDICA_CODIGOS,
+  NATUREZA_JURIDICA_LABELS,
+} from '../schemas/natureza-juridica.js'
+import {
   criarFiltroEngine,
   type FiltroEngine,
   type Grupo,
@@ -110,6 +114,21 @@ export const CATALOGO_FAIXAS: readonly VariavelCatalogo[] = [
     descricao:
       'Está na lista de supressão e a supressão ainda vale. Notas de suprimidos saem das ' +
       'faixas de qualquer forma — a variável existe para regras que queiram ser explícitas.',
+  },
+  {
+    id: 'fornecedor_natureza_juridica',
+    label: 'Natureza jurídica do fornecedor',
+    tipo: 'enum',
+    coluna: 'fornecedor_natureza_juridica',
+    opcoes: NATUREZA_JURIDICA_CODIGOS,
+    rotulos: NATUREZA_JURIDICA_LABELS,
+    descricao:
+      'Ltda, S.A. fechada, empresário individual, cooperativa… O valor gravado é o CÓDIGO de 4 ' +
+      'dígitos da tabela do IBGE, porque o texto da Receita vem em dois formatos ("2062 - ' +
+      'Sociedade Empresária Limitada" e "2062") e o rótulo muda entre revisões da tabela. Vem ' +
+      'do lookup cadastral (`mercado_universo`): fornecedor ainda não enriquecido fica NULO, e ' +
+      'nulo não satisfaz operador de comparação — uma regra com esta variável exclui em ' +
+      'silêncio quem a fila ainda não processou. Use "não definido" se quiser alcançá-los.',
   },
   { id: 'fornecedor_uf', label: 'UF do fornecedor', tipo: 'texto', coluna: 'fornecedor_uf' },
 

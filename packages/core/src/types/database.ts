@@ -3543,6 +3543,7 @@ export type Database = {
           vendedor_origem: string | null
           sacado_gestao_operacao: string | null
           fornecedor_sem_interesse: boolean
+          fornecedor_natureza_juridica: string | null
         }
         Relationships: [
           {
@@ -4268,6 +4269,10 @@ export type Database = {
       cnae_grupos_de: {
         Args: { p_principal: string; p_secundarios: string[] }
         Returns: string[]
+      }
+      natureza_juridica_codigo: {
+        Args: { bruto: string }
+        Returns: string
       }
       empresa_analise_financeira: {
         Args: { p_empresa_id: string }

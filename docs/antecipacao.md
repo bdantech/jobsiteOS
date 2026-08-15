@@ -751,6 +751,8 @@ e é **ignorada** no aplicar, não zerada.
   - `0104`: `antecipacao_fornecedor_sem_interesse` (o descarte do lead, com motivo
     enumerado) + `fornecedor_sem_interesse` no fim de `notas_funil` + a view
     `antecipacao_fornecedores_sem_interesse`
+  - `0105`: `natureza_juridica_codigo()` + `fornecedor_natureza_juridica` no fim de
+    `notas_funil` — a natureza jurídica como variável de faixa, pelo código
   - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
   - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
   - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
@@ -817,10 +819,48 @@ entre os dois catálogos sumiria sem nada quebrar. Há teste para isso.
 | `fornecedor_tem_protesto` | Consulta de protesto é **paga e opt-in por empresa**. `false` significa "não consultamos" muito mais vezes do que "não tem". Serve para **excluir quem tem**, nunca para atestar quem não tem — hoje, 1 fornecedor consultado em 378. |
 | `fornecedor_protesto_valor` | R$ 800 e R$ 800 mil de protesto não são o mesmo risco, e o booleano não distingue. |
 | `fornecedor_ultimo_numero_nf` | Proxy de **porte**, não de relação conosco: o `nNF` é sequencial por emitente, então estima quantas notas ele emitiu no total. **Só NFe** — o número da NFS-e nacional é identificador composto (chega a 2.6 × 10¹² nesta base) e misturá-lo faria qualquer emissor de serviço parecer o maior da carteira. Quem só emite serviço fica nulo. Na base atual: mediana 71.952, máximo 23,2M, 262 de 378 fornecedores com valor. |
+| `fornecedor_natureza_juridica` | Também do lookup: 3.378 notas ficam **nulas**, e nulo não satisfaz comparação. Para alcançá-las é preciso o operador "não definido". |
 
-O uso que motivou a última: *"grandes fornecedores não antecipam, mas emitem muitas NFs"* —
-um corte por `fornecedor_ultimo_numero_nf < N` tira do funil quem tem caixa e não precisa
-da antecipação.
+O uso que motivou a penúltima: *"grandes fornecedores não antecipam, mas emitem muitas
+NFs"* — um corte por `fornecedor_ultimo_numero_nf < N` tira do funil quem tem caixa e não
+precisa da antecipação.
+
+### Natureza jurídica: por que a regra grava o CÓDIGO (0105)
+
+"Ltda ou S.A.?" é pergunta de régua, e o dado já estava em `mercado_universo`. O que
+faltava era chegar a `notas_funil`, que é a única superfície que `CATALOGO_FAIXAS` pode
+nomear.
+
+**A coluna é o código de 4 dígitos, não o texto — porque o texto não é um valor, são
+dois.** Nos 899.295 CNPJs com natureza preenchida:
+
+| Valor bruto | Linhas |
+| --- | ---: |
+| `2062 - Sociedade Empresária Limitada` | 627.012 |
+| `2062` | 5.597 |
+
+É a mesma natureza. Uma regra sobre o texto pegaria as primeiras e perderia as segundas,
+sem erro e sem aviso. O código ainda sobrevive a uma revisão da tabela do IBGE — o 2321 é
+"Sociedade Unipessoal de Advocacia" no nosso dump e "Advogados" na tabela oficial — e é o
+código que fica gravado na definição da regra.
+
+A normalização é a função `natureza_juridica_codigo()`, par em SQL do
+`codigoNaturezaJuridica()` que o Perfil (04f) já tinha em TS. Doze linhas da base trazem
+três dígitos ("206", "213", "232"): perderam o dígito verificador na origem e viram
+**NULL**, não um código inventado.
+
+**A tabela de rótulos mora só no core** (`schemas/natureza-juridica.ts`, 92 códigos da
+CONCLA/IBGE 2021). Repetir 92 descrições num `CASE` de SQL seria uma segunda tabela para
+envelhecer sozinha. Isso exigiu uma peça nova no catálogo genérico: `rotulos` em
+`VariavelCatalogo` — o valor gravado continua sendo o código, e a UI (e `descrever`)
+procuram o texto ali. Um dropdown de 92 números é inutilizável; `descrever` passou a
+imprimir "está em Sociedade Empresária Limitada" no lugar de "está em 2062".
+
+A lista oferece os **92 códigos oficiais**, não os 51 que a base tem hoje: uma natureza
+que ainda não emitiu nota para nós pode emitir amanhã, e um dropdown que só mostra o que
+já existe faz o operador concluir que o tipo que ele procura não existe. Com 92 opções, a
+checklist de "em / não em" ganhou busca (acima de 12 opções), e o item já selecionado
+nunca some do filtro — um chip aceso que desaparece parece ter sido desmarcado.
 
 ## O sync (§3)
 
