@@ -65,6 +65,19 @@ export function ProtestoFornecedor({
   const qc = useQueryClient()
   const [confirmando, setConfirmando] = React.useState(false)
   const [disparando, setDisparando] = React.useState(false)
+  /** O `consultadoEm` de quando o botão foi clicado. `null` = não estamos esperando. */
+  const [esperandoDesde, setEsperandoDesde] = React.useState<string | null | undefined>(undefined)
+  const timers = React.useRef<ReturnType<typeof setTimeout>[]>([])
+
+  React.useEffect(() => () => timers.current.forEach(clearTimeout), [])
+
+  // Chegou resultado novo: para de esperar. Comparar com o valor de ANTES do clique
+  // é o que distingue "a consulta voltou" de "a consulta de ontem continua lá" —
+  // inclusive quando ela volta limpa, que é o caso em que não muda mais nada na tela.
+  const aguardando = esperandoDesde !== undefined && consultadoEm === esperandoDesde
+  React.useEffect(() => {
+    if (esperandoDesde !== undefined && consultadoEm !== esperandoDesde) setEsperandoDesde(undefined)
+  }, [consultadoEm, esperandoDesde])
 
   const { data: custos } = useQuery({
     queryKey: [...antecipacaoKeys.all, 'custo-protesto'],
@@ -98,8 +111,26 @@ export function ProtestoFornecedor({
     // Assíncrono de propósito: o worker devolve 202, consulta a DirectD e só depois
     // reclassifica o funil. Prometer resultado imediato produziria "cliquei e não
     // mudou nada".
-    toast.success('Consultando protesto. O funil é reclassificado logo em seguida.')
-    void qc.invalidateQueries({ queryKey: antecipacaoKeys.fornecedor(cnpj) })
+    toast.success('Consultando protesto. O resultado aparece aqui em alguns segundos.')
+
+    /*
+     * Uma invalidação no clique não traz nada: o 202 chega em milissegundos e a
+     * consulta paga leva ~4s (DirectD) mais a reclassificação do funil. Recarregar
+     * imediatamente relê o estado ANTERIOR, e depois nada mais acontece — a tela
+     * ficava dizendo "nunca consultamos este CNPJ" para quem tinha acabado de pagar
+     * pela consulta, até alguém apertar F5.
+     *
+     * As três releituras cobrem o caso normal com folga, e o efeito acima desliga a
+     * espera assim que o dado novo chega. Se demorar mais que isso, o rodapé do card
+     * diz o que fazer em vez de girar para sempre.
+     */
+    setEsperandoDesde(consultadoEm)
+    timers.current.forEach(clearTimeout)
+    timers.current = [5_000, 12_000, 25_000].map((ms) =>
+      setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: antecipacaoKeys.fornecedor(cnpj) })
+      }, ms),
+    )
   }
 
   return (
@@ -148,13 +179,29 @@ export function ProtestoFornecedor({
               size="sm"
               className="shrink-0"
               onClick={() => setConfirmando(true)}
-              disabled={disparando}
+              disabled={disparando || aguardando}
             >
-              {jaConsultado ? 'Consultar de novo' : 'Consultar protesto'}
-              {custo !== null ? ` · ${formatarMoedaExata(custo)}` : ''}
+              {aguardando ? (
+                'Consultando…'
+              ) : (
+                <>
+                  {jaConsultado ? 'Consultar de novo' : 'Consultar protesto'}
+                  {custo !== null ? ` · ${formatarMoedaExata(custo)}` : ''}
+                </>
+              )}
             </Button>
           </div>
         </CardHeader>
+
+        {aguardando ? (
+          <CardContent className="pt-0">
+            <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              Consulta enviada. O resultado costuma chegar em poucos segundos e aparece aqui
+              sozinho — se não aparecer, recarregue a página: a consulta continua rodando no
+              servidor de qualquer forma.
+            </p>
+          </CardContent>
+        ) : null}
 
         {jaConsultado && temProtesto ? (
           <CardContent className="pt-0">

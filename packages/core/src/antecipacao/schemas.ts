@@ -200,6 +200,89 @@ export const marcarSemInteresseSchema = z.object({
 })
 export type MarcarSemInteresseInput = z.infer<typeof marcarSemInteresseSchema>
 
+// ─── Fornecedor sem interesse em se CADASTRAR (prospecção) ──────────────────
+
+/**
+ * Duas coisas parecidas que não são a mesma, e o nome de cada uma importa:
+ *
+ *   `marcarSemInteresse` (acima)  → SUPRESSÃO DE CANAL. Não tocar este CNPJ por
+ *     e-mail/telefone/WhatsApp, com validade e peso de LGPD. Mora em `supressao`,
+ *     e o Radar inteiro consulta antes de qualquer disparo.
+ *
+ *   `marcarFornecedorSemInteresse` (aqui) → QUALIFICAÇÃO DO LEAD. O fornecedor da
+ *     lista a prospectar foi trabalhado e não vai se cadastrar. Tira o CNPJ da lista
+ *     e as notas dele dos funis, é reversível num clique e não bloqueia canal nenhum.
+ *
+ * O motivo é ENUMERADO, e não texto livre como o da supressão: esta resposta é
+ * contável. "Quantos leads perdemos porque já operam com outro?" é uma pergunta que
+ * só tem resposta se a razão vier de uma lista fechada.
+ */
+export const MOTIVOS_SEM_INTERESSE = [
+  'nao_utiliza_antecipacao',
+  'ja_opera_com_outro',
+  'caixa_confortavel',
+  'nao_quer_plataforma',
+  'sem_contato',
+  'porte_incompativel',
+  'outro',
+] as const
+export const motivoSemInteresseSchema = z.enum(MOTIVOS_SEM_INTERESSE)
+export type MotivoSemInteresse = z.infer<typeof motivoSemInteresseSchema>
+
+export const MOTIVO_SEM_INTERESSE_LABELS: Record<MotivoSemInteresse, string> = {
+  nao_utiliza_antecipacao: 'Não utiliza antecipação',
+  ja_opera_com_outro: 'Já opera com outra financeira',
+  caixa_confortavel: 'Não precisa — caixa confortável',
+  nao_quer_plataforma: 'Não quer se cadastrar na plataforma',
+  sem_contato: 'Não conseguimos contato',
+  porte_incompativel: 'Porte ou perfil incompatível',
+  outro: 'Outro',
+}
+
+export const MOTIVO_SEM_INTERESSE_DESCRICOES: Record<MotivoSemInteresse, string> = {
+  nao_utiliza_antecipacao: 'Não antecipa recebível, por política ou por não precisar.',
+  ja_opera_com_outro: 'Já tem banco ou fintech fazendo isso — é disputa, não aquisição.',
+  caixa_confortavel: 'Antecipa eventualmente, mas hoje não precisa. Vale revisitar.',
+  nao_quer_plataforma: 'Antecipa, mas não quer se cadastrar aqui.',
+  sem_contato: 'Não conseguimos falar com quem decide.',
+  porte_incompativel: 'Porte ou perfil fora do que a operação atende.',
+  outro: 'Qualquer outro caso — a observação passa a ser obrigatória.',
+}
+
+export const marcarFornecedorSemInteresseSchema = z
+  .object({
+    cnpj: cnpjSchema.describe('CNPJ do fornecedor (14 dígitos, com ou sem pontuação).'),
+    motivo: motivoSemInteresseSchema.describe('Por que ele não vai se cadastrar.'),
+    observacao: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .nullable()
+      .describe('Detalhe livre. Obrigatório quando o motivo é "outro".'),
+    /**
+     * O nome que a tela já tem em mãos. Vai junto para a lista de descartados
+     * continuar legível depois que o fornecedor sair da janela de 90 dias e não
+     * houver mais nota de onde tirar um nome. Sem ele, o RPC busca na última nota.
+     */
+    fornecedor_nome: z.string().trim().max(200).optional().nullable(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.motivo === 'outro' && !v.observacao?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['observacao'],
+        message: 'Descreva o motivo.',
+      })
+    }
+  })
+export type MarcarFornecedorSemInteresseInput = z.infer<typeof marcarFornecedorSemInteresseSchema>
+
+export const reverterFornecedorSemInteresseSchema = z.object({
+  cnpj: cnpjSchema.describe('CNPJ do fornecedor a devolver para a lista a prospectar.'),
+})
+export type ReverterFornecedorSemInteresseInput = z.infer<typeof reverterFornecedorSemInteresseSchema>
+
 export const salvarFaixaRegraSchema = z.object({
   faixa: faixaSchema,
   definicao: arvoreFaixaSchema,

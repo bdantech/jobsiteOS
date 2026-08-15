@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, ExternalLink, Factory, Search, UserPlus } from 'lucide-react'
+import { AlertTriangle, Ban, ExternalLink, Factory, Search, UserPlus } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import {
   usePreferenciasFornecedoresProspectar,
 } from './fornecedores-prospectar-tabela'
 import { CabecalhoOrdenavel } from './tabela-ordenavel'
+import { FornecedorSemInteresseDialog } from './fornecedor-sem-interesse-dialog'
 
 /**
  * Fornecedores a prospectar — quem emite para os sacados que JÁ podem operar e
@@ -56,6 +57,8 @@ export function FornecedoresProspectar() {
   const qc = useQueryClient()
   const [promovendo, setPromovendo] = React.useState<string | null>(null)
   const [termo, setTermo] = React.useState('')
+  /** O fornecedor cujo diálogo de descarte está aberto. `null` = nenhum. */
+  const [descartando, setDescartando] = React.useState<FornecedorProspectar | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: antecipacaoKeys.prospectarFornecedores(),
@@ -129,9 +132,22 @@ export function FornecedoresProspectar() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Factory className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <CardTitle className="text-base">Fornecedores a prospectar</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Factory className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <CardTitle className="text-base">Fornecedores a prospectar</CardTitle>
+            </div>
+            {/*
+             * A porta para os descartados fica NO TOPO da lista de onde eles saíram:
+             * é o único lugar onde alguém se pergunta "e o fornecedor que sumiu daqui,
+             * para onde foi?".
+             */}
+            <Button variant="outline" size="sm" asChild className="shrink-0">
+              <Link href="/antecipacao/prospectar-fornecedores/sem-interesse">
+                <Ban className="mr-1 h-3.5 w-3.5" aria-hidden />
+                Sem interesse em se cadastrar
+              </Link>
+            </Button>
           </div>
           <CardDescription>
             Quem emitiu NF nos <strong>últimos 90 dias</strong> contra sacados com{' '}
@@ -310,24 +326,44 @@ export function FornecedoresProspectar() {
                       {formatarData(f.ultima_nota_em)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {f.fornecedor_empresa_id ? (
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/empresas/${f.fornecedor_empresa_id}`}>
-                            <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
-                            Ficha
-                          </Link>
-                        </Button>
-                      ) : (
+                      <div className="flex items-center justify-end gap-1">
+                        {f.fornecedor_empresa_id ? (
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/empresas/${f.fornecedor_empresa_id}`}>
+                              <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
+                              Ficha
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={promovendo === f.fornecedor_cnpj}
+                            onClick={() => f.fornecedor_cnpj && void promover(f.fornecedor_cnpj)}
+                          >
+                            <UserPlus className="mr-1 h-3.5 w-3.5" aria-hidden />
+                            {promovendo === f.fornecedor_cnpj ? 'Promovendo…' : 'Promover'}
+                          </Button>
+                        )}
+                        {/*
+                         * O descarte na PRÓPRIA lista, e não só na ficha: quem trabalha
+                         * esta tela liga para dez fornecedores seguidos, e obrigar a
+                         * abrir e voltar a cada "não" é o que faz o "não" não ser
+                         * registrado. Ícone só, com título — a coluna já tem o botão
+                         * principal, e dois botões com texto disputariam a mesma
+                         * atenção.
+                         */}
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          disabled={promovendo === f.fornecedor_cnpj}
-                          onClick={() => f.fornecedor_cnpj && void promover(f.fornecedor_cnpj)}
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Sem interesse em se cadastrar"
+                          aria-label={`Marcar ${f.fornecedor_nome ?? f.fornecedor_cnpj ?? ''} como sem interesse em se cadastrar`}
+                          onClick={() => setDescartando(f)}
                         >
-                          <UserPlus className="mr-1 h-3.5 w-3.5" aria-hidden />
-                          {promovendo === f.fornecedor_cnpj ? 'Promovendo…' : 'Promover'}
+                          <Ban className="h-3.5 w-3.5" aria-hidden />
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -348,6 +384,16 @@ export function FornecedoresProspectar() {
           )}
         </CardContent>
       </Card>
+
+      {descartando?.fornecedor_cnpj ? (
+        <FornecedorSemInteresseDialog
+          cnpj={descartando.fornecedor_cnpj}
+          nome={descartando.fornecedor_nome}
+          aberto
+          onOpenChange={(v) => !v && setDescartando(null)}
+          aoMarcar={() => setDescartando(null)}
+        />
+      ) : null}
     </div>
   )
 }

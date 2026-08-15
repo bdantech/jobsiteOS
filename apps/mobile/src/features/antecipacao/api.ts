@@ -44,6 +44,10 @@ export async function fetchFunil(filtros: FiltrosFunil, pagina = 0): Promise<Pag
     // e o topo tem que ser onde há mais ROI.
     .order('receita_esperada', { ascending: false, nullsFirst: false })
     .range(pagina * PAGINA_FUNIL, pagina * PAGINA_FUNIL + PAGINA_FUNIL - 1)
+    // Fornecedor marcado como sem interesse em se cadastrar sai do funil, aqui como
+    // na web. Um filtro que só o desktop respeita faria o vendedor na rua ligar para
+    // quem o escritório já descartou.
+    .eq('fornecedor_sem_interesse', false)
 
   if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
   else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)

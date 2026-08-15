@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      antecipacao_fornecedor_sem_interesse: {
+        Row: {
+          cnpj: string
+          fornecedor_nome: string | null
+          marcado_em: string
+          marcado_por: string | null
+          motivo: string
+          observacao: string | null
+        }
+        Insert: {
+          cnpj: string
+          fornecedor_nome?: string | null
+          marcado_em?: string
+          marcado_por?: string | null
+          motivo: string
+          observacao?: string | null
+        }
+        Update: {
+          cnpj?: string
+          fornecedor_nome?: string | null
+          marcado_em?: string
+          marcado_por?: string | null
+          motivo?: string
+          observacao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antecipacao_fornecedor_sem_interesse_marcado_por_fkey"
+            columns: ["marcado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       antecipacao_config: {
         Row: {
           atualizado_em: string
@@ -3226,6 +3261,25 @@ export type Database = {
         }
         Relationships: []
       }
+      antecipacao_fornecedores_sem_interesse: {
+        Row: {
+          fornecedor_cnae_principal: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_municipio: string | null
+          fornecedor_nome: string | null
+          fornecedor_uf: string | null
+          marcado_em: string | null
+          marcado_por: string | null
+          marcado_por_nome: string | null
+          motivo: string | null
+          notas: number | null
+          observacao: string | null
+          ultima_nota_em: string | null
+          valor_agregado: number | null
+        }
+        Relationships: []
+      }
       antecipacao_fornecedores_a_prospectar: {
         Row: {
           fornecedor_cnae_principal: string | null
@@ -3488,6 +3542,7 @@ export type Database = {
           vendedor_id: string | null
           vendedor_origem: string | null
           sacado_gestao_operacao: string | null
+          fornecedor_sem_interesse: boolean
         }
         Relationships: [
           {
@@ -4057,6 +4112,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_marcar_fornecedor_sem_interesse: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["antecipacao_fornecedor_sem_interesse"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "antecipacao_fornecedor_sem_interesse"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_reverter_fornecedor_sem_interesse: { Args: { p: Json }; Returns: boolean }
       app_promover_fornecedor: {
         Args: { p: Json }
         Returns: Database["public"]["Tables"]["empresas"]["Row"]

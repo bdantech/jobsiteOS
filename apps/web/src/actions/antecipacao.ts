@@ -8,10 +8,12 @@ import {
   casarAntecipacaoManual,
   definirPontoFocal,
   descartarMensagem,
+  marcarFornecedorSemInteresse,
   marcarSemInteresse,
   moverEstagio,
   promoverFornecedor,
   registrarToqueManual,
+  reverterFornecedorSemInteresse,
   salvarAntecipacaoConfig,
   salvarCreditoConfig,
   salvarFaixaDisparo,
@@ -90,6 +92,44 @@ export async function marcarSemInteresseAction(input: unknown): Promise<ActionRe
     revalidatePath('/antecipacao')
     revalidatePath('/radar/supressao')
     return { ok: true, data: sup }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+/**
+ * O descarte de um LEAD da prospecção, que não é a supressão de canal acima:
+ * `marcarSemInteresseAction` diz "não toque neste CNPJ"; esta diz "este fornecedor
+ * não vai se cadastrar, e este é o motivo". Some da lista a prospectar, tira as
+ * notas dos dois funis, e se desfaz com `reverterFornecedorSemInteresseAction`.
+ */
+export async function marcarFornecedorSemInteresseAction(
+  input: unknown,
+): Promise<ActionResult<Tables<'antecipacao_fornecedor_sem_interesse'>>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const r = await marcarFornecedorSemInteresse(supabase, input)
+    revalidatePath('/antecipacao')
+    revalidatePath('/antecipacao/prospectar-fornecedores')
+    revalidatePath('/comercial/nfs')
+    return { ok: true, data: r }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+export async function reverterFornecedorSemInteresseAction(
+  input: unknown,
+): Promise<ActionResult<{ revertido: boolean }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const revertido = await reverterFornecedorSemInteresse(supabase, input)
+    revalidatePath('/antecipacao')
+    revalidatePath('/antecipacao/prospectar-fornecedores')
+    revalidatePath('/comercial/nfs')
+    return { ok: true, data: { revertido } }
   } catch (e) {
     return falhaDe(e)
   }

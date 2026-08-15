@@ -279,6 +279,27 @@ agora: o Comercial pagaria R$ 3,50 e a tela continuaria dizendo a mesma coisa.
 `fornecedor_protesto_em` também entrou na view, porque sem ela "sem protesto" e "nunca
 consultado" são a mesma tela — e a diferença é justamente a que decide se vale gastar.
 
+### E a coluna que entrou na view mas nunca foi pedida no `select`
+
+O card de protesto ficou **cego por meses**, e por um motivo bobo: `COLUNAS_CARD` em
+`components/antecipacao/queries.ts` — a string literal única que o Kanban **e** a ficha do
+fornecedor usam — nunca listou `fornecedor_protesto_em`, `fornecedor_protesto_valor` nem
+`fornecedor_uf`. A coluna existia na view desde a `0066`; ela só nunca era pedida.
+
+O efeito era exatamente o sintoma relatado ("cliquei em consultar e o protesto não vem"):
+`consultadoEm` chegava `undefined`, então `jaConsultado` era sempre `false`, e o card dizia
+"nunca consultamos este CNPJ" mesmo depois da consulta paga — escondendo, junto, o selo
+"Com protesto" (que só aparece se `jaConsultado`) e o valor protestado. De quebra, `uf`
+nulo fazia o diálogo cobrar sempre o preço da base nacional. O banco estava certo o tempo
+todo: `protestos_consultas` e `protestos_atual` tinham a linha, com valor e data.
+
+A segunda metade do mesmo bug era o **assíncrono**. O worker devolve 202 na hora e a
+DirectD leva ~4 s, mais a reclassificação; a tela invalidava a query **no clique**, ou
+seja, relia o estado anterior e depois nada mais acontecia. Agora o clique guarda o
+`consultadoEm` de antes, agenda releituras em 5 s / 12 s / 25 s e mostra "Consultando…"
+até o valor mudar — o que também cobre o caso em que a consulta volta **limpa**, o único
+em que nada mais na tela se mexeria.
+
 ## O que promoção NÃO destrava
 
 Vale registrar, porque a intuição erra aqui: promover **não** é o que libera a análise de
@@ -587,6 +608,52 @@ Clicar num sacado abre `/antecipacao/sacados/{cnpj}` com **as notas que ele rece
 a mesma tela que a aba de capacidade usa, porque a pergunta ("quem emite para ele, e
 quanto?") é a mesma nos dois caminhos.
 
+### O descarte do lead: "sem interesse em se cadastrar" (0104)
+
+A lista é trabalhada por telefone, e a resposta mais comum de uma ligação **não** é "quero
+antecipar". Sem um lugar para guardar o "não", a lista devolve o mesmo CNPJ para a próxima
+pessoa na semana seguinte — o custo do lead descartado é pago de novo, indefinidamente.
+
+`antecipacao_fornecedor_sem_interesse` (CNPJ como PK) guarda a marcação com **motivo
+enumerado**: `nao_utiliza_antecipacao`, `ja_opera_com_outro`, `caixa_confortavel`,
+`nao_quer_plataforma`, `sem_contato`, `porte_incompativel`, `outro` (este exige
+observação). Enumerado e não texto livre porque a resposta é **contável**: "quantos leads
+perdemos para outra financeira?" só tem resposta se ninguém puder escrever a mesma razão
+de sete formas.
+
+**Por que não é `supressao`.** As duas coisas parecem a mesma e não são:
+
+| | `supressao` (`app_marcar_sem_interesse`) | `antecipacao_fornecedor_sem_interesse` |
+|---|---|---|
+| O que é | supressão de **canal** | qualificação do **lead** |
+| Efeito | nenhum canal toca o CNPJ; as notas vivas perdem a faixa | some da lista a prospectar; as notas somem dos funis |
+| Motivo | `nao_abordar` / `solicitacao_lgpd`, detalhe em texto livre | lista fechada de sete motivos comerciais |
+| Desfazer | expira sozinha, ou some do Radar inteiro | um clique em **Reverter** |
+
+Alargar o CHECK de `supressao` com motivos comerciais faria "não usa antecipação" e "pediu
+remoção por LGPD" morarem na mesma linha, com o mesmo peso, desfeitas pelo mesmo botão.
+
+**As notas saem dos funis, e o filtro é do lado do cliente sobre uma coluna da view.**
+`notas_funil` ganhou `fornecedor_sem_interesse` (`create or replace` com a coluna **no
+fim** — é o que estende a view sem derrubar as sete que dependem dela), e `buscarFunil`
+filtra por ela. Uma função só, então o funil do gestor (`/antecipacao`) e o do vendedor
+(`/comercial/nfs`) herdam o filtro juntos; o mobile tem o mesmo `.eq()` em `fetchFunil`,
+porque um descarte que só o desktop respeita faz o vendedor na rua ligar para quem o
+escritório já descartou. Vale também para as encerradas: a nota some da **tela**, não do
+banco, e volta inteira quando alguém reverte.
+
+**A lista dos descartados parte da tabela, não da janela de 90 dias.** Quem foi descartado
+há quatro meses precisa continuar visível com nome e motivo mesmo sem nota no período —
+senão a lista esvazia sozinha e o CNPJ volta a ser prospectado. Por isso a marcação guarda
+uma **cópia do nome**: sem nota na janela não há de onde tirá-lo. As contagens de nota vêm
+por `lateral` sobre a **mesma** janela da lista a prospectar, para que "12 notas" queira
+dizer a mesma coisa nas duas telas.
+
+Marcar acontece em dois lugares — na própria linha da lista (quem liga para dez seguidos
+não deveria abrir e voltar a cada "não") e na ficha do fornecedor (onde a decisão amadurece,
+com notas, cadastro e protesto à vista). Na ficha, marcado, o botão vira **Voltar a
+prospectar**.
+
 ## Conversão automática: quem marca a nota como convertida (04e)
 
 Até aqui `estagio_funil = 'convertida'` só existia por clique humano — **5 notas em
@@ -681,6 +748,9 @@ e é **ignorada** no aplicar, não zerada.
   - `0102`: `antecipacao_sacados_com_credito` (aprovação própria ou do grupo holding/SPE)
     passa a ser o qualificador da lista acima — "cadastrado" era 70% ruído. Mais
     `clientes_onepay_lista` (protesto do grupo, faturamento, gestão)
+  - `0104`: `antecipacao_fornecedor_sem_interesse` (o descarte do lead, com motivo
+    enumerado) + `fornecedor_sem_interesse` no fim de `notas_funil` + a view
+    `antecipacao_fornecedores_sem_interesse`
   - `0066`: Antecipação lê protesto dos CNPJs das suas notas + `fornecedor_protesto_em`
   - `0067`: `antecipacao_custo_protesto()` — o preço, para quem não tem Radar
   - `0068`: `app_promover_fornecedor` — promover do funil, sem Mercado nem Empresas
@@ -689,7 +759,9 @@ e é **ignorada** no aplicar, não zerada.
     `conversao` + fonte de ingestão `onepay_antecipacoes`
   - `0078`: índice único em `notificacao_regras` — o `on conflict do nothing` de todas as
     migrações anteriores nunca fez nada, e a 0077 criou a primeira duplicata visível
-  - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`, `app_salvar_faixa_regra`,
+  - RPCs: `app_mover_estagio_nf`, `app_marcar_sem_interesse`,
+    `app_marcar_fornecedor_sem_interesse`, `app_reverter_fornecedor_sem_interesse`,
+    `app_salvar_faixa_regra`,
     `app_ativar_faixa_regra`, `app_salvar_faixa_disparo`, `app_salvar_whatsapp_conta`,
     `app_descartar_mensagem`, `app_definir_ponto_focal`, `app_registrar_toque_manual`,
     `app_salvar_antecipacao_config`, `antecipacao_metricas_faixa`,
@@ -705,7 +777,8 @@ e é **ignorada** no aplicar, não zerada.
   `calibrar-economia`, `reclassificar`, `outbox`, `lookup-cadastral`, `contatos-nf`,
   `supressoes`; config em `apps/worker/src/antecipacao/`.
 - **Web** (`apps/web/src/app/(app)/antecipacao/` + `components/antecipacao/`): Kanban,
-  por sacado, sacados a prospectar, **fornecedores a prospectar**, **antecipações + fila
+  por sacado, sacados a prospectar, **fornecedores a prospectar** (+ a sub-tela dos
+  **descartados**, `prospectar-fornecedores/sem-interesse`), **antecipações + fila
   de revisão**, métricas por
   faixa, regras de faixa, disparos, Outbox, contas WhatsApp, settings (com a calibração
   da carteira no topo).

@@ -7,8 +7,10 @@ import {
   casarAntecipacaoSchema,
   descartarMensagemSchema,
   definirPontoFocalSchema,
+  marcarFornecedorSemInteresseSchema,
   marcarSemInteresseSchema,
   moverEstagioSchema,
+  reverterFornecedorSemInteresseSchema,
   promoverFornecedorSchema,
   registrarToqueManualSchema,
   salvarAntecipacaoConfigSchema,
@@ -19,8 +21,10 @@ import {
   type CasarAntecipacaoInput,
   type DefinirPontoFocalInput,
   type DescartarMensagemInput,
+  type MarcarFornecedorSemInteresseInput,
   type MarcarSemInteresseInput,
   type MoverEstagioInput,
+  type ReverterFornecedorSemInteresseInput,
   type PromoverFornecedorInput,
   type RegistrarToqueManualInput,
   type SalvarAntecipacaoConfigInput,
@@ -77,6 +81,40 @@ export async function marcarSemInteresse(
   const { data, error } = await supabase.rpc('app_marcar_sem_interesse', { p: p as unknown as Json })
   if (error) throw traduzirErro(error)
   return data
+}
+
+/**
+ * Marca um fornecedor da lista a prospectar como sem interesse em se CADASTRAR.
+ *
+ * Não confundir com `marcarSemInteresse`: aquele suprime canal (`supressao`, peso de
+ * LGPD, validade), este qualifica o lead — tira o CNPJ da lista a prospectar e as
+ * notas dele dos funis, e se desfaz num clique. Ver a nota longa em schemas.ts.
+ */
+export async function marcarFornecedorSemInteresse(
+  supabase: Supabase,
+  input: MarcarFornecedorSemInteresseInput | unknown,
+): Promise<Tables<'antecipacao_fornecedor_sem_interesse'>> {
+  const dados = parseOuFalhar(marcarFornecedorSemInteresseSchema, input)
+  const p = { ...dados, cnpj: normalizeCnpj(dados.cnpj) }
+  const { data, error } = await supabase.rpc('app_marcar_fornecedor_sem_interesse', {
+    p: p as unknown as Json,
+  })
+  if (error) throw traduzirErro(error)
+  return data
+}
+
+/** Devolve o fornecedor à lista a prospectar (e as notas dele aos funis). */
+export async function reverterFornecedorSemInteresse(
+  supabase: Supabase,
+  input: ReverterFornecedorSemInteresseInput | unknown,
+): Promise<boolean> {
+  const dados = parseOuFalhar(reverterFornecedorSemInteresseSchema, input)
+  const p = { cnpj: normalizeCnpj(dados.cnpj) }
+  const { data, error } = await supabase.rpc('app_reverter_fornecedor_sem_interesse', {
+    p: p as unknown as Json,
+  })
+  if (error) throw traduzirErro(error)
+  return data ?? false
 }
 
 export async function salvarFaixaRegra(

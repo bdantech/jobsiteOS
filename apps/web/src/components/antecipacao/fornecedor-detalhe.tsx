@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, ExternalLink, History, SearchX, UserPlus } from 'lucide-react'
+import { AlertTriangle, Ban, ExternalLink, History, RotateCcw, SearchX, UserPlus } from 'lucide-react'
 import {
   EVENTO_LABELS,
   FAIXA_LABELS,
@@ -21,8 +21,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { FichaVoltar } from '@/components/ficha/ficha'
 import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
 import { EmpresaContatos } from '@/components/empresas/empresa-contatos'
-import { promoverFornecedorAction } from '@/actions/antecipacao'
+import { promoverFornecedorAction, reverterFornecedorSemInteresseAction } from '@/actions/antecipacao'
 import { NotaCard } from './nota-card'
+import { FornecedorSemInteresseDialog } from './fornecedor-sem-interesse-dialog'
 import { ProtestoFornecedor } from './protesto-fornecedor'
 import { FAIXA_BADGE, TIPAGEM_BADGE, formatarDataHora, formatarInteiro, formatarMoeda } from './format'
 import { antecipacaoKeys, buscarDetalheFornecedor } from './queries'
@@ -38,6 +39,8 @@ import { antecipacaoKeys, buscarDetalheFornecedor } from './queries'
 export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
   const qc = useQueryClient()
   const [promovendo, setPromovendo] = React.useState(false)
+  const [descartando, setDescartando] = React.useState(false)
+  const [revertendo, setRevertendo] = React.useState(false)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: antecipacaoKeys.fornecedor(cnpj),
@@ -66,6 +69,19 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
     }
     void qc.invalidateQueries({ queryKey: antecipacaoKeys.fornecedor(cnpj) })
     return r.data?.id ?? null
+  }
+
+  /** Devolve o fornecedor à lista a prospectar e as notas dele aos funis. */
+  async function reverterSemInteresse() {
+    setRevertendo(true)
+    const r = await reverterFornecedorSemInteresseAction({ cnpj })
+    setRevertendo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success('De volta à lista a prospectar — as notas dele voltam aos funis.')
+    void qc.invalidateQueries({ queryKey: antecipacaoKeys.all })
   }
 
   async function promoverPeloBotao() {
@@ -143,6 +159,10 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
   const nome = fornecedor?.fornecedor_nome ?? primeira?.fornecedor_nome ?? formatCnpj(cnpj)
   const tipagem = (fornecedor?.fornecedor_tipagem ?? primeira?.fornecedor_tipagem) as Tipagem | null
   const empresaId = fornecedor?.fornecedor_empresa_id ?? primeira?.fornecedor_empresa_id ?? null
+  // Vem da nota porque a marcação é por CNPJ e `notas_funil` já a carrega — o
+  // agregado `antecipacao_fornecedores` não tem a coluna, e criar uma segunda fonte
+  // para o mesmo booleano é como as duas telas passariam a discordar.
+  const semInteresse = primeira?.fornecedor_sem_interesse ?? false
 
   const valorTotal = notas.reduce((s, n) => s + Number(n.valor ?? 0), 0)
   const receitaTotal = notas.reduce((s, n) => s + Number(n.receita_esperada ?? 0), 0)
@@ -174,22 +194,56 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
                     Suprimido
                   </Badge>
                 )}
+                {semInteresse && (
+                  <Badge variant="outline" className="text-destructive">
+                    Sem interesse em se cadastrar
+                  </Badge>
+                )}
               </div>
             </div>
 
-            {empresaId ? (
-              <Button variant="outline" asChild>
-                <Link href={`/empresas/${empresaId}`}>
-                  <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
-                  Company 360
-                </Link>
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={() => void promoverPeloBotao()} disabled={promovendo}>
-                <UserPlus className="mr-2 h-4 w-4" aria-hidden />
-                {promovendo ? 'Promovendo…' : 'Promover para Empresas'}
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {empresaId ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/empresas/${empresaId}`}>
+                    <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
+                    Company 360
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => void promoverPeloBotao()} disabled={promovendo}>
+                  <UserPlus className="mr-2 h-4 w-4" aria-hidden />
+                  {promovendo ? 'Promovendo…' : 'Promover para Empresas'}
+                </Button>
+              )}
+
+              {/*
+               * O descarte mora na ficha, e não só na lista, porque é aqui que a
+               * decisão amadurece: quem abriu para ver as notas, o cadastro e o
+               * protesto é quem tem em mãos o que responde "vale a pena insistir?".
+               * Marcado, o botão vira o de desfazer — o mesmo lugar para as duas
+               * direções da mesma decisão.
+               */}
+              {semInteresse ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void reverterSemInteresse()}
+                  disabled={revertendo}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" aria-hidden />
+                  {revertendo ? 'Voltando…' : 'Voltar a prospectar'}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => setDescartando(true)}
+                >
+                  <Ban className="mr-2 h-4 w-4" aria-hidden />
+                  Sem interesse
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
 
@@ -288,6 +342,13 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
           ))}
         </div>
       </section>
+
+      <FornecedorSemInteresseDialog
+        cnpj={cnpj}
+        nome={nome}
+        aberto={descartando}
+        onOpenChange={setDescartando}
+      />
     </div>
   )
 }

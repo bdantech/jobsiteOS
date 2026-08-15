@@ -1,25 +1,33 @@
 import { formatCnpj, normalizeCnpj } from '../../schemas/cnpj.js'
 import {
   casarAntecipacaoManual,
+  marcarFornecedorSemInteresse,
   marcarSemInteresse,
   moverEstagio,
+  reverterFornecedorSemInteresse,
 } from '../../antecipacao/mutations.js'
 import { MATCH_STATUS_LABELS, MOTIVO_MATCH_LABELS } from '../../antecipacao/matching.js'
 import {
   ESTAGIO_FUNIL_LABELS,
   ESTAGIOS_ABERTOS,
   FAIXA_LABELS,
+  MOTIVO_SEM_INTERESSE_LABELS,
   capacidadeSacadoSchema,
   casarAntecipacaoSchema,
+  marcarFornecedorSemInteresseSchema,
   marcarSemInteresseSchema,
   moverEstagioSchema,
   notasFornecedorSchema,
   resumoFunilSchema,
+  reverterFornecedorSemInteresseSchema,
   statusConversoesSchema,
   type CapacidadeSacadoInput,
   type CasarAntecipacaoInput,
+  type MarcarFornecedorSemInteresseInput,
   type MarcarSemInteresseInput,
+  type MotivoSemInteresse,
   type MoverEstagioInput,
+  type ReverterFornecedorSemInteresseInput,
   type NotasFornecedorInput,
   type ResumoFunilInput,
   type StatusConversoesInput,
@@ -380,6 +388,51 @@ export const antecipacaoModule: AppModule = {
           expira_em: sup.expira_em,
           eterna: sup.expira_em === null,
           route: '/radar/supressao',
+        }
+      },
+    },
+    {
+      id: 'antecipacao.fornecedor_sem_interesse',
+      name: 'Fornecedor sem interesse em se cadastrar',
+      description:
+        'Tira um fornecedor da lista a prospectar com um motivo enumerado (não utiliza ' +
+        'antecipação, já opera com outro, caixa confortável, não quer a plataforma, sem ' +
+        'contato, porte incompatível, outro). As notas dele saem dos dois funis. NÃO é ' +
+        'supressão de canal (para isso é marcar_sem_interesse); é qualificação de lead, e se ' +
+        'desfaz por antecipacao.reverter_sem_interesse. Exige confirmação explícita.',
+      inputSchema: marcarFornecedorSemInteresseSchema,
+      mutates: true,
+      execute: async (input, ctx) => {
+        const r = await marcarFornecedorSemInteresse(
+          ctx.supabase,
+          input as MarcarFornecedorSemInteresseInput,
+        )
+        return {
+          cnpj: formatCnpj(r.cnpj),
+          fornecedor_nome: r.fornecedor_nome,
+          motivo: MOTIVO_SEM_INTERESSE_LABELS[r.motivo as MotivoSemInteresse] ?? r.motivo,
+          observacao: r.observacao,
+          route: '/antecipacao/prospectar-fornecedores/sem-interesse',
+        }
+      },
+    },
+    {
+      id: 'antecipacao.reverter_sem_interesse',
+      name: 'Devolver fornecedor à lista a prospectar',
+      description:
+        'Desfaz o descarte: o fornecedor volta para a lista a prospectar e as notas dele ' +
+        'voltam aos funis. Exige confirmação explícita.',
+      inputSchema: reverterFornecedorSemInteresseSchema,
+      mutates: true,
+      execute: async (input, ctx) => {
+        const entrada = input as ReverterFornecedorSemInteresseInput
+        const revertido = await reverterFornecedorSemInteresse(ctx.supabase, entrada)
+        return {
+          cnpj: formatCnpj(normalizeCnpj(entrada.cnpj)),
+          // false = não havia marcação. Dizer "revertido" nesse caso faria a IA
+          // relatar um efeito que não houve.
+          revertido,
+          route: '/antecipacao/prospectar-fornecedores',
         }
       },
     },

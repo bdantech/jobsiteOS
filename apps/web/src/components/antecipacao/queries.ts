@@ -17,6 +17,7 @@ export type FornecedorFunil = Views<'antecipacao_fornecedores'>
 export type SacadoFunil = Views<'antecipacao_sacados'>
 export type SacadoProspectar = Views<'antecipacao_sacados_a_prospectar'>
 export type FornecedorProspectar = Views<'antecipacao_fornecedores_a_prospectar'>
+export type FornecedorSemInteresse = Views<'antecipacao_fornecedores_sem_interesse'>
 
 export const antecipacaoKeys = {
   all: ['antecipacao'] as const,
@@ -28,6 +29,8 @@ export const antecipacaoKeys = {
   prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
   prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
   prospectarFornecedores: () => [...antecipacaoKeys.all, 'prospectar-fornecedores'] as const,
+  fornecedoresSemInteresse: () =>
+    [...antecipacaoKeys.all, 'prospectar-fornecedores', 'sem-interesse'] as const,
   sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   regras: (faixa: Faixa) => [...antecipacaoKeys.all, 'regras', faixa] as const,
   disparos: () => [...antecipacaoKeys.all, 'disparos'] as const,
@@ -63,9 +66,16 @@ export interface FiltrosFunil {
  * As colunas do card. Em UMA string literal: supabase-js parseia o select no
  * nível de tipo, e concatenar vários literais estoura o parser — o resultado
  * degrada em silêncio para `GenericStringError`.
+ *
+ * `fornecedor_uf`, `fornecedor_protesto_valor` e `fornecedor_protesto_em` não são do
+ * card: são da ficha do fornecedor, que lê pelo MESMO select. Faltavam aqui, e o
+ * efeito era a tela de protesto inteira ficar cega — `consultadoEm` chegava sempre
+ * `undefined`, então o card dizia "nunca consultamos este CNPJ" mesmo depois da
+ * consulta paga, escondia o valor protestado e cobrava o preço da base nacional
+ * porque a UF também não vinha. Três colunas a mais por card é barato perto disso.
  */
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
+  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
 
 export const PAGINA_FUNIL = 40
 
@@ -94,6 +104,13 @@ export async function buscarFunil(
   // ganha de qualquer venda real. `incluirNaoOperaveis` existe para auditar o que a
   // regra escondeu, já que ela lê natureza em texto livre e erra às vezes.
   if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
+
+  // Fornecedor que já disse que não vai se cadastrar sai dos DOIS funis — o do gestor
+  // e o do vendedor, que são esta mesma função. Sem isto, a decisão tomada uma vez na
+  // lista de prospecção teria de ser lembrada nota a nota, todo dia, por quem trabalha
+  // o Kanban. Vale também para as encerradas: a nota some da tela, não do banco, e
+  // volta inteira quando alguém reverte o descarte.
+  query = query.eq('fornecedor_sem_interesse', false)
 
   if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
   else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)
@@ -324,6 +341,26 @@ export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspec
   }
 
   return linhas
+}
+
+/**
+ * Os descartados: quem já foi trabalhado e não vai se cadastrar.
+ *
+ * Sem paginação, e não por descuido — a lista a prospectar precisa dela porque tem
+ * 1.951 linhas vindas de uma janela de 90 dias, e esta aqui só cresce por clique
+ * humano. Se um dia passar de mil, o teto do PostgREST corta em silêncio (foi o que
+ * aconteceu na irmã dela), então o aviso vem no rodapé da tela.
+ */
+export async function buscarFornecedoresSemInteresse(): Promise<FornecedorSemInteresse[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('antecipacao_fornecedores_sem_interesse')
+    .select('*')
+    // Os mais recentes primeiro: quem quer conferir um descarte acabou de fazê-lo.
+    .order('marcado_em', { ascending: false })
+    .limit(1000)
+  if (error) throw error
+  return (data ?? []) as FornecedorSemInteresse[]
 }
 
 /**
