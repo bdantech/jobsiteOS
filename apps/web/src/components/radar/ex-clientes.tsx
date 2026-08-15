@@ -257,13 +257,33 @@ function MotivoInline({ linha }: { linha: ExCliente }) {
 
 export function ExClientesLista({ termo }: { termo: string }) {
   const [janela, setJanela] = React.useState(12)
+  /**
+   * Abre em CLIENTES PRINCIPAIS, e esse é o ponto da tela.
+   *
+   * A plataforma abria análise de crédito por SPE e por filial no passado, e o
+   * resultado é que 17 dos 21 primeiros "ex-clientes" eram veículo de obra ou
+   * endereço da mesma pessoa jurídica — a VALKA apareceu quatro vezes. Quem pergunta
+   * "quais clientes perdemos?" quer matriz e holding.
+   *
+   * Os outros ficam a um clique, e não escondidos: "as cinco SPEs daquele grupo
+   * saíram no mesmo trimestre" é informação, e some se a lista as apagar.
+   */
+  const [somentePrincipais, setSomentePrincipais] = React.useState(true)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: radarKeys.exClientes(),
     queryFn: buscarExClientes,
   })
 
-  const linhas = React.useMemo(() => (data ?? []).filter((c) => combina(c, termo)), [data, termo])
+  const linhas = React.useMemo(
+    () =>
+      (data ?? []).filter(
+        (c) => combina(c, termo) && (!somentePrincipais || c.e_principal !== false),
+      ),
+    [data, termo, somentePrincipais],
+  )
+
+  const secundarios = (data ?? []).filter((c) => c.e_principal === false).length
 
   if (isPending) return <Skeleton className="h-64 w-full" />
 
@@ -329,6 +349,32 @@ export function ExClientesLista({ termo }: { termo: string }) {
       </Card>
 
       <Card>
+        {secundarios > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+            <p className="text-sm text-muted-foreground">
+              {somentePrincipais ? (
+                <>
+                  Mostrando <strong>clientes principais</strong>. {secundarios} filial(is) e SPE(s)
+                  ocultas — a plataforma abria análise por SPE no passado, e elas não são o
+                  cliente.
+                </>
+              ) : (
+                <>
+                  Mostrando <strong>todos</strong>, inclusive filiais e SPEs. A carteira se olha
+                  por matriz e holding.
+                </>
+              )}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setSomentePrincipais((v) => !v)}
+            >
+              {somentePrincipais ? `Mostrar todos (${secundarios} a mais)` : 'Só principais'}
+            </Button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -354,8 +400,19 @@ export function ExClientesLista({ termo }: { termo: string }) {
                 <tr key={c.empresa_id} className="align-top">
                   <td className="max-w-[18rem] px-4 py-3">
                     <p className="truncate font-medium">{c.nome ?? '—'}</p>
-                    <p className="font-mono text-xs tabular-nums text-muted-foreground">
+                    <p className="flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
                       {c.cnpj ? formatCnpj(c.cnpj) : '—'}
+                      {/*
+                       * Com o toggle aberto, a marca é obrigatória: sem ela a lista
+                       * mistura "a construtora saiu" com "uma obra dela terminou", e
+                       * as duas linhas parecem a mesma perda.
+                       */}
+                      {c.e_filial ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-sans">Filial</span>
+                      ) : null}
+                      {c.e_spe ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-sans">SPE</span>
+                      ) : null}
                     </p>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">

@@ -348,6 +348,38 @@ tem várias análises, e decidir na primeira leria o conjunto pela metade — a 
 uma vencida na página 1 e uma vigente na página 3 seria rebaixada e restaurada, emitindo
 um evento de saída que nunca houve.
 
+### Filial e SPE não são o cliente que saiu (0109)
+
+Dos 21 ex-clientes da primeira carga, **17 não eram clientes**:
+
+| | qtd | o que era |
+|---|---:|---|
+| Filiais | 5 | Todas com cliente **ativo na mesma raiz de CNPJ**. A VALKA CONSTRUÇÕES apareceu **quatro vezes**, uma por filial, sendo cliente ativa o tempo todo. Filial não é empresa — é endereço da mesma pessoa jurídica. |
+| SPEs | 12 | Herança da prática antiga de abrir análise por SPE. A SPE nasce com o empreendimento e some quando a obra acaba; o cliente é a holding. |
+| Matrizes comuns | 4 | Os ex-clientes de verdade. |
+
+A correção vive em duas camadas, e as duas são necessárias porque respondem a
+perguntas diferentes:
+
+**No classificador** — raiz de CNPJ ou grupo econômico com cliente ativo → `grupo_ainda_cliente`,
+uma saída nova e **silenciosa**. Não é `conflito`: conflito é dado divergente e chama o
+Admin; isto é o desenho da carteira, e notificar a cada obra encerrada de um cliente ativo
+seria alarme sobre o normal. Pega os 6 casos factualmente errados (5 filiais + a SPE do
+grupo ativo) e **desfaz** os já marcados, voltando para `mercado` — não para `cliente`,
+que inflaria a contagem da carteira com veículos de obra.
+
+A ordem importa: o guard vem **depois** do conflito. Se o próprio CNPJ está ativo no
+temperature report, é dado divergente e alguém precisa olhar; aqui o CNPJ realmente parou,
+e quem continua operando é o resto da casa.
+
+**Na view** — as flags `e_filial`, `e_spe` e `e_principal`. Elas não escondem nada: a lista
+é que abre no recorte de cliente principal, com os outros a um clique e marcados com selo.
+As 11 SPEs cujo grupo **realmente** saiu continuam sendo perda — elas só não são a resposta
+para "quais clientes perdemos?". Uma view que as apagasse tornaria impossível ler "as cinco
+SPEs daquele grupo saíram no mesmo trimestre", que é informação.
+
+Sobraram 4 clientes principais, somando R$ 6,05 mi de último limite.
+
 ### O motivo é humano
 
 O sync grava **"Motivo desconhecido"** e o evento `cliente.tornou_ex` pede a

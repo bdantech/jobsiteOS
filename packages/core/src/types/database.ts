@@ -3386,6 +3386,9 @@ export type Database = {
           motivo_sugerido: string | null
           motivo_sugerido_label: string | null
           motivo_sugerido_evidencia: string | null
+          e_filial: boolean | null
+          e_spe: boolean | null
+          e_principal: boolean | null
           municipio: string | null
           nome: string | null
           uf: string | null

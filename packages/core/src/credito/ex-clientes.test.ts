@@ -163,6 +163,50 @@ test('reativado no temperature report não é rebaixado no dia seguinte', () => 
   assert.equal(r.situacao, 'conflito')
 })
 
+/**
+ * O que a primeira carga real mostrou: 5 dos 21 "ex-clientes" eram FILIAIS de uma
+ * matriz ativa (a VALKA apareceu quatro vezes, uma por filial) e 1 era SPE de um
+ * grupo com cliente operando. Filial é endereço da mesma pessoa jurídica; SPE é
+ * veículo de obra. Nem uma nem outra é o cliente.
+ */
+test('filial de matriz ativa não é ex-cliente — a perda é da pessoa jurídica', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 500000 })],
+    { raizTemClienteAtivo: true },
+    HOJE,
+  )
+  assert.equal(r.situacao, 'grupo_ainda_cliente')
+  assert.equal(r.exClienteDesde, null)
+})
+
+test('SPE de grupo com cliente ativo é obra que acabou, não cliente que saiu', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-06-30', credit_limit: 300000 })],
+    { grupoTemClienteAtivo: true },
+    HOJE,
+  )
+  assert.equal(r.situacao, 'grupo_ainda_cliente')
+})
+
+test('mas SPE de grupo SEM cliente ativo é perda de verdade', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-06-30', credit_limit: 300000 })],
+    { grupoTemClienteAtivo: false, raizTemClienteAtivo: false },
+    HOJE,
+  )
+  assert.equal(r.situacao, 'ex_cliente')
+  assert.equal(r.exClienteDesde, '2025-06-30')
+})
+
+test('o conflito vem ANTES: o próprio CNPJ ativo é dado divergente, não desenho', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 500000 })],
+    { statusOnepay: 'active', raizTemClienteAtivo: true },
+    HOJE,
+  )
+  assert.equal(r.situacao, 'conflito')
+})
+
 test('mesesDesde só fecha o mês quando o dia passa', () => {
   assert.equal(mesesDesde('2026-01-15', '2026-02-14'), 0)
   assert.equal(mesesDesde('2026-01-15', '2026-02-15'), 1)

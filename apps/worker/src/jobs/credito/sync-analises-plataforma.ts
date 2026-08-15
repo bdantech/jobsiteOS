@@ -113,6 +113,10 @@ export interface ResultadoAnalises {
    * está entregando uma análise por empresa (74/74 na primeira carga) ou o histórico.
    */
   cnpjs_distintos: number
+  /** Filiais de matriz ativa e SPEs de grupo ativo — não são perda de cliente. */
+  filiais_e_spes_ignoradas: number
+  /** Quantas marcações erradas de corridas anteriores foram desfeitas. */
+  desmarcados: number
 }
 
 const PAGE_SIZE = 200
@@ -172,6 +176,8 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     paginacao: [],
     recebido_por_status: {},
     cnpjs_distintos: 0,
+    filiais_e_spes_ignoradas: 0,
+    desmarcados: 0,
   }
 
   /** Os CNPJs tocados nesta corrida. A classificação só olha para eles. */
@@ -241,6 +247,8 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     if (r === 'ex_cliente') acc.novos_ex_clientes++
     if (r === 'conflito') acc.conflitos++
     if (r === 'analise_sem_cadastro') acc.sem_cadastro++
+    if (r === 'grupo_ainda_cliente' || r === 'desmarcado_grupo_ativo') acc.filiais_e_spes_ignoradas++
+    if (r === 'desmarcado_grupo_ativo') acc.desmarcados++
   }
 
   logger.info(acc, 'Sync de análises da plataforma concluído.')
@@ -398,6 +406,8 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
     {
       statusOnepay: cliente?.status ?? null,
       converteuRecentemente: await converteuRecentemente(cnpj),
+      raizTemClienteAtivo: await raizTemClienteAtivo(cnpj),
+      grupoTemClienteAtivo: await grupoTemClienteAtivo(cnpj),
     },
     hoje,
   )
@@ -447,6 +457,33 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
         ex_cliente_desde: r.exClienteDesde,
       })
       return 'ex_cliente'
+    }
+
+    case 'grupo_ainda_cliente': {
+      /*
+       * DESFAZ marcação anterior. A primeira carga rebaixou 5 filiais de matriz ativa
+       * e 1 SPE de grupo ativo antes deste guard existir; sem esta correção elas
+       * ficariam como ex-clientes para sempre, e não só na lista — `e_ex_cliente` no
+       * Explorador e a exclusão do SDR leem o mesmo estágio.
+       *
+       * Volta para `mercado`, e não para `cliente`: filial e SPE não são clientes
+       * (quem é são a matriz e a holding), e promovê-las inflaria a contagem da
+       * carteira. `mercado` é o estado neutro de "empresa que conhecemos".
+       */
+      if (empresa?.estagio === 'ex_cliente') {
+        await supabaseAdmin
+          .from('empresas')
+          .update({
+            estagio: 'mercado',
+            ex_cliente_desde: null,
+            ex_cliente_motivo: null,
+            ex_cliente_motivo_obs: null,
+          })
+          .eq('id', empresa.id)
+        logger.info({ cnpj }, 'Ex-cliente desfeito: filial/SPE com matriz ou grupo ativo.')
+        return 'desmarcado_grupo_ativo'
+      }
+      return 'grupo_ainda_cliente'
     }
 
     case 'conflito': {
@@ -578,6 +615,63 @@ async function motivoDesconhecido(): Promise<string | null> {
     .eq('motivo', 'Motivo desconhecido')
     .maybeSingle()
   return data?.id ?? null
+}
+
+/**
+ * Existe cliente ATIVO em outro CNPJ da mesma raiz (mesmos 8 dígitos)?
+ *
+ * Filial não é empresa, é endereço da mesma pessoa jurídica — e a plataforma abriu
+ * análise por filial no passado. Sem esta pergunta, a VALKA CONSTRUÇÕES aparecia
+ * quatro vezes como ex-cliente (uma por filial) sendo cliente ativa o tempo todo.
+ */
+async function raizTemClienteAtivo(cnpj: string): Promise<boolean> {
+  const { count } = await supabaseAdmin
+    .from('clientes_onepay')
+    .select('cnpj', { count: 'exact', head: true })
+    .like('cnpj', `${cnpj.slice(0, 8)}%`)
+    .eq('status', 'active')
+  return (count ?? 0) > 0
+}
+
+/**
+ * Existe cliente ATIVO em outro CNPJ do mesmo grupo econômico?
+ *
+ * A prática antiga de abrir análise por SPE deixou este rastro: a SPE é veículo de
+ * obra e some quando a obra acaba, mas o cliente é a holding, que continua operando.
+ */
+async function grupoTemClienteAtivo(cnpj: string): Promise<boolean> {
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('grupo_id')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  // Sem grupo conhecido, tenta pelo universo: a empresa pode nem ter ficha ainda.
+  let grupoId = emp?.grupo_id ?? null
+  if (!grupoId) {
+    const { data: mu } = await supabaseAdmin
+      .from('mercado_universo')
+      .select('grupo_id')
+      .eq('cnpj', cnpj)
+      .maybeSingle()
+    grupoId = mu?.grupo_id ?? null
+  }
+  if (!grupoId) return false
+
+  const { data: irmas } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('cnpj')
+    .eq('grupo_id', grupoId)
+    .neq('cnpj', cnpj)
+  const cnpjs = (irmas ?? []).map((i) => i.cnpj)
+  if (cnpjs.length === 0) return false
+
+  const { count } = await supabaseAdmin
+    .from('clientes_onepay')
+    .select('cnpj', { count: 'exact', head: true })
+    .in('cnpj', cnpjs)
+    .eq('status', 'active')
+  return (count ?? 0) > 0
 }
 
 /**

@@ -40,6 +40,23 @@ export interface ContextoCliente {
   statusOnepay?: string | null
   /** Houve antecipação convertida (04e) nos últimos 60 dias? Também blinda. */
   converteuRecentemente?: boolean
+  /**
+   * Outro CNPJ da MESMA RAIZ (mesmos 8 primeiros dígitos) é cliente ativo.
+   *
+   * Filial não é empresa: é endereço da mesma pessoa jurídica. Uma análise de
+   * filial que venceu enquanto a matriz opera não é saída de cliente nenhum — na
+   * primeira carga isso pintou a VALKA CONSTRUÇÕES como ex-cliente QUATRO vezes,
+   * uma por filial, com ela ativa o tempo todo.
+   */
+  raizTemClienteAtivo?: boolean
+  /**
+   * Outro CNPJ do mesmo GRUPO ECONÔMICO é cliente ativo.
+   *
+   * Herança da prática antiga de abrir análise por SPE: a SPE é veículo de obra, o
+   * cliente é a holding. SPE com análise vencida e grupo operando é obra que
+   * acabou, não cliente que saiu.
+   */
+  grupoTemClienteAtivo?: boolean
 }
 
 export type SituacaoCnpj =
@@ -51,6 +68,13 @@ export type SituacaoCnpj =
   | 'analise_sem_cadastro'
   /** Seria ex-cliente, mas o temperature report diz que está ativo. Ninguém rebaixa. */
   | 'conflito'
+  /**
+   * Seria ex-cliente, mas outro CNPJ da mesma raiz ou do mesmo grupo é cliente
+   * ativo. NÃO é conflito de dado — é o desenho da carteira: filial e SPE não são
+   * clientes, a matriz e a holding são. Silencioso de propósito: notificar o Admin
+   * a cada obra encerrada de um cliente ativo seria alarme sobre o normal.
+   */
+  | 'grupo_ainda_cliente'
   /** Tem análise, nenhuma aprovada. Nunca foi cliente; nada a fazer. */
   | 'sem_analise_aprovada'
 
@@ -165,6 +189,17 @@ export function classificarCnpj(
 
   if (motivoConflito) {
     return { situacao: 'conflito', exClienteDesde: null, ultimaAprovada, motivoConflito }
+  }
+
+  /*
+   * A perda é do CLIENTE, e cliente é a matriz/holding — não a filial nem a SPE.
+   *
+   * Vem DEPOIS do conflito porque é mais específico: se o próprio CNPJ está ativo, o
+   * caso é de dado divergente e alguém precisa olhar. Aqui o próprio CNPJ realmente
+   * parou, e não há nada errado nisso — quem continua operando é o resto da casa.
+   */
+  if (contexto.raizTemClienteAtivo || contexto.grupoTemClienteAtivo) {
+    return { situacao: 'grupo_ainda_cliente', exClienteDesde: null, ultimaAprovada, motivoConflito: null }
   }
 
   // `exClienteDesde` é a MAIOR expiração entre as aprovadas: é o dia em que a última
