@@ -119,6 +119,13 @@ export const EVENTO_TIPOS = {
   COMISSAO_APURADA: 'comissao.apurada',
   COMISSAO_APROVADA: 'comissao.aprovada',
   VENDEDOR_SEM_ATIVIDADE: 'vendedor.sem_atividade',
+
+  // Ex-clientes pelas análises da plataforma (04h)
+  CLIENTE_TORNOU_EX: 'cliente.tornou_ex',
+  EXCLIENTE_CONFLITO_DADOS: 'excliente.conflito_dados',
+  EXCLIENTE_MOTIVO_DEFINIDO: 'excliente.motivo_definido',
+  ANALISE_PLATAFORMA_STATUS_ALTERADO: 'analise_plataforma.status_alterado',
+  ANALISE_SEM_CADASTRO: 'analise.sem_cadastro',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -206,6 +213,11 @@ export const EVENTO_LABELS: Record<string, string> = {
   'comissao.apurada': 'Comissão apurada',
   'comissao.aprovada': 'Comissão aprovada',
   'vendedor.sem_atividade': 'Vendedor sem atividade',
+  'cliente.tornou_ex': 'Virou ex-cliente',
+  'excliente.conflito_dados': 'Ex-cliente com dado conflitante',
+  'excliente.motivo_definido': 'Motivo de saída definido',
+  'analise_plataforma.status_alterado': 'Análise da plataforma mudou de status',
+  'analise.sem_cadastro': 'Análise aprovada sem cadastro',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

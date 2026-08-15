@@ -15,6 +15,7 @@ import {
   dispararReceita,
   dispararReclassificacao,
   dispararSincronizarOnepay,
+  dispararSincronizarAnalisesPlataforma,
   dispararSincronizarCertificados,
   dispararLoteRadar,
   motivoLoteNaoExecutavel,
@@ -451,6 +452,20 @@ app.post('/jobs/radar/reestimar', (_req: Request, res: Response, next: NextFunct
 const enviarAnalisesSchema = z.object({ analise_ids: z.array(z.string().uuid()).optional() })
 
 /** Mensal: calibra na carteira, pontua a base e calcula o potencial, NESTA ordem. */
+/**
+ * Análises de crédito da plataforma + detecção de ex-clientes (04h §3). Devolve
+ * `ingestao_id` e não `job_id`: esta é uma ingestão registrada, e é por ela que a
+ * página de Ingestões responde "de quando é esta lista?".
+ */
+app.post('/jobs/credito/sync-analises-plataforma', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = await dispararSincronizarAnalisesPlataforma()
+    res.status(202).json({ ingestao_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
 app.post('/jobs/credito/mensal', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararCreditoMensal(), status: 'executando' })

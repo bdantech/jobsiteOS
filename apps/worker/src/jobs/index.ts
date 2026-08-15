@@ -55,6 +55,7 @@ import {
   pollDecisoes,
   syncAtradius,
 } from './credito/esteira.js'
+import { sincronizarAnalisesPlataforma } from './credito/sync-analises-plataforma.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
@@ -90,6 +91,7 @@ export type TipoJob =
   | 'protestos-empresa'
   | 'contatos-empresa'
   | 'certificados'
+  | 'analises-plataforma'
   | 'antecipacao-sync-nfs'
   | 'antecipacao-sync-antecipacoes'
   | 'antecipacao-calibrar'
@@ -392,6 +394,37 @@ export async function dispararSincronizarCertificados(): Promise<string> {
       await falharIngestao(id, 'onepay_certificados', erro)
     } finally {
       emExecucao.delete('certificados')
+    }
+  })()
+
+  return id
+}
+
+/**
+ * Sync das análises de crédito da plataforma + detecção de ex-clientes (04h §3).
+ *
+ * Ingestão registrada (`onepay_credit_analyses`) e não job avulso, pela mesma razão
+ * dos certificados: quando a lista de ex-clientes estiver com cara de desatualizada,
+ * a pergunta vai ser feita na página de Ingestões, não no log do worker.
+ */
+export async function dispararSincronizarAnalisesPlataforma(): Promise<string> {
+  const id = await abrirIngestao('onepay_credit_analyses')
+  reservar('analises-plataforma', id)
+
+  void (async () => {
+    try {
+      const r = await sincronizarAnalisesPlataforma()
+      await concluirIngestao(
+        id,
+        'onepay_credit_analyses',
+        { linhas_processadas: r.itens, linhas_atualizadas: r.analises_upsert },
+        { analises: r },
+      )
+    } catch (erro) {
+      logger.error({ id, erro: String(erro) }, 'Sync de análises da plataforma falhou.')
+      await falharIngestao(id, 'onepay_credit_analyses', erro)
+    } finally {
+      emExecucao.delete('analises-plataforma')
     }
   })()
 

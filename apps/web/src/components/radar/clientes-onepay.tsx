@@ -6,12 +6,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Search, ShieldCheck } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
-import { sincronizarOnepayAction } from '@/actions/radar'
+import { sincronizarAnalisesPlataformaAction, sincronizarOnepayAction } from '@/actions/radar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buscarClientesOnepay, radarKeys } from './queries'
+import { AnalisesSemCadastro } from './analises-sem-cadastro'
+import { ExClientesLista } from './ex-clientes'
 
 const brl = (n: number | null) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const pct = (n: number | null) => `${Math.round((Number(n) || 0) * 100)}%`
@@ -40,6 +42,20 @@ const DORMENTE = 15
  * já filtrando por ativa+passiva mostraria 4 linhas de 50 e pareceria defeito.
  */
 type FiltroGestao = 'todos' | 'prospeccao_ativa' | 'passivo'
+
+/**
+ * Atuais é o default e é o comportamento de sempre (04h §4). "Ambos" existe porque a
+ * pergunta "esta empresa é nossa cliente?" às vezes não sabe a resposta de antemão —
+ * e é exatamente nesse caso que obrigar a escolher a lista certa antes de procurar
+ * transformaria uma busca em duas.
+ */
+type Visao = 'atuais' | 'ex' | 'ambos'
+
+const VISOES: readonly { valor: Visao; rotulo: string }[] = [
+  { valor: 'atuais', rotulo: 'Atuais' },
+  { valor: 'ex', rotulo: 'Ex-clientes' },
+  { valor: 'ambos', rotulo: 'Ambos' },
+]
 
 const GESTAO_OPCOES: readonly { valor: FiltroGestao; rotulo: string }[] = [
   { valor: 'todos', rotulo: 'Todos' },
@@ -92,6 +108,8 @@ export function ClientesOnepay() {
   const [sincronizando, setSincronizando] = React.useState(false)
   const [termo, setTermo] = React.useState('')
   const [gestao, setGestao] = React.useState<FiltroGestao>('todos')
+  const [visao, setVisao] = React.useState<Visao>('atuais')
+  const [semCadastro, setSemCadastro] = React.useState(false)
 
   const todos = React.useMemo(() => clientes.data ?? [], [clientes.data])
   const filtrados = React.useMemo(
@@ -127,6 +145,14 @@ export function ClientesOnepay() {
       toast.error(r.data.aviso ?? 'O worker não aceitou o sync.')
       return
     }
+    /*
+     * As análises de crédito vão junto, na MESMA ordem do cron diário: o temperature
+     * report primeiro (é a fonte de verdade de "cliente atual"), a detecção de saída
+     * depois. Um botão que atualizasse só metade faria a aba de ex-clientes ficar
+     * permanentemente um dia atrás da de atuais, na mesma tela.
+     */
+    void sincronizarAnalisesPlataformaAction()
+
     toast.success('Sync enfileirado. Os clientes aparecem em instantes — atualizando…')
     // O sync roda em background no worker; recarrega algumas vezes enquanto chega.
     let tentativas = 0
@@ -161,7 +187,75 @@ export function ClientesOnepay() {
         </div>
       </div>
 
-      {clientes.isPending ? (
+      {/*
+       * A VISÃO, no topo da aba e acima de tudo (04h §4): "atuais" é o comportamento
+       * de sempre e continua sendo o default — quem abre esta tela está trabalhando a
+       * carteira viva. Ex-clientes fica a um clique porque a perda é invisível por
+       * natureza: o cliente que sai não gera evento, ele só para de aparecer.
+       *
+       * A busca é COMPARTILHADA pelas três listas: procurar uma empresa pelo nome não
+       * deveria depender de acertar antes em qual delas ela está — e quando a pessoa
+       * não sabe se a empresa saiu ou não, essa é justamente a pergunta.
+       */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div
+          role="group"
+          aria-label="Filtrar entre clientes atuais e ex-clientes"
+          className="flex shrink-0 items-center rounded-md border border-border p-0.5"
+        >
+          {VISOES.map((v) => (
+            <button
+              key={v.valor}
+              type="button"
+              aria-pressed={visao === v.valor}
+              onClick={() => setVisao(v.valor)}
+              className={`rounded px-2.5 py-1 text-sm transition-colors ${
+                visao === v.valor
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {v.rotulo}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative min-w-64 flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={termo}
+            onChange={(e) => setTermo(e.target.value)}
+            placeholder="Buscar por nome ou CNPJ"
+            className="pl-9"
+            aria-label="Buscar clientes"
+          />
+        </div>
+
+        {/*
+         * Link discreto, e não uma quarta aba: a lista de "analisada e nunca
+         * cadastrada" é pequena e episódica, e promovê-la a par de "atuais" daria a
+         * ela um peso permanente que ela não tem.
+         */}
+        <button
+          type="button"
+          onClick={() => setSemCadastro((v) => !v)}
+          aria-pressed={semCadastro}
+          className={`shrink-0 text-sm underline-offset-4 hover:underline ${
+            semCadastro ? 'font-medium text-foreground' : 'text-muted-foreground'
+          }`}
+        >
+          Análise aprovada, nunca cadastrada
+        </button>
+      </div>
+
+      {semCadastro ? <AnalisesSemCadastro termo={termo} /> : null}
+
+      {visao !== 'atuais' ? <ExClientesLista termo={termo} /> : null}
+
+      {visao === 'ex' ? null : clientes.isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : todos.length === 0 ? (
         <Card>
@@ -172,19 +266,6 @@ export function ClientesOnepay() {
       ) : (
         <Card>
           <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
-            <div className="relative min-w-64 flex-1">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={termo}
-                onChange={(e) => setTermo(e.target.value)}
-                placeholder="Buscar por nome ou CNPJ"
-                className="pl-9"
-                aria-label="Buscar clientes Onepay"
-              />
-            </div>
             {/*
              * O toggle de gestão. Segmentado e não um Select porque são três opções
              * fixas que se comparam entre si — o número ao lado de cada uma é metade

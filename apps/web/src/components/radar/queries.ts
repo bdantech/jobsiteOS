@@ -25,6 +25,11 @@ export const radarKeys = {
   loteItensPorStatus: (id: string, status: string) =>
     ['radar', 'lote', id, 'itens', status] as const,
   clientes: () => ['radar', 'clientes'] as const,
+  exClientes: () => ['radar', 'ex-clientes'] as const,
+  exCliente: (empresaId: string) => ['radar', 'ex-clientes', empresaId] as const,
+  exClientesMotivos: (meses: number) => ['radar', 'ex-clientes', 'motivos', meses] as const,
+  analisesSemCadastro: () => ['radar', 'analises-sem-cadastro'] as const,
+  motivosSaida: () => ['radar', 'motivos-saida'] as const,
   supressao: () => ['radar', 'supressao'] as const,
   config: () => ['radar', 'config'] as const,
   spesMonitoramento: (grupoId: string) => ['radar', 'monitoramento', grupoId] as const,
@@ -212,6 +217,80 @@ export async function buscarClientesOnepay(): Promise<ClienteOnepay[]> {
     .limit(500)
   if (error) throw new Error(error.message)
   return (data ?? []) as ClienteOnepay[]
+}
+
+// ─── Ex-clientes (04h) ──────────────────────────────────────────────────────
+
+export type ExCliente = Views<'ex_clientes'>
+export type AnaliseSemCadastro = Views<'analises_sem_cadastro'>
+
+/**
+ * Quem foi cliente e saiu. Ordenado por data de saída DESC, e não por limite: quem
+ * saiu semana passada ainda lembra do nosso nome, e é com ele que uma tentativa de
+ * reativação tem chance. O maior limite de 2023 é uma saudade, não um lead.
+ */
+export async function buscarExClientes(): Promise<ExCliente[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('ex_clientes')
+    .select('*')
+    .order('ex_cliente_desde', { ascending: false, nullsFirst: false })
+    .limit(1000)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ExCliente[]
+}
+
+/**
+ * Análise aprovada e nunca cadastrada: alguém pagou a análise, o crédito saiu e a
+ * empresa nunca operou. Ordenado por limite — aqui o tamanho É a temperatura, porque
+ * não há relação passada para pesar, só a oportunidade.
+ */
+export async function buscarAnalisesSemCadastro(): Promise<AnaliseSemCadastro[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('analises_sem_cadastro')
+    .select('*')
+    .order('credit_limit', { ascending: false, nullsFirst: false })
+    .limit(1000)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as AnaliseSemCadastro[]
+}
+
+/** A linha de UM ex-cliente — o que a ficha (Company 360) precisa, com a sugestão. */
+export async function buscarExCliente(empresaId: string): Promise<ExCliente | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('ex_clientes')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as ExCliente | null) ?? null
+}
+
+export interface MotivoSaida {
+  motivo: string
+  total: number
+}
+
+export async function buscarExClientesPorMotivo(meses: number): Promise<MotivoSaida[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('ex_clientes_por_motivo', { p_meses: meses })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as MotivoSaida[]
+}
+
+/** A lista fechada de motivos de saída, para o dropdown inline. */
+export async function buscarMotivosSaida(): Promise<Tables<'motivos_perda'>[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('motivos_perda')
+    .select('*')
+    .eq('contexto', 'ex_cliente')
+    .eq('ativo', true)
+    .order('ordem', { ascending: true })
+  if (error) throw new Error(error.message)
+  return data ?? []
 }
 
 export async function buscarSupressao(): Promise<Tables<'supressao'>[]> {

@@ -1,11 +1,13 @@
 import {
   ativarScorecardSchema,
+  definirExClienteMotivoSchema,
   moverAnaliseSchema,
   registrarDocSchema,
   salvarCreditoConfigSchema,
   salvarScorecardSchema,
   solicitarAnaliseSchema,
   type AtivarScorecardInput,
+  type DefinirExClienteMotivoInput,
   type MoverAnaliseInput,
   type RegistrarDocInput,
   type SalvarCreditoConfigInput,
@@ -73,6 +75,21 @@ export async function ativarScorecardVersao(
   const { data, error } = await supabase.rpc('app_ativar_scorecard_versao', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'scorecard_versoes'>
+}
+
+/**
+ * POR QUE o cliente saiu (04h §2). O sync detecta o fato e grava "Motivo
+ * desconhecido"; isto é a parte humana — e é a única parte que responde a pergunta
+ * que a lista de ex-clientes existe para fazer.
+ */
+export async function definirExClienteMotivo(
+  supabase: Supabase,
+  input: DefinirExClienteMotivoInput | unknown,
+): Promise<Tables<'empresas'>> {
+  const dados = parseOuFalhar(definirExClienteMotivoSchema, input)
+  const { data, error } = await supabase.rpc('app_definir_ex_cliente_motivo', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'empresas'>
 }
 
 export async function salvarCreditoConfig(

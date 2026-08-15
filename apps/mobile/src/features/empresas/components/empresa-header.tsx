@@ -3,7 +3,7 @@ import { View } from 'react-native'
 
 import { Badge } from '@/components/ui/badge'
 import { Text } from '@/components/ui/text'
-import { empresaTitulo, estagioLabel, estagioVariant, localizacao, tipoLabel } from '../format'
+import { dataCurta, empresaTitulo, estagioLabel, estagioVariant, localizacao, tipoLabel } from '../format'
 import type { Empresa } from '../types'
 
 /** razao_social is shown under the title only when the title is the fantasia name. */
@@ -31,6 +31,16 @@ export function EmpresaHeader({ empresa }: { empresa: Empresa }) {
         <Badge variant="outline">
           <Text>{tipoLabel(empresa.tipo)}</Text>
         </Badge>
+        {/*
+         * "Ex-cliente" sozinho cala a metade que decide a ligação: quem saiu no mês
+         * passado ainda lembra de nós, quem saiu em 2023 é outra conversa. O vendedor
+         * que abre esta ficha na obra precisa do "desde quando" na mesma linha.
+         */}
+        {empresa.estagio === 'ex_cliente' && empresa.ex_cliente_desde ? (
+          <Badge variant="outline">
+            <Text>Desde {dataCurta(empresa.ex_cliente_desde)}</Text>
+          </Badge>
+        ) : null}
       </View>
     </View>
   )

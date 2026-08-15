@@ -30,6 +30,7 @@ import { AnaliseFinanceira } from './analise-financeira'
 import { MonitoramentoProtesto } from './monitoramento-protesto'
 import { CadastroRfb } from '@/components/cadastro/cadastro-rfb'
 import { EmpresaForm } from './empresa-form'
+import { ExClienteMotivo } from './ex-cliente-motivo'
 import { EmpresaAcaoEstagio } from './empresa-header'
 import { EmpresaContatos } from './empresa-contatos'
 import { FaturamentoEquipe } from './faturamento-equipe'
@@ -204,6 +205,25 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                 <>
                   <EstagioBadge estagio={data.estagio} />
                   <Badge variant="secondary">{labelTipo(data.tipo)}</Badge>
+                  {/*
+                   * O "desde quando" ao lado do estágio, e não escondido numa aba: a
+                   * primeira pergunta sobre um ex-cliente é há quanto tempo ele saiu,
+                   * porque é o que decide se ainda vale ligar. O badge de estágio
+                   * sozinho diz "Ex-cliente" e cala justamente a metade que importa.
+                   */}
+                  {data.estagio === 'ex_cliente' && data.ex_cliente_desde ? (
+                    <Badge variant="outline" className="text-destructive">
+                      Ex-cliente desde {formatData(data.ex_cliente_desde)}
+                    </Badge>
+                  ) : null}
+                  {data.teve_analise_sem_cadastro ? (
+                    <Badge
+                      variant="outline"
+                      title="Teve análise de crédito aprovada na plataforma e nunca foi cadastrada."
+                    >
+                      Analisada sem cadastro
+                    </Badge>
+                  ) : null}
                 </>
               }
               abaixoDoNome={
@@ -243,6 +263,20 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                * dados da RFB não são duplicados em `empresas` de propósito.
                */}
               <TabsContent value="dados" className="mt-0 space-y-4">
+                {/*
+                 * Antes do cadastro da Receita quando a empresa saiu: para um
+                 * ex-cliente, "o que aconteceu aqui" vem antes de "quem é esta
+                 * empresa" — e a classificação é a única coisa nesta ficha que o
+                 * sistema não consegue preencher sozinho.
+                 */}
+                {data.estagio === 'ex_cliente' ? (
+                  <ExClienteMotivo
+                    empresaId={data.id}
+                    desde={data.ex_cliente_desde}
+                    motivoId={data.ex_cliente_motivo}
+                    observacao={data.ex_cliente_motivo_obs}
+                  />
+                ) : null}
                 <CadastroRfb cnpj={data.cnpj} />
                 {/*
                  * Faturamento & Equipe entre o cadastro da Receita e o formulário: é a

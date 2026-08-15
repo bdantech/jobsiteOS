@@ -118,6 +118,40 @@ export const salvarCreditoConfigSchema = z.object({
 })
 export type SalvarCreditoConfigInput = z.infer<typeof salvarCreditoConfigSchema>
 
+// ─── Ex-clientes (04h) ──────────────────────────────────────────────────────
+
+export const definirExClienteMotivoSchema = z.object({
+  empresa_id: z.string().uuid(),
+  motivo_id: z
+    .string()
+    .uuid()
+    .describe('Id de motivos_perda no contexto `ex_cliente`. O RPC recusa outros contextos.'),
+  observacao: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .nullable()
+    .describe('Detalhe livre do caso — o que a lista fechada de motivos não cobre.'),
+})
+export type DefinirExClienteMotivoInput = z.infer<typeof definirExClienteMotivoSchema>
+
+export const exClientesSchema = z.object({
+  meses: z
+    .number()
+    .int()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe('Só quem saiu nos últimos N meses. Ausente = todos os ex-clientes.'),
+})
+export type ExClientesInput = z.infer<typeof exClientesSchema>
+
+export const statusCnpjSchema = z.object({
+  cnpj: z.string().describe('CNPJ (14 dígitos, com ou sem pontuação).'),
+})
+export type StatusCnpjInput = z.infer<typeof statusCnpjSchema>
+
 // ─── Tools de leitura (IA) ──────────────────────────────────────────────────
 
 export const potencialEmpresaSchema = z.object({

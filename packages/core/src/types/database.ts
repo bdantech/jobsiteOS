@@ -49,6 +49,93 @@ export type Database = {
           },
         ]
       }
+      analises_plataforma: {
+        Row: {
+          available_limit: number | null
+          bill_fine: number | null
+          cnpj: string
+          commission_percent: number | null
+          company_name: string | null
+          consumed_limit: number | null
+          credit_limit: number | null
+          empresa_cadastrada: boolean
+          expiration_date: string | null
+          fee_d0: number | null
+          fee_d1: number | null
+          fidc_ready: boolean | null
+          has_insurance: boolean | null
+          has_referral: boolean | null
+          id_externo: number
+          invest_back: Json | null
+          max_anticipation_value: number | null
+          max_invoice_deadline_days: number | null
+          min_fee_d0: number | null
+          min_fee_d1: number | null
+          monthly_rate_d0: number | null
+          monthly_rate_d1: number | null
+          onepay_company_id: number | null
+          raw: Json | null
+          sincronizada_em: string
+          status: string
+        }
+        Insert: {
+          available_limit?: number | null
+          bill_fine?: number | null
+          cnpj: string
+          commission_percent?: number | null
+          company_name?: string | null
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          empresa_cadastrada: boolean
+          expiration_date?: string | null
+          fee_d0?: number | null
+          fee_d1?: number | null
+          fidc_ready?: boolean | null
+          has_insurance?: boolean | null
+          has_referral?: boolean | null
+          id_externo: number
+          invest_back?: Json | null
+          max_anticipation_value?: number | null
+          max_invoice_deadline_days?: number | null
+          min_fee_d0?: number | null
+          min_fee_d1?: number | null
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          onepay_company_id?: number | null
+          raw?: Json | null
+          sincronizada_em?: string
+          status: string
+        }
+        Update: {
+          available_limit?: number | null
+          bill_fine?: number | null
+          cnpj?: string
+          commission_percent?: number | null
+          company_name?: string | null
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          empresa_cadastrada?: boolean
+          expiration_date?: string | null
+          fee_d0?: number | null
+          fee_d1?: number | null
+          fidc_ready?: boolean | null
+          has_insurance?: boolean | null
+          has_referral?: boolean | null
+          id_externo?: number
+          invest_back?: Json | null
+          max_anticipation_value?: number | null
+          max_invoice_deadline_days?: number | null
+          min_fee_d0?: number | null
+          min_fee_d1?: number | null
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          onepay_company_id?: number | null
+          raw?: Json | null
+          sincronizada_em?: string
+          status?: string
+        }
+        Relationships: []
+      }
       antecipacao_config: {
         Row: {
           atualizado_em: string
@@ -1039,6 +1126,10 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          teve_analise_sem_cadastro: boolean
         }
         Insert: {
           atualizado_em?: string
@@ -1098,6 +1189,10 @@ export type Database = {
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
+          ex_cliente_desde?: string | null
+          ex_cliente_motivo?: string | null
+          ex_cliente_motivo_obs?: string | null
+          teve_analise_sem_cadastro?: boolean
         }
         Update: {
           atualizado_em?: string
@@ -1157,6 +1252,10 @@ export type Database = {
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
+          ex_cliente_desde?: string | null
+          ex_cliente_motivo?: string | null
+          ex_cliente_motivo_obs?: string | null
+          teve_analise_sem_cadastro?: boolean
         }
         Relationships: [
           {
@@ -3234,6 +3333,69 @@ export type Database = {
     }
 
     Views: {
+      analises_plataforma_atual: {
+        Row: {
+          available_limit: number | null
+          cnpj: string | null
+          company_name: string | null
+          consumed_limit: number | null
+          credit_limit: number | null
+          empresa_cadastrada: boolean | null
+          expiration_date: string | null
+          fee_d0: number | null
+          fee_d1: number | null
+          fidc_ready: boolean | null
+          has_insurance: boolean | null
+          id_externo: number | null
+          max_anticipation_value: number | null
+          monthly_rate_d0: number | null
+          monthly_rate_d1: number | null
+          onepay_company_id: number | null
+          sincronizada_em: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
+      analises_sem_cadastro: {
+        Row: {
+          cnpj: string | null
+          credit_limit: number | null
+          empresa_id: string | null
+          expiration_date: string | null
+          monthly_rate_d0: number | null
+          municipio: string | null
+          nome: string | null
+          sincronizada_em: string | null
+          status: string | null
+          uf: string | null
+          vigente: boolean | null
+        }
+        Relationships: []
+      }
+      ex_clientes: {
+        Row: {
+          cnpj: string | null
+          consumo_historico: number | null
+          empresa_id: string | null
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_label: string | null
+          ex_cliente_motivo_obs: string | null
+          gestao_operacao: string | null
+          meses_desde: number | null
+          motivo_sugerido: string | null
+          motivo_sugerido_label: string | null
+          motivo_sugerido_evidencia: string | null
+          municipio: string | null
+          nome: string | null
+          uf: string | null
+          ultima_analise_expirou_em: string | null
+          ultima_analise_status: string | null
+          ultima_taxa_d0: number | null
+          ultimo_limite: number | null
+        }
+        Relationships: []
+      }
       analise_vigente: {
         Row: {
           analise_estagio: string | null
@@ -3455,6 +3617,13 @@ export type Database = {
           tem_protesto: boolean | null
           tipo: string | null
           uf: string | null
+          e_ex_cliente: boolean | null
+          ex_cliente_desde: string | null
+          ex_cliente_meses: number | null
+          ex_cliente_motivo: string | null
+          teve_analise_sem_cadastro: boolean | null
+          ultima_analise_limite: number | null
+          ultima_analise_expirou_em: string | null
         }
         Relationships: [
           {
@@ -4112,6 +4281,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      app_definir_ex_cliente_motivo: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["empresas"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      ex_clientes_por_motivo: {
+        Args: { p_meses?: number }
+        Returns: Json
       }
       app_marcar_fornecedor_sem_interesse: {
         Args: { p: Json }

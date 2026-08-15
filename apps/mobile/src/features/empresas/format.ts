@@ -66,6 +66,18 @@ export function formatDateTime(iso: string): string {
   return dateTimeFormatter.format(new Date(iso))
 }
 
+/**
+ * Uma data `YYYY-MM-DD` do Postgres em `dd/mm/aaaa`, sem passar por `new Date()`.
+ *
+ * `new Date('2026-08-15')` é interpretado como UTC e, no fuso de São Paulo, volta
+ * como 14/08 — um dia a menos em toda data pura do banco. O corte por string não
+ * tem fuso para errar.
+ */
+export function dataCurta(iso: string): string {
+  const [a, m, d] = iso.split('T')[0]!.split('-')
+  return a && m && d ? `${d}/${m}/${a}` : iso
+}
+
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',

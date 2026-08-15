@@ -538,6 +538,65 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     coluna: 'e_cliente_onepay',
     descricao: 'Empresa presente na base de clientes Onepay (sync diário).',
   },
+
+  // ─── Ex-clientes (04h) ────────────────────────────────────────────────────
+  // O que estas cinco existem para permitir: "saíram por taxa alta nos últimos 6
+  // meses e tinham mais de R$ 1 mi de limite" — o alvo de uma campanha de
+  // reativação com proposta recalibrada, que é a razão de detectar a saída.
+  {
+    id: 'e_ex_cliente',
+    label: 'É ex-cliente',
+    tipo: 'booleano',
+    coluna: 'e_ex_cliente',
+    descricao:
+      'Foi cliente e não tem mais análise de crédito vigente. Detectado pelo sync de '
+      + 'análises da plataforma (04h) — não confundir com cliente dormente, que ainda tem limite.',
+  },
+  {
+    id: 'ex_cliente_meses',
+    label: 'Saiu há (meses)',
+    tipo: 'numero',
+    coluna: 'ex_cliente_meses',
+    descricao:
+      'Meses inteiros desde a expiração da última análise aprovada. Em meses e não em '
+      + 'data porque a pergunta de campanha é "saiu há menos de 6 meses" — quanto mais '
+      + 'recente, mais quente. Nulo para quem não é ex-cliente.',
+  },
+  {
+    id: 'ex_cliente_motivo',
+    label: 'Motivo da saída',
+    tipo: 'texto',
+    coluna: 'ex_cliente_motivo',
+    descricao:
+      'O motivo classificado à mão (motivos_perda de contexto ex_cliente). Nulo = '
+      + 'ninguém classificou ainda, que é diferente de "Motivo desconhecido" — este é '
+      + 'uma resposta, aquele é a ausência dela.',
+  },
+  {
+    id: 'teve_analise_sem_cadastro',
+    label: 'Análise aprovada sem cadastro',
+    tipo: 'booleano',
+    coluna: 'teve_analise_sem_cadastro',
+    descricao:
+      'Teve análise aprovada na plataforma e NUNCA foi cadastrada. Não é ex-cliente: '
+      + 'nunca operou. O crédito já saiu e ninguém usou.',
+  },
+  {
+    id: 'ultima_analise_limite',
+    label: 'Limite da última análise',
+    tipo: 'numero',
+    coluna: 'ultima_analise_limite',
+    descricao:
+      'Limite aprovado na última análise da plataforma (aprovada ganha de expirada). É '
+      + 'o tamanho da relação que existiu — quem saiu com R$ 2 mi é outra conversa.',
+  },
+  {
+    id: 'ultima_analise_expirou_em',
+    label: 'Última análise expira em',
+    tipo: 'data',
+    coluna: 'ultima_analise_expirou_em',
+    descricao: 'Validade da última análise. No passado para ex-cliente, no futuro para vigente.',
+  },
   {
     id: 'dias_sem_antecipar',
     label: 'Dias sem antecipar',

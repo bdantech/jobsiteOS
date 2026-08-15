@@ -5,11 +5,15 @@ import {
   FAIXA_SCORE_LABELS,
   KNOCKOUT_LABELS,
   MOTIVO_SEM_POTENCIAL_LABELS,
+  exClientesSchema,
   potencialEmpresaSchema,
   scoreEmpresaSchema,
   solicitarAnaliseSchema,
+  statusCnpjSchema,
   statusEsteiraSchema,
   type EstagioAnalise,
+  type ExClientesInput,
+  type StatusCnpjInput,
   type FaixaScore,
   type Knockout,
   type PotencialEmpresaInput,
@@ -155,6 +159,106 @@ async function statusEsteira(input: StatusEsteiraInput, ctx: ToolContext) {
   }
 }
 
+/**
+ * Ex-clientes (04h §6). Devolve SEMPRE o tempo desde a saída junto do limite: um
+ * ex-cliente de R$ 2 mi que saiu em 2023 e um de R$ 300 mil que saiu mês passado são
+ * leads de temperatura oposta, e o valor sozinho ordenaria os dois ao contrário.
+ */
+async function exClientes(input: ExClientesInput, ctx: ToolContext) {
+  let q = ctx.supabase
+    .from('ex_clientes')
+    .select('nome, cnpj, ex_cliente_desde, meses_desde, ultimo_limite, consumo_historico, ex_cliente_motivo_label')
+    .order('ex_cliente_desde', { ascending: false, nullsFirst: false })
+  if (input.meses) {
+    const corte = new Date()
+    corte.setMonth(corte.getMonth() - input.meses)
+    q = q.gte('ex_cliente_desde', corte.toISOString().slice(0, 10))
+  }
+  const { data, error } = await q.limit(200)
+  if (error) throw new Error(error.message)
+
+  const linhas = data ?? []
+  return {
+    total: linhas.length,
+    janela: input.meses ? `últimos ${input.meses} meses` : 'todos',
+    limite_somado: brl(linhas.reduce((s, l) => s + Number(l.ultimo_limite ?? 0), 0)),
+    ex_clientes: linhas.map((l) => ({
+      nome: l.nome,
+      cnpj: l.cnpj ? formatCnpj(l.cnpj) : null,
+      saiu_em: l.ex_cliente_desde,
+      ha_meses: l.meses_desde,
+      ultimo_limite: brl(l.ultimo_limite),
+      consumo_historico: brl(l.consumo_historico),
+      // Nulo é "ninguém classificou", que é diferente de "Motivo desconhecido".
+      motivo: l.ex_cliente_motivo_label ?? 'não classificado',
+    })),
+    route: '/empresas?tab=clientes',
+  }
+}
+
+/**
+ * A situação consolidada de UM CNPJ, que é a pergunta que ninguém consegue responder
+ * hoje sem abrir três telas: cliente atual, ex-cliente desde X, análise sem cadastro,
+ * ou nunca analisado.
+ *
+ * A ordem das checagens é a ordem da autoridade: o temperature report decide "cliente
+ * atual" e ganha de tudo (04h §3), depois o estágio, depois as análises.
+ */
+async function statusCnpj(input: StatusCnpjInput, ctx: ToolContext) {
+  const cnpj = normalizeCnpj(input.cnpj)
+
+  const [empresa, cliente, analise] = await Promise.all([
+    ctx.supabase
+      .from('empresas')
+      .select('id, razao_social, estagio, ex_cliente_desde, teve_analise_sem_cadastro')
+      .eq('cnpj', cnpj)
+      .maybeSingle(),
+    ctx.supabase.from('clientes_onepay').select('status, last_anticipation').eq('cnpj', cnpj).maybeSingle(),
+    ctx.supabase
+      .from('analises_plataforma_atual')
+      .select('status, expiration_date, credit_limit, empresa_cadastrada')
+      .eq('cnpj', cnpj)
+      .maybeSingle(),
+  ])
+
+  const e = empresa.data
+  const c = cliente.data
+  const a = analise.data
+
+  const situacao = c?.status === 'active'
+    ? 'cliente_atual'
+    : e?.estagio === 'ex_cliente'
+      ? 'ex_cliente'
+      : a && !a.empresa_cadastrada && a.status === 'approved'
+        ? 'analise_sem_cadastro'
+        : a
+          ? 'analisada'
+          : 'nunca_analisada'
+
+  const RESUMO: Record<string, string> = {
+    cliente_atual: 'Cliente ativo no temperature report.',
+    ex_cliente: `Ex-cliente desde ${e?.ex_cliente_desde ?? '—'}: a última análise aprovada venceu e não foi renovada.`,
+    analise_sem_cadastro: 'Tem análise APROVADA na plataforma e NUNCA foi cadastrada — nunca operou.',
+    analisada: 'Passou por análise de crédito, mas não está aprovada e vigente.',
+    nunca_analisada: 'Nenhuma análise de crédito da plataforma para este CNPJ.',
+  }
+
+  return {
+    cnpj: formatCnpj(cnpj),
+    nome: e?.razao_social ?? null,
+    situacao,
+    resumo: RESUMO[situacao],
+    estagio: e?.estagio ?? null,
+    ex_cliente_desde: e?.ex_cliente_desde ?? null,
+    teve_analise_sem_cadastro: e?.teve_analise_sem_cadastro ?? false,
+    ultima_analise: a
+      ? { status: a.status, validade: a.expiration_date, limite: brl(a.credit_limit) }
+      : null,
+    ultima_antecipacao: c?.last_anticipation ?? null,
+    route: e ? `/empresas/${e.id}` : `/mercado/universo/${cnpj}`,
+  }
+}
+
 export const creditoModule: AppModule = {
   id: 'credito',
   name: 'Crédito',
@@ -194,6 +298,29 @@ export const creditoModule: AppModule = {
       inputSchema: statusEsteiraSchema,
       mutates: false,
       execute: (input, ctx) => statusEsteira(input as StatusEsteiraInput, ctx),
+    },
+    {
+      id: 'clientes.ex_clientes',
+      name: 'Ex-clientes',
+      description:
+        'Quem FOI cliente e saiu: a última análise de crédito aprovada venceu sem renovação. ' +
+        'Devolve há quantos meses saiu, o último limite aprovado, o consumo histórico e o motivo ' +
+        'classificado. Janela opcional em meses. Não confundir com cliente dormente, que ainda ' +
+        'tem limite vigente e só parou de antecipar.',
+      inputSchema: exClientesSchema,
+      mutates: false,
+      execute: (input, ctx) => exClientes(input as ExClientesInput, ctx),
+    },
+    {
+      id: 'clientes.status_cnpj',
+      name: 'Situação consolidada de um CNPJ',
+      description:
+        'Responde, para UM CNPJ: cliente atual, ex-cliente desde X, análise aprovada sem ' +
+        'cadastro (nunca operou), analisada sem aprovação vigente, ou nunca analisada. Cruza ' +
+        'temperature report, estágio da empresa e análises da plataforma numa resposta só.',
+      inputSchema: statusCnpjSchema,
+      mutates: false,
+      execute: (input, ctx) => statusCnpj(input as StatusCnpjInput, ctx),
     },
     {
       id: 'credito.solicitar_analise',

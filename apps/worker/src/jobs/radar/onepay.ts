@@ -194,17 +194,48 @@ async function resolverEmpresa(
 ): Promise<{ empresaId: string | null; novo: boolean; promovido: boolean; eventos: number }> {
   const { data: existente } = await supabaseAdmin
     .from('empresas')
-    .select('id, estagio')
+    .select('id, estagio, ex_cliente_desde')
     .eq('cnpj', cnpj)
     .maybeSingle()
 
   if (existente) {
     if (existente.estagio !== 'cliente') {
-      await supabaseAdmin.from('empresas').update({ estagio: 'cliente' }).eq('id', existente.id)
-      await emitirEvento(existente.id, EVENTO_TIPOS.ESTAGIO_ALTERADO, {
-        titulo: 'Promovido a cliente', resumo: `${item.name ?? cnpj} detectado como cliente Onepay.`,
-        url: `/empresas/${existente.id}`, de: existente.estagio, para: 'cliente',
-      })
+      /*
+       * A REATIVAÇÃO (04h §3.3). Voltar de `ex_cliente` para `cliente` não é a mesma
+       * promoção que sair de `prospect`: é uma volta, e ela precisa limpar
+       * `ex_cliente_desde` — senão a empresa continua na lista de ex-clientes,
+       * carregando uma data de saída que já não vale, e alguém liga para reativar
+       * quem já voltou.
+       *
+       * `ex_cliente_motivo` é limpo junto: o motivo descreve UMA saída. Mantê-lo
+       * depois da volta faria o gráfico de churn contar de novo, no mês seguinte, um
+       * cliente que está operando. O histórico não se perde — os eventos
+       * `cliente.tornou_ex` e `cliente.reativado` ficam na timeline, que é onde a
+       * história pertence.
+       */
+      const voltou = existente.estagio === 'ex_cliente'
+      await supabaseAdmin
+        .from('empresas')
+        .update({
+          estagio: 'cliente',
+          ...(voltou ? { ex_cliente_desde: null, ex_cliente_motivo: null, ex_cliente_motivo_obs: null } : {}),
+        })
+        .eq('id', existente.id)
+
+      if (voltou) {
+        await emitirEvento(existente.id, EVENTO_TIPOS.CLIENTE_REATIVADO, {
+          titulo: 'Ex-cliente reativado',
+          resumo: `${item.name ?? cnpj} voltou a aparecer no temperature report e é cliente de novo.`,
+          url: `/empresas/${existente.id}`,
+          cnpj,
+          ex_cliente_desde: existente.ex_cliente_desde,
+        })
+      } else {
+        await emitirEvento(existente.id, EVENTO_TIPOS.ESTAGIO_ALTERADO, {
+          titulo: 'Promovido a cliente', resumo: `${item.name ?? cnpj} detectado como cliente Onepay.`,
+          url: `/empresas/${existente.id}`, de: existente.estagio, para: 'cliente',
+        })
+      }
       return { empresaId: existente.id, novo: false, promovido: true, eventos: 1 }
     }
     return { empresaId: existente.id, novo: false, promovido: false, eventos: 0 }

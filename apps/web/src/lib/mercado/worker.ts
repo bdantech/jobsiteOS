@@ -390,6 +390,15 @@ export async function dispararReclassificacaoFunil(): Promise<DispararJobResulta
   return postar('/jobs/antecipacao/reclassificar', {}, 'antecipacao-reclassificar')
 }
 
+/**
+ * Análises de crédito da plataforma (04h): a fonte de quem FOI cliente e saiu.
+ * Encadeado ao temperature report no cron diário, e disponível sob demanda porque
+ * "este cliente saiu mesmo?" é uma pergunta que não espera até amanhã.
+ */
+export async function dispararSincronizarAnalisesPlataforma(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/sync-analises-plataforma', {}, 'credito-analises-plataforma')
+}
+
 /** Regeneração da outbox — depois de mexer na régua de disparo de uma faixa. */
 export async function dispararOutbox(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/outbox', {}, 'antecipacao-outbox')

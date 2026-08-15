@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { autorizarCron } from '../auth'
-import { dispararSincronizarCertificados, dispararSincronizarOnepay } from '@/lib/mercado/worker'
+import {
+  dispararSincronizarAnalisesPlataforma,
+  dispararSincronizarCertificados,
+  dispararSincronizarOnepay,
+} from '@/lib/mercado/worker'
 
 /**
  * Diário: sync dos clientes Onepay → apps/worker (`POST /jobs/radar/onepay`).
@@ -26,10 +30,28 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const resultado = await dispararSincronizarOnepay()
   const certificados = await dispararSincronizarCertificados()
+  /*
+   * As análises de crédito vêm DEPOIS do temperature report, e a ordem é a regra
+   * (04h §3): o temperature report é a fonte de verdade de "cliente atual", e a
+   * detecção de ex-cliente consulta `clientes_onepay` para não rebaixar quem está
+   * ativo. Rodar antes leria o estado de ontem e produziria conflitos fabricados.
+   *
+   * Não condicionado ao sucesso, pela mesma razão dos certificados: os jobs do
+   * worker são assíncronos (202 na hora), então "esperar o primeiro" não é uma
+   * garantia que este processo consiga dar — e deixar de detectar uma saída porque
+   * o temperature report caiu troca um problema por outro.
+   */
+  const analises = await dispararSincronizarAnalisesPlataforma()
 
   if (!resultado.ok) {
     return NextResponse.json(
-      { ok: false, job: 'radar-onepay', erro: resultado.message, certificados: certificados.ok },
+      {
+        ok: false,
+        job: 'radar-onepay',
+        erro: resultado.message,
+        certificados: certificados.ok,
+        analises: analises.ok,
+      },
       { status: resultado.code === 'config' ? 500 : 502 },
     )
   }
@@ -38,6 +60,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     ok: true,
     job: 'radar-onepay',
     certificados: certificados.ok ? 'disparado' : certificados.message,
+    analises: analises.ok ? 'disparado' : analises.message,
     disparadoEm: new Date().toISOString(),
   })
 }

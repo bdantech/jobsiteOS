@@ -52,7 +52,10 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Puxa o temperature-report do BI, atualiza os clientes Onepay e grava o snapshot do dia.',
     destino: 'POST /jobs/radar/onepay',
-    encadeia: ['Certificados digitais (mesmo BI, disparado mesmo se o primeiro falhar)'],
+    encadeia: [
+      'Certificados digitais (mesmo BI, disparado mesmo se o primeiro falhar)',
+      'Análises de crédito da plataforma — detecta ex-clientes (04h); vem depois porque o temperature report é quem decide "cliente atual"',
+    ],
   },
   {
     path: '/api/cron/radar-protestos-clientes',

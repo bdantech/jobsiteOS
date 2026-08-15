@@ -7,6 +7,7 @@ import {
   cancelarLote,
   canAccessRoute,
   criarLote,
+  definirExClienteMotivo,
   removerSupressao,
   salvarRadarConfig,
   suprimir,
@@ -25,6 +26,7 @@ import {
   dispararLoteRadar,
   dispararProtestosEmpresa,
   dispararReestimarFaturamento,
+  dispararSincronizarAnalisesPlataforma,
   dispararSincronizarOnepay,
 } from '@/lib/mercado/worker'
 
@@ -113,6 +115,38 @@ export async function sincronizarOnepayAction(): Promise<ActionResult<{ enfileir
   if (erro) return erro
   const r = await dispararSincronizarOnepay()
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Dispara o sync das análises de crédito da plataforma — a fonte que detecta quem
+ * saiu (04h). Sob demanda porque "este cliente saiu mesmo?" não espera até amanhã.
+ */
+export async function sincronizarAnalisesPlataformaAction(): Promise<
+  ActionResult<{ enfileirado: boolean; aviso?: string }>
+> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararSincronizarAnalisesPlataforma()
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * POR QUE o cliente saiu. O sync detecta o fato e grava "Motivo desconhecido"; esta
+ * é a parte que só uma pessoa sabe, e a única que responde a pergunta da tela.
+ */
+export async function definirExClienteMotivoAction(
+  input: unknown,
+): Promise<ActionResult<Tables<'empresas'>>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const emp = await definirExClienteMotivo(supabase, input)
+    revalidatePath('/empresas')
+    revalidatePath(`/empresas/${emp.id}`)
+    return { ok: true, data: emp }
+  } catch (e) {
+    return falhaDe(e)
+  }
 }
 
 /**

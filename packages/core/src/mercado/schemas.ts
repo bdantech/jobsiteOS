@@ -64,6 +64,7 @@ export const FONTES_INGESTAO = [
   'onepay_nf',
   'onepay_certificados',
   'onepay_antecipacoes',
+  'onepay_credit_analyses',
 ] as const
 export const fonteIngestaoSchema = z.enum(FONTES_INGESTAO)
 export type FonteIngestao = z.infer<typeof fonteIngestaoSchema>
@@ -75,6 +76,7 @@ export const FONTE_INGESTAO_LABELS: Record<FonteIngestao, string> = {
   onepay_nf: 'Notas fiscais (Onepay)',
   onepay_certificados: 'Certificados digitais (Onepay)',
   onepay_antecipacoes: 'Antecipações (Onepay)',
+  onepay_credit_analyses: 'Análises de crédito (Onepay)',
 }
 
 export const STATUS_INGESTAO = ['executando', 'concluida', 'falhou'] as const
