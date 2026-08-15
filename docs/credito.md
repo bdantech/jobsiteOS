@@ -264,10 +264,43 @@ quem **foi**: a saída de um cliente não emite nada na Onepay — ele simplesme
 aparecer. A marca fica na análise de crédito: uma `approved` que venceu e ninguém
 renovou.
 
-`analises_plataforma` guarda o endpoint `credit-analyses?role=drawee` inteiro (aprovadas
-e expiradas), com `analysis.id` como chave natural — o sync é idempotente. **Sempre
-`role=drawee`**: sem o filtro viriam as análises de cedente, e cedente não é cliente
-neste sentido — fornecedor apareceria como ex-cliente da carteira.
+`analises_plataforma` guarda o endpoint `credit-analyses?role=drawee` inteiro, com
+`analysis.id` como chave natural — o sync é idempotente. **Sempre `role=drawee`**: sem o
+filtro viriam as análises de cedente, e cedente não é cliente neste sentido —
+fornecedor apareceria como ex-cliente da carteira.
+
+### O vocabulário real não é o previsto, e isso zerou a primeira carga
+
+A especificação dizia `status: approved | expired`. A produção **não tem `expired`**:
+tem `approved` (53) e **`blocked`** (21), e são os `blocked` que carregam as saídas —
+todos os 21 com limite consumido (operaram de verdade) e **nenhum** presente no
+temperature report.
+
+O classificador exigia `status = 'approved'` para reconhecer que houve relação, então os
+21 caíram em "nunca foi cliente" e a lista nasceu **vazia com a base cheia deles**. O
+critério passou a ser o **limite concedido** (`approved`, ou `credit_limit`/
+`consumed_limit` > 0), que é o fato: uma análise com limite abriu a porta, tenha sido
+bloqueada depois ou não. Negada sem limite continua de fora.
+
+A assimetria é deliberada: para ser **vigente** ainda se exige `approved`. Um `blocked`
+com data futura não é cliente — a plataforma bloqueou, ele não opera (são 10 casos, todos
+fora do temperature report). O guard de conflito continua acima de tudo.
+
+Junto veio o segundo defeito: **18 dos 21 ex-clientes não tinham ficha em `empresas`**, e
+o job os descartava com "sem empresa na base". Faz sentido que não tenham — quem saiu
+antes de o CRM existir nunca foi promovido por sync nenhum, e o do temperature report só
+enxerga quem está ativo hoje. Pular esses perderia justamente os mais antigos, então o
+job passou a **criar a ficha** (espelhando `resolverEmpresa` do 03, derivadas do universo
+incluídas), já nascendo em `ex_cliente` — passar por `cliente` acenderia, por um instante,
+um cliente que não existe.
+
+**A paginação não era o problema, mas ficou conferível.** 74 itens em 2 páginas com
+`pageSize=200` pedido só fecha se o servidor ignora o nosso tamanho e usa o dele (50) —
+dedução, não prova. O resultado passou a gravar o envelope de cada página (`page`,
+`pageSize`, `totalPages`, `total`, itens recebidos) no meta da ingestão, e o job avisa
+quando a última página vem CHEIA, que é o sintoma de um `totalPages` mentiroso. Foi um
+`.limit()` ignorado em silêncio que já custou 800 linhas na lista de fornecedores a
+prospectar.
 
 ### O classificador, e as três armadilhas que ele existe para evitar
 
@@ -326,10 +359,13 @@ Três evidências, todas FATO de fonte externa, em ordem de força:
 | Situação cadastral `baixada`/`nula` na Receita | Encerrou atividades / recuperação judicial |
 | Protesto registrado (`protestos_atual`) | Inadimplência / default |
 | Certificado digital vencido **antes** da saída | Certificado / cadastro vencido e não renovado |
+| Análise `blocked` na plataforma (0108) | Análise não renovada pela plataforma |
 
 A ordem importa: uma empresa baixada pode ter protesto e certificado vencido ao mesmo
 tempo, e das três a que explica a saída é o fechamento. Invertida, "inadimplência"
-carimbaria empresas que simplesmente encerraram.
+carimbaria empresas que simplesmente encerraram. `blocked` entra por último de propósito:
+diz **quem** fechou a porta, não **por quê** — com protesto na frente, a razão do bloqueio
+provavelmente é a inadimplência, e é ela que explica.
 
 Ficou de fora "score despencou no período", que o §2 citava: o scorecard é recalculado
 por versão e não guarda série por data de saída, então "despencou" não é uma pergunta que

@@ -42,14 +42,51 @@ test('ex-cliente: teve aprovada, nenhuma vale hoje, e é cadastrada', () => {
   assert.equal(r.exClienteDesde, '2026-02-28')
 })
 
-test('nunca aprovada nunca foi cliente — negada não vira ex-cliente', () => {
+test('nunca aprovada nunca foi cliente — negada sem limite não vira ex-cliente', () => {
   const r = classificarCnpj(
-    [analise({ status: 'denied', expiration_date: '2025-01-01' }), analise({ status: 'expired' })],
+    [
+      analise({ status: 'denied', expiration_date: '2025-01-01', credit_limit: 0, consumed_limit: 0 }),
+      analise({ status: 'expired', credit_limit: null, consumed_limit: null }),
+    ],
     {},
     HOJE,
   )
   assert.equal(r.situacao, 'sem_analise_aprovada')
   assert.equal(r.ultimaAprovada, null)
+})
+
+/**
+ * O vocabulário REAL do endpoint, aprendido na primeira carga: não existe `expired`.
+ * Existem `approved` e `blocked`, e os `blocked` são as saídas — 21 de 74 na base,
+ * todos com limite consumido e nenhum no temperature report. Exigir `approved` para
+ * reconhecer que houve relação fazia a lista inteira de ex-clientes nascer vazia.
+ */
+test('blocked com limite concedido É ex-cliente — é o vocabulário real da fonte', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 212718.57, consumed_limit: 212718.57 })],
+    {},
+    HOJE,
+  )
+  assert.equal(r.situacao, 'ex_cliente')
+  assert.equal(r.exClienteDesde, '2025-12-31')
+})
+
+test('blocked com data FUTURA também é ex-cliente: bloqueado não opera', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2026-12-31', credit_limit: 2000000, consumed_limit: 16461.6 })],
+    {},
+    HOJE,
+  )
+  assert.equal(r.situacao, 'ex_cliente')
+})
+
+test('mas o temperature report continua ganhando do blocked', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 500000 })],
+    { statusOnepay: 'active' },
+    HOJE,
+  )
+  assert.equal(r.situacao, 'conflito')
 })
 
 test('a regra de ouro da fonte: sem cadastro não é ex-cliente, é outra categoria', () => {

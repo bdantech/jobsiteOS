@@ -71,7 +71,32 @@ function normalizarStatus(status: string | null): string {
 }
 
 /**
- * Vigente = aprovada E com validade hoje ou no futuro.
+ * A análise concedeu crédito em algum momento — ou seja, o CNPJ FOI cliente.
+ *
+ * Não é `status = 'approved'`, e essa foi a lição da primeira carga real. O
+ * vocabulário do endpoint não é o que a especificação previa (`approved | expired`):
+ * em produção só existem `approved` e **`blocked`**, e são os `blocked` que carregam
+ * as saídas — 21 de 74 na primeira corrida, TODOS com limite consumido (operaram de
+ * verdade) e NENHUM presente no temperature report.
+ *
+ * Exigir `approved` fazia os 21 caírem em "nunca foi cliente" e a lista de
+ * ex-clientes nascer vazia com a base cheia deles.
+ *
+ * O critério passa a ser o LIMITE CONCEDIDO, que é o fato: uma análise com limite é
+ * uma análise que abriu a porta, tenha ela sido bloqueada depois ou não. Uma negada
+ * não concede limite, então continua de fora — que é o ponto da armadilha nº 1.
+ */
+function concedeuCredito(a: AnaliseDoCnpj): boolean {
+  if (normalizarStatus(a.status) === APROVADA) return true
+  return Number(a.credit_limit ?? 0) > 0 || Number(a.consumed_limit ?? 0) > 0
+}
+
+/**
+ * Vigente = **aprovada** E com validade hoje ou no futuro.
+ *
+ * Aqui o `approved` continua sendo exigido, e a assimetria com `concedeuCredito` é o
+ * ponto: `blocked` com data futura NÃO é cliente vigente — a plataforma bloqueou, ele
+ * não consegue operar. São 10 casos na base, todos fora do temperature report.
  *
  * Análise aprovada SEM `expiration_date` conta como vigente, e é decisão: a data é o
  * que a plataforma usa para expirar, e sua ausência significa "sem prazo definido",
@@ -110,7 +135,7 @@ export function classificarCnpj(
   }
   if (analises.length === 0) return vazio
 
-  const aprovadas = analises.filter((a) => normalizarStatus(a.status) === APROVADA)
+  const aprovadas = analises.filter(concedeuCredito)
   if (aprovadas.length === 0) return vazio
 
   const ultimaAprovada = aprovadas.reduce(maisRecente)

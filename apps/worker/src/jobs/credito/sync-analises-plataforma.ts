@@ -74,6 +74,8 @@ interface RespostaAnalises {
   page?: number
   pageSize?: number
   totalPages?: number
+  total?: number
+  totalItems?: number
 }
 
 export interface ResultadoAnalises {
@@ -86,6 +88,17 @@ export interface ResultadoAnalises {
   sem_cadastro: number
   snapshots_credito: number
   status_alterados: number
+  /**
+   * O envelope de paginação como o servidor o devolveu, por página.
+   *
+   * Existe porque "veio tudo?" foi a primeira pergunta da primeira carga, e a
+   * resposta estava fora do alcance: 74 itens em 2 páginas com `pageSize=200`
+   * pedido só faz sentido se o servidor IGNORA o nosso tamanho e usa o dele (50).
+   * Guardar o envelope torna isso conferível no meta da ingestão em vez de
+   * dedutível — e denuncia na hora se um dia `totalPages` vier menor que o número
+   * de páginas realmente necessárias.
+   */
+  paginacao: { page: number; pageSize: number | null; totalPages: number | null; total: number | null; itens: number }[]
 }
 
 const PAGE_SIZE = 200
@@ -142,6 +155,7 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     sem_cadastro: 0,
     snapshots_credito: 0,
     status_alterados: 0,
+    paginacao: [],
   }
 
   /** Os CNPJs tocados nesta corrida. A classificação só olha para eles. */
@@ -157,7 +171,16 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     })
     totalPages = Math.max(1, resp.totalPages ?? 1)
 
-    for (const item of extrair(resp)) {
+    const itensDaPagina = extrair(resp)
+    acc.paginacao.push({
+      page,
+      pageSize: resp.pageSize ?? null,
+      totalPages: resp.totalPages ?? null,
+      total: resp.total ?? resp.totalItems ?? null,
+      itens: itensDaPagina.length,
+    })
+
+    for (const item of itensDaPagina) {
       acc.itens++
       const r = await gravarAnalise(item)
       if (!r) continue
@@ -165,6 +188,21 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
       if (r.statusAlterado) acc.status_alterados++
       if (r.snapshot) acc.snapshots_credito++
       cnpjs.add(r.cnpj)
+    }
+
+    /*
+     * Uma página CHEIA na última volta é suspeita: significa que o servidor tinha
+     * exatamente o que cabia, e `totalPages` pode estar mentindo (ou ter sido
+     * calculado sobre outro tamanho de página). Avisar é melhor que parar em
+     * silêncio — foi um `.limit()` ignorado em silêncio que já custou 800 linhas
+     * na lista de fornecedores a prospectar.
+     */
+    const tamanho = resp.pageSize ?? PAGE_SIZE
+    if (page === totalPages && itensDaPagina.length >= tamanho) {
+      logger.warn(
+        { page, totalPages, itens: itensDaPagina.length, pageSize: tamanho },
+        'Última página veio cheia — pode haver mais análises do que totalPages indica.',
+      )
     }
     page++
   } while (page <= totalPages)
@@ -338,20 +376,24 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
     hoje,
   )
 
-  const { data: empresa } = await supabaseAdmin
-    .from('empresas')
-    .select('id, estagio, razao_social, ex_cliente_desde, teve_analise_sem_cadastro')
-    .eq('cnpj', cnpj)
-    .maybeSingle()
+  let empresa = await lerEmpresa(cnpj)
 
   switch (r.situacao) {
     case 'ex_cliente': {
-      // Sem empresa não há estágio para mexer. Acontece quando a análise é de um CNPJ
-      // que nunca entrou em `empresas` — mas com `empresa_cadastrada = true` isso é
-      // uma inconsistência entre a plataforma e a nossa base, não um ex-cliente.
+      /*
+       * A empresa PODE NÃO EXISTIR no nosso CRM, e isso é o caso comum e não a
+       * exceção: na primeira carga real, 18 dos 21 ex-clientes não tinham ficha.
+       * Faz sentido — quem saiu antes de o CRM existir nunca foi promovido por
+       * nenhum sync, e o do temperature report só enxerga quem está ativo hoje.
+       *
+       * Pular esses seria perder justamente os mais antigos. Criar a ficha é o que
+       * o sync de clientes já faz para o cliente novo (`resolverEmpresa`), pelo
+       * mesmo motivo: sem `empresas` não há timeline, contato nem estágio — ou seja,
+       * não há onde registrar que ele foi cliente.
+       */
       if (!empresa) {
-        logger.warn({ cnpj }, 'Ex-cliente sem empresa na base — ignorado.')
-        return 'sem_empresa'
+        empresa = await criarEmpresaDeExCliente(cnpj)
+        if (!empresa) return 'falha_ao_criar_empresa'
       }
       if (empresa.estagio === 'ex_cliente' && empresa.ex_cliente_desde === r.exClienteDesde) {
         return 'ja_era_ex'
@@ -422,6 +464,83 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
     default:
       return r.situacao
   }
+}
+
+type EmpresaMin = {
+  id: string
+  estagio: string
+  razao_social: string | null
+  ex_cliente_desde: string | null
+  teve_analise_sem_cadastro: boolean
+}
+
+async function lerEmpresa(cnpj: string): Promise<EmpresaMin | null> {
+  const { data } = await supabaseAdmin
+    .from('empresas')
+    .select('id, estagio, razao_social, ex_cliente_desde, teve_analise_sem_cadastro')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+  return (data as EmpresaMin | null) ?? null
+}
+
+/**
+ * Cria a ficha de quem foi cliente e saiu antes de o CRM conhecê-lo.
+ *
+ * Espelha `resolverEmpresa` do sync de clientes (03), inclusive nas DERIVADAS
+ * (camada, grupo, is_spe, grafo_sefaz) copiadas do universo: sem `grupo_id` a ficha
+ * não mostra a aba de grupo econômico, e quem tem SPE costuma ser exatamente este
+ * perfil. Nasce já como `ex_cliente` — passar por `cliente` acenderia, por um
+ * instante, um cliente que não existe, e o evento de estágio junto.
+ *
+ * `origem: 'onepay'` porque a fonte é a mesma plataforma; o nome vem do universo e,
+ * na falta dele, da própria análise.
+ */
+async function criarEmpresaDeExCliente(cnpj: string): Promise<EmpresaMin | null> {
+  const { data: mu } = await supabaseAdmin
+    .from('mercado_universo')
+    .select(
+      'razao_social, nome_fantasia, uf, municipio, cnae_principal, porte_rfb, camada, grupo_id, is_spe, grafo_sefaz',
+    )
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  const { data: analise } = await supabaseAdmin
+    .from('analises_plataforma')
+    .select('company_name')
+    .eq('cnpj', cnpj)
+    .not('company_name', 'is', null)
+    .limit(1)
+    .maybeSingle()
+
+  const { data: nova, error } = await supabaseAdmin
+    .from('empresas')
+    .insert({
+      cnpj,
+      razao_social: mu?.razao_social ?? analise?.company_name ?? null,
+      nome_fantasia: mu?.nome_fantasia ?? null,
+      uf: mu?.uf ?? null,
+      municipio: mu?.municipio ?? null,
+      cnae_principal: mu?.cnae_principal ?? null,
+      porte: mu?.porte_rfb ?? null,
+      camada: mu?.camada ?? null,
+      grupo_id: mu?.grupo_id ?? null,
+      is_spe: mu?.is_spe ?? false,
+      grafo_sefaz: mu?.grafo_sefaz ?? false,
+      tipo: 'construtora',
+      estagio: 'ex_cliente',
+      origem: 'onepay',
+    })
+    .select('id, estagio, razao_social, ex_cliente_desde, teve_analise_sem_cadastro')
+    .single()
+
+  if (error || !nova) {
+    logger.error({ cnpj, erro: error?.message }, 'Falha ao criar empresa de ex-cliente.')
+    return null
+  }
+
+  // Liga o universo à ficha nova, como as outras promoções fazem.
+  await supabaseAdmin.from('mercado_universo').update({ empresa_id: nova.id }).eq('cnpj', cnpj)
+  return nova as EmpresaMin
 }
 
 /** O id de "Motivo desconhecido": o default do detector, explícito e contável. */
