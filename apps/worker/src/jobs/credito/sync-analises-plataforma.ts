@@ -136,6 +136,8 @@ export interface ResultadoAnalises {
   descartados_assignor: number
   /** Filiais de matriz ativa e SPEs de grupo ativo — não são perda de cliente. */
   filiais_e_spes_ignoradas: number
+  /** Aprovados que nunca operaram: crédito concedido e parado. Lead, não perda. */
+  aprovados_sem_operacao: number
   /** Quantas marcações erradas de corridas anteriores foram desfeitas. */
   desmarcados: number
 }
@@ -199,6 +201,7 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     cnpjs_distintos: 0,
     descartados_assignor: 0,
     filiais_e_spes_ignoradas: 0,
+    aprovados_sem_operacao: 0,
     desmarcados: 0,
   }
 
@@ -306,7 +309,8 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     if (r === 'conflito') acc.conflitos++
     if (r === 'analise_sem_cadastro') acc.sem_cadastro++
     if (r === 'grupo_ainda_cliente' || r === 'desmarcado_grupo_ativo') acc.filiais_e_spes_ignoradas++
-    if (r === 'desmarcado_grupo_ativo') acc.desmarcados++
+    if (r === 'aprovado_nunca_operou' || r === 'desmarcado_nunca_operou') acc.aprovados_sem_operacao++
+    if (r === 'desmarcado_grupo_ativo' || r === 'desmarcado_nunca_operou') acc.desmarcados++
   }
 
   logger.info(acc, 'Sync de análises da plataforma concluído.')
@@ -470,6 +474,7 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
       converteuRecentemente: await converteuRecentemente(cnpj),
       raizTemClienteAtivo: await raizTemClienteAtivo(cnpj),
       grupoTemClienteAtivo: await grupoTemClienteAtivo(cnpj),
+      operouAlgumaVez: await operouAlgumaVez(cnpj),
     },
     hoje,
   )
@@ -519,6 +524,31 @@ async function classificar(cnpj: string, hoje: string): Promise<string> {
         ex_cliente_desde: r.exClienteDesde,
       })
       return 'ex_cliente'
+    }
+
+    case 'aprovado_nunca_operou': {
+      /*
+       * Aprovado e nunca operou NÃO é perda — e desfazer é obrigatório porque a
+       * corrida anterior marcou 145 assim, R$ 132 mi de "clientes perdidos" que
+       * nunca foram clientes. O grupo RFM sozinho eram 27.
+       *
+       * Volta para `mercado`: é empresa conhecida com crédito aprovado parado, que é
+       * lead quente — não cliente, nem ex.
+       */
+      if (empresa?.estagio === 'ex_cliente') {
+        await supabaseAdmin
+          .from('empresas')
+          .update({
+            estagio: 'mercado',
+            ex_cliente_desde: null,
+            ex_cliente_motivo: null,
+            ex_cliente_motivo_obs: null,
+          })
+          .eq('id', empresa.id)
+        logger.info({ cnpj }, 'Ex-cliente desfeito: aprovado e nunca operou.')
+        return 'desmarcado_nunca_operou'
+      }
+      return 'aprovado_nunca_operou'
     }
 
     case 'grupo_ainda_cliente': {
@@ -734,6 +764,32 @@ async function grupoTemClienteAtivo(cnpj: string): Promise<boolean> {
     .in('cnpj', cnpjs)
     .eq('status', 'active')
   return (count ?? 0) > 0
+}
+
+/**
+ * Prova de OPERAÇÃO fora do saldo da análise — em qualquer época.
+ *
+ * `consumed_limit` é saldo, não acumulado: quem antecipou e liquidou tudo volta a
+ * zero. Sem esta rede, o cliente antigo e adimplente — justamente o que mais
+ * interessa reativar — seria classificado como "nunca operou".
+ *
+ * Duas fontes independentes: antecipação casada (04e) e presença histórica no
+ * temperature report, que só lista quem é ou foi cliente de verdade.
+ */
+async function operouAlgumaVez(cnpj: string): Promise<boolean> {
+  const { count: antecipou } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('access_key', { count: 'exact', head: true })
+    .eq('sacado_cnpj', cnpj)
+    .not('conversao_antecipacao_id', 'is', null)
+  if ((antecipou ?? 0) > 0) return true
+
+  const { data: cliente } = await supabaseAdmin
+    .from('clientes_onepay')
+    .select('cnpj, last_anticipation')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+  return Boolean(cliente)
 }
 
 /**

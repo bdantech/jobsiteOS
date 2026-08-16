@@ -380,6 +380,36 @@ SPEs daquele grupo saíram no mesmo trimestre", que é informação.
 
 Sobraram 4 clientes principais, somando R$ 6,05 mi de último limite.
 
+### Aprovação não é operação (o caso RFM)
+
+Com o endpoint novo a lista saltou de 21 para **166 ex-clientes**, R$ 132 mi de
+"perda". O grupo RFM entregou o padrão de bandeja: **27 empresas**, uma análise para
+cada SPE numa leva só, **R$ 1 milhão de limite em cada**, a **mesma data de
+expiração** (31/12/2025) e **consumo zero em todas**. Nenhuma antecipou uma nota.
+Elas não saíram — nunca entraram.
+
+Na base inteira o corte foi limpo:
+
+| | empresas | limite somado |
+|---|---:|---:|
+| Nunca consumiu, nunca antecipou, nunca esteve no temperature report | **145** | R$ 132,8 mi |
+| Consumiu limite em alguma análise | **21** | R$ 11,6 mi |
+
+Os 21 são exatamente os da primeira detecção. O defeito era o fallback
+`credit_limit > 0` tratando **limite concedido** como **cliente** — e `everApproved`
+não corrige isso, porque essas empresas *foram* aprovadas. Aprovação e operação são
+coisas diferentes, e a diferença entre elas é a diferença entre "perdemos" e "nunca
+ganhamos".
+
+O critério passou a ser **prova de operação**, e a nova saída `aprovado_nunca_operou`
+recebe o resto: não é perda, é lead quente com o crédito já concedido e parado.
+
+**`consumed_limit` sozinho não bastaria**, e isso é a parte fácil de errar: ele é
+SALDO, não acumulado — quem antecipou e liquidou tudo volta a zero. Sozinho,
+produziria falso negativo justamente no cliente antigo e adimplente, o que mais
+interessa reativar. Por isso entram duas redes independentes: antecipação casada
+(04e) e presença histórica no temperature report, que só lista quem é ou foi cliente.
+
 ### O motivo é humano
 
 O sync grava **"Motivo desconhecido"** e o evento `cliente.tornou_ex` pede a
