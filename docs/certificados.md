@@ -223,7 +223,25 @@ authenticated` na migration é o que fecha isso; não conceder não bastava.
 `certificado_funil_sincronizar()` é **idempotente** e roda encadeada ao sync diário
 (no mesmo job, não num cron próprio: agendar separado abriria uma janela em que a tela
 mostra a coluna de ontem sobre o certificado de hoje). Falha dela não derruba o sync —
-o certificado já está gravado, e a próxima rodada ou o botão "Sincronizar" resolve.
+o certificado já está gravado, e a próxima rodada resolve.
+
+**O funil não tem botão de sincronizar.** Com alimentação automática ele só ofereceria
+a chance de clicar em algo que quase sempre não muda nada. Quem precisar forçar usa o
+"Sincronizar" do grid, que dispara o job inteiro — e o job reconcilia o funil no fim.
+
+### A tela
+
+Card = **só leitura**: nome, CNPJ, escudo do estado da matriz e a barra de cobertura.
+Clicar abre o detalhe, e é lá que se move, ganha e perde. Três botões por card
+multiplicavam por 47 uma decisão que se toma uma vez, e comiam o espaço do que o card
+tinha a dizer.
+
+O detalhe é `flex-col` com `max-h-[85vh]` e miolo rolável (`min-h-0`), e não o `grid`
+sem altura do primitivo: com listas de até 371 CNPJs a caixa crescia além da viewport
+e cabeçalho, tabela e rodapé apareciam fora do fundo pintado.
+
+O seletor de originador fica no **cabeçalho**, na mesma posição do funil de vendas e do
+de reuniões — um filtro que muda de lugar entre telas irmãs custa uma procura por tela.
 
 ## Fora de escopo
 

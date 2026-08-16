@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ExternalLink,
   LayoutGrid,
-  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Trophy,
@@ -21,10 +20,7 @@ import {
   pctCobertura,
   type EstagioCertificado,
 } from '@jobsiteos/core'
-import {
-  moverCertificadoCardAction,
-  sincronizarFunilCertificadosAction,
-} from '@/actions/certificado-funil'
+import { moverCertificadoCardAction } from '@/actions/certificado-funil'
 import { buscarVendedoresVisiveis, comercialKeys } from '@/components/comercial/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -229,13 +225,24 @@ function DetalheDoCard({
   const encerrado = c.estagio === 'ganho' || c.estagio === 'perdido'
 
   return (
-    <DialogContent className="max-w-lg">
-      <DialogHeader>
+    /*
+     * FLEX COLUNA COM TETO, e não o `grid` sem altura do primitivo.
+     *
+     * O conteúdo aqui é variável — a lista chega a 371 CNPJs — e num grid sem
+     * max-height a caixa cresce além da tela: o `bg-background` acompanha o box, mas o
+     * box sai da viewport e cabeçalho, tabela e rodapé aparecem fora do fundo pintado.
+     *
+     * Com flex-col + max-h, o miolo é o único que rola (`min-h-0` é obrigatório: sem
+     * ele o filho com overflow se recusa a encolher e empurra o container de volta) e
+     * título e botões ficam sempre visíveis dentro do fundo.
+     */
+    <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 p-0">
+      <DialogHeader className="border-b p-6 pb-4">
         <DialogTitle className="pr-6">{c.nome}</DialogTitle>
         <DialogDescription className="font-mono tabular-nums">{formatCnpj(c.cnpj)}</DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">
             {encerrado
@@ -300,7 +307,7 @@ function DetalheDoCard({
         )}
       </div>
 
-      <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+      <DialogFooter className="flex-wrap gap-2 border-t p-6 pt-4 sm:justify-between">
         <Button variant="ghost" size="sm" onClick={onFechar}>
           Fechar
         </Button>
@@ -360,7 +367,6 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
   const [termo, setTermo] = React.useState('')
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [agindo, setAgindo] = React.useState(false)
-  const [sincronizando, setSincronizando] = React.useState(false)
   const [verFinalizados, setVerFinalizados] = React.useState(false)
   const [abertoId, setAbertoId] = React.useState<string | null>(null)
 
@@ -413,23 +419,6 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
     void qc.invalidateQueries({ queryKey: funilCertificadosKeys.all })
   }
 
-  async function sincronizar() {
-    setSincronizando(true)
-    const r = await sincronizarFunilCertificadosAction()
-    setSincronizando(false)
-    if (!r.ok) {
-      toast.error(r.message)
-      return
-    }
-    const { abertos: a, ganhos, reabertos } = r.data
-    toast.success(
-      a + ganhos + reabertos === 0
-        ? 'Nada mudou — o funil já reflete os certificados de hoje.'
-        : `${a} aberto(s), ${ganhos} ganho(s), ${reabertos} reaberto(s).`,
-    )
-    void qc.invalidateQueries({ queryKey: funilCertificadosKeys.all })
-  }
-
   if (isPending) return <Skeleton className="h-96 w-full" />
 
   if (isError) {
@@ -471,16 +460,38 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {/*
+               * O seletor mora no cabeçalho, ao lado das ações — mesma posição do funil
+               * de vendas e do de reuniões. Um filtro que muda de lugar entre telas
+               * irmãs custa uma procura por tela, toda vez.
+               *
+               * Quem não é gestor não o vê porque para ele não há escolha: o RPC
+               * devolve a própria carteira e ignora o argumento.
+               */}
+              {ehGestor && originadores.length > 0 && (
+                <Select
+                  value={vendedorId ?? 'todos'}
+                  onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}
+                >
+                  <SelectTrigger className="w-52" aria-label="Filtrar por originador">
+                    <SelectValue placeholder="Todos os originadores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os originadores</SelectItem>
+                    {originadores.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/empresas/certificados">
                   <LayoutGrid className="mr-1 h-3.5 w-3.5" aria-hidden />
                   Ver o grid
                   <ExternalLink className="ml-1 h-3 w-3" aria-hidden />
                 </Link>
-              </Button>
-              <Button variant="outline" size="sm" disabled={sincronizando} onClick={() => void sincronizar()}>
-                <RefreshCw className={cn('mr-1 h-3.5 w-3.5', sincronizando && 'animate-spin')} aria-hidden />
-                Sincronizar
               </Button>
             </div>
           </div>
@@ -494,30 +505,6 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
               className="h-9 max-w-xs"
               aria-label="Buscar cliente no funil"
             />
-            {/*
-             * O filtro do gestor, como nos outros funis: sem ele o recorte por carteira
-             * é invisível para quem administra — e o que é invisível parece quebrado.
-             * Quem não é gestor não vê o seletor porque para ele não há escolha: o RPC
-             * devolve a própria carteira e ignora o argumento.
-             */}
-            {ehGestor && originadores.length > 0 && (
-              <Select
-                value={vendedorId ?? 'todos'}
-                onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}
-              >
-                <SelectTrigger className="h-9 w-56" aria-label="Filtrar por originador">
-                  <SelectValue placeholder="Todos os originadores" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os originadores</SelectItem>
-                  {originadores.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <Button
               variant={verFinalizados ? 'default' : 'outline'}
               size="sm"

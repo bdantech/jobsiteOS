@@ -52,26 +52,15 @@ export async function moverCertificadoCardAction(input: unknown): Promise<Action
   return { ok: true, data: { id: (data as { id: string } | null)?.id ?? parsed.data.card_id } }
 }
 
-/**
- * Reconcilia o funil com a tabela de certificados AGORA.
+/*
+ * NÃO HÁ ACTION DE SINCRONIZAR AQUI, e a ausência é deliberada.
  *
- * O worker chama isto todo dia depois do sync; o botão existe para quem acabou de
- * receber o certificado do cliente e não quer esperar até amanhã para o card sair da
- * coluna. É idempotente — clicar duas vezes não faz nada duas vezes.
+ * A reconciliação (`certificado_funil_sincronizar`) roda dentro do job diário de
+ * certificados, logo depois de a tabela ser reescrita — é lá que ela pertence, porque
+ * reconciliar antes do dado chegar não faz nada e depois de a tela abrir chega tarde.
+ *
+ * O botão manual saiu do funil: com a alimentação automática ele só oferecia a chance
+ * de clicar em algo que não muda nada. Quem precisar forçar tem o "Sincronizar" do
+ * grid em /empresas/certificados, que dispara o job inteiro — e o job reconcilia o
+ * funil no fim.
  */
-export async function sincronizarFunilCertificadosAction(): Promise<
-  ActionResult<{ abertos: number; ganhos: number; reabertos: number }>
-> {
-  const { erro, supabase } = await autorizar()
-  if (erro || !supabase) return erro as ActionResult<never>
-
-  const { data, error } = await supabase.rpc('certificado_funil_sincronizar' as never)
-  if (error) return { ok: false, message: error.message, code: 'unknown' }
-
-  const r = (data ?? {}) as { abertos?: number; ganhos?: number; reabertos?: number }
-  revalidatePath('/comercial/certificados')
-  return {
-    ok: true,
-    data: { abertos: r.abertos ?? 0, ganhos: r.ganhos ?? 0, reabertos: r.reabertos ?? 0 },
-  }
-}
