@@ -113,6 +113,19 @@ export async function sincronizarCertificados(): Promise<ResultadoCertificados> 
     acc.eventos += r.eventos
   }
 
+  /*
+   * O funil de captura (0116) reconcilia AQUI, e não num cron próprio: ele é uma
+   * leitura da tabela que acabou de ser reescrita, e agendá-lo separado criaria uma
+   * janela em que a tela mostra a coluna de ontem sobre o certificado de hoje.
+   *
+   * Falha do funil não derruba o sync. O certificado já está gravado — que é o dado
+   * de verdade — e a reconciliação é idempotente: a próxima rodada, ou o botão
+   * "Sincronizar" na tela, resolve.
+   */
+  const { data: funil, error: erroFunil } = await supabaseAdmin.rpc('certificado_funil_sincronizar')
+  if (erroFunil) logger.error({ err: erroFunil.message }, 'Funil de certificados não reconciliou.')
+  else logger.info({ funil }, 'Funil de certificados reconciliado.')
+
   logger.info({ ...acc, recebidos: todos.length }, 'Sync de certificados concluído.')
   return acc
 }

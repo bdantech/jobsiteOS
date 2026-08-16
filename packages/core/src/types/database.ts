@@ -409,6 +409,76 @@ export type Database = {
           },
         ]
       }
+      certificado_cards: {
+        Row: {
+          id: string
+          empresa_id: string
+          estagio: string
+          estagio_anterior: string | null
+          perdido_motivo: string | null
+          perdido_em: string | null
+          ganho_em: string | null
+          fechado_matriz_coberta: boolean | null
+          fechado_cobertos: number | null
+          observacao: string | null
+          aberto_em: string
+          atualizado_em: string
+          atualizado_por: string | null
+        }
+        Insert: {
+          id?: string
+          empresa_id: string
+          estagio?: string
+          estagio_anterior?: string | null
+          perdido_motivo?: string | null
+          perdido_em?: string | null
+          ganho_em?: string | null
+          fechado_matriz_coberta?: boolean | null
+          fechado_cobertos?: number | null
+          observacao?: string | null
+          aberto_em?: string
+          atualizado_em?: string
+          atualizado_por?: string | null
+        }
+        Update: {
+          estagio?: string
+          estagio_anterior?: string | null
+          perdido_motivo?: string | null
+          perdido_em?: string | null
+          ganho_em?: string | null
+          fechado_matriz_coberta?: boolean | null
+          fechado_cobertos?: number | null
+          observacao?: string | null
+          atualizado_em?: string
+          atualizado_por?: string | null
+        }
+        Relationships: []
+      }
+      certificado_card_eventos: {
+        Row: {
+          id: number
+          card_id: string
+          de: string | null
+          para: string
+          motivo: string | null
+          automatico: boolean
+          detalhe: string | null
+          usuario_id: string | null
+          criado_em: string
+        }
+        Insert: {
+          card_id: string
+          de?: string | null
+          para: string
+          motivo?: string | null
+          automatico?: boolean
+          detalhe?: string | null
+          usuario_id?: string | null
+          criado_em?: string
+        }
+        Update: never
+        Relationships: []
+      }
       certificados: {
         Row: {
           cnpj: string
@@ -4311,6 +4381,18 @@ export type Database = {
       }
       ex_clientes_analise: {
         Args: never
+        Returns: Json
+      }
+      certificado_funil: {
+        Args: never
+        Returns: Json
+      }
+      certificado_funil_sincronizar: {
+        Args: never
+        Returns: Json
+      }
+      app_mover_certificado_card: {
+        Args: { p: Json }
         Returns: Json
       }
       ex_clientes_por_motivo: {

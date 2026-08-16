@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, Target, Users,
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Target, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
  *
  * Cada tipo vê o seu conjunto:
  *   SDR         funil de reuniões · calendário · comissão
- *   Originador  funil de NFs · carteira · comissão
+ *   Originador  funil de NFs · funil de certificados · carteira · comissão
  *   Closer      funil de vendas · calendário · comissão · passivas na carteira
  *
  * Gestor (Admin/Comercial) vê tudo — é ele quem atribui a fila e aprova a comissão — e
@@ -42,6 +42,9 @@ const ITENS: readonly ItemNav[] = [
   { href: '/comercial/sdr', label: 'Funil de Reuniões', icon: Target, tipos: ['sdr'] },
   { href: '/comercial/vendas', label: 'Funil de Vendas', icon: Users, tipos: ['vendedor'] },
   { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador'] },
+  // Do originador: a carteira dele é o recorte, e capturar certificado é o trabalho
+  // que destrava a ingestão das NFs que ele origina.
+  { href: '/comercial/certificados', label: 'Funil de Certificados', icon: ShieldCheck, tipos: ['originador'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
   {

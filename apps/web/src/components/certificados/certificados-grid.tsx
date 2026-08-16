@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, EyeOff, RefreshCw, Search, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, EyeOff, Kanban, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import {
   COR_CERTIFICADO,
   ESTADO_CERTIFICADO_LABELS,
@@ -346,6 +346,17 @@ export function CertificadosGrid() {
               </CardDescription>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {/*
+               * Esta tela responde "onde está a cegueira"; o funil responde "quem está
+               * cuidando dela". São a mesma origem com perguntas diferentes, e sem o
+               * link viram duas telas que mostram o mesmo dado sem se reconhecerem.
+               */}
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/comercial/certificados">
+                  <Kanban className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Ir para o funil
+                </Link>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setOcultasAberto(true)}>
                 <EyeOff className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Ocultados ({data.ocultas.length})
