@@ -4384,7 +4384,7 @@ export type Database = {
         Returns: Json
       }
       certificado_funil: {
-        Args: never
+        Args: { p_vendedor_id?: string | null }
         Returns: Json
       }
       certificado_funil_sincronizar: {

@@ -12,7 +12,8 @@ import { createClient } from '@/lib/supabase/client'
 
 export const funilCertificadosKeys = {
   all: ['certificado-funil'] as const,
-  funil: () => [...funilCertificadosKeys.all, 'cards'] as const,
+  // O vendedor entra na chave: sem ele, trocar o filtro serviria o cache do anterior.
+  funil: (vendedorId: string | null) => [...funilCertificadosKeys.all, 'cards', vendedorId] as const,
   motivos: () => [...funilCertificadosKeys.all, 'motivos'] as const,
 }
 
@@ -48,18 +49,27 @@ export interface CardCertificado {
 export interface FunilCertificados {
   tem_acesso: boolean
   eh_gestor: boolean
+  vendedor_id: string | null
   cards: CardCertificado[]
   sincronizado_em: string | null
 }
 
-export async function buscarFunilCertificados(): Promise<FunilCertificados> {
+/**
+ * `vendedorId` só tem efeito para o gestor — o RPC ignora o argumento de quem não é,
+ * e devolve a carteira do próprio. O filtro é conveniência de administração, e a
+ * checagem de quem pode o quê fica no servidor.
+ */
+export async function buscarFunilCertificados(vendedorId: string | null): Promise<FunilCertificados> {
   const supabase = createClient()
-  const { data, error } = await supabase.rpc('certificado_funil' as never)
+  const { data, error } = await supabase.rpc('certificado_funil' as never, {
+    p_vendedor_id: vendedorId,
+  } as never)
   if (error) throw new Error(error.message)
   const r = (data ?? {}) as Partial<FunilCertificados>
   return {
     tem_acesso: r.tem_acesso ?? false,
     eh_gestor: r.eh_gestor ?? false,
+    vendedor_id: r.vendedor_id ?? null,
     cards: r.cards ?? [],
     sincronizado_em: r.sincronizado_em ?? null,
   }
