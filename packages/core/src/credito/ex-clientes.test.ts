@@ -71,6 +71,37 @@ test('blocked com limite concedido É ex-cliente — é o vocabulário real da f
   assert.equal(r.exClienteDesde, '2025-12-31')
 })
 
+/**
+ * `everApproved` chegou na fonte e é agregado sobre todo o histórico do par
+ * empresa+papel — quando vem, ele decide, porque é fato declarado e não inferência.
+ */
+test('everApproved=false vence o limite concedido: nunca foi cliente', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-01-01', credit_limit: 500000, ever_approved: false })],
+    {},
+    HOJE,
+  )
+  assert.equal(r.situacao, 'sem_analise_aprovada')
+})
+
+test('everApproved=true reconhece a saída mesmo sem limite na linha', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'blocked', expiration_date: '2025-01-01', credit_limit: null, consumed_limit: null, ever_approved: true })],
+    {},
+    HOJE,
+  )
+  assert.equal(r.situacao, 'ex_cliente')
+})
+
+test('to_approve virgem não é ex-cliente — é empresa entrando agora', () => {
+  const r = classificarCnpj(
+    [analise({ status: 'to_approve', expiration_date: null, credit_limit: 0, ever_approved: false })],
+    {},
+    HOJE,
+  )
+  assert.equal(r.situacao, 'sem_analise_aprovada')
+})
+
 test('blocked com data FUTURA também é ex-cliente: bloqueado não opera', () => {
   const r = classificarCnpj(
     [analise({ status: 'blocked', expiration_date: '2026-12-31', credit_limit: 2000000, consumed_limit: 16461.6 })],

@@ -32,6 +32,14 @@ export interface AnaliseDoCnpj {
   credit_limit?: number | null
   consumed_limit?: number | null
   monthly_rate_d0?: number | null
+  /**
+   * `everApproved` da fonte: o par empresa+papel já teve aprovação em algum momento,
+   * agregado sobre todo o histórico. Quando presente, é a resposta AUTORITATIVA para
+   * "foi cliente?" e dispensa qualquer inferência.
+   *
+   * Nulo nas linhas gravadas antes de a fonte publicar o campo — daí o fallback.
+   */
+  ever_approved?: boolean | null
 }
 
 /** O que o sync sabe do CNPJ FORA das análises — e que tem prioridade sobre elas. */
@@ -99,18 +107,27 @@ function normalizarStatus(status: string | null): string {
  *
  * Não é `status = 'approved'`, e essa foi a lição da primeira carga real. O
  * vocabulário do endpoint não é o que a especificação previa (`approved | expired`):
- * em produção só existem `approved` e **`blocked`**, e são os `blocked` que carregam
+ * existem `to_approve`, `approved` e **`blocked`**, e são os `blocked` que carregam
  * as saídas — 21 de 74 na primeira corrida, TODOS com limite consumido (operaram de
- * verdade) e NENHUM presente no temperature report.
+ * verdade) e NENHUM presente no temperature report. Exigir `approved` fazia os 21
+ * caírem em "nunca foi cliente" e a lista nascer vazia com a base cheia deles.
  *
- * Exigir `approved` fazia os 21 caírem em "nunca foi cliente" e a lista de
- * ex-clientes nascer vazia com a base cheia deles.
+ * A resposta certa passou a existir na fonte: **`everApproved`**, agregado sobre todo
+ * o histórico do par empresa+papel e independente do filtro de status. Quando ele
+ * vem, ele decide — é fato declarado, não inferência.
  *
- * O critério passa a ser o LIMITE CONCEDIDO, que é o fato: uma análise com limite é
- * uma análise que abriu a porta, tenha ela sido bloqueada depois ou não. Uma negada
- * não concede limite, então continua de fora — que é o ponto da armadilha nº 1.
+ * O fallback por LIMITE CONCEDIDO fica para as linhas gravadas antes de o campo
+ * existir. Ele acerta pelo mesmo motivo: uma análise com limite abriu a porta, tenha
+ * sido bloqueada depois ou não. Uma negada não concede limite, então continua de
+ * fora — que é o ponto da armadilha nº 1.
+ *
+ * `to_approve` sem `everApproved` e sem limite é o caso que o campo novo separa bem:
+ * empresa em análise pela primeira vez nunca foi cliente, e antes ela dependia de o
+ * limite ainda não ter sido preenchido para não ser confundida com uma saída.
  */
 function concedeuCredito(a: AnaliseDoCnpj): boolean {
+  if (a.ever_approved === true) return true
+  if (a.ever_approved === false) return false
   if (normalizarStatus(a.status) === APROVADA) return true
   return Number(a.credit_limit ?? 0) > 0 || Number(a.consumed_limit ?? 0) > 0
 }

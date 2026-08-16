@@ -14,9 +14,21 @@ import { emitirEvento } from '../../radar/eventos.js'
 /**
  * Sync das análises de crédito da plataforma e detecção de ex-clientes (04h §3).
  *
- * SEMPRE `role=drawee`. Sem o filtro viriam também as análises de cedente, e o
- * cedente não é cliente no sentido desta tela — misturá-los faria fornecedor
- * aparecer como ex-cliente da carteira.
+ * SÓ `drawee` entra na tabela — cedente não é cliente neste sentido, e misturá-lo
+ * faria fornecedor aparecer como ex-cliente da carteira. Mas o RECORTE É NOSSO: o
+ * pedido vai sem filtro de papel e o descarte acontece aqui, o que faz o censo do
+ * resultado mostrar o que a fonte de fato manda. Filtro do servidor é invisível; o
+ * nosso denuncia quando a fonte muda de ideia.
+ *
+ * O CONTRATO DA FONTE, que mudou uma vez e vai mudar de novo:
+ *   - uma linha por par empresa+papel, com a análise mais recente daquele papel;
+ *   - três status: `to_approve`, `approved`, `blocked` (não existe `expired`);
+ *   - `everApproved` agregado sobre todo o histórico do par, independente do filtro;
+ *   - documento sem cadastro na plataforma não é devolvido;
+ *   - a análise é do documento da MATRIZ — filial não gera linha.
+ *
+ * As duas últimas apagaram dois problemas na origem: a lista "analisada e nunca
+ * cadastrada" perdeu a fonte, e as filiais de matriz ativa pararam de chegar.
  *
  * O QUE ESTE JOB NÃO FAZ: promover ninguém a `cliente`. Quem governa "é cliente
  * hoje" é o temperature report (03), e ter duas fontes promovendo produziria dois
@@ -43,6 +55,12 @@ interface AnalysisPayload {
   id?: number
   role?: string | null
   status?: string | null
+  /**
+   * O par empresa+papel já teve aprovação em ALGUM momento — agregado sobre todo o
+   * histórico e independente do filtro de status. É a resposta autoritativa para
+   * "foi cliente?", e substitui o proxy que a gente usava (limite concedido > 0).
+   */
+  everApproved?: boolean | null
   expirationDate?: string | null
   creditLimit?: number | null
   consumedLimit?: number | null
@@ -76,6 +94,7 @@ interface RespostaAnalises {
   totalPages?: number
   total?: number
   totalItems?: number
+  page_size?: number
 }
 
 export interface ResultadoAnalises {
@@ -98,7 +117,7 @@ export interface ResultadoAnalises {
    * dedutível — e denuncia na hora se um dia `totalPages` vier menor que o número
    * de páginas realmente necessárias.
    */
-  paginacao: { page: number; pageSize: number | null; totalPages: number | null; total: number | null; itens: number }[]
+  paginacao: { passada: string; page: number; pageSize: number | null; totalPages: number | null; total: number | null; itens: number }[]
   /**
    * Quantas análises vieram de cada `status`, ANTES de qualquer recorte nosso.
    *
@@ -113,6 +132,8 @@ export interface ResultadoAnalises {
    * está entregando uma análise por empresa (74/74 na primeira carga) ou o histórico.
    */
   cnpjs_distintos: number
+  /** Linhas de cedente descartadas: a tabela é só de sacado. */
+  descartados_assignor: number
   /** Filiais de matriz ativa e SPEs de grupo ativo — não são perda de cliente. */
   filiais_e_spes_ignoradas: number
   /** Quantas marcações erradas de corridas anteriores foram desfeitas. */
@@ -176,6 +197,7 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     paginacao: [],
     recebido_por_status: {},
     cnpjs_distintos: 0,
+    descartados_assignor: 0,
     filiais_e_spes_ignoradas: 0,
     desmarcados: 0,
   }
@@ -183,12 +205,37 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
   /** Os CNPJs tocados nesta corrida. A classificação só olha para eles. */
   const cnpjs = new Set<string>()
 
+  /*
+   * DUAS PASSADAS, e a segunda é o que conserta a data da saída.
+   *
+   * A fonte devolve UMA linha por par empresa+papel: a análise mais recente daquele
+   * papel. Sem filtro vêm os três status (to_approve, approved, blocked) — é a foto
+   * de HOJE. Com `status=approved` vem o par cuja análise APROVADA é a mais recente,
+   * mesmo que a vigente já seja outra — é a foto de QUANDO A PORTA FECHOU.
+   *
+   * Para um ex-cliente as duas diferem, e é a segunda que importa: `ex_cliente_desde`
+   * e "último limite aprovado" saem da aprovada, não da bloqueada que a substituiu.
+   * Como a tabela é chaveada por `analysis.id`, as duas passadas fazem upsert de
+   * linhas DIFERENTES — o histórico se acumula sozinho, que é o que faltava.
+   *
+   * `page_size` em snake_case: era `pageSize` e o servidor ignorava em silêncio,
+   * usando o default de 50. Mesma família do `.limit()` que já custou 800 linhas.
+   */
+  const passadas: { rotulo: string; query: string }[] = [
+    { rotulo: 'todos_os_status', query: '' },
+    { rotulo: 'somente_aprovadas', query: '&status=approved' },
+  ]
+
+  for (const passada of passadas) {
   let page = 1
   let totalPages = 1
   do {
-    // `role=drawee` é a chamada certa e fica como está: sem ela viriam as análises de
-    // cedente, e cedente não é cliente neste sentido.
-    const url = `${base}/api/v1/credit-analyses?role=drawee&page=${page}&pageSize=${PAGE_SIZE}`
+    /*
+     * SEM filtro de `role`: trazemos tudo e recortamos aqui. O recorte continua o
+     * mesmo — só `drawee` entra em `analises_plataforma` — mas feito no nosso código
+     * ele fica visível no censo, que é como se descobre que a fonte mudou de ideia.
+     */
+    const url = `${base}/api/v1/credit-analyses?page=${page}&page_size=${PAGE_SIZE}${passada.query}`
     const resp = await requisitarJson<RespostaAnalises>(url, {
       headers: autorizacao(),
       timeoutMs: 60_000,
@@ -197,8 +244,9 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
 
     const itensDaPagina = extrair(resp)
     acc.paginacao.push({
+      passada: passada.rotulo,
       page,
-      pageSize: resp.pageSize ?? null,
+      pageSize: resp.pageSize ?? resp.page_size ?? null,
       totalPages: resp.totalPages ?? null,
       total: resp.total ?? resp.totalItems ?? null,
       itens: itensDaPagina.length,
@@ -208,10 +256,18 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
       acc.itens++
 
       // O censo do que a fonte devolve, antes de qualquer recorte nosso. É ele que
-      // responde, na página de Ingestões, QUAIS status existem de verdade — foi assim
-      // que `blocked` apareceu no lugar do `expired` que a especificação previa.
+      // responde, na página de Ingestões, QUAIS status e papéis existem de verdade —
+      // foi assim que `blocked` apareceu no lugar do `expired` que a spec previa.
+      const papel = (item.analysis?.role ?? 'sem_role').trim().toLowerCase()
       const st = (item.analysis?.status ?? 'sem_status').trim().toLowerCase()
-      acc.recebido_por_status[st] = (acc.recebido_por_status[st] ?? 0) + 1
+      const chave = `${papel}/${st}`
+      acc.recebido_por_status[chave] = (acc.recebido_por_status[chave] ?? 0) + 1
+
+      // Cedente não é cliente neste sentido: fornecedor viraria ex-cliente da carteira.
+      if (papel !== 'drawee') {
+        acc.descartados_assignor++
+        continue
+      }
 
       const r = await gravarAnalise(item)
       if (!r) continue
@@ -238,7 +294,9 @@ export async function sincronizarAnalisesPlataforma(): Promise<ResultadoAnalises
     page++
   } while (page <= totalPages)
 
-  acc.paginas = totalPages
+  acc.paginas += totalPages
+  } // fim das passadas
+
   acc.cnpjs_distintos = cnpjs.size
 
   for (const cnpj of cnpjs) {
@@ -282,6 +340,9 @@ async function gravarAnalise(
     empresa_cadastrada: estaCadastrada(item.company),
     onepay_company_id: typeof item.company?.id === 'number' ? item.company.id : null,
     company_name: item.company?.name?.trim() || null,
+    company_type: item.company?.companyType?.trim() || null,
+    role: (analysis?.role ?? 'drawee').trim().toLowerCase() || 'drawee',
+    ever_approved: analysis?.everApproved ?? null,
     status,
     expiration_date: dataOuNulo(analysis?.expirationDate),
     credit_limit: numeroOuNulo(analysis?.creditLimit),
@@ -392,8 +453,9 @@ async function empresaDoCnpj(cnpj: string): Promise<string | null> {
 async function classificar(cnpj: string, hoje: string): Promise<string> {
   const { data: analises } = await supabaseAdmin
     .from('analises_plataforma')
-    .select('status, expiration_date, empresa_cadastrada, credit_limit, consumed_limit, monthly_rate_d0')
+    .select('status, expiration_date, empresa_cadastrada, credit_limit, consumed_limit, monthly_rate_d0, ever_approved')
     .eq('cnpj', cnpj)
+    .eq('role', 'drawee')
 
   const { data: cliente } = await supabaseAdmin
     .from('clientes_onepay')

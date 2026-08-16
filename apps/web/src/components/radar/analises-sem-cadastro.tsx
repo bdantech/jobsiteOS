@@ -57,10 +57,20 @@ export function AnalisesSemCadastro({ termo }: { termo: string }) {
   if (todas.length === 0) {
     return (
       <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Nenhuma análise aprovada sem cadastro. A lista se enche quando o sync encontrar uma
-          análise cujo payload vem sem <code>company.id</code> — análise paga e empresa que nunca
-          entrou na plataforma.
+        <CardContent className="space-y-2 py-10 text-center text-sm text-muted-foreground">
+          <p>Nenhuma análise aprovada sem cadastro.</p>
+          {/*
+           * A honestidade aqui importa mais que a mensagem genérica: o endpoint de
+           * análises passou a NÃO devolver documento sem cadastro na plataforma (CNPJ
+           * avulso ou CPF). Enquanto for assim, esta lista fica permanentemente vazia
+           * — e "vazio porque não há" é indistinguível de "vazio porque a fonte não
+           * conta" para quem só vê a tela.
+           */}
+          <p className="mx-auto max-w-lg text-xs">
+            A fonte deixou de devolver análises de documento sem cadastro na plataforma, então
+            esta lista tende a ficar vazia. Ela volta a se encher se a plataforma expuser esses
+            casos de novo.
+          </p>
         </CardContent>
       </Card>
     )

@@ -77,6 +77,9 @@ export type Database = {
           raw: Json | null
           sincronizada_em: string
           status: string
+          role: string
+          ever_approved: boolean | null
+          company_type: string | null
         }
         Insert: {
           available_limit?: number | null
@@ -105,6 +108,9 @@ export type Database = {
           raw?: Json | null
           sincronizada_em?: string
           status: string
+          role?: string
+          ever_approved?: boolean | null
+          company_type?: string | null
         }
         Update: {
           available_limit?: number | null
@@ -133,6 +139,9 @@ export type Database = {
           raw?: Json | null
           sincronizada_em?: string
           status?: string
+          role?: string
+          ever_approved?: boolean | null
+          company_type?: string | null
         }
         Relationships: []
       }
@@ -3353,6 +3362,8 @@ export type Database = {
           onepay_company_id: number | null
           sincronizada_em: string | null
           status: string | null
+          ever_approved: boolean | null
+          company_type: string | null
         }
         Relationships: []
       }
