@@ -319,3 +319,29 @@ export async function salvarConfigAction(input: unknown): Promise<ActionResult<T
     return falhaDe(e)
   }
 }
+
+/**
+ * Esconde da LISTA um ex-cliente que a heurística de SPE/filial não separou — o
+ * veículo de projeto que, estruturalmente, é indistinguível de uma operacional.
+ *
+ * Não muda o estágio da empresa: some da tela, continua no banco, e reexibir
+ * devolve a linha inteira. Um "ocultar" que apagasse o dado seria irreversível por
+ * um clique feito no meio de uma triagem.
+ */
+export async function ocultarExClienteAction(cnpj: string): Promise<ActionResult<null>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  const { error } = await supabase.rpc('app_ocultar_ex_cliente' as never, { p_cnpj: cnpj } as never)
+  if (error) return { ok: false, message: error.message, code: 'unknown' }
+  revalidatePath('/empresas')
+  return { ok: true, data: null }
+}
+
+export async function reexibirExClienteAction(cnpj: string): Promise<ActionResult<null>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  const { error } = await supabase.rpc('app_reexibir_ex_cliente' as never, { p_cnpj: cnpj } as never)
+  if (error) return { ok: false, message: error.message, code: 'unknown' }
+  revalidatePath('/empresas')
+  return { ok: true, data: null }
+}

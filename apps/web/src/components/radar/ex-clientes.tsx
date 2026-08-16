@@ -4,9 +4,13 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ExternalLink, TrendingDown } from 'lucide-react'
+import { Eye, EyeOff, ExternalLink, TrendingDown } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
-import { definirExClienteMotivoAction } from '@/actions/radar'
+import {
+  definirExClienteMotivoAction,
+  ocultarExClienteAction,
+  reexibirExClienteAction,
+} from '@/actions/radar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -256,6 +260,7 @@ function MotivoInline({ linha }: { linha: ExCliente }) {
 }
 
 export function ExClientesLista({ termo }: { termo: string }) {
+  const qc = useQueryClient()
   const [janela, setJanela] = React.useState(12)
   /**
    * Abre em CLIENTES PRINCIPAIS, e esse é o ponto da tela.
@@ -269,6 +274,14 @@ export function ExClientesLista({ termo }: { termo: string }) {
    * saíram no mesmo trimestre" é informação, e some se a lista as apagar.
    */
   const [somentePrincipais, setSomentePrincipais] = React.useState(true)
+  /**
+   * A gaveta dos ocultos. Existe porque a heurística de SPE/filial não fecha: sobram
+   * veículos de projeto que, estruturalmente, são iguais a uma operacional. Quem
+   * conhece a carteira resolve num clique — e precisa poder conferir e desfazer, ou
+   * o clique vira uma decisão cega que ninguém revisa.
+   */
+  const [verOcultos, setVerOcultos] = React.useState(false)
+  const [ocultando, setOcultando] = React.useState<string | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: radarKeys.exClientes(),
@@ -277,13 +290,33 @@ export function ExClientesLista({ termo }: { termo: string }) {
 
   const linhas = React.useMemo(
     () =>
-      (data ?? []).filter(
-        (c) => combina(c, termo) && (!somentePrincipais || c.e_principal !== false),
-      ),
-    [data, termo, somentePrincipais],
+      (data ?? []).filter((c) => {
+        if (!combina(c, termo)) return false
+        // `=== true` e não `!== false`: um nulo vindo da view já reapareceu na lista
+        // uma vez, quando `e_spe` saía NULO por lógica de três valores do SQL.
+        if (verOcultos) return c.oculto === true
+        if (c.oculto === true) return false
+        return !somentePrincipais || c.e_principal === true
+      }),
+    [data, termo, somentePrincipais, verOcultos],
   )
 
-  const secundarios = (data ?? []).filter((c) => c.e_principal === false).length
+  const visiveis = (data ?? []).filter((c) => c.oculto !== true)
+  const secundarios = visiveis.filter((c) => c.e_principal !== true).length
+  const ocultos = (data ?? []).filter((c) => c.oculto === true).length
+
+  async function alternarOculto(cnpj: string | null, estaOculto: boolean) {
+    if (!cnpj) return
+    setOcultando(cnpj)
+    const r = estaOculto ? await reexibirExClienteAction(cnpj) : await ocultarExClienteAction(cnpj)
+    setOcultando(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(estaOculto ? 'De volta à lista.' : 'Ocultado da lista.')
+    void qc.invalidateQueries({ queryKey: radarKeys.exClientes() })
+  }
 
   if (isPending) return <Skeleton className="h-64 w-full" />
 
@@ -349,32 +382,42 @@ export function ExClientesLista({ termo }: { termo: string }) {
       </Card>
 
       <Card>
-        {secundarios > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
-            <p className="text-sm text-muted-foreground">
-              {somentePrincipais ? (
-                <>
-                  Mostrando <strong>clientes principais</strong>. {secundarios} filial(is) e SPE(s)
-                  ocultas — a plataforma abria análise por SPE no passado, e elas não são o
-                  cliente.
-                </>
-              ) : (
-                <>
-                  Mostrando <strong>todos</strong>, inclusive filiais e SPEs. A carteira se olha
-                  por matriz e holding.
-                </>
-              )}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => setSomentePrincipais((v) => !v)}
-            >
-              {somentePrincipais ? `Mostrar todos (${secundarios} a mais)` : 'Só principais'}
-            </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+          <p className="text-sm text-muted-foreground">
+            {verOcultos ? (
+              <>
+                Mostrando os <strong>ocultos</strong> — escondidos da lista à mão. Nada foi
+                apagado: reexibir devolve a linha.
+              </>
+            ) : somentePrincipais ? (
+              <>
+                Mostrando <strong>clientes principais</strong>
+                {secundarios > 0 ? <> · {secundarios} filial(is) e SPE(s) fora</> : null}
+                {ocultos > 0 ? <> · {ocultos} oculto(s)</> : null}.
+              </>
+            ) : (
+              <>
+                Mostrando <strong>todos</strong>, inclusive filiais e SPEs.
+              </>
+            )}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {!verOcultos && secundarios > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setSomentePrincipais((v) => !v)}>
+                {somentePrincipais ? `Mostrar todos (${secundarios} a mais)` : 'Só principais'}
+              </Button>
+            )}
+            {(ocultos > 0 || verOcultos) && (
+              <Button
+                variant={verOcultos ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setVerOcultos((v) => !v)}
+              >
+                {verOcultos ? 'Voltar à lista' : `Ocultos (${ocultos})`}
+              </Button>
+            )}
           </div>
-        )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -434,16 +477,36 @@ export function ExClientesLista({ termo }: { termo: string }) {
                     {taxaOuTraco(c.ultima_taxa_d0)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {c.empresa_id ? (
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/empresas/${c.empresa_id}`}>
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
-                          Company 360
-                        </Link>
+                    <div className="flex items-center justify-end gap-1">
+                      {c.empresa_id ? (
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/empresas/${c.empresa_id}`}>
+                            <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
+                            Company 360
+                          </Link>
+                        </Button>
+                      ) : null}
+                      {/*
+                       * O escape da heurística. Sobram veículos de projeto que nenhum
+                       * sinal estrutural separa de uma operacional — quem conhece a
+                       * carteira resolve num clique, e o clique é reversível.
+                       */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={ocultando === c.cnpj}
+                        title={c.oculto ? 'Devolver à lista' : 'Ocultar da lista'}
+                        aria-label={`${c.oculto ? 'Devolver à lista' : 'Ocultar da lista'}: ${c.nome ?? c.cnpj ?? ''}`}
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => void alternarOculto(c.cnpj, c.oculto === true)}
+                      >
+                        {c.oculto ? (
+                          <Eye className="h-3.5 w-3.5" aria-hidden />
+                        ) : (
+                          <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                        )}
                       </Button>
-                    ) : (
-                      '—'
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

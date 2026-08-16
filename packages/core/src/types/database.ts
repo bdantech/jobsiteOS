@@ -3401,6 +3401,7 @@ export type Database = {
           e_spe: boolean | null
           e_principal: boolean | null
           origem_spe: string | null
+          oculto: boolean | null
           municipio: string | null
           nome: string | null
           uf: string | null
