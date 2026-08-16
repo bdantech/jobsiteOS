@@ -3400,6 +3400,7 @@ export type Database = {
           e_filial: boolean | null
           e_spe: boolean | null
           e_principal: boolean | null
+          origem_spe: string | null
           municipio: string | null
           nome: string | null
           uf: string | null

@@ -65,15 +65,6 @@ export interface ContextoCliente {
    * acabou, não cliente que saiu.
    */
   grupoTemClienteAtivo?: boolean
-  /**
-   * Há prova de OPERAÇÃO fora das análises: antecipação casada (04e) ou presença
-   * histórica no temperature report.
-   *
-   * Existe porque `consumed_limit` é um saldo, não um acumulado: quem antecipou e
-   * liquidou tudo volta a zero. Sozinho, ele produziria falso negativo justamente
-   * no cliente antigo e adimplente — o que mais interessa reativar.
-   */
-  operouAlgumaVez?: boolean
 }
 
 export type SituacaoCnpj =
@@ -94,14 +85,6 @@ export type SituacaoCnpj =
   | 'grupo_ainda_cliente'
   /** Tem análise, nenhuma aprovada. Nunca foi cliente; nada a fazer. */
   | 'sem_analise_aprovada'
-  /**
-   * Teve limite aprovado e **nunca operou** — nenhuma antecipação, consumo zero.
-   *
-   * NÃO é ex-cliente: nunca foi cliente. Aprovação não é operação, e a diferença
-   * entre as duas é a diferença entre "perdemos" e "nunca ganhamos". É lead quente
-   * (o crédito já saiu, falta usar), não perda.
-   */
-  | 'aprovado_nunca_operou'
 
 export interface Classificacao {
   situacao: SituacaoCnpj
@@ -234,27 +217,6 @@ export function classificarCnpj(
    */
   if (contexto.raizTemClienteAtivo || contexto.grupoTemClienteAtivo) {
     return { situacao: 'grupo_ainda_cliente', exClienteDesde: null, ultimaAprovada, motivoConflito: null }
-  }
-
-  /*
-   * APROVAÇÃO NÃO É OPERAÇÃO, e confundir as duas foi o que inflou a lista de 21
-   * para 166.
-   *
-   * O grupo RFM é o caso puro: 27 empresas, uma análise para cada SPE numa leva só,
-   * R$ 1 milhão de limite em cada, a mesma data de expiração — e consumo ZERO em
-   * todas. Nenhuma antecipou uma nota sequer. Elas não saíram: nunca entraram.
-   *
-   * Na base inteira o corte é limpo: 145 dos 166 nunca consumiram, nunca tiveram
-   * antecipação casada e nunca apareceram no temperature report. Os 21 que
-   * consumiram são os ex-clientes de verdade — os mesmos 21 da primeira detecção.
-   *
-   * Chamar os 145 de perda faria a tela responder a pergunta errada com R$ 132 mi de
-   * autoridade: "por que perdemos clientes?" viraria uma lista de gente que nunca
-   * foi cliente.
-   */
-  const consumiu = analises.some((a) => Number(a.consumed_limit ?? 0) > 0)
-  if (!consumiu && !contexto.operouAlgumaVez) {
-    return { situacao: 'aprovado_nunca_operou', exClienteDesde: null, ultimaAprovada, motivoConflito: null }
   }
 
   // `exClienteDesde` é a MAIOR expiração entre as aprovadas: é o dia em que a última

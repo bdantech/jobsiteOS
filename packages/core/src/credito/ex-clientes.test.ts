@@ -107,16 +107,7 @@ test('everApproved=false vence o limite concedido: nunca foi cliente', () => {
  * `everApproved` prova APROVAÇÃO, não operação — e é essa distinção que separa
  * "perdemos um cliente" de "nunca ganhamos um". O grupo RFM foi todo aprovado.
  */
-test('everApproved=true sem consumo é lead aprovado, não ex-cliente', () => {
-  const r = classificarCnpj(
-    [analise({ status: 'blocked', expiration_date: '2025-01-01', credit_limit: 1000000, consumed_limit: 0, ever_approved: true })],
-    {},
-    HOJE,
-  )
-  assert.equal(r.situacao, 'aprovado_nunca_operou')
-})
-
-test('everApproved=true COM consumo é a saída de um cliente de verdade', () => {
+test('everApproved=true reconhece a saída mesmo sem limite na linha', () => {
   const r = classificarCnpj(
     [analise({ status: 'blocked', expiration_date: '2025-01-01', credit_limit: null, consumed_limit: 4200, ever_approved: true })],
     {},
@@ -268,48 +259,6 @@ test('o conflito vem ANTES: o próprio CNPJ ativo é dado divergente, não desen
     HOJE,
   )
   assert.equal(r.situacao, 'conflito')
-})
-
-/**
- * O caso RFM: 27 empresas do mesmo grupo, uma análise para cada SPE numa leva só,
- * R$ 1 mi de limite em cada, mesma data de expiração, consumo ZERO em todas. Foi o
- * que inflou a lista de 21 para 166 — aprovação não é operação.
- */
-test('aprovado com limite e consumo ZERO nunca foi cliente', () => {
-  const r = classificarCnpj(
-    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 1000000, consumed_limit: 0 })],
-    {},
-    HOJE,
-  )
-  assert.equal(r.situacao, 'aprovado_nunca_operou')
-  assert.equal(r.exClienteDesde, null, 'quem nunca entrou não tem data de saída')
-})
-
-test('consumo em QUALQUER análise do CNPJ já prova operação', () => {
-  const r = classificarCnpj(
-    [
-      analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 1000000, consumed_limit: 0 }),
-      analise({ status: 'approved', expiration_date: '2024-06-30', credit_limit: 500000, consumed_limit: 250000 }),
-    ],
-    {},
-    HOJE,
-  )
-  assert.equal(r.situacao, 'ex_cliente')
-  assert.equal(r.exClienteDesde, '2025-12-31')
-})
-
-/**
- * `consumed_limit` é SALDO, não acumulado: quem antecipou e liquidou tudo volta a
- * zero. Sozinho ele produziria falso negativo justamente no cliente antigo e
- * adimplente — o que mais interessa reativar.
- */
-test('antecipação casada salva quem liquidou tudo e zerou o saldo', () => {
-  const r = classificarCnpj(
-    [analise({ status: 'blocked', expiration_date: '2025-12-31', credit_limit: 800000, consumed_limit: 0 })],
-    { operouAlgumaVez: true },
-    HOJE,
-  )
-  assert.equal(r.situacao, 'ex_cliente')
 })
 
 test('mesesDesde só fecha o mês quando o dia passa', () => {

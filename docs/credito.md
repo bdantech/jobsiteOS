@@ -380,35 +380,35 @@ SPEs daquele grupo saíram no mesmo trimestre", que é informação.
 
 Sobraram 4 clientes principais, somando R$ 6,05 mi de último limite.
 
-### Aprovação não é operação (o caso RFM)
+### SPE que o flag não pega (0111)
 
-Com o endpoint novo a lista saltou de 21 para **166 ex-clientes**, R$ 132 mi de
-"perda". O grupo RFM entregou o padrão de bandeja: **27 empresas**, uma análise para
-cada SPE numa leva só, **R$ 1 milhão de limite em cada**, a **mesma data de
-expiração** (31/12/2025) e **consumo zero em todas**. Nenhuma antecipou uma nota.
-Elas não saíram — nunca entraram.
+Com o endpoint novo a lista foi a 148, e o grupo RFM apareceu com **27 entidades**.
+A reclamação não era o volume: era que SPEs e filiais estavam ocupando a lista de
+clientes principais.
 
-Na base inteira o corte foi limpo:
+A causa é o enriquecimento. `mercado_universo.is_spe` é derivado do lookup cadastral,
+e **55 dos 148 ex-clientes nem estão no universo** — para eles o flag é `false` por
+ausência de dado, não por serem matriz. Empresas com "SPE" na própria razão social
+passavam como cliente principal.
 
-| | empresas | limite somado |
-|---|---:|---:|
-| Nunca consumiu, nunca antecipou, nunca esteve no temperature report | **145** | R$ 132,8 mi |
-| Consumiu limite em alguma análise | **21** | R$ 11,6 mi |
+Duas evidências novas, ambas independentes do enriquecimento:
 
-Os 21 são exatamente os da primeira detecção. O defeito era o fallback
-`credit_limit > 0` tratando **limite concedido** como **cliente** — e `everApproved`
-não corrige isso, porque essas empresas *foram* aprovadas. Aprovação e operação são
-coisas diferentes, e a diferença entre elas é a diferença entre "perdemos" e "nunca
-ganhamos".
+| Evidência | Detalhe |
+|---|---|
+| `SPE`/`SCP` como palavra inteira na razão social | A borda de palavra é o que faz a regra funcionar: sem ela, "ESPECIAL" e "PROSPECT" virariam veículo |
+| Natureza jurídica **2127** | Sociedade em Conta de Participação — veículo de investimento por definição legal. O código veio de graça com a 0105 |
 
-O critério passou a ser **prova de operação**, e a nova saída `aprovado_nunca_operou`
-recebe o resto: não é perda, é lead quente com o crédito já concedido e parado.
+`origem_spe` registra qual das três decidiu (`flag`, `nome`, `natureza_2127`). Uma
+heurística que não diz por que classificou é uma que ninguém consegue contestar — e
+esta vai errar em algum caso.
 
-**`consumed_limit` sozinho não bastaria**, e isso é a parte fácil de errar: ele é
-SALDO, não acumulado — quem antecipou e liquidou tudo volta a zero. Sozinho,
-produziria falso negativo justamente no cliente antigo e adimplente, o que mais
-interessa reativar. Por isso entram duas redes independentes: antecipação casada
-(04e) e presença histórica no temperature report, que só lista quem é ou foi cliente.
+**Medido:** principais caem de 90 para **37**, e o RFM sai de 14 entidades na lista
+para **4** — as operacionais (RFM CONSTRUTORA e RFM INCORPORADORA, com R$ 5 mi de
+limite, contra R$ 1 mi dos veículos).
+
+A raiz continua sendo o enriquecimento: os 55 CNPJs ausentes foram enfileirados em
+`cnpj_lookup_fila`. Quando o lookup rodar, `is_spe` e o grupo econômico voltam a
+funcionar para eles e a heurística de nome vira rede, não pilar.
 
 ### O motivo é humano
 
