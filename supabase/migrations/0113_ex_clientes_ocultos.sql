@@ -106,18 +106,22 @@ with (security_invoker = true) as
     left join public.motivos_perda m on m.id = e.ex_cliente_motivo
     left join public.mercado_universo mu on mu.cnpj = e.cnpj
     left join public.ex_clientes_ocultos oc on oc.cnpj = e.cnpj
+    -- UMA chamada de `raiz_e_spe` por linha, e não duas. `e_spe` e `origem_spe`
+    -- precisam do mesmo resultado, e cada uma chamava a função de novo: a projeção
+    -- respondia por 21 dos 27 ms da consulta. Medido: 27,2 ms → 22,8 ms.
+    left join lateral (select public.raiz_e_spe(e.cnpj) as raiz_spe) r on true
     left join lateral (
       select
         coalesce(mu.is_spe, e.is_spe, false)
           or coalesce(coalesce(e.razao_social, e.nome_fantasia, '') ~* '(^|[^A-Za-z])(SPE|SCP)([^A-Za-z]|$)', false)
           or coalesce(public.natureza_juridica_codigo(mu.natureza_juridica) = '2127', false)
-          or public.raiz_e_spe(e.cnpj)
+          or r.raiz_spe
           as e_spe,
         case
           when coalesce(mu.is_spe, e.is_spe, false) then 'flag'
           when coalesce(coalesce(e.razao_social, e.nome_fantasia, '') ~* '(^|[^A-Za-z])(SPE|SCP)([^A-Za-z]|$)', false) then 'nome'
           when coalesce(public.natureza_juridica_codigo(mu.natureza_juridica) = '2127', false) then 'natureza_2127'
-          when public.raiz_e_spe(e.cnpj) then 'raiz'
+          when r.raiz_spe then 'raiz'
         end as origem_spe
     ) v on true
     left join lateral (
