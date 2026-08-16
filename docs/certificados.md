@@ -167,10 +167,15 @@ descoberto → vence antes) a própria interface do card.
 | coluna | quem move |
 |---|---|
 | Universo de certificados | a máquina — entra tudo que falta ou vence em <30d |
+| Iniciar prospecção | humano — escolhido para atacar, conversa ainda não começou |
 | Em prospecção | humano |
 | Emissão agendada | humano |
 | Pendente só SPEs | **a máquina**, quando a matriz fica coberta |
 | Ganho / Perdido | humano, com as regras abaixo |
+
+`iniciar_prospeccao` separa a fila do que foi **escolhido** da fila. Sem ela, "Universo"
+guardava as duas coisas — tudo que falta e o que se decidiu atacar — e uma coluna que
+significa duas coisas não prioriza nenhuma.
 
 `pendente_spes` é da máquina de propósito: ela separa "ainda não falei com o cliente"
 de "o cliente resolveu o principal e sobrou a cauda". Dois trabalhos com ligações

@@ -15,6 +15,7 @@ import { z } from 'zod'
 /** As colunas em ORDEM. A ordem é o caminho do trabalho, e a UI depende dela. */
 export const ESTAGIOS_CERTIFICADO = [
   'universo',
+  'iniciar_prospeccao',
   'prospeccao',
   'emissao_agendada',
   'pendente_spes',
@@ -33,13 +34,22 @@ export type EstagioCertificado = (typeof ESTAGIOS_CERTIFICADO)[number]
  */
 export const ESTAGIO_CERTIFICADO_LABELS: Record<EstagioCertificado, string> = {
   universo: 'Universo de certificados',
+  iniciar_prospeccao: 'Iniciar prospecção',
   prospeccao: 'Em prospecção',
   emissao_agendada: 'Emissão agendada',
   pendente_spes: 'Pendente só SPEs',
 }
 
+/**
+ * `iniciar_prospeccao` separa a fila do que foi ESCOLHIDO da fila.
+ *
+ * Sem ela, "Universo" guardava as duas coisas — tudo que falta e o que se decidiu
+ * atacar — e uma coluna que significa duas coisas não prioriza nenhuma. É também a
+ * única etapa que não descreve uma conversa: é a decisão que vem antes dela.
+ */
 export const ESTAGIO_CERTIFICADO_AJUDA: Record<EstagioCertificado, string> = {
   universo: 'Entrou sozinho: falta certificado, ou algum vence em menos de 30 dias.',
+  iniciar_prospeccao: 'Escolhido para atacar. A conversa ainda não começou.',
   prospeccao: 'Alguém já está falando com o cliente sobre isto.',
   emissao_agendada: 'Data marcada com o cliente para emitir o certificado.',
   pendente_spes: 'A matriz está coberta. Sobrou a cauda de SPEs — a máquina move para cá.',

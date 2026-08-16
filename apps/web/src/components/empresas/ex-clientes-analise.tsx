@@ -4,9 +4,23 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, TrendingDown } from 'lucide-react'
+import { formatCnpj } from '@jobsiteos/core'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { buscarExClientesAnalise, empresasKeys, type ExClientesAnalise } from './queries'
+import {
+  buscarExClientesAnalise,
+  buscarExClientesLista,
+  empresasKeys,
+  type ExClientesAnalise,
+  type RecorteExClientes,
+} from './queries'
 
 /**
  * Ex-clientes na aba Análise: quantos são, quantos dá para reconquistar, e por quê
@@ -48,6 +62,21 @@ interface Fatia {
   total: number
   retornoPossivel: boolean | null
   cor: string
+  /**
+   * Os motivos que esta fatia SOMA. Uma fatia normal tem um; "Outros (N motivos)" e
+   * "Sem motivo registrado" têm vários — e é por isso que o recorte viaja como lista e
+   * não como rótulo: clicar numa fatia agregada tem de abrir exatamente as linhas que
+   * ela somou, não uma aproximação por nome.
+   */
+  motivosOrigem: string[]
+}
+
+/** O recorte que o diálogo está mostrando. */
+interface Recorte {
+  titulo: string
+  ajuda: string
+  recorte: RecorteExClientes
+  motivos: string[]
 }
 
 const NAO_E_RESPOSTA = new Set(['Não classificado', 'Motivo desconhecido'])
@@ -74,6 +103,7 @@ function montarFatias(distribuicao: ExClientesAnalise['distribuicao']): Fatia[] 
     total: d.total,
     retornoPossivel: d.retorno_possivel,
     cor: CORES[i % CORES.length]!,
+    motivosOrigem: [d.motivo],
   }))
 
   if (resto.length > 0) {
@@ -82,12 +112,19 @@ function montarFatias(distribuicao: ExClientesAnalise['distribuicao']): Fatia[] 
       total: resto.reduce((s, d) => s + d.total, 0),
       retornoPossivel: null,
       cor: CORES[Math.min(principais.length, CORES.length - 1)]!,
+      motivosOrigem: resto.map((d) => d.motivo),
     })
   }
 
   const totalSemResposta = semResposta.reduce((s, d) => s + d.total, 0)
   if (totalSemResposta > 0) {
-    fatias.push({ motivo: 'Sem motivo registrado', total: totalSemResposta, retornoPossivel: null, cor: CINZA })
+    fatias.push({
+      motivo: 'Sem motivo registrado',
+      total: totalSemResposta,
+      retornoPossivel: null,
+      cor: CINZA,
+      motivosOrigem: semResposta.map((d) => d.motivo),
+    })
   }
 
   return fatias
@@ -113,7 +150,15 @@ function arco(inicio: number, fim: number, raioExterno: number, raioInterno: num
   ].join(' ')
 }
 
-function Donut({ fatias, total }: { fatias: Fatia[]; total: number }) {
+function Donut({
+  fatias,
+  total,
+  onAbrir,
+}: {
+  fatias: Fatia[]
+  total: number
+  onAbrir: (f: Fatia) => void
+}) {
   let acumulado = 0
   // 2px de superfície entre fatias: sem o vão, dois matizes vizinhos encostam e a
   // fronteira some justamente para quem tem dificuldade de distingui-los.
@@ -127,8 +172,14 @@ function Donut({ fatias, total }: { fatias: Fatia[]; total: number }) {
         acumulado += angulo
         const fim = Math.max(inicio, acumulado - VAO)
         return (
-          <path key={f.motivo} d={arco(inicio, fim, 46, 30)} fill={f.cor}>
-            <title>{`${f.motivo}: ${f.total} (${Math.round((f.total / total) * 100)}%)`}</title>
+          <path
+            key={f.motivo}
+            d={arco(inicio, fim, 46, 30)}
+            fill={f.cor}
+            className="cursor-pointer outline-none transition-opacity hover:opacity-80"
+            onClick={() => onAbrir(f)}
+          >
+            <title>{`${f.motivo}: ${f.total} (${Math.round((f.total / total) * 100)}%) — clique para ver quem`}</title>
           </path>
         )
       })}
@@ -143,28 +194,125 @@ function Donut({ fatias, total }: { fatias: Fatia[]; total: number }) {
   )
 }
 
+/**
+ * O indicador é um BOTÃO. Um número que não abre é um número em que se acredita ou não
+ * se acredita; abrindo, vira a lista de quem ligar — que é o que se queria desde o
+ * começo. Vale inclusive para o zero: "nenhum com chance de retorno" merece a mesma
+ * confirmação que os outros, e uma lista vazia é resposta.
+ */
 function Indicador({
   rotulo,
   valor,
   ajuda,
   tom,
+  onAbrir,
 }: {
   rotulo: string
   valor: number
   ajuda: string
   tom?: 'bom' | 'ruim'
+  onAbrir: () => void
 }) {
   const cor = tom === 'bom' ? 'text-emerald-700 dark:text-emerald-300' : tom === 'ruim' ? 'text-destructive' : ''
   return (
-    <div className="rounded-lg border border-border p-3">
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
+    >
       <p className="text-xs text-muted-foreground">{rotulo}</p>
       <p className={`text-2xl font-semibold tabular-nums ${cor}`}>{valor}</p>
       <p className="mt-1 text-xs text-muted-foreground">{ajuda}</p>
-    </div>
+    </button>
+  )
+}
+
+const brl = (n: number | null) =>
+  n === null || !Number.isFinite(Number(n))
+    ? null
+    : Number(n).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      })
+
+function dataBr(iso: string | null): string | null {
+  if (!iso) return null
+  const [a, m, d] = iso.split('-')
+  return a && m && d ? `${d}/${m}/${a}` : iso
+}
+
+/** A lista por trás do indicador clicado — mesmo desenho do drill-down do mapa. */
+function ListaDialog({ alvo, onOpenChange }: { alvo: Recorte | null; onOpenChange: (a: boolean) => void }) {
+  const aberto = alvo !== null
+  const q = useQuery({
+    queryKey: empresasKeys.exClientesLista(alvo?.recorte ?? '', alvo?.motivos ?? []),
+    queryFn: () => buscarExClientesLista(alvo!.recorte, alvo!.motivos),
+    enabled: aberto,
+  })
+
+  return (
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 p-0">
+        <DialogHeader className="border-b p-6 pb-4">
+          <DialogTitle className="pr-6">{alvo?.titulo ?? ''}</DialogTitle>
+          <DialogDescription>{alvo?.ajuda ?? ''}</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {q.isPending ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (q.data ?? []).length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Nenhum ex-cliente neste recorte.</p>
+          ) : (
+            <ul className="space-y-1">
+              {(q.data ?? []).map((c) => {
+                const nome = c.nome ?? formatCnpj(c.cnpj)
+                const meta = [c.uf, dataBr(c.ex_cliente_desde), brl(c.ultimo_limite)]
+                  .filter(Boolean)
+                  .join(' · ')
+                return (
+                  <li key={c.cnpj} className="rounded-md border border-border p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      {c.empresa_id ? (
+                        <Link
+                          href={`/empresas/${c.empresa_id}`}
+                          className="truncate text-sm font-medium hover:underline"
+                        >
+                          {nome}
+                        </Link>
+                      ) : (
+                        <span className="truncate text-sm font-medium">{nome}</span>
+                      )}
+                      <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                        {formatCnpj(c.cnpj)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span>{c.motivo}</span>
+                      {/*
+                       * O selo repete em texto o que o recorte já dizia — e continua
+                       * necessário: nas listas por motivo (donut) e em "todos", a
+                       * chance de retorno não está no título do diálogo.
+                       */}
+                      {c.retorno_possivel === false && (
+                        <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-destructive">sem retorno</span>
+                      )}
+                      {meta ? <span>· {meta}</span> : null}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 export function ExClientesAnaliseCard() {
+  const [alvo, setAlvo] = React.useState<Recorte | null>(null)
   const { data, isPending } = useQuery({
     queryKey: empresasKeys.exClientesAnalise(),
     queryFn: buscarExClientesAnalise,
@@ -209,18 +357,46 @@ export function ExClientesAnaliseCard() {
 
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Indicador rotulo="Ex-clientes" valor={data.total} ajuda="Só clientes principais." />
+          <Indicador
+            rotulo="Ex-clientes"
+            valor={data.total}
+            ajuda="Só clientes principais."
+            onAbrir={() =>
+              setAlvo({
+                titulo: 'Ex-clientes',
+                ajuda: 'Quem foi cliente e não tem mais análise vigente. Sem filiais, SPEs ou ocultos.',
+                recorte: 'todos',
+                motivos: [],
+              })
+            }
+          />
           <Indicador
             rotulo="Com chance de retorno"
             valor={data.com_retorno}
             tom="bom"
             ajuda="Saíram por preço, limite, concorrente ou fricção — coisas que uma proposta nova resolve."
+            onAbrir={() =>
+              setAlvo({
+                titulo: 'Com chance de retorno',
+                ajuda: 'Saíram por motivo que uma proposta nova resolve.',
+                recorte: 'com_retorno',
+                motivos: [],
+              })
+            }
           />
           <Indicador
             rotulo="Sem chance"
             valor={data.sem_retorno}
             tom="ruim"
             ajuda="Default, encerramento de atividades ou crédito cancelado. Não é preço que traz de volta."
+            onAbrir={() =>
+              setAlvo({
+                titulo: 'Sem chance de retorno',
+                ajuda: 'Default, encerramento de atividades ou crédito cancelado.',
+                recorte: 'sem_retorno',
+                motivos: [],
+              })
+            }
           />
         </div>
 
@@ -231,15 +407,39 @@ export function ExClientesAnaliseCard() {
          */}
         {semMotivo > 0 && (
           <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-            <strong className="text-foreground">{semMotivo}</strong> de {data.total} ainda sem
-            motivo classificado — e por isso fora das duas contas acima. A classificação é feita
-            na lista de ex-clientes ou na ficha da empresa, e é ela que transforma este quadro
-            numa resposta.
+            <button
+              type="button"
+              onClick={() =>
+                setAlvo({
+                  titulo: 'Ainda sem motivo classificado',
+                  ajuda: 'Fora das duas contas acima até alguém dizer por que saíram.',
+                  recorte: 'indefinido',
+                  motivos: [],
+                })
+              }
+              className="font-bold text-foreground underline-offset-2 hover:underline"
+            >
+              {semMotivo}
+            </button>{' '}
+            de {data.total} ainda sem motivo classificado — e por isso fora das duas contas
+            acima. A classificação é feita na lista de ex-clientes ou na ficha da empresa, e é
+            ela que transforma este quadro numa resposta.
           </p>
         )}
 
         <div className="flex flex-wrap items-center gap-6">
-          <Donut fatias={fatias} total={data.total} />
+          <Donut
+            fatias={fatias}
+            total={data.total}
+            onAbrir={(f) =>
+              setAlvo({
+                titulo: f.motivo,
+                ajuda: `${f.total} de ${data.total} ex-clientes saíram por este motivo.`,
+                recorte: 'motivos',
+                motivos: f.motivosOrigem,
+              })
+            }
+          />
 
           {/*
            * A legenda carrega contagem e percentual porque no tema claro três dos
@@ -249,29 +449,49 @@ export function ExClientesAnaliseCard() {
            */}
           <ul className="min-w-56 flex-1 space-y-1.5">
             {fatias.map((f) => (
-              <li key={f.motivo} className="flex items-center gap-2 text-sm">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                  style={{ backgroundColor: f.cor }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate" title={f.motivo}>
-                  {f.motivo}
-                </span>
-                {f.retornoPossivel === false && (
-                  <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
-                    sem retorno
+              <li key={f.motivo}>
+                {/*
+                 * A legenda também abre. Ela é o alvo grande e rotulado do gráfico —
+                 * uma fatia de 1% é um alvo de poucos pixels, e num donut é a legenda
+                 * que se lê primeiro de qualquer forma.
+                 */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAlvo({
+                      titulo: f.motivo,
+                      ajuda: `${f.total} de ${data.total} ex-clientes saíram por este motivo.`,
+                      recorte: 'motivos',
+                      motivos: f.motivosOrigem,
+                    })
+                  }
+                  className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-sm transition-colors hover:bg-accent/60"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: f.cor }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate" title={f.motivo}>
+                    {f.motivo}
                   </span>
-                )}
-                <span className="shrink-0 tabular-nums">{f.total}</span>
-                <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {Math.round((f.total / data.total) * 100)}%
-                </span>
+                  {f.retornoPossivel === false && (
+                    <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
+                      sem retorno
+                    </span>
+                  )}
+                  <span className="shrink-0 tabular-nums">{f.total}</span>
+                  <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                    {Math.round((f.total / data.total) * 100)}%
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
         </div>
       </CardContent>
+
+      <ListaDialog alvo={alvo} onOpenChange={(a) => !a && setAlvo(null)} />
     </Card>
   )
 }

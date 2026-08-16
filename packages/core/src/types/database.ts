@@ -4399,6 +4399,10 @@ export type Database = {
         Args: { p_meses?: number }
         Returns: Json
       }
+      ex_clientes_lista: {
+        Args: { p_recorte: string; p_motivos?: string[] | null }
+        Returns: Json
+      }
       app_marcar_fornecedor_sem_interesse: {
         Args: { p: Json }
         Returns: Database["public"]["Tables"]["antecipacao_fornecedor_sem_interesse"]["Row"]

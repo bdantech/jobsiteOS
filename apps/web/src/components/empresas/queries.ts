@@ -76,6 +76,8 @@ export const empresasKeys = {
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin, afiancadas] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
   exClientesAnalise: () => ['empresas', 'ex-clientes-analise'] as const,
+  exClientesLista: (recorte: string, motivos: readonly string[]) =>
+    ['empresas', 'ex-clientes-lista', recorte, motivos.join('|')] as const,
   potencialLimite: () => ['empresas', 'potencial-limite'] as const,
   custoProtestos: () => ['empresas', 'custo-protestos'] as const,
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
@@ -552,4 +554,39 @@ export async function buscarExClientesAnalise(): Promise<ExClientesAnalise> {
   const { data, error } = await supabase.rpc('ex_clientes_analise')
   if (error) throw new Error(error.message)
   return data as unknown as ExClientesAnalise
+}
+
+/** Um recorte da análise: 'todos', 'com_retorno', 'sem_retorno', 'indefinido', 'motivos'. */
+export type RecorteExClientes = 'todos' | 'com_retorno' | 'sem_retorno' | 'indefinido' | 'motivos'
+
+export interface ExClienteDaLista {
+  empresa_id: string | null
+  cnpj: string
+  nome: string | null
+  ex_cliente_desde: string | null
+  meses_desde: number | null
+  ultimo_limite: number | null
+  uf: string | null
+  motivo: string
+  retorno_possivel: boolean | null
+}
+
+/**
+ * As empresas por trás de um indicador clicado.
+ *
+ * `motivos` é ARRAY porque a fatia "Outros (N motivos)" do donut soma vários: mandar o
+ * conjunto é o que faz o clique numa fatia agregada abrir exatamente as linhas que ela
+ * somou, em vez de uma aproximação.
+ */
+export async function buscarExClientesLista(
+  recorte: RecorteExClientes,
+  motivos: readonly string[] = [],
+): Promise<ExClienteDaLista[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('ex_clientes_lista', {
+    p_recorte: recorte,
+    p_motivos: motivos.length > 0 ? [...motivos] : null,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as ExClienteDaLista[]
 }
