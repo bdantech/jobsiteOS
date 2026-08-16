@@ -19,6 +19,23 @@ const LOGIN_ROUTE = '/login'
 const TROCA_SENHA_ROUTE = '/alterar-senha'
 
 /**
+ * Rotas que existem PARA quem não tem conta.
+ *
+ * `/f/{slug}` é o formulário público de captação (04i): quem chega nele veio de uma
+ * landing page ou de um QR code e não tem login — mandá-lo para /login seria pedir
+ * senha a um desconhecido para ele poder virar lead.
+ *
+ * A lista é de PREFIXO e é curta de propósito. Cada entrada aqui é uma porta aberta
+ * na frente do app inteiro; o que passa por ela precisa se defender sozinho, como a
+ * rota do formulário faz (recorte mínimo por RPC, rate limit, honeypot).
+ */
+const PREFIXOS_PUBLICOS = ['/f/'] as const
+
+function ehPublica(pathname: string): boolean {
+  return PREFIXOS_PUBLICOS.some((p) => pathname.startsWith(p))
+}
+
+/**
  * The service-role client is built inline here instead of importing
  * lib/supabase/admin.ts, which carries `import 'server-only'`. Middleware is
  * compiled for the edge runtime, where that import is not guaranteed to resolve
@@ -114,8 +131,14 @@ function expulsar(request: NextRequest, motivo: 'desativado' | 'sessao'): NextRe
 }
 
 export async function middleware(request: NextRequest) {
-  const { response, user } = await updateSession(request)
   const { pathname } = request.nextUrl
+
+  // Antes de qualquer coisa, inclusive do refresh de sessão: a página pública não
+  // depende de sessão nenhuma, e tocar no cookie de quem não tem conta só gasta uma
+  // ida ao Supabase por visita de landing page.
+  if (ehPublica(pathname)) return NextResponse.next()
+
+  const { response, user } = await updateSession(request)
 
   const isLogin = pathname === LOGIN_ROUTE
 

@@ -409,6 +409,134 @@ export type Database = {
           },
         ]
       }
+      formularios: {
+        Row: {
+          id: string
+          slug: string
+          nome: string
+          descricao: string | null
+          titulo: string | null
+          subtitulo: string | null
+          texto_botao: string
+          mensagem_sucesso: string | null
+          ajuda_cnpj: string | null
+          campos: Json
+          pergunta_intencao: Json | null
+          consentimento_texto: string | null
+          consentimento_obrigatorio: boolean
+          vendedor_destino_id: string | null
+          auto_resposta_habilitada: boolean
+          auto_resposta_assunto: string | null
+          auto_resposta_corpo: string | null
+          enriquecimento_pago: boolean
+          ativo: boolean
+          criado_por: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          nome: string
+          descricao?: string | null
+          titulo?: string | null
+          subtitulo?: string | null
+          texto_botao?: string
+          mensagem_sucesso?: string | null
+          ajuda_cnpj?: string | null
+          campos: Json
+          pergunta_intencao?: Json | null
+          consentimento_texto?: string | null
+          consentimento_obrigatorio?: boolean
+          vendedor_destino_id?: string | null
+          auto_resposta_habilitada?: boolean
+          auto_resposta_assunto?: string | null
+          auto_resposta_corpo?: string | null
+          enriquecimento_pago?: boolean
+          ativo?: boolean
+          criado_por?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['formularios']['Insert']>
+        Relationships: []
+      }
+      formulario_submissoes: {
+        Row: {
+          id: string
+          formulario_id: string | null
+          dados: Json
+          campos_snapshot: Json
+          intencao: string | null
+          utm_source: string | null
+          utm_medium: string | null
+          utm_campaign: string | null
+          utm_term: string | null
+          utm_content: string | null
+          referrer: string | null
+          pagina_url: string | null
+          user_agent: string | null
+          ip_hash: string | null
+          cnpj: string | null
+          empresa_id: string | null
+          contato_id: string | null
+          sdr_lead_id: string | null
+          status: string
+          motivo_revisao: string | null
+          divergencia_papel: boolean
+          consentimento_aceito: boolean | null
+          consentimento_em: string | null
+          erro: string | null
+          criada_em: string
+          processada_em: string | null
+        }
+        Insert: {
+          id?: string
+          formulario_id?: string | null
+          dados: Json
+          campos_snapshot: Json
+          intencao?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          utm_term?: string | null
+          utm_content?: string | null
+          referrer?: string | null
+          pagina_url?: string | null
+          user_agent?: string | null
+          ip_hash?: string | null
+          cnpj?: string | null
+          empresa_id?: string | null
+          contato_id?: string | null
+          sdr_lead_id?: string | null
+          status?: string
+          motivo_revisao?: string | null
+          divergencia_papel?: boolean
+          consentimento_aceito?: boolean | null
+          consentimento_em?: string | null
+          erro?: string | null
+          processada_em?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['formulario_submissoes']['Insert']>
+        Relationships: []
+      }
+      formulario_visualizacoes: {
+        Row: {
+          id: number
+          formulario_id: string | null
+          utm_source: string | null
+          utm_campaign: string | null
+          pagina_url: string | null
+          visto_em: string
+        }
+        Insert: {
+          formulario_id?: string | null
+          utm_source?: string | null
+          utm_campaign?: string | null
+          pagina_url?: string | null
+          visto_em?: string
+        }
+        Update: never
+        Relationships: []
+      }
       certificado_cards: {
         Row: {
           id: string
@@ -4401,6 +4529,22 @@ export type Database = {
       }
       ex_clientes_lista: {
         Args: { p_recorte: string; p_motivos?: string[] | null }
+        Returns: Json
+      }
+      formulario_publico: {
+        Args: { p_slug: string }
+        Returns: Json
+      }
+      formularios_lista: {
+        Args: never
+        Returns: Json
+      }
+      app_salvar_formulario: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      app_processar_submissao: {
+        Args: { p: Json }
         Returns: Json
       }
       app_marcar_fornecedor_sem_interesse: {

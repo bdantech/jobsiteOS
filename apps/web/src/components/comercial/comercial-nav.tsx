@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Target, Users,
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Sparkles, Target, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -54,6 +54,9 @@ const ITENS: readonly ItemNav[] = [
     tipos: ['originador', 'vendedor'],
     labelPorTipo: { originador: 'Empresas da Carteira', vendedor: 'Passivas na Carteira' },
   },
+  // Leads é do time todo (o SDR precisa ver de onde veio o que chegou na fila dele),
+  // mas só o gestor cria formulário — a página resolve isso por dentro.
+  { href: '/comercial/leads', label: 'Leads', icon: Sparkles },
   { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true },
   { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },

@@ -11,6 +11,18 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  /*
+   * O snippet embutível é `<script src="/f/{slug}.js">` (04i §4), e essa URL colide
+   * com a página standalone `/f/{slug}`: o App Router resolve as duas para o MESMO
+   * segmento dinâmico, e uma pasta não pode ter `page.tsx` e `route.ts` ao mesmo
+   * tempo. O rewrite desempata pela extensão antes do roteador ver o caminho.
+   *
+   * A alternativa era mudar a URL do script — mas ela vai colada na landing page do
+   * cliente, e um snippet publicado é a coisa mais cara de trocar depois.
+   */
+  async rewrites() {
+    return [{ source: '/f/:slug.js', destination: '/api/f/:slug/script' }]
+  },
   webpack: (config) => {
     // @jobsiteos/core is raw ESM TypeScript: its relative imports carry explicit
     // `.js` extensions ("export * from './schemas/index.js'") that actually
