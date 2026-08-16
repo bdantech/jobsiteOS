@@ -95,6 +95,9 @@ const JANELAS: readonly { valor: number; rotulo: string }[] = [
  * Barra e não pizza: são até treze categorias com nomes longos, e a pizza precisaria
  * de uma legenda que dobra a área ocupada para dizer a mesma coisa pior. Ordenado por
  * contagem, porque a pergunta é "qual é o maior?".
+ *
+ * Conta as MESMAS linhas da tabela logo abaixo (`na_lista`, 0115). Contar aqui quem a
+ * tabela não mostra é uma contradição a dois centímetros de distância.
  */
 function DistribuicaoMotivos({ meses }: { meses: number }) {
   const { data, isPending } = useQuery({
@@ -263,24 +266,20 @@ export function ExClientesLista({ termo }: { termo: string }) {
   const qc = useQueryClient()
   const [janela, setJanela] = React.useState(12)
   /**
-   * Abre em CLIENTES PRINCIPAIS, e esse é o ponto da tela.
+   * UMA gaveta, não duas.
    *
-   * A plataforma abria análise de crédito por SPE e por filial no passado, e o
-   * resultado é que 17 dos 21 primeiros "ex-clientes" eram veículo de obra ou
-   * endereço da mesma pessoa jurídica — a VALKA apareceu quatro vezes. Quem pergunta
-   * "quais clientes perdemos?" quer matriz e holding.
+   * Havia dois filtros respondendo à mesma pergunta — "esta empresa conta como
+   * cliente que perdemos?" — por caminhos diferentes: "só principais" (heurística de
+   * filial/SPE) e "ocultos" (decisão humana, o escape de quando a heurística não
+   * fecha). Dois botões, duas contagens, e a chance de discordarem entre si e dos
+   * indicadores. São o mesmo conceito com dois nomes.
    *
-   * Os outros ficam a um clique, e não escondidos: "as cinco SPEs daquele grupo
-   * saíram no mesmo trimestre" é informação, e some se a lista as apagar.
+   * Agora o recorte é `na_lista`, calculado na view (0115) e lido por todo mundo:
+   * esta tabela, o gráfico acima dela e os indicadores da aba Análise. O que fica de
+   * fora não some — fica atrás deste toggle, com a marca de POR QUE saiu, porque "as
+   * cinco SPEs daquele grupo saíram no mesmo trimestre" é informação.
    */
-  const [somentePrincipais, setSomentePrincipais] = React.useState(true)
-  /**
-   * A gaveta dos ocultos. Existe porque a heurística de SPE/filial não fecha: sobram
-   * veículos de projeto que, estruturalmente, são iguais a uma operacional. Quem
-   * conhece a carteira resolve num clique — e precisa poder conferir e desfazer, ou
-   * o clique vira uma decisão cega que ninguém revisa.
-   */
-  const [verOcultos, setVerOcultos] = React.useState(false)
+  const [verFora, setVerFora] = React.useState(false)
   const [ocultando, setOcultando] = React.useState<string | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
@@ -294,28 +293,36 @@ export function ExClientesLista({ termo }: { termo: string }) {
         if (!combina(c, termo)) return false
         // `=== true` e não `!== false`: um nulo vindo da view já reapareceu na lista
         // uma vez, quando `e_spe` saía NULO por lógica de três valores do SQL.
-        if (verOcultos) return c.oculto === true
-        if (c.oculto === true) return false
-        return !somentePrincipais || c.e_principal === true
+        return verFora ? c.na_lista !== true : c.na_lista === true
       }),
-    [data, termo, somentePrincipais, verOcultos],
+    [data, termo, verFora],
   )
 
-  const visiveis = (data ?? []).filter((c) => c.oculto !== true)
-  const secundarios = visiveis.filter((c) => c.e_principal !== true).length
-  const ocultos = (data ?? []).filter((c) => c.oculto === true).length
+  const fora = (data ?? []).filter((c) => c.na_lista !== true).length
 
-  async function alternarOculto(cnpj: string | null, estaOculto: boolean) {
-    if (!cnpj) return
-    setOcultando(cnpj)
-    const r = estaOculto ? await reexibirExClienteAction(cnpj) : await ocultarExClienteAction(cnpj)
+  async function alternarOculto(c: ExCliente) {
+    if (!c.cnpj) return
+    const estaOculto = c.oculto === true
+    setOcultando(c.cnpj)
+    const r = estaOculto ? await reexibirExClienteAction(c.cnpj) : await ocultarExClienteAction(c.cnpj)
     setOcultando(null)
     if (!r.ok) {
       toast.error(r.message)
       return
     }
-    toast.success(estaOculto ? 'De volta à lista.' : 'Ocultado da lista.')
-    void qc.invalidateQueries({ queryKey: radarKeys.exClientes() })
+    /*
+     * Reexibir uma filial/SPE desfaz o ocultar mas NÃO devolve a linha — ela continua
+     * fora pela heurística. Prometer "de volta à lista" e a pessoa não achar a
+     * empresa lá é o tipo de mentira pequena que faz duvidar do resto da tela.
+     */
+    toast.success(
+      !estaOculto
+        ? 'Fora da lista.'
+        : c.e_principal === true
+          ? 'De volta à lista.'
+          : 'Ocultar desfeito — segue fora por ser filial/SPE.',
+    )
+    void qc.invalidateQueries({ queryKey: radarKeys.all })
   }
 
   if (isPending) return <Skeleton className="h-64 w-full" />
@@ -384,36 +391,23 @@ export function ExClientesLista({ termo }: { termo: string }) {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
           <p className="text-sm text-muted-foreground">
-            {verOcultos ? (
+            {verFora ? (
               <>
-                Mostrando os <strong>ocultos</strong> — escondidos da lista à mão. Nada foi
-                apagado: reexibir devolve a linha.
-              </>
-            ) : somentePrincipais ? (
-              <>
-                Mostrando <strong>clientes principais</strong>
-                {secundarios > 0 ? <> · {secundarios} filial(is) e SPE(s) fora</> : null}
-                {ocultos > 0 ? <> · {ocultos} oculto(s)</> : null}.
+                <strong>Fora da lista</strong>: filiais, SPEs e o que alguém ocultou à mão. Nada
+                foi apagado — a marca em cada linha diz por que ela está aqui.
               </>
             ) : (
               <>
-                Mostrando <strong>todos</strong>, inclusive filiais e SPEs.
+                Mostrando <strong>clientes principais</strong> — é este recorte que os
+                indicadores contam
+                {fora > 0 ? <> · {fora} fora da lista</> : null}.
               </>
             )}
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            {!verOcultos && secundarios > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setSomentePrincipais((v) => !v)}>
-                {somentePrincipais ? `Mostrar todos (${secundarios} a mais)` : 'Só principais'}
-              </Button>
-            )}
-            {(ocultos > 0 || verOcultos) && (
-              <Button
-                variant={verOcultos ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setVerOcultos((v) => !v)}
-              >
-                {verOcultos ? 'Voltar à lista' : `Ocultos (${ocultos})`}
+            {(fora > 0 || verFora) && (
+              <Button variant={verFora ? 'default' : 'outline'} size="sm" onClick={() => setVerFora((v) => !v)}>
+                {verFora ? 'Voltar à lista' : `Fora da lista (${fora})`}
               </Button>
             )}
           </div>
@@ -435,7 +429,11 @@ export function ExClientesLista({ termo }: { termo: string }) {
               {linhas.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                    Nenhum ex-cliente para “{termo.trim()}”.
+                    {termo.trim()
+                      ? `Nenhum ex-cliente para “${termo.trim()}”.`
+                      : verFora
+                        ? 'Nada fora da lista.'
+                        : 'Nenhum ex-cliente na lista.'}
                   </td>
                 </tr>
               )}
@@ -446,15 +444,19 @@ export function ExClientesLista({ termo }: { termo: string }) {
                     <p className="flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums text-muted-foreground">
                       {c.cnpj ? formatCnpj(c.cnpj) : '—'}
                       {/*
-                       * Com o toggle aberto, a marca é obrigatória: sem ela a lista
-                       * mistura "a construtora saiu" com "uma obra dela terminou", e
-                       * as duas linhas parecem a mesma perda.
+                       * Na gaveta, a marca é o que responde "por que esta empresa está
+                       * fora?" — e são três motivos diferentes que podem coexistir.
+                       * Sem elas a lista mistura "a construtora saiu" com "uma obra
+                       * dela terminou", e as duas linhas parecem a mesma perda.
                        */}
                       {c.e_filial ? (
                         <span className="rounded bg-muted px-1.5 py-0.5 font-sans">Filial</span>
                       ) : null}
                       {c.e_spe ? (
                         <span className="rounded bg-muted px-1.5 py-0.5 font-sans">SPE</span>
+                      ) : null}
+                      {c.oculto ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-sans">Oculta à mão</span>
                       ) : null}
                     </p>
                   </td>
@@ -490,22 +492,29 @@ export function ExClientesLista({ termo }: { termo: string }) {
                        * O escape da heurística. Sobram veículos de projeto que nenhum
                        * sinal estrutural separa de uma operacional — quem conhece a
                        * carteira resolve num clique, e o clique é reversível.
+                       *
+                       * Só aparece onde faz alguma coisa: numa filial/SPE que ninguém
+                       * ocultou, a heurística já tirou a linha da lista, e um botão
+                       * que grava um registro sem mudar nada na tela é um botão que
+                       * ensina a pessoa a duvidar dos outros.
                        */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={ocultando === c.cnpj}
-                        title={c.oculto ? 'Devolver à lista' : 'Ocultar da lista'}
-                        aria-label={`${c.oculto ? 'Devolver à lista' : 'Ocultar da lista'}: ${c.nome ?? c.cnpj ?? ''}`}
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => void alternarOculto(c.cnpj, c.oculto === true)}
-                      >
-                        {c.oculto ? (
-                          <Eye className="h-3.5 w-3.5" aria-hidden />
-                        ) : (
-                          <EyeOff className="h-3.5 w-3.5" aria-hidden />
-                        )}
-                      </Button>
+                      {c.na_lista === true || c.oculto === true ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={ocultando === c.cnpj}
+                          title={c.oculto ? 'Desfazer o ocultar' : 'Tirar da lista'}
+                          aria-label={`${c.oculto ? 'Desfazer o ocultar' : 'Tirar da lista'}: ${c.nome ?? c.cnpj ?? ''}`}
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => void alternarOculto(c)}
+                        >
+                          {c.oculto ? (
+                            <Eye className="h-3.5 w-3.5" aria-hidden />
+                          ) : (
+                            <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

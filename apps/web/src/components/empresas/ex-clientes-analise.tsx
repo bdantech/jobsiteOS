@@ -12,9 +12,11 @@ import { buscarExClientesAnalise, empresasKeys, type ExClientesAnalise } from '.
  * Ex-clientes na aba Análise: quantos são, quantos dá para reconquistar, e por quê
  * saíram.
  *
- * Só os NÃO OCULTOS entram. O que alguém escondeu da lista não pode voltar pela
- * porta dos indicadores — um número que contradiz a tela ao lado destrói a
- * confiança nos dois.
+ * CONTA EXATAMENTE AS LINHAS DA LISTA — nem uma a mais. O recorte é `na_lista`
+ * (0115): matriz, não-SPE, não-oculta. Antes daquela migração este card descontava
+ * os ocultos mas não as filiais e SPEs, e dizia 139 enquanto a lista ao lado mostrava
+ * 72. Um número que contradiz a tela ao lado destrói a confiança nos dois, e a
+ * correção não é acertar a conta aqui: é não ter uma segunda definição.
  *
  * A CLASSIFICAÇÃO DE RETORNO mora no banco (`motivos_perda.retorno_possivel`), não
  * aqui: a lista de motivos é editável por admin, e uma regra em TS chaveada por
@@ -192,8 +194,8 @@ export function ExClientesAnaliseCard() {
               <CardTitle className="text-base">Ex-clientes</CardTitle>
             </div>
             <CardDescription>
-              Quem foi cliente e não tem mais análise de crédito vigente. Não conta os que
-              foram ocultados da lista.
+              Quem foi cliente e não tem mais análise de crédito vigente. Mesmo recorte da
+              lista: sem filiais, sem SPEs e sem o que foi ocultado à mão.
             </CardDescription>
           </div>
           <Link
@@ -207,7 +209,7 @@ export function ExClientesAnaliseCard() {
 
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Indicador rotulo="Ex-clientes" valor={data.total} ajuda="Fora os ocultos." />
+          <Indicador rotulo="Ex-clientes" valor={data.total} ajuda="Só clientes principais." />
           <Indicador
             rotulo="Com chance de retorno"
             valor={data.com_retorno}
