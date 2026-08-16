@@ -109,6 +109,27 @@
     --chart-4: 220 35% 18%; /* SOM      */
     --chart-5: 217 20% 55%; /* neutro, para séries fora da pirâmide */
 
+    /*
+     * ── Os `--cat-*` são CATEGÓRICOS, o oposto dos `--chart-*` acima ──────────
+     * A rampa ordinal não serve para identidade: motivos de saída de cliente não
+     * têm ordem, e pintá-los com luminosidades do mesmo matiz sugeriria uma que
+     * não existe. São oito matizes distintos, atribuídos em ORDEM FIXA — nunca
+     * ciclados, nunca gerados: um nono matiz é indistinguível de um existente sob
+     * daltonismo.
+     *
+     * Validados (não estimados) contra a superfície de cada tema: banda de
+     * luminosidade, piso de croma, separação sob protanopia/deuteranopia/
+     * tritanopia e piso de visão normal. No claro, três deles ficam abaixo de 3:1
+     * contra a superfície — por isso todo gráfico que os usa é OBRIGADO a trazer
+     * rótulo visível (legenda com contagem), nunca cor sozinha.
+     */
+    --cat-1: 213 68% 50%;
+    --cat-2: 17 82% 56%;
+    --cat-3: 159 73% 40%;
+    --cat-4: 41 100% 46%;
+    --cat-5: 337 70% 70%;
+    --cat-6: 120 100% 26%;
+
     --radius: 0.5rem;
   }
 
@@ -173,6 +194,16 @@
     --chart-3: 217 36% 67%; /* SAM      */
     --chart-4: 217 61% 87%; /* SOM      */
     --chart-5: 217 15% 60%; /* neutro   */
+
+    /* Os mesmos seis matizes, re-escalonados para a superfície escura — não é o
+     * espelho do claro: no escuro todos passam de 3:1, e é o claro que precisa da
+     * muleta do rótulo. */
+    --cat-1: 213 77% 56%;
+    --cat-2: 17 70% 50%;
+    --cat-3: 159 73% 36%;
+    --cat-4: 40 100% 39%;
+    --cat-5: 338 61% 58%;
+    --cat-6: 120 100% 26%;
   }
 }
 

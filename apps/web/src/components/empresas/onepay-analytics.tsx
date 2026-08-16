@@ -38,6 +38,7 @@ import {
 } from './queries'
 import { GraficoTempoProtestos, extrairProtestos } from './protestos-serie'
 import { PotencialLimite } from './potencial-limite'
+import { ExClientesAnaliseCard } from './ex-clientes-analise'
 
 const pctDe = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 1000) / 10 : 0)
 const fmtPct = (p: number) => `${p.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -810,6 +811,13 @@ export function OnepayAnalyticsTab({ temRadar }: { temRadar: boolean }) {
        * card que ninguém rola até.
        */}
       <PotencialLimite />
+
+      {/*
+       * Logo abaixo do potencial, e antes dos descritivos: os dois são acionáveis e
+       * olham para lados opostos da mesma carteira — quanto dá para crescer em quem
+       * está dentro, e quem já saiu e dá para trazer de volta.
+       */}
+      <ExClientesAnaliseCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <MapaRegioes porRegiao={data.por_regiao} onAbrir={setFiltro} />

@@ -75,6 +75,7 @@ export const empresasKeys = {
   previaProtestos: (id: string, incluirSpes: boolean, anoMin: number | null, afiancadas = false) =>
     ['empresas', 'analise-financeira', id, 'previa-protestos', incluirSpes, anoMin, afiancadas] as const,
   onepayAnalytics: () => ['empresas', 'onepay-analytics'] as const,
+  exClientesAnalise: () => ['empresas', 'ex-clientes-analise'] as const,
   potencialLimite: () => ['empresas', 'potencial-limite'] as const,
   custoProtestos: () => ['empresas', 'custo-protestos'] as const,
   metricas: (cnpj: string) => ['empresas', 'metricas', cnpj] as const,
@@ -527,4 +528,28 @@ export async function buscarPotencialLimite(): Promise<PotencialLimiteDados> {
     nDeclarantes: Number(coef?.n_declarantes ?? 0),
     calibradoEm: calibracao.data?.calibrado_em ?? null,
   }
+}
+
+// ─── Ex-clientes na aba Análise (04h) ───────────────────────────────────────
+
+export interface ExClientesAnalise {
+  total: number
+  com_retorno: number
+  sem_retorno: number
+  /** Sem motivo classificado. NÃO entra em com_retorno nem em sem_retorno. */
+  indefinido: number
+  distribuicao: { motivo: string; total: number; retorno_possivel: boolean | null }[]
+}
+
+/**
+ * Um RPC e não quatro consultas: os quatro números têm de vir do MESMO instante e do
+ * mesmo recorte (só os não ocultos). Somados de leituras separadas, dariam um total
+ * que não bate com a soma das partes na primeira vez que alguém ocultasse uma linha
+ * no meio do carregamento.
+ */
+export async function buscarExClientesAnalise(): Promise<ExClientesAnalise> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('ex_clientes_analise')
+  if (error) throw new Error(error.message)
+  return data as unknown as ExClientesAnalise
 }

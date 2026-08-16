@@ -4308,6 +4308,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      ex_clientes_analise: {
+        Args: never
+        Returns: Json
+      }
       ex_clientes_por_motivo: {
         Args: { p_meses?: number }
         Returns: Json
