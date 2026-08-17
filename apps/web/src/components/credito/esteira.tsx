@@ -63,19 +63,41 @@ function CartaoAnalise({
   onSelecionar: ((id: string, v: boolean) => void) | null
 }) {
   return (
-    <div className={cn('rounded-md border p-2 text-sm', ESTAGIO_CLASSE[a.estagio as EstagioAnalise])}>
+    /*
+     * O CARD INTEIRO abre o detalhe, mas o link continua sendo o nome.
+     *
+     * O `after:absolute after:inset-0` estica a área clicável da âncora até as bordas do
+     * card, que é `relative`. Parece um truque e é o contrário de um: um `onClick` no
+     * `div` daria a mesma área e quebraria tudo que faz de um link um link — abrir em
+     * nova aba com o meio do mouse, copiar o endereço, chegar nele pelo teclado, e o
+     * leitor de tela anunciar "link para {empresa}" em vez de silêncio.
+     *
+     * O checkbox sobe para `z-10` porque ele fica DEBAIXO da camada esticada. Sem isso,
+     * selecionar uma análise para envio viraria navegar para ela — e o envio é a ação
+     * cara desta tela.
+     */
+    <div
+      className={cn(
+        'relative rounded-md border p-2 text-sm transition-colors',
+        'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
+        ESTAGIO_CLASSE[a.estagio as EstagioAnalise],
+      )}
+    >
       <div className="flex items-start gap-2">
         {onSelecionar && (
           <input
             type="checkbox"
-            className="mt-1 h-3.5 w-3.5 shrink-0"
+            className="relative z-10 mt-1 h-3.5 w-3.5 shrink-0"
             checked={selecionada}
             onChange={(e) => onSelecionar(a.id, e.target.checked)}
             aria-label={`Selecionar ${nomeDe(a)}`}
           />
         )}
         <div className="min-w-0 flex-1">
-          <Link href={`/credito/analises/${a.id}`} className="line-clamp-2 font-medium hover:underline">
+          <Link
+            href={`/credito/analises/${a.id}`}
+            className="line-clamp-2 font-medium after:absolute after:inset-0 hover:underline"
+          >
             {nomeDe(a)}
           </Link>
           <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{formatCnpj(a.cnpj)}</p>
@@ -267,9 +289,15 @@ export function Esteira() {
                 </TableHeader>
                 <TableBody>
                   {(data ?? []).map((a) => (
-                    <TableRow key={a.id}>
+                    /* Mesma lista, mesma regra: a linha inteira abre, pelo mesmo link
+                       esticado do card. Duas vistas do mesmo dado que se clicam de jeitos
+                       diferentes fazem a pessoa reaprender a tela ao trocar de botão. */
+                    <TableRow key={a.id} className="relative">
                       <TableCell className="max-w-[20rem]">
-                        <Link href={`/credito/analises/${a.id}`} className="text-sm font-medium hover:underline">
+                        <Link
+                          href={`/credito/analises/${a.id}`}
+                          className="text-sm font-medium after:absolute after:inset-0 hover:underline"
+                        >
                           {nomeDe(a)}
                         </Link>
                         <p className="font-mono text-xs tabular-nums text-muted-foreground">
