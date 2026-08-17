@@ -15,6 +15,7 @@ import {
   MapPin,
   PlayCircle,
   RefreshCw,
+  Send,
   ShieldCheck,
 } from 'lucide-react'
 import {
@@ -34,11 +35,19 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
-import { moverAnaliseAction } from '@/actions/credito'
+import { enviarAnalisesAction, moverAnaliseAction } from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
@@ -77,15 +86,29 @@ const moeda = (v: number | null | undefined): string => brl(v)
 const formatData = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
-/** O seletor de estágio + o botão que roda a nossa análise: as duas ações da tela. */
+/**
+ * As ações da análise, todas no mesmo lugar: enviar à seguradora, rodar a nossa análise
+ * e mover de estágio.
+ *
+ * ─── POR QUE O ENVIO MORA AQUI, E NÃO NA ESTEIRA ────────────────────────────
+ * O envio resolve o cadastro do buyer na Atradius e PODE SER COBRADO. Na tela da esteira
+ * ele era um botão de lote alimentado por checkboxes nos cards — uma ação cara disparada
+ * a partir de uma lista, onde tudo que se vê de cada análise é o nome e um valor.
+ *
+ * Aqui ele fica ao lado do que justifica a decisão: os documentos anexados, o score, os
+ * protestos, a nossa recomendação. Enviar sem cobertura documental é jogar dinheiro fora
+ * — e o único lugar em que dá para saber isso antes de clicar é este.
+ */
 function Acoes({
   analiseId,
+  nome,
   estagio,
   statusPropria,
   jaTemPropria,
   onMudou,
 }: {
   analiseId: string
+  nome: string
   estagio: EstagioAnalise
   statusPropria: StatusAnalisePropria | null
   jaTemPropria: boolean
@@ -93,8 +116,30 @@ function Acoes({
 }) {
   const [movendo, setMovendo] = React.useState(false)
   const [rodando, setRodando] = React.useState(false)
+  const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false)
+  const [enviando, setEnviando] = React.useState(false)
 
   const decidida = ehEstagioDecidido(estagio)
+  // Só "solicitada" vai à seguradora — é o que o worker aceita, e oferecer o botão nos
+  // outros estágios seria desenhar um clique que não faz nada.
+  const podeEnviar = estagio === 'solicitada'
+
+  async function enviar() {
+    setEnviando(true)
+    const r = await enviarAnalisesAction([analiseId])
+    setEnviando(false)
+    setConfirmandoEnvio(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    if (!r.data.enfileirado) {
+      toast.error(r.data.aviso ?? 'O worker não aceitou o envio.')
+      return
+    }
+    toast.success('Envio disparado. A decisão chega pelo acompanhamento automático.')
+    onMudou()
+  }
   // Enquanto o worker trabalha ou a revisão espera, rodar de novo só gastaria os mesmos
   // tokens sobre os mesmos PDFs — e o RPC recusaria de qualquer forma.
   const podeRodar = statusPropria !== 'processando' && statusPropria !== 'aguardando_revisao'
@@ -133,8 +178,14 @@ function Acoes({
 
   return (
     <>
+      {podeEnviar && (
+        <Button size="sm" variant="default" onClick={() => setConfirmandoEnvio(true)}>
+          <Send className="mr-1.5 size-3.5" aria-hidden />
+          Enviar à seguradora
+        </Button>
+      )}
       {podeRodar && (
-        <Button size="sm" onClick={() => void rodar()} disabled={rodando}>
+        <Button size="sm" variant={podeEnviar ? 'outline' : 'default'} onClick={() => void rodar()} disabled={rodando}>
           {jaTemPropria ? (
             <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
           ) : (
@@ -157,6 +208,33 @@ function Acoes({
           </SelectContent>
         </Select>
       )}
+
+      {/*
+       * Diálogo, e não clique direto: `resolverBuyer` pode ser cobrado, uma vez por CNPJ
+       * sem cadastro na Atradius. Mesma cerimônia dos protestos, pelo mesmo motivo.
+       */}
+      <Dialog open={confirmandoEnvio} onOpenChange={setConfirmandoEnvio}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar à seguradora</DialogTitle>
+            <DialogDescription>
+              O envio resolve o cadastro do buyer na Atradius, e{' '}
+              <strong>essa consulta pode ser cobrada</strong> — uma vez por CNPJ que ainda não
+              tem cadastro. Depois disso o pedido de cobertura é submetido e a decisão chega
+              pelo acompanhamento automático.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="rounded-md border p-3 text-sm">{nome}</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmandoEnvio(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void enviar()} disabled={enviando}>
+              {enviando ? 'Enviando…' : 'Enviar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -247,6 +325,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
         acao={
           <Acoes
             analiseId={id}
+            nome={nome}
             estagio={estagio}
             statusPropria={status}
             jaTemPropria={propria !== null}

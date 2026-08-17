@@ -2,9 +2,8 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { AlertTriangle, LayoutGrid, Send, Table2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, LayoutGrid, Table2 } from 'lucide-react'
 import {
   COLUNAS_ESTEIRA,
   ESTAGIO_ANALISE_LABELS,
@@ -14,17 +13,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { enviarAnalisesAction } from '@/actions/credito'
 import { cn } from '@/lib/utils'
 import { buscarEsteira, creditoKeys, type AnaliseNaEsteira } from './queries'
 
@@ -35,6 +25,15 @@ import { buscarEsteira, creditoKeys, type AnaliseNaEsteira } from './queries'
  * (enviada, em análise, aprovada, negada, expirada) pertence à seguradora, não a nós.
  * Uma coluna que aceita um card arrastado promete um poder que não existe — e a migração
  * 0073 recusaria a escrita, transformando um gesto natural num erro inexplicável.
+ *
+ * ─── ESTA TELA NÃO ESCREVE NADA ─────────────────────────────────────────────
+ * Nem move estágio, nem envia à seguradora. O envio morava aqui como um botão de lote
+ * alimentado por checkboxes nos cards, e era a ação mais cara do módulo sendo disparada
+ * de uma lista onde só se vê nome e valor. Ele foi para a página de detalhe, ao lado dos
+ * documentos, do score e dos protestos — o único lugar onde dá para saber se vale gastar
+ * a consulta antes de gastá-la.
+ *
+ * O que sobra é uma lista que se lê e por onde se entra. Um card, um clique, um destino.
  */
 
 const moeda = (v: number | null): string =>
@@ -53,15 +52,7 @@ function nomeDe(a: AnaliseNaEsteira): string {
   return a.razao_social ?? a.nome_fantasia ?? formatCnpj(a.cnpj)
 }
 
-function CartaoAnalise({
-  a,
-  selecionada,
-  onSelecionar,
-}: {
-  a: AnaliseNaEsteira
-  selecionada: boolean
-  onSelecionar: ((id: string, v: boolean) => void) | null
-}) {
+function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
   return (
     /*
      * O CARD INTEIRO abre o detalhe, mas o link continua sendo o nome.
@@ -72,9 +63,9 @@ function CartaoAnalise({
      * nova aba com o meio do mouse, copiar o endereço, chegar nele pelo teclado, e o
      * leitor de tela anunciar "link para {empresa}" em vez de silêncio.
      *
-     * O checkbox sobe para `z-10` porque ele fica DEBAIXO da camada esticada. Sem isso,
-     * selecionar uma análise para envio viraria navegar para ela — e o envio é a ação
-     * cara desta tela.
+     * Nada mais dentro do card é clicável, e é de propósito: o envio à seguradora —
+     * que era a razão do checkbox que morava aqui — foi para a página de detalhe, onde
+     * dá para ver o que justifica gastar a consulta antes de gastá-la.
      */
     <div
       className={cn(
@@ -84,15 +75,6 @@ function CartaoAnalise({
       )}
     >
       <div className="flex items-start gap-2">
-        {onSelecionar && (
-          <input
-            type="checkbox"
-            className="relative z-10 mt-1 h-3.5 w-3.5 shrink-0"
-            checked={selecionada}
-            onChange={(e) => onSelecionar(a.id, e.target.checked)}
-            aria-label={`Selecionar ${nomeDe(a)}`}
-          />
-        )}
         <div className="min-w-0 flex-1">
           <Link
             href={`/credito/analises/${a.id}`}
@@ -122,11 +104,7 @@ function CartaoAnalise({
 }
 
 export function Esteira() {
-  const qc = useQueryClient()
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
-  const [selecionadas, setSelecionadas] = React.useState<Set<string>>(new Set())
-  const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false)
-  const [enviando, setEnviando] = React.useState(false)
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: creditoKeys.esteira(),
@@ -143,33 +121,6 @@ export function Esteira() {
     return m
   }, [data])
 
-  function alternar(id: string, v: boolean) {
-    setSelecionadas((s) => {
-      const n = new Set(s)
-      if (v) n.add(id)
-      else n.delete(id)
-      return n
-    })
-  }
-
-  async function enviar() {
-    setEnviando(true)
-    const r = await enviarAnalisesAction([...selecionadas])
-    setEnviando(false)
-    setConfirmandoEnvio(false)
-    if (!r.ok) {
-      toast.error(r.message)
-      return
-    }
-    if (!r.data.enfileirado) {
-      toast.error(r.data.aviso ?? 'O worker não aceitou o envio.')
-      return
-    }
-    toast.success('Envio disparado. As decisões chegam pelo poll da seguradora.')
-    setSelecionadas(new Set())
-    void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })
-  }
-
   if (isPending) return <Skeleton className="h-96 w-full rounded-lg" />
 
   if (isError) {
@@ -185,9 +136,6 @@ export function Esteira() {
     )
   }
 
-  const solicitadas = porEstagio.get('solicitada') ?? []
-  const podeEnviar = selecionadas.size > 0
-
   return (
     <div className="space-y-4">
       <Card>
@@ -198,23 +146,11 @@ export function Esteira() {
               <CardDescription>
                 Só os quatro primeiros estágios são nossos. <strong>Enviada em diante é da
                 seguradora</strong> — por isso não há arrastar-e-soltar: uma coluna que aceita
-                um card promete um poder que não existe.
+                um card promete um poder que não existe. Abra uma análise para enviá-la à
+                seguradora ou rodar a nossa.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button
-                size="sm"
-                disabled={!podeEnviar}
-                onClick={() => setConfirmandoEnvio(true)}
-                title={
-                  podeEnviar
-                    ? 'Envia as selecionadas à seguradora.'
-                    : 'Selecione análises em "Solicitada" para enviar.'
-                }
-              >
-                <Send className="mr-1 h-3.5 w-3.5" aria-hidden />
-                Enviar {selecionadas.size > 0 ? `(${selecionadas.size})` : ''}
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -248,7 +184,6 @@ export function Esteira() {
             <div className="flex gap-3 overflow-x-auto pb-2">
               {COLUNAS_ESTEIRA.map((estagio) => {
                 const itens = porEstagio.get(estagio) ?? []
-                const selecionavel = estagio === 'solicitada'
                 return (
                   <div key={estagio} className="w-56 shrink-0 space-y-2">
                     <div className="flex items-baseline justify-between gap-2 border-b pb-1">
@@ -257,12 +192,7 @@ export function Esteira() {
                     </div>
                     <div className="space-y-2">
                       {itens.map((a) => (
-                        <CartaoAnalise
-                          key={a.id}
-                          a={a}
-                          selecionada={selecionadas.has(a.id)}
-                          onSelecionar={selecionavel ? alternar : null}
-                        />
+                        <CartaoAnalise key={a.id} a={a} />
                       ))}
                       {itens.length === 0 && (
                         <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
@@ -323,44 +253,6 @@ export function Esteira() {
           )}
         </CardContent>
       </Card>
-
-      {/*
-       * Diálogo de confirmação, e não um clique direto: o envio resolve o cadastro do
-       * buyer na Atradius, e essa consulta PODE SER COBRADA. É a mesma cerimônia que
-       * protestos têm, pelo mesmo motivo.
-       */}
-      <Dialog open={confirmandoEnvio} onOpenChange={setConfirmandoEnvio}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar {selecionadas.size} análise(s) à seguradora</DialogTitle>
-            <DialogDescription>
-              O envio resolve o cadastro do buyer na Atradius, e <strong>essa consulta pode ser
-              cobrada</strong> — uma vez por CNPJ que ainda não tem cadastro. Depois disso o
-              pedido de cobertura é submetido e a decisão chega pelo acompanhamento automático.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-48 space-y-1 overflow-y-auto text-sm">
-            {solicitadas
-              .filter((a) => selecionadas.has(a.id))
-              .map((a) => (
-                <p key={a.id} className="flex items-baseline justify-between gap-2">
-                  <span className="truncate">{nomeDe(a)}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {moeda(a.limite_solicitado)}
-                  </span>
-                </p>
-              ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmandoEnvio(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void enviar()} disabled={enviando}>
-              {enviando ? 'Enviando…' : 'Confirmar envio'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
