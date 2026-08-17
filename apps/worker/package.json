@@ -6,12 +6,13 @@
   "scripts": {
     "//": "Every script runs the EMITTED js. Node's --experimental-strip-types cannot resolve the .js specifiers that TypeScript requires (packages/core is written the same way), so 'run the .ts directly' is not on the table here.",
     "dev": "tsc -p tsconfig.json && node --watch --env-file=.env dist/apps/worker/src/index.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/checar-imports.mjs && tsc -p tsconfig.json",
     "start": "node dist/apps/worker/src/index.js",
     "sample": "tsc -p tsconfig.json && node --env-file=.env dist/apps/worker/src/sample/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "typecheck": "node scripts/checar-imports.mjs && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "node --experimental-strip-types --import ./test/register.mjs --test \"src/**/*.test.ts\"",
-    "//env": "dev/sample carregam apps/worker/.env via --env-file do próprio Node. start NAO carrega: no Railway as variaveis vem da plataforma."
+    "//env": "dev/sample carregam apps/worker/.env via --env-file do próprio Node. start NAO carrega: no Railway as variaveis vem da plataforma.",
+    "//imports": "checar-imports roda ANTES do tsc: um import de @jobsiteos/core compila e so quebra no boot do container (ver scripts/checar-imports.mjs)."
   },
   "dependencies": {
     "@jobsiteos/core": "workspace:*",

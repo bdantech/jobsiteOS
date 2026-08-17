@@ -1,7 +1,16 @@
+/*
+ * Imports RELATIVOS ao fonte do core, e não `@jobsiteos/core` — como os outros 40
+ * arquivos deste worker.
+ *
+ * Não é preferência de estilo: o `rootDir` do worker é a raiz do repo, então o tsc emite
+ * `dist/packages/core/...` ao lado de `dist/apps/worker/...` e o caminho relativo resolve
+ * dentro do dist. O estágio runner do Dockerfile copia SÓ `apps/worker/dist` — o fonte de
+ * packages/core nunca chega lá. Um import pelo nome do pacote compila, passa no
+ * typecheck, roda em desenvolvimento, e só falha no boot do container.
+ */
+import { AI_MODEL, EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
-  AI_MODEL,
   DOCS_EXTRAIVEIS,
-  EVENTO_TIPOS,
   INDICADOR_LABELS,
   PARAMETROS_PADRAO,
   TETO_LABELS,
@@ -9,11 +18,11 @@ import {
   calcularAnalise,
   classificarQuadrante,
   criticosPendentes,
-  formatCnpj,
   type ContextoAnalise,
   type DadosExtraidos,
   type ParametrosAnalise,
-} from '@jobsiteos/core'
+} from '../../../../../packages/core/src/credito/analise.js'
+import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
 import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
