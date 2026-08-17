@@ -4,292 +4,660 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, FileUp, Paperclip } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  ExternalLink,
+  FileText,
+  Gauge,
+  Hash,
+  MapPin,
+  PlayCircle,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react'
 import {
   ESTAGIOS_MANUAIS,
   ESTAGIO_ANALISE_LABELS,
+  FAIXA_SCORE_LABELS,
+  KNOCKOUT_LABELS,
   ehEstagioDecidido,
   formatCnpj,
+  type DecisaoFinal,
   type EstagioAnalise,
+  type FaixaScore,
+  type Knockout,
+  type Quadrante,
+  type StatusAnalisePropria,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
-import { moverAnaliseAction, registrarDocAction } from '@/actions/credito'
-import { createClient } from '@/lib/supabase/client'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
-import { PainelSacado } from './analise-propria/painel-sacado'
-import { buscarAnalise, buscarCreditoConfig, buscarDocs, creditoKeys } from './queries'
+import { moverAnaliseAction } from '@/actions/credito'
+import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
+import { creditoKeys } from './queries'
+import { Confronto } from './analise-propria/confronto'
+import { DetalheCarregandoFicha } from './analise-propria/carregando'
+import { Documentos } from './analise-propria/documentos'
+import { Parecer } from './analise-propria/parecer'
+import { RevisaoExtracao } from './analise-propria/revisao-extracao'
+import { Cenarios, Indicadores, Lacunas, Tetos, brl } from './analise-propria/resultado'
+import { StatusAnalise } from './analise-propria/status-analise'
+import { analisePropriaKeys, buscarPainelSacado } from './analise-propria/queries'
 
 /**
- * Detalhe de uma análise: dados da seguradora, checklist de documentos e o pouco que a
- * tela pode mover.
+ * A ficha de uma análise de crédito.
  *
- * O seletor de estágio só oferece os quatro estágios MANUAIS. Os outros seis pertencem à
- * seguradora e são escritos pelo worker — a migração 0073 recusa o resto no RPC, e
- * oferecê-los aqui seria desenhar um botão que o banco vai negar.
+ * ─── POR QUE ELA É UMA FICHA, COMO A DA EMPRESA ─────────────────────────────
+ * Antes eram duas telas empilhadas: os dados da seguradora numa grade de cards, e a
+ * análise proprietária logo abaixo, com abas próprias no meio da rolagem. Duas caixas de
+ * abas na mesma página é o tipo de coisa que ninguém decide fazer — acontece quando um
+ * bloco novo chega e é pendurado no fim do que já existia.
+ *
+ * Agora é a mesma forma da Company 360 (`components/ficha/ficha.tsx`): voltar, topo,
+ * status, ABAS NO ALTO, e uma grade com a identidade fixa à esquerda. A identidade não é
+ * uma aba — é de quem se está falando, e sumir com ela ao trocar de aba é o caminho mais
+ * curto para alguém registrar uma decisão de crédito na empresa errada.
+ *
+ * ─── UMA CONSULTA SÓ ────────────────────────────────────────────────────────
+ * `analise_propria_painel` já devolve esteira, empresa, score, protestos, NF-e observada,
+ * documentos e a análise proprietária numa chamada de ~13ms. A tela lia a esteira por
+ * fora, o painel por dentro, e as duas podiam discordar por alguns segundos depois de uma
+ * mutação — tempo suficiente para o cabeçalho dizer "solicitada" enquanto o corpo já
+ * mostrava a decisão.
  */
 
-const moeda = (v: number | null): string =>
-  v === null || !Number.isFinite(Number(v))
-    ? '—'
-    : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+const moeda = (v: number | null | undefined): string => brl(v)
 
-interface TipoDoc {
-  id: string
-  label: string
-  obrigatorio: boolean
-}
+const formatData = (d: string | null | undefined) =>
+  d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
-/** Upload direto no bucket privado; o RPC só registra o caminho. */
-async function subirArquivo(analiseId: string, tipo: string, arquivo: File): Promise<string> {
-  const supabase = createClient()
-  // O caminho começa pelo id da análise: é o que amarra o objeto ao registro e o que a
-  // policy de storage usa como âncora. Timestamp no nome para dois envios do mesmo
-  // arquivo não se sobrescreverem em silêncio.
-  const caminho = `${analiseId}/${tipo}-${Date.now()}-${arquivo.name.replace(/[^\w.\-]/g, '_')}`
-  const { error } = await supabase.storage.from('analise-docs').upload(caminho, arquivo, { upsert: false })
-  if (error) throw new Error(error.message)
-  return caminho
-}
-
-function Docs({ analiseId }: { analiseId: string }) {
-  const qc = useQueryClient()
-  const [enviando, setEnviando] = React.useState<string | null>(null)
-
-  const docs = useQuery({ queryKey: creditoKeys.docs(analiseId), queryFn: () => buscarDocs(analiseId) })
-  const config = useQuery({ queryKey: creditoKeys.config(), queryFn: buscarCreditoConfig })
-
-  const tipos: TipoDoc[] =
-    ((config.data?.docs as { tipos?: TipoDoc[] } | undefined)?.tipos ?? []).length > 0
-      ? ((config.data?.docs as { tipos: TipoDoc[] }).tipos)
-      : [
-          { id: 'balanco', label: 'Balanço patrimonial', obrigatorio: true },
-          { id: 'dre', label: 'DRE', obrigatorio: true },
-          { id: 'contrato_social', label: 'Contrato social', obrigatorio: true },
-          { id: 'outros', label: 'Outros', obrigatorio: false },
-        ]
-
-  async function enviar(tipo: string, arquivo: File) {
-    setEnviando(tipo)
-    try {
-      const caminho = await subirArquivo(analiseId, tipo, arquivo)
-      const r = await registrarDocAction({
-        analise_id: analiseId,
-        tipo,
-        arquivo_url: caminho,
-        nome_arquivo: arquivo.name,
-      })
-      if (!r.ok) {
-        toast.error(r.message)
-        return
-      }
-      toast.success('Documento anexado.')
-      void qc.invalidateQueries({ queryKey: creditoKeys.docs(analiseId) })
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao enviar o arquivo.')
-    } finally {
-      setEnviando(null)
-    }
-  }
-
-  const enviados = new Set((docs.data ?? []).map((d) => d.tipo))
-  const faltando = tipos.filter((t) => t.obrigatorio && !enviados.has(t.id))
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Paperclip className="h-4 w-4" aria-hidden />
-          Documentos
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {faltando.length > 0 && (
-          <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
-            Faltam obrigatórios: <strong>{faltando.map((t) => t.label).join(', ')}</strong>. A
-            seguradora costuma pedir por eles; sem isso a análise volta.
-          </p>
-        )}
-
-        <ul className="divide-y rounded-lg border">
-          {tipos.map((t) => {
-            const doTipo = (docs.data ?? []).filter((d) => d.tipo === t.id)
-            return (
-              <li key={t.id} className="space-y-1 px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm">
-                    {t.label}
-                    {t.obrigatorio && <span className="ml-1 text-destructive">*</span>}
-                  </span>
-                  <label className="cursor-pointer text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
-                    <FileUp className="mr-1 inline h-3 w-3" aria-hidden />
-                    {enviando === t.id ? 'Enviando…' : 'Anexar'}
-                    <input
-                      type="file"
-                      className="hidden"
-                      disabled={enviando !== null}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0]
-                        if (f) void enviar(t.id, f)
-                        e.target.value = ''
-                      }}
-                    />
-                  </label>
-                </div>
-                {doTipo.map((d) => (
-                  <p key={d.id} className="truncate text-xs text-muted-foreground">
-                    {d.nome_arquivo ?? d.arquivo_url} · {new Date(d.enviado_em).toLocaleDateString('pt-BR')}
-                  </p>
-                ))}
-              </li>
-            )
-          })}
-        </ul>
-      </CardContent>
-    </Card>
-  )
-}
-
-export function AnaliseDetalhe({ id }: { id: string }) {
-  const qc = useQueryClient()
+/** O seletor de estágio + o botão que roda a nossa análise: as duas ações da tela. */
+function Acoes({
+  analiseId,
+  estagio,
+  statusPropria,
+  jaTemPropria,
+  onMudou,
+}: {
+  analiseId: string
+  estagio: EstagioAnalise
+  statusPropria: StatusAnalisePropria | null
+  jaTemPropria: boolean
+  onMudou: () => void
+}) {
   const [movendo, setMovendo] = React.useState(false)
+  const [rodando, setRodando] = React.useState(false)
 
-  const { data, isPending, isError, error } = useQuery({
-    queryKey: creditoKeys.analise(id),
-    queryFn: () => buscarAnalise(id),
-    // Análise no ar espera decisão da seguradora: o poll do worker a atualiza em
-    // segundo plano, e sem refetch a tela ficaria mostrando "em análise" para sempre.
-    refetchInterval: (q) =>
-      ['enviada_seguradora', 'em_analise'].includes(q.state.data?.estagio ?? '') ? 30_000 : false,
-  })
+  const decidida = ehEstagioDecidido(estagio)
+  // Enquanto o worker trabalha ou a revisão espera, rodar de novo só gastaria os mesmos
+  // tokens sobre os mesmos PDFs — e o RPC recusaria de qualquer forma.
+  const podeRodar = statusPropria !== 'processando' && statusPropria !== 'aguardando_revisao'
 
-  async function mover(estagio: string) {
+  async function mover(novo: string) {
     setMovendo(true)
-    const r = await moverAnaliseAction({ id, estagio })
+    const r = await moverAnaliseAction({ id: analiseId, estagio: novo })
     setMovendo(false)
     if (!r.ok) {
       toast.error(r.message)
       return
     }
     toast.success('Análise movida.')
-    void qc.invalidateQueries({ queryKey: creditoKeys.analise(id) })
-    void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })
+    onMudou()
   }
 
-  if (isPending) return <Skeleton className="h-96 w-full rounded-lg" />
+  async function rodar() {
+    setRodando(true)
+    const r = await rodarAnalisePropriaAction({
+      analise_credito_id: analiseId,
+      tipo: jaTemPropria ? 'reanalise' : 'inicial',
+      gatilho: 'manual',
+    })
+    setRodando(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(
+      r.data.worker_acordado
+        ? 'Análise iniciada. A extração roda em segundo plano e para para a sua revisão.'
+        : 'Análise registrada, mas o worker não respondeu. A rotina diária a retoma.',
+    )
+    onMudou()
+  }
 
-  if (isError || !data) {
+  return (
+    <>
+      {podeRodar && (
+        <Button size="sm" onClick={() => void rodar()} disabled={rodando}>
+          {jaTemPropria ? (
+            <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
+          ) : (
+            <PlayCircle className="mr-1.5 size-3.5" aria-hidden />
+          )}
+          {rodando ? 'Iniciando…' : jaTemPropria ? 'Rodar de novo' : 'Rodar nossa análise'}
+        </Button>
+      )}
+      {!decidida && (
+        <Select value="" onValueChange={(v) => void mover(v)} disabled={movendo}>
+          <SelectTrigger className="h-9 w-44" aria-label="Mover análise">
+            <SelectValue placeholder="Mover para…" />
+          </SelectTrigger>
+          <SelectContent>
+            {ESTAGIOS_MANUAIS.filter((e) => e !== estagio).map((e) => (
+              <SelectItem key={e} value={e}>
+                {ESTAGIO_ANALISE_LABELS[e]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </>
+  )
+}
+
+export function AnaliseDetalhe({ id }: { id: string }) {
+  const qc = useQueryClient()
+
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: analisePropriaKeys.painel(id),
+    queryFn: () => buscarPainelSacado(id),
+    /**
+     * Dois motivos para voltar sozinha, e os dois têm relógio de outra pessoa: a
+     * seguradora responde pelo poll do worker, e a extração roda por minutos. Sem
+     * refetch a tela ficaria dizendo "em análise" para sempre, e alguém recarregaria a
+     * página para descobrir que já tinha acabado.
+     */
+    refetchInterval: (q) => {
+      const p = q.state.data
+      if (p?.propria?.status === 'processando') return 10_000
+      if (['enviada_seguradora', 'em_analise'].includes(p?.esteira?.estagio ?? '')) return 30_000
+      return false
+    },
+  })
+
+  const [aba, setAba] = React.useState('analise')
+  const status = (data?.propria?.status ?? null) as StatusAnalisePropria | null
+
+  // A aba de abertura segue o ESTADO: extração esperando revisão abre em "Revisão".
+  // Só reage à troca de status — mexer a cada refetch tiraria a aba de baixo de quem
+  // estava lendo o parecer.
+  React.useEffect(() => {
+    if (status === 'aguardando_revisao') setAba('revisao')
+  }, [status])
+
+  const invalidar = React.useCallback(() => {
+    void qc.invalidateQueries({ queryKey: analisePropriaKeys.painel(id) })
+    void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })
+  }, [qc, id])
+
+  if (isPending) return <DetalheCarregandoFicha />
+
+  if (isError || !data?.encontrado || !data.esteira) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-          <AlertTriangle className="h-6 w-6 text-muted-foreground" aria-hidden />
+          <AlertTriangle className="size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm text-muted-foreground">
             {isError && error instanceof Error ? error.message : 'Análise não encontrada.'}
           </p>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/credito">Voltar para a esteira</Link>
+          </Button>
         </CardContent>
       </Card>
     )
   }
 
-  const decidida = ehEstagioDecidido(data.estagio)
-  const nome = data.razao_social ?? data.nome_fantasia ?? formatCnpj(data.cnpj)
+  const esteira = data.esteira
+  const propria = data.propria
+  const empresa = data.empresa
+  const estagio = esteira.estagio as EstagioAnalise
+  const nome = empresa?.razao_social ?? empresa?.nome_fantasia ?? formatCnpj(esteira.cnpj)
+  const local = [empresa?.municipio, empresa?.uf].filter(Boolean).join(' / ')
+  const concluida = status === 'concluida'
 
   return (
     <div className="space-y-4">
       <VoltarContextual padrao={{ href: '/credito', label: 'Esteira' }} />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{nome}</h1>
-          <p className="font-mono text-sm tabular-nums text-muted-foreground">{formatCnpj(data.cnpj)}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="outline">{ESTAGIO_ANALISE_LABELS[data.estagio as EstagioAnalise] ?? data.estagio}</Badge>
-          {!decidida && (
-            <Select value="" onValueChange={(v) => void mover(v)} disabled={movendo}>
-              <SelectTrigger className="w-44" aria-label="Mover análise">
-                <SelectValue placeholder="Mover para…" />
-              </SelectTrigger>
-              <SelectContent>
-                {ESTAGIOS_MANUAIS.filter((e) => e !== data.estagio).map((e) => (
-                  <SelectItem key={e} value={e}>
-                    {ESTAGIO_ANALISE_LABELS[e]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      </div>
+      <FichaTopo titulo="Análise de crédito" descricao={formatCnpj(esteira.cnpj)} />
 
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Dados da análise</CardTitle>
-            <CardDescription>O que a SEGURADORA disse. A nossa leitura fica abaixo.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">Limite solicitado</dt>
-                <dd className="text-sm tabular-nums">{moeda(data.limite_solicitado)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Limite aprovado (seguradora)</dt>
-                <dd className="text-sm font-medium tabular-nums">{moeda(data.limite_aprovado)}</dd>
-              </div>
-              {/*
-               * O limite OPERACIONAL fica ao lado do da seguradora, e não no lugar dele:
-               * em "só nós aprovamos" existe operacional sem aprovado, e em "só a
-               * seguradora" existe aprovado sem operacional. São duas verdades.
-               */}
-              <div>
-                <dt className="text-xs text-muted-foreground">Limite operacional (nossa decisão)</dt>
-                <dd className="text-sm font-medium tabular-nums">{moeda(data.limite_operacional)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Validade</dt>
-                <dd className="text-sm">{data.expira_em ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Caso na seguradora</dt>
-                <dd className="font-mono text-xs">{data.atradius_case_id ?? '—'}</dd>
-              </div>
-              {data.motivo && (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs text-muted-foreground">Motivo</dt>
-                  <dd className="text-sm">{data.motivo}</dd>
-                </div>
+      {/*
+       * A banda de status ANTES das abas e fora da grade: ela vale para a tela inteira,
+       * não para uma aba. E fora da coluna estreita porque o número que ela carrega é o
+       * mais importante da página — espremê-lo em um terço da largura seria repetir, com
+       * outra geometria, o problema de tê-lo num badge de 11px.
+       */}
+      <StatusAnalise
+        estagio={estagio}
+        statusPropria={status}
+        etapa={propria?.etapa ?? null}
+        erro={propria?.erro ?? null}
+        recomendacao={propria?.recomendacao ?? null}
+        limiteRecomendado={propria?.limite_recomendado ?? null}
+        limiteAprovado={esteira.limite_aprovado}
+        limiteOperacional={esteira.limite_operacional}
+        decisaoFinal={propria?.decisao_final ?? null}
+        acao={
+          <Acoes
+            analiseId={id}
+            estagio={estagio}
+            statusPropria={status}
+            jaTemPropria={propria !== null}
+            onMudou={invalidar}
+          />
+        }
+      />
+
+      <Tabs value={aba} onValueChange={setAba} className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="analise">Nossa análise</TabsTrigger>
+          {status === 'aguardando_revisao' && <TabsTrigger value="revisao">Revisão</TabsTrigger>}
+          <TabsTrigger value="parecer">Parecer</TabsTrigger>
+          <TabsTrigger value="seguradora">Seguradora e decisão</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+          <TabsTrigger value="contexto">Contexto</TabsTrigger>
+        </TabsList>
+
+        <FichaGrade
+          identidade={
+            <FichaIdentidade
+              nome={nome}
+              papel={empresa?.nome_fantasia && empresa.razao_social ? empresa.nome_fantasia : null}
+              /*
+               * O atalho para a ficha da empresa fica sob o NOME, e não no rodapé: é de
+               * lá que o olho parte, e é a pergunta natural de quem acabou de ler a razão
+               * social. Mesmo lugar do "ver quadro societário" na Company 360.
+               */
+              abaixoDoNome={
+                empresa ? (
+                  <Link
+                    href={`/empresas/${empresa.id}`}
+                    className="mx-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    <Building2 className="size-3" aria-hidden />
+                    Abrir a Company 360
+                    <ExternalLink className="size-3" aria-hidden />
+                  </Link>
+                ) : null
+              }
+              tags={
+                <>
+                  <Badge variant="outline">{ESTAGIO_ANALISE_LABELS[estagio]}</Badge>
+                  {esteira.origem === 'atradius_backfill' ? (
+                    <Badge
+                      variant="secondary"
+                      title="Veio do backfill da apólice: já existia na seguradora e não foi pedida por aqui."
+                    >
+                      da apólice
+                    </Badge>
+                  ) : null}
+                  {data.opera_na_plataforma ? <Badge variant="secondary">opera</Badge> : null}
+                </>
+              }
+              /*
+               * A tira de números da identidade é a do SACADO, não a da análise: os
+               * limites já estão grandes na banda de status, e repeti-los aqui pequenos
+               * ensinaria a ler o mesmo número em dois lugares com dois pesos.
+               */
+              resumo={[
+                { label: 'Score', valor: data.score?.score ?? '—' },
+                {
+                  label: 'Faturamento',
+                  valor: empresa?.faturamento_anual ? brl(empresa.faturamento_anual) : '—',
+                },
+                { label: 'Obras', valor: data.metricas?.obras_ativas ?? '—' },
+              ]}
+              linhas={[
+                {
+                  icone: Hash,
+                  label: 'CNPJ',
+                  valor: <span className="font-mono tabular-nums">{formatCnpj(esteira.cnpj)}</span>,
+                },
+                { icone: MapPin, label: 'Localização', valor: local || '—' },
+                {
+                  icone: Gauge,
+                  label: 'Faixa de score',
+                  valor: data.score
+                    ? (FAIXA_SCORE_LABELS[data.score.faixa as FaixaScore] ?? data.score.faixa)
+                    : 'nunca pontuada',
+                },
+                {
+                  icone: ShieldCheck,
+                  label: 'Protestos',
+                  valor: data.protestos
+                    ? data.protestos.tem_protesto
+                      ? `${data.protestos.qtd_protestos} · ${brl(data.protestos.valor_total)}`
+                      : 'sem protesto'
+                    : 'nunca consultado',
+                },
+                {
+                  icone: FileText,
+                  label: 'Documentos',
+                  valor: `${data.docs.length} anexado(s)`,
+                },
+                {
+                  icone: CalendarClock,
+                  label: 'Validade',
+                  valor: esteira.expira_em ? formatData(esteira.expira_em) : '—',
+                },
+              ]}
+              rodape={
+                empresa
+                  ? `Solicitada em ${formatData(esteira.criada_em)} · Atualizada em ${formatData(esteira.atualizada_em)}`
+                  : 'Esta análise não está ligada a uma empresa cadastrada.'
+              }
+            />
+          }
+          conteudo={
+            <>
+              {/* ── Nossa análise ─────────────────────────────────────────── */}
+              <TabsContent value="analise" className="mt-0 space-y-4">
+                {!propria || !concluida ? (
+                  <Card>
+                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                      {status === 'processando'
+                        ? 'A extração está rodando. Isto leva alguns minutos — a tela se atualiza sozinha.'
+                        : status === 'aguardando_revisao'
+                          ? 'Nada foi calculado ainda: os campos críticos esperam a sua confirmação na aba Revisão.'
+                          : status === 'falhou'
+                            ? `Falhou na etapa ${propria?.etapa ?? 'desconhecida'}: ${propria?.erro ?? ''}`
+                            : 'Esta esteira ainda não tem análise proprietária. O botão está na banda de status, acima.'}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    <Cenarios
+                      cenarios={propria.cenarios ?? []}
+                      recomendacao={propria.recomendacao}
+                      limite={propria.limite_recomendado}
+                      motivos={propria.motivos_nao_operar ?? []}
+                    />
+                    <Tetos tetos={propria.tetos ?? []} />
+                    <Indicadores indicadores={propria.indicadores ?? []} />
+                    <Lacunas lacunas={propria.lacunas_calculo ?? []} />
+                  </>
+                )}
+              </TabsContent>
+
+              {/* ── Revisão ───────────────────────────────────────────────── */}
+              {status === 'aguardando_revisao' && propria && (
+                <TabsContent value="revisao" className="mt-0">
+                  <RevisaoExtracao
+                    analiseId={propria.id}
+                    analiseCreditoId={id}
+                    dados={propria.dados_extraidos}
+                    docs={data.docs}
+                  />
+                </TabsContent>
               )}
-              {data.empresa_id && (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs text-muted-foreground">Empresa</dt>
-                  <dd className="text-sm">
-                    <Link href={`/empresas/${data.empresa_id}`} className="hover:underline">
-                      Abrir a Company 360
-                    </Link>
-                  </dd>
+
+              {/* ── Parecer ───────────────────────────────────────────────── */}
+              <TabsContent value="parecer" className="mt-0">
+                {propria ? (
+                  <Parecer
+                    analiseId={propria.id}
+                    analiseCreditoId={id}
+                    original={propria.parecer_markdown}
+                    editado={propria.parecer_editado}
+                    modelo={propria.parecer_modelo}
+                    tokens={propria.parecer_tokens}
+                    editadoEm={propria.parecer_editado_em}
+                  />
+                ) : (
+                  <Card>
+                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                      Sem análise, sem parecer.
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              {/* ── Seguradora e decisão ──────────────────────────────────── */}
+              <TabsContent value="seguradora" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">O pedido na seguradora</CardTitle>
+                    <CardDescription>
+                      O que foi pedido e o que ela respondeu. Estes campos são escritos pelo
+                      worker — a tela não define decisão de seguradora.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Limite solicitado</dt>
+                        <dd className="text-sm tabular-nums">{moeda(esteira.limite_solicitado)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Limite aprovado</dt>
+                        <dd className="text-sm font-medium tabular-nums">
+                          {moeda(esteira.limite_aprovado)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Rating</dt>
+                        <dd className="text-sm">{esteira.rating_seguradora ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Caso na seguradora</dt>
+                        <dd className="font-mono text-xs">{esteira.atradius_case_id ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Validade</dt>
+                        <dd className="text-sm">{formatData(esteira.expira_em)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Decidida em</dt>
+                        <dd className="text-sm">{formatData(esteira.decidida_em)}</dd>
+                      </div>
+                      {esteira.motivo ? (
+                        <div className="sm:col-span-2">
+                          <dt className="text-xs text-muted-foreground">Motivo</dt>
+                          <dd className="text-sm">{esteira.motivo}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+
+                    {esteira.origem === 'atradius_backfill' && (
+                      <p className="mt-4 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                        Esta análise veio do <strong>backfill da apólice</strong>: ela já existia na
+                        seguradora e não foi pedida por aqui. Fica marcada para o funil da esteira
+                        não levar crédito por uma decisão que ele não tomou.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {propria && concluida ? (
+                  <Confronto
+                    analiseId={propria.id}
+                    analiseCreditoId={id}
+                    quadrante={propria.quadrante as Quadrante | null}
+                    nossaRecomendacao={propria.recomendacao}
+                    nossoLimite={propria.limite_recomendado}
+                    seguradoraStatus={propria.atradius_status}
+                    seguradoraLimite={propria.atradius_limite}
+                    decisaoAtual={propria.decisao_final as DecisaoFinal | null}
+                    decisaoLimite={propria.decisao_limite}
+                    decisaoMotivo={propria.decisao_motivo}
+                    decidaEm={propria.decidida_em}
+                  />
+                ) : (
+                  <Card>
+                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                      O confronto exige as duas leituras. A nossa precisa estar concluída.
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              {/* ── Documentos ────────────────────────────────────────────── */}
+              <TabsContent value="documentos" className="mt-0">
+                <Documentos analiseId={id} docs={data.docs} />
+              </TabsContent>
+
+              {/* ── Contexto ──────────────────────────────────────────────── */}
+              <TabsContent value="contexto" className="mt-0 space-y-4">
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Scorecard</CardTitle>
+                      <CardDescription>
+                        A chance de a SEGURADORA conceder (04d) — diferente da nossa análise, que
+                        lê o balanço. Ele também vira um dos cinco tetos.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {data.score ? (
+                        <dl className="space-y-1.5">
+                          <Linha rotulo="Score" valor={data.score.score ?? 'não calculado'} />
+                          <Linha
+                            rotulo="Faixa"
+                            valor={
+                              FAIXA_SCORE_LABELS[data.score.faixa as FaixaScore] ?? data.score.faixa
+                            }
+                          />
+                          <Linha
+                            rotulo="Completude"
+                            valor={`${Math.round(Number(data.score.completude) * 100)}%`}
+                          />
+                          {data.score.knockout ? (
+                            <Linha
+                              rotulo="Knockout"
+                              valor={
+                                <Badge variant="destructive">
+                                  {KNOCKOUT_LABELS[data.score.knockout as Knockout] ??
+                                    data.score.knockout}
+                                </Badge>
+                              }
+                            />
+                          ) : null}
+                        </dl>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Esta empresa ainda não foi pontuada.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Comportamento observado</CardTitle>
+                      <CardDescription>
+                        {data.opera_na_plataforma
+                          ? 'A empresa opera: este é o teto mais confiável dos cinco, porque é comportamento e não declaração.'
+                          : 'A empresa ainda não opera. O teto operacional fica fora do cálculo — não entra como zero.'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <dl className="space-y-1.5">
+                        <Linha
+                          rotulo="Opera na plataforma"
+                          valor={data.opera_na_plataforma ? 'sim' : 'não'}
+                        />
+                        <Linha
+                          rotulo={`NF-e (${data.nfe_observada.janela_meses} meses)`}
+                          valor={`${data.nfe_observada.qtd} notas · ${brl(data.nfe_observada.total)}`}
+                        />
+                        <Linha rotulo="Média mensal" valor={brl(data.nfe_observada.media_mensal)} />
+                      </dl>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Porte e estrutura</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <dl className="space-y-1.5">
+                        <Linha
+                          rotulo="Faturamento"
+                          valor={
+                            <>
+                              {brl(empresa?.faturamento_anual ?? null)}
+                              {empresa?.faturamento_confianca ? (
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                  (
+                                  {empresa.faturamento_origem === 'declarado_cliente'
+                                    ? 'declarado'
+                                    : 'estimado'}
+                                  , confiança {empresa.faturamento_confianca})
+                                </span>
+                              ) : null}
+                            </>
+                          }
+                        />
+                        <Linha rotulo="Patrimônio líquido" valor={brl(empresa?.patrimonio_liquido ?? null)} />
+                        <Linha rotulo="Funcionários" valor={empresa?.funcionarios ?? '—'} />
+                        <Linha rotulo="Filiais" valor={data.metricas?.qtd_filiais ?? '—'} />
+                        <Linha rotulo="SPEs do grupo" valor={data.metricas?.grupo_spes_total ?? '—'} />
+                        <Linha rotulo="Obras ativas" valor={data.metricas?.obras_ativas ?? '—'} />
+                      </dl>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Risco e sinais</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <dl className="space-y-1.5">
+                        <Linha
+                          rotulo="Protestos"
+                          valor={
+                            data.protestos
+                              ? data.protestos.tem_protesto
+                                ? `${data.protestos.qtd_protestos} · ${brl(data.protestos.valor_total)}`
+                                : 'sem protesto'
+                              : 'nunca consultado'
+                          }
+                        />
+                        <Linha
+                          rotulo="Consultado em"
+                          valor={formatData(data.protestos?.consultado_em)}
+                        />
+                        <Linha
+                          rotulo="Certificado digital"
+                          valor={
+                            data.certificado?.expires_at
+                              ? `vence em ${formatData(data.certificado.expires_at)}`
+                              : 'não temos'
+                          }
+                        />
+                        <Linha
+                          rotulo="Limite potencial"
+                          valor={brl(empresa?.limite_potencial ?? null)}
+                        />
+                        <Linha
+                          rotulo="Valor esperado"
+                          valor={`${brl(empresa?.valor_esperado_mensal ?? null)}/mês`}
+                        />
+                      </dl>
+                    </CardContent>
+                  </Card>
                 </div>
-              )}
-            </dl>
+              </TabsContent>
+            </>
+          }
+        />
+      </Tabs>
+    </div>
+  )
+}
 
-            {data.origem === 'atradius_backfill' && (
-              <p className="mt-4 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                Esta análise veio do <strong>backfill da apólice</strong>: ela já existia na
-                seguradora e não foi pedida por aqui. Fica marcada para o funil da esteira não
-                levar crédito por uma decisão que ela não tomou.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Docs analiseId={id} />
-      </div>
-
-      <PainelSacado analiseCreditoId={id} />
+function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
+      <dt className="shrink-0 text-xs text-muted-foreground">{rotulo}</dt>
+      <dd className="min-w-0 truncate text-right">{valor}</dd>
     </div>
   )
 }
