@@ -126,6 +126,18 @@ export const EVENTO_TIPOS = {
   EXCLIENTE_MOTIVO_DEFINIDO: 'excliente.motivo_definido',
   ANALISE_PLATAFORMA_STATUS_ALTERADO: 'analise_plataforma.status_alterado',
   ANALISE_SEM_CADASTRO: 'analise.sem_cadastro',
+
+  // Análise de crédito proprietária (04j)
+  ANALISE_PROPRIA_INICIADA: 'analise_propria.iniciada',
+  ANALISE_PROPRIA_AGUARDANDO_REVISAO: 'analise_propria.aguardando_revisao',
+  ANALISE_PROPRIA_CONCLUIDA: 'analise_propria.concluida',
+  ANALISE_PROPRIA_FALHOU: 'analise_propria.falhou',
+  // Evento próprio, e não um caso de "concluída": duas leituras independentes
+  // discordaram sobre o mesmo sacado, e isso é o que Crédito e Admin precisam ver antes
+  // de qualquer número.
+  ANALISE_PROPRIA_DIVERGENCIA: 'analise_propria.divergencia_seguradora',
+  CREDITO_DECISAO_REGISTRADA: 'credito.decisao_registrada',
+  REANALISE_SUGERIDA: 'reanalise.sugerida',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -218,6 +230,13 @@ export const EVENTO_LABELS: Record<string, string> = {
   'excliente.motivo_definido': 'Motivo de saída definido',
   'analise_plataforma.status_alterado': 'Análise da plataforma mudou de status',
   'analise.sem_cadastro': 'Análise aprovada sem cadastro',
+  'analise_propria.iniciada': 'Análise proprietária iniciada',
+  'analise_propria.aguardando_revisao': 'Extração aguardando revisão',
+  'analise_propria.concluida': 'Análise proprietária concluída',
+  'analise_propria.falhou': 'Análise proprietária falhou',
+  'analise_propria.divergencia_seguradora': 'Divergência com a seguradora',
+  'credito.decisao_registrada': 'Decisão de crédito registrada',
+  'reanalise.sugerida': 'Reanálise sugerida',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

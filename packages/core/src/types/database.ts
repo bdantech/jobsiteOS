@@ -847,17 +847,21 @@ export type Database = {
       }
       analises_credito: {
         Row: {
+          analise_propria_id: string | null
           atradius_buyer_id: string | null
           atradius_case_id: string | null
           atualizada_em: string
           cnpj: string
           criada_em: string
           decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
           empresa_id: string | null
           estagio: string
           expira_em: string | null
           id: string
           limite_aprovado: number | null
+          limite_operacional: number | null
           limite_solicitado: number | null
           moeda: string
           motivo: string | null
@@ -868,17 +872,21 @@ export type Database = {
           solicitada_por: string | null
         }
         Insert: {
+          analise_propria_id?: string | null
           atradius_buyer_id?: string | null
           atradius_case_id?: string | null
           atualizada_em?: string
           cnpj: string
           criada_em?: string
           decidida_em?: string | null
+          decisao_interna?: string | null
+          decisao_interna_em?: string | null
           empresa_id?: string | null
           estagio?: string
           expira_em?: string | null
           id?: string
           limite_aprovado?: number | null
+          limite_operacional?: number | null
           limite_solicitado?: number | null
           moeda?: string
           motivo?: string | null
@@ -889,17 +897,21 @@ export type Database = {
           solicitada_por?: string | null
         }
         Update: {
+          analise_propria_id?: string | null
           atradius_buyer_id?: string | null
           atradius_case_id?: string | null
           atualizada_em?: string
           cnpj?: string
           criada_em?: string
           decidida_em?: string | null
+          decisao_interna?: string | null
+          decisao_interna_em?: string | null
           empresa_id?: string | null
           estagio?: string
           expira_em?: string | null
           id?: string
           limite_aprovado?: number | null
+          limite_operacional?: number | null
           limite_solicitado?: number | null
           moeda?: string
           motivo?: string | null
@@ -925,8 +937,10 @@ export type Database = {
           arquivo_url: string
           enviado_em: string
           enviado_por: string | null
+          extraido_em: string | null
           id: string
           nome_arquivo: string | null
+          paginas: number | null
           tipo: string
         }
         Insert: {
@@ -934,8 +948,10 @@ export type Database = {
           arquivo_url: string
           enviado_em?: string
           enviado_por?: string | null
+          extraido_em?: string | null
           id?: string
           nome_arquivo?: string | null
+          paginas?: number | null
           tipo: string
         }
         Update: {
@@ -943,8 +959,10 @@ export type Database = {
           arquivo_url?: string
           enviado_em?: string
           enviado_por?: string | null
+          extraido_em?: string | null
           id?: string
           nome_arquivo?: string | null
+          paginas?: number | null
           tipo?: string
         }
         Relationships: [
@@ -953,6 +971,168 @@ export type Database = {
             columns: ["analise_id"]
             isOneToOne: false
             referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analise_parametros: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          nome: string | null
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          nome?: string | null
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          nome?: string | null
+          versao?: number
+        }
+        Relationships: []
+      }
+      analises_proprietarias: {
+        Row: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
+        Insert: {
+          analise_credito_id?: string | null
+          atradius_limite?: number | null
+          atradius_status?: string | null
+          cenarios?: Json | null
+          cnpj: string
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          dados_extraidos?: Json | null
+          decidida_em?: string | null
+          decidida_por?: string | null
+          decisao_final?: string | null
+          decisao_limite?: number | null
+          decisao_motivo?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          etapa?: string | null
+          extracao_revisada_em?: string | null
+          extracao_revisada_por?: string | null
+          gatilho?: string
+          id?: string
+          indicadores?: Json | null
+          lacunas_calculo?: Json
+          limite_recomendado?: number | null
+          motivos_nao_operar?: Json
+          parametros_versao: number
+          parecer_editado?: string | null
+          parecer_editado_em?: string | null
+          parecer_editado_por?: string | null
+          parecer_markdown?: string | null
+          parecer_modelo?: string | null
+          parecer_tokens?: number | null
+          quadrante?: string | null
+          recomendacao?: string | null
+          status?: string
+          tetos?: Json | null
+          tipo?: string
+        }
+        Update: {
+          analise_credito_id?: string | null
+          atradius_limite?: number | null
+          atradius_status?: string | null
+          cenarios?: Json | null
+          cnpj?: string
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          dados_extraidos?: Json | null
+          decidida_em?: string | null
+          decidida_por?: string | null
+          decisao_final?: string | null
+          decisao_limite?: number | null
+          decisao_motivo?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          etapa?: string | null
+          extracao_revisada_em?: string | null
+          extracao_revisada_por?: string | null
+          gatilho?: string
+          id?: string
+          indicadores?: Json | null
+          lacunas_calculo?: Json
+          limite_recomendado?: number | null
+          motivos_nao_operar?: Json
+          parametros_versao?: number
+          parecer_editado?: string | null
+          parecer_editado_em?: string | null
+          parecer_editado_por?: string | null
+          parecer_markdown?: string | null
+          parecer_modelo?: string | null
+          parecer_tokens?: number | null
+          quadrante?: string | null
+          recomendacao?: string | null
+          status?: string
+          tetos?: Json | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analises_proprietarias_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
@@ -4509,6 +4689,60 @@ export type Database = {
       }
       ex_clientes_analise: {
         Args: never
+        Returns: Json
+      }
+      app_rodar_analise_propria: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_revisar_extracao: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_editar_parecer: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_registrar_decisao_credito: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_parametros_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analise_parametros"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "analise_parametros"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      analise_propria_painel: {
+        Args: { p_analise_credito_id: string }
         Returns: Json
       }
       certificado_funil: {

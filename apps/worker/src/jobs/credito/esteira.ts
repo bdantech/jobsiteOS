@@ -12,6 +12,7 @@ import { emitirEvento } from '../../radar/eventos.js'
 import { aplicarDecisaoCreditoEmVendas } from '../comercial/comissoes.js'
 import { atradius } from './atradius.js'
 import { recalcularScoresDeCnpjs } from './potencial.js'
+import { processarAnalisePropria } from './analise-propria.js'
 
 /**
  * A esteira contra a seguradora (04d §4).
@@ -42,6 +43,8 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
   status: 'ok' | 'nao_configurada'
   enviadas?: number
   falharam?: number
+  /** Quantas análises proprietárias o envio abriu de carona (04j §6). */
+  analises_disparadas?: number
   detalhes?: Array<{ id: string; erro: string }>
 }> {
   if (!seguradora.configurada()) {
@@ -56,7 +59,7 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
   if (analiseIds?.length) q = q.in('id', analiseIds)
 
   const { data: pendentes } = await q
-  const acc = { enviadas: 0, falharam: 0 }
+  const acc = { enviadas: 0, falharam: 0, analises_disparadas: 0 }
   const detalhes: Array<{ id: string; erro: string }> = []
 
   for (const a of pendentes ?? []) {
@@ -106,10 +109,81 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
 
     await emitirEventoAnalise(a.id, EVENTO_TIPOS.ANALISE_ENVIADA, 'Análise enviada à seguradora', `Pedido ${pedido.dados.case_id} aberto na ${seguradora.nome}.`)
     acc.enviadas++
+
+    // 04j §6: a análise proprietária dispara JUNTO do envio, não antes dele.
+    //
+    // Em paralelo e sem bloquear — o envio já aconteceu e não pode ser desfeito por uma
+    // extração que demorou. Se ela falhar, o registro fica `falhou` com motivo, e o
+    // envio à seguradora segue valendo.
+    acc.analises_disparadas += await dispararPropriaSeFaltar(a.id)
   }
 
   logger.info(acc, 'Envio de análises concluído.')
   return { status: 'ok', ...acc, detalhes }
+}
+
+/**
+ * Abre a análise proprietária deste pedido, se ainda não houver uma.
+ *
+ * Roda com service role e por INSERT direto, não pelo RPC `app_rodar_analise_propria`:
+ * o RPC exige `auth.uid()` e o módulo Crédito do usuário, e aqui não há usuário — o
+ * gatilho é do sistema. A guarda contra duplicar é a mesma, aplicada aqui.
+ *
+ * `void` no processamento: o envio à seguradora não espera a extração terminar.
+ */
+async function dispararPropriaSeFaltar(analiseCreditoId: string): Promise<number> {
+  const { data: existente } = await supabaseAdmin
+    .from('analises_proprietarias')
+    .select('id, status')
+    .eq('analise_credito_id', analiseCreditoId)
+    .in('status', ['processando', 'aguardando_revisao', 'concluida'])
+    .limit(1)
+  if (existente && existente.length > 0) return 0
+
+  const { data: esteira } = await supabaseAdmin
+    .from('analises_credito')
+    .select('cnpj, empresa_id')
+    .eq('id', analiseCreditoId)
+    .maybeSingle()
+  const { data: versao } = await supabaseAdmin
+    .from('analise_parametros')
+    .select('versao')
+    .eq('ativa', true)
+    .maybeSingle()
+  if (!esteira || !versao) {
+    logger.warn({ analiseCreditoId }, 'Sem esteira ou sem versão ativa de parâmetros; análise proprietária não disparada.')
+    return 0
+  }
+
+  const { data: nova, error } = await supabaseAdmin
+    .from('analises_proprietarias')
+    .insert({
+      analise_credito_id: analiseCreditoId,
+      empresa_id: esteira.empresa_id,
+      cnpj: esteira.cnpj,
+      tipo: 'inicial',
+      gatilho: 'automatico_envio_atradius',
+      status: 'processando',
+      etapa: 'extracao',
+      parametros_versao: versao.versao,
+    } as never)
+    .select('id')
+    .maybeSingle()
+  if (error || !nova) {
+    logger.error({ analiseCreditoId, erro: error?.message }, 'Falha ao abrir análise proprietária no envio.')
+    return 0
+  }
+
+  await emitirEvento(esteira.empresa_id, EVENTO_TIPOS.ANALISE_PROPRIA_INICIADA, {
+    analise_propria_id: nova.id,
+    cnpj: esteira.cnpj,
+    gatilho: 'automatico_envio_atradius',
+  })
+
+  void processarAnalisePropria(nova.id).catch((e) =>
+    logger.error({ analise: nova.id, erro: String(e) }, 'Análise proprietária automática falhou.'),
+  )
+  return 1
 }
 
 // ─── §4.3 Aplicar uma decisão ───────────────────────────────────────────────

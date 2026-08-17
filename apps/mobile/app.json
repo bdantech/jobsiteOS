@@ -7,18 +7,26 @@
     "scheme": "jobsiteos",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.oneos.jobsiteos",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
       "package": "com.oneos.jobsiteos",
-      "permissions": ["POST_NOTIFICATIONS", "RECEIVE_BOOT_COMPLETED", "VIBRATE"]
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -28,6 +36,13 @@
         {
           "color": "#1e293f",
           "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O JobsiteOS usa a câmera para fotografar documentos contábeis do sacado e anexá-los à análise de crédito.",
+          "photosPermission": "O JobsiteOS acessa suas fotos para anexar documentos contábeis à análise de crédito."
         }
       ]
     ],

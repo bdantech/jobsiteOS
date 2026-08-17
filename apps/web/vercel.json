@@ -50,6 +50,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/credito-reanalises",
+      "schedule": "30 9 * * *"
+    },
+    {
       "path": "/api/cron/perfil-recalcular",
       "schedule": "0 10 8 * *"
     },

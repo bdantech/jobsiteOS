@@ -44,7 +44,10 @@ import {
   dispararDominioEmpresa,
   dispararEnviarAnalises,
   dispararEstimarPotencial,
+  dispararAnalisePropria,
+  dispararDrenarAnalisesProprias,
   dispararExpirarAnalises,
+  dispararSugerirReanalises,
   dispararPollDecisoes,
   dispararRecalcularScores,
   dispararSyncAtradius,
@@ -547,6 +550,41 @@ app.post('/jobs/perfil/recalcular', (_req: Request, res: Response, next: NextFun
 app.post('/jobs/credito/expirar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararExpirarAnalises(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Análise proprietária (04j) ──────────────────────────────────────────────
+
+const analisePropriaSchema = z.object({ analise_propria_id: z.string().uuid() })
+
+/**
+ * Roda UMA análise, do ponto em que ela parou. Chamada logo depois do RPC que a abriu e
+ * de novo depois da revisão da extração — as duas metades do mesmo caminho.
+ */
+app.post('/jobs/credito/analise-propria', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { analise_propria_id } = analisePropriaSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararAnalisePropria(analise_propria_id), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Rede de segurança: retoma o que ficou parado em `processando`. */
+app.post('/jobs/credito/analises-drenar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararDrenarAnalisesProprias(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Diário. SUGERE reanálise — nunca executa em lote (custo de tokens). */
+app.post('/jobs/credito/sugerir-reanalises', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararSugerirReanalises(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

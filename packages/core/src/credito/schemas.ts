@@ -170,3 +170,83 @@ export const statusEsteiraSchema = z.object({
     .describe('Recorta por estágio. Ausente = todos os estágios.'),
 })
 export type StatusEsteiraInput = z.infer<typeof statusEsteiraSchema>
+
+// ─── Análise proprietária (04j) ─────────────────────────────────────────────
+
+export const rodarAnalisePropriaSchema = z.object({
+  analise_credito_id: z
+    .string()
+    .uuid()
+    .describe('A análise da esteira. É nela que os documentos contábeis estão pendurados.'),
+  tipo: z.enum(['inicial', 'reanalise']).default('inicial'),
+  gatilho: z.enum(['manual', 'automatico_envio_atradius']).default('manual'),
+})
+export type RodarAnalisePropriaInput = z.infer<typeof rodarAnalisePropriaSchema>
+
+export const revisarExtracaoSchema = z.object({
+  id: z.string().uuid(),
+  correcoes: z
+    .array(
+      z.object({
+        exercicio: z.coerce.number().int(),
+        campo: z.string().min(1),
+        // `null` é uma correção legítima: "o modelo achou um número, mas ele não é este
+        // campo". Sem isso, o único jeito de desfazer uma leitura errada seria zerá-la —
+        // e zero é uma afirmação sobre o balanço que ninguém fez.
+        valor: z.coerce.number().nullable(),
+      }),
+    )
+    .min(1, 'Nada a confirmar.'),
+})
+export type RevisarExtracaoInput = z.infer<typeof revisarExtracaoSchema>
+
+export const editarParecerSchema = z.object({
+  id: z.string().uuid(),
+  texto: z.string().trim().max(60_000),
+})
+export type EditarParecerInput = z.infer<typeof editarParecerSchema>
+
+export const registrarDecisaoCreditoSchema = z.object({
+  id: z.string().uuid(),
+  decisao_final: z.enum([
+    'operar_com_cobertura',
+    'operar_sem_cobertura',
+    'operar_limite_reduzido',
+    'nao_operar',
+  ]),
+  decisao_limite: z.coerce.number().nonnegative().optional().nullable(),
+  decisao_motivo: z.string().trim().max(4000).optional().nullable(),
+})
+export type RegistrarDecisaoCreditoInput = z.infer<typeof registrarDecisaoCreditoSchema>
+
+export const salvarParametrosAnaliseSchema = z.object({
+  definicao: z.record(z.unknown()),
+  nome: z.string().trim().max(120).optional(),
+  ativar: z.boolean().default(true),
+})
+export type SalvarParametrosAnaliseInput = z.infer<typeof salvarParametrosAnaliseSchema>
+
+/** Tool de leitura: o resultado consolidado de um CNPJ. */
+export const analisePropriaSchema = z.object({
+  cnpj: z.string().describe('CNPJ do sacado (14 dígitos, com ou sem pontuação).'),
+})
+export type AnalisePropriaInput = z.infer<typeof analisePropriaSchema>
+
+/** Tool de mutação: dispara a análise. NUNCA decide. */
+export const rodarAnaliseToolSchema = z.object({
+  cnpj: z.string().describe('CNPJ do sacado. Precisa ter uma análise aberta na esteira.'),
+  tipo: z.enum(['inicial', 'reanalise']).default('inicial'),
+})
+export type RodarAnaliseToolInput = z.infer<typeof rodarAnaliseToolSchema>
+
+/** Tool de leitura: quadrantes e divergências do período. */
+export const compararSeguradoraSchema = z.object({
+  dias: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .default(90)
+    .describe('Janela em dias, contada das análises concluídas.'),
+})
+export type CompararSeguradoraInput = z.infer<typeof compararSeguradoraSchema>

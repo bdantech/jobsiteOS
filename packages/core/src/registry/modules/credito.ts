@@ -22,7 +22,30 @@ import {
   type SolicitarAnaliseInput,
   type StatusEsteiraInput,
 } from '../../credito/index.js'
-import { solicitarAnalise } from '../../credito/mutations.js'
+import { rodarAnalisePropria, solicitarAnalise } from '../../credito/mutations.js'
+import {
+  DECISAO_FINAL_LABELS,
+  INDICADOR_LABELS,
+  QUADRANTE_LABELS,
+  QUADRANTE_LEITURA,
+  STATUS_ANALISE_PROPRIA_LABELS,
+  TETO_LABELS,
+  type DecisaoFinal,
+  type Indicador,
+  type IndicadorId,
+  type Quadrante,
+  type StatusAnalisePropria,
+  type Teto,
+  type TetoId,
+} from '../../credito/analise.js'
+import {
+  analisePropriaSchema,
+  compararSeguradoraSchema,
+  rodarAnaliseToolSchema,
+  type AnalisePropriaInput,
+  type CompararSeguradoraInput,
+  type RodarAnaliseToolInput,
+} from '../../credito/schemas.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -259,6 +282,149 @@ async function statusCnpj(input: StatusCnpjInput, ctx: ToolContext) {
   }
 }
 
+
+// ─── Análise proprietária (04j) ─────────────────────────────────────────────
+
+/**
+ * O resultado consolidado. Devolve os TETOS NÃO APLICÁVEIS junto dos aplicáveis, com o
+ * motivo: é a metade da resposta que o modelo mais tende a engolir, e é justamente a
+ * que explica por que o limite é o que é.
+ */
+async function analisePropriaDoCnpj(input: AnalisePropriaInput, ctx: ToolContext) {
+  const cnpj = normalizeCnpj(input.cnpj)
+  const { data, error } = await ctx.supabase
+    .from('analises_proprietarias')
+    .select('id, analise_credito_id, status, tipo, recomendacao, limite_recomendado, motivos_nao_operar, indicadores, tetos, cenarios, lacunas_calculo, quadrante, atradius_status, atradius_limite, decisao_final, decisao_limite, decisao_motivo, decidida_em, parecer_markdown, parecer_editado, parametros_versao, criada_em, concluida_em')
+    .eq('cnpj', cnpj)
+    .order('criada_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) {
+    return {
+      encontrado: false,
+      cnpj: formatCnpj(cnpj),
+      aviso: 'Este CNPJ ainda não tem análise proprietária. Ela é rodada sob demanda, a partir dos documentos contábeis anexados na esteira.',
+    }
+  }
+
+  if (data.status !== 'concluida') {
+    return {
+      encontrado: true,
+      cnpj: formatCnpj(cnpj),
+      status: STATUS_ANALISE_PROPRIA_LABELS[data.status as StatusAnalisePropria] ?? data.status,
+      aviso:
+        data.status === 'aguardando_revisao'
+          ? 'A extração está aguardando revisão humana dos campos críticos. Nada foi calculado ainda — não há limite a informar.'
+          : 'A análise ainda não está concluída. Não há número a informar.',
+      route: `/credito/analises/${data.analise_credito_id}`,
+    }
+  }
+
+  const indicadores = (Array.isArray(data.indicadores) ? data.indicadores : []) as unknown as Indicador[]
+  const tetos = (Array.isArray(data.tetos) ? data.tetos : []) as unknown as Teto[]
+  const vinculante = tetos.find((t) => t.vinculante)
+
+  return {
+    encontrado: true,
+    cnpj: formatCnpj(cnpj),
+    status: STATUS_ANALISE_PROPRIA_LABELS.concluida,
+    recomendacao: data.recomendacao === 'operar' ? 'OPERAR' : 'NÃO OPERAR',
+    limite_recomendado: brl(data.limite_recomendado),
+    motivos_nao_operar: data.motivos_nao_operar ?? [],
+    teto_vinculante: vinculante
+      ? `${TETO_LABELS[vinculante.id as TetoId] ?? vinculante.id} — ${vinculante.formula}`
+      : null,
+    tetos: tetos.map((t) => ({
+      teto: TETO_LABELS[t.id as TetoId] ?? t.id,
+      aplicavel: t.aplicavel,
+      valor: t.aplicavel ? brl(t.valor) : null,
+      // NUNCA some com o não aplicável: "sem cobertura da seguradora" e "cobertura de
+      // zero" produzem o mesmo silêncio e significados opostos.
+      motivo_nao_aplicavel: t.motivo_nao_aplicavel ?? null,
+      vinculante: t.vinculante,
+    })),
+    indicadores: indicadores
+      .filter((i) => i.valor !== null)
+      .map((i) => ({
+        indicador: INDICADOR_LABELS[i.id as IndicadorId] ?? i.id,
+        valor: i.valor,
+        unidade: i.unidade,
+        semaforo: i.faixa,
+      })),
+    indicadores_sem_valor: indicadores
+      .filter((i) => i.valor === null)
+      .map((i) => `${INDICADOR_LABELS[i.id as IndicadorId] ?? i.id}: ${i.motivo_sem_valor ?? 'sem insumo'}`),
+    cenarios: data.cenarios ?? [],
+    lacunas: data.lacunas_calculo ?? [],
+    seguradora: {
+      status: data.atradius_status,
+      limite: brl(data.atradius_limite),
+      quadrante: data.quadrante ? QUADRANTE_LABELS[data.quadrante as Quadrante] : null,
+      leitura: data.quadrante ? QUADRANTE_LEITURA[data.quadrante as Quadrante] : null,
+    },
+    decisao: data.decisao_final
+      ? {
+          decisao: DECISAO_FINAL_LABELS[data.decisao_final as DecisaoFinal],
+          limite: brl(data.decisao_limite),
+          motivo: data.decisao_motivo,
+          em: data.decidida_em,
+        }
+      : null,
+    parecer: data.parecer_editado ?? data.parecer_markdown,
+    ressalva:
+      'Os números vêm de um cálculo determinístico versionado (parâmetros v' +
+      String(data.parametros_versao) +
+      '). O parecer é texto gerado por IA sobre esses números — ele não os altera.',
+    route: `/credito/analises/${data.analise_credito_id}`,
+  }
+}
+
+/** Quadrantes e divergências do período. Serve à pergunta "onde discordamos dela?". */
+async function compararSeguradora(input: CompararSeguradoraInput, ctx: ToolContext) {
+  const desde = new Date()
+  desde.setDate(desde.getDate() - input.dias)
+
+  const { data, error } = await ctx.supabase
+    .from('analises_proprietarias')
+    .select('cnpj, quadrante, recomendacao, limite_recomendado, atradius_limite, decisao_final, decisao_motivo, analise_credito_id')
+    .eq('status', 'concluida')
+    .not('quadrante', 'is', null)
+    .gte('concluida_em', desde.toISOString())
+    .order('concluida_em', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  const linhas = data ?? []
+  const porQuadrante: Record<string, number> = {}
+  for (const l of linhas) {
+    const q = l.quadrante as string
+    porQuadrante[QUADRANTE_LABELS[q as Quadrante] ?? q] = (porQuadrante[QUADRANTE_LABELS[q as Quadrante] ?? q] ?? 0) + 1
+  }
+
+  const divergentes = linhas.filter((l) => l.quadrante === 'so_nos' || l.quadrante === 'so_seguradora')
+
+  return {
+    janela_dias: input.dias,
+    total: linhas.length,
+    por_quadrante: porQuadrante,
+    divergencias: divergentes.map((l) => ({
+      cnpj: formatCnpj(l.cnpj),
+      quadrante: QUADRANTE_LABELS[l.quadrante as Quadrante],
+      leitura: QUADRANTE_LEITURA[l.quadrante as Quadrante],
+      nosso_limite: brl(l.limite_recomendado),
+      limite_seguradora: brl(l.atradius_limite),
+      decidida: l.decisao_final ? DECISAO_FINAL_LABELS[l.decisao_final as DecisaoFinal] : 'ainda sem decisão',
+      motivo: l.decisao_motivo,
+      route: `/credito/analises/${l.analise_credito_id}`,
+    })),
+    // Sem divergência não há "tudo certo": pode não haver análise proprietária alguma.
+    observacao:
+      linhas.length === 0
+        ? 'Nenhuma análise proprietária foi concluída com resposta da seguradora nesta janela.'
+        : undefined,
+  }
+}
+
 export const creditoModule: AppModule = {
   id: 'credito',
   name: 'Crédito',
@@ -340,6 +506,77 @@ export const creditoModule: AppModule = {
           limite_solicitado: brl(a.limite_solicitado),
           aviso: 'Criada na esteira. O envio à seguradora é uma ação separada, feita por alguém do time de Crédito.',
           route: `/credito/analises/${a.id}`,
+        }
+      },
+    },
+    {
+      id: 'credito.analise_proprietaria',
+      name: 'Análise de crédito proprietária',
+      description:
+        'O resultado consolidado da NOSSA análise de um CNPJ: recomendação OPERAR/NÃO OPERAR, ' +
+        'limite recomendado, os cinco tetos (com "não aplicável" e o motivo, que você NUNCA deve ' +
+        'omitir nem tratar como zero), indicadores com semáforo, cenários, o quadrante contra a ' +
+        'seguradora e a decisão registrada. Os números são de cálculo determinístico; o parecer é ' +
+        'texto de IA sobre eles. Diferente de credito.score_empresa, que estima a CHANCE de a ' +
+        'seguradora conceder — aqui é a nossa leitura dos documentos contábeis.',
+      inputSchema: analisePropriaSchema,
+      mutates: false,
+      execute: (input, ctx) => analisePropriaDoCnpj(input as AnalisePropriaInput, ctx),
+    },
+    {
+      id: 'credito.comparar_seguradora',
+      name: 'Confronto com a seguradora',
+      description:
+        'Quadrantes e divergências do período: onde nós e a Atradius concordamos e onde não. ' +
+        '"Só nós aprovamos" é a decisão que só um FIDC com dado próprio pode tomar; ' +
+        '"só a seguradora aprova" é alerta de complacência. Ambos exigem motivo escrito.',
+      inputSchema: compararSeguradoraSchema,
+      mutates: false,
+      execute: (input, ctx) => compararSeguradora(input as CompararSeguradoraInput, ctx),
+    },
+    {
+      id: 'credito.rodar_analise',
+      name: 'Rodar análise proprietária',
+      description:
+        'Dispara a análise sobre os documentos contábeis já anexados na esteira daquele CNPJ. ' +
+        'NUNCA decide nem aprova: o que ela produz é extração, cálculo e parecer, e a decisão ' +
+        'continua sendo de uma pessoa do perfil Crédito. Custa tokens sobre documentos longos, ' +
+        'então exige confirmação explícita do usuário.',
+      inputSchema: rodarAnaliseToolSchema,
+      mutates: true,
+      execute: async (input, ctx) => {
+        const { cnpj, tipo } = input as RodarAnaliseToolInput
+        const normalizado = normalizeCnpj(cnpj)
+        const { data: esteira, error } = await ctx.supabase
+          .from('analises_credito')
+          .select('id, estagio')
+          .eq('cnpj', normalizado)
+          .order('criada_em', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (error) throw new Error(error.message)
+        if (!esteira) {
+          return {
+            ok: false,
+            cnpj: formatCnpj(normalizado),
+            motivo:
+              'Não há análise na esteira para este CNPJ. Os documentos contábeis ficam pendurados nela — solicite a análise antes.',
+          }
+        }
+        const a = await rodarAnalisePropria(ctx.supabase, {
+          analise_credito_id: esteira.id,
+          tipo,
+          gatilho: 'manual',
+        })
+        return {
+          ok: true,
+          id: a.id,
+          cnpj: formatCnpj(a.cnpj),
+          status: STATUS_ANALISE_PROPRIA_LABELS[a.status as StatusAnalisePropria] ?? a.status,
+          aviso:
+            'A extração roda em segundo plano e PARA para revisão humana dos campos críticos. ' +
+            'Nada é calculado antes de alguém confirmar os números lidos.',
+          route: `/credito/analises/${esteira.id}`,
         }
       },
     },

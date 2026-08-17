@@ -56,6 +56,11 @@ import {
   syncAtradius,
 } from './credito/esteira.js'
 import { sincronizarAnalisesPlataforma } from './credito/sync-analises-plataforma.js'
+import {
+  drenarAnalisesProprias,
+  processarAnalisePropria,
+  sugerirReanalises,
+} from './credito/analise-propria.js'
 import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
 import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
@@ -115,6 +120,9 @@ export type TipoJob =
   | 'credito-backfill'
   | 'credito-sync'
   | 'credito-expirar'
+  | 'credito-analise-propria'
+  | 'credito-analises-drenar'
+  | 'credito-reanalises'
   | 'perfil-recalcular'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
@@ -913,6 +921,76 @@ export function dispararSyncAtradius(): string {
 
 export function dispararExpirarAnalises(): string {
   return dispararAvulso('credito-expirar', async () => expirarAnalises())
+}
+
+// ─── Análise proprietária (Prompt 04j) ───────────────────────────────────────
+
+/**
+ * O single-flight aqui é por ANÁLISE, não por tipo de job — e é a única exceção no
+ * arquivo.
+ *
+ * `dispararAvulso` serializa por tipo, o que é certo para uma reclassificação (só faz
+ * sentido uma por vez) e errado para isto: dois analistas rodando dois sacados diferentes
+ * ao mesmo tempo é o uso normal, e o segundo receberia 409. O que NÃO pode acontecer é a
+ * mesma análise rodar duas vezes — cada corrida relê os mesmos PDFs no modelo e custa o
+ * mesmo tanto de novo.
+ */
+const analisesEmVoo = new Set<string>()
+
+export function dispararAnalisePropria(analiseId: string): string {
+  const id = randomUUID()
+  avulsos.set(id, {
+    id,
+    tipo: 'credito-analise-propria',
+    status: 'executando',
+    iniciado_em: new Date().toISOString(),
+  })
+
+  if (analisesEmVoo.has(analiseId)) {
+    // Clique repetido não é erro: a análise já está rodando e o resultado é o mesmo.
+    avulsos.set(id, {
+      ...(avulsos.get(id) as JobAvulso),
+      status: 'concluida',
+      terminado_em: new Date().toISOString(),
+      resultado: { analise_id: analiseId, ja_em_execucao: true },
+    })
+    return id
+  }
+  analisesEmVoo.add(analiseId)
+
+  void (async () => {
+    try {
+      const resultado = await processarAnalisePropria(analiseId)
+      avulsos.set(id, {
+        ...(avulsos.get(id) as JobAvulso),
+        status: 'concluida',
+        terminado_em: new Date().toISOString(),
+        resultado,
+      })
+    } catch (erro) {
+      logger.error({ analiseId, erro: String(erro) }, 'Análise proprietária falhou fora das etapas.')
+      avulsos.set(id, {
+        ...(avulsos.get(id) as JobAvulso),
+        status: 'falhou',
+        terminado_em: new Date().toISOString(),
+        erro: String(erro),
+      })
+    } finally {
+      analisesEmVoo.delete(analiseId)
+    }
+  })()
+
+  return id
+}
+
+/** Rede de segurança: retoma o que ficou em `processando` depois de um deploy. */
+export function dispararDrenarAnalisesProprias(): string {
+  return dispararAvulso('credito-analises-drenar', async () => drenarAnalisesProprias())
+}
+
+/** Diário: sugere (não executa) reanálise do que vence em menos de 60 dias. */
+export function dispararSugerirReanalises(): string {
+  return dispararAvulso('credito-reanalises', async () => sugerirReanalises())
 }
 
 // ─── Perfil de Quem Opera (Prompt 04f) ───────────────────────────────────────

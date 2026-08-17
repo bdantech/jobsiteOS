@@ -123,6 +123,14 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/credito/sync',
   },
   {
+    path: '/api/cron/credito-reanalises',
+    nome: 'Reanálises e retomada',
+    moduloId: 'credito',
+    descricao:
+      'Sugere reanálise do que vence em menos de 60 dias e retoma as análises proprietárias que ficaram paradas. SUGERE, não executa: rodar a análise é ler dez PDFs num modelo, e fazer isso em lote automático seria a forma mais cara possível de descobrir que a maioria não mudou.',
+    destino: 'POST /jobs/credito/sugerir-reanalises + /jobs/credito/analises-drenar',
+  },
+  {
     path: '/api/cron/comercial-distribuir',
     nome: 'Distribuição semanal de SDR',
     moduloId: 'comercial',

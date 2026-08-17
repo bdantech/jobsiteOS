@@ -21,6 +21,9 @@ export interface AnaliseNaEsteira {
   estagio: string
   limite_solicitado: number | null
   limite_aprovado: number | null
+  /** A NOSSA decisão (04j §7). Distinto do aprovado, que é o da seguradora. */
+  limite_operacional: number | null
+  decisao_interna: string | null
   expira_em: string | null
   motivo: string | null
   origem: string
@@ -42,7 +45,7 @@ export async function buscarEsteira(): Promise<AnaliseNaEsteira[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('analises_credito')
-    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
+    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
     .order('atualizada_em', { ascending: false })
     .limit(LIMITE_ESTEIRA)
   if (error) throw new Error(error.message)
@@ -61,7 +64,7 @@ export async function buscarAnalise(id: string): Promise<AnaliseNaEsteira | null
   const supabase = createClient()
   const { data, error } = await supabase
     .from('analises_credito')
-    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
+    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)

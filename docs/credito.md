@@ -518,3 +518,15 @@ menos de seis meses" — escrevê-la com data obriga a pessoa a fazer a conta de
 Calibração estatística automática dos pesos do scorecard (chega com histórico de decisões
 acumulado), chance de adesão do fornecedor, declarações de faturamento à seguradora,
 sinistros/non-payment.
+
+---
+
+## A segunda leitura (04j)
+
+A partir do Prompt 04j existe uma análise **proprietária**, que lê os documentos contábeis
+do sacado e produz a nossa própria recomendação — ao lado, e nunca por cima, da leitura da
+seguradora. `analises_credito` ganhou `limite_operacional`, `decisao_interna` e
+`analise_propria_id`; **`limite_aprovado` continua sendo o número da Atradius**, e é ele
+que o fator "histórico de análises" e a view `analise_vigente` leem.
+
+Ver **[docs/analise-credito.md](analise-credito.md)**.

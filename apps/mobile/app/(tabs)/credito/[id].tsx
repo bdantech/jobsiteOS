@@ -9,13 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { AnalisePropriaMobile } from '@/features/credito'
 import { supabase } from '@/lib/supabase'
 
 /**
- * Detalhe da análise no celular: acompanhar, não operar.
+ * Detalhe da análise no celular.
  *
- * Sem mover estágio e sem enviar à seguradora — as duas coisas precisam de conferência e
- * uma delas pode ser cobrada. O que se faz aqui é olhar em que pé está e abrir a empresa.
+ * Sem mover estágio e sem enviar à seguradora — as duas precisam de conferência e uma
+ * delas pode ser cobrada. Mas a DECISÃO de crédito está aqui (04j §10): comitê por
+ * telefone e alçada aprovando fora do escritório são o caso de uso real, e mandar a
+ * pessoa abrir o notebook para clicar em "operar" é a diferença entre decidir hoje e
+ * decidir amanhã.
  */
 
 async function buscar(id: string): Promise<(Tables<'analises_credito'> & { razao_social: string | null }) | null> {
@@ -82,8 +86,12 @@ export default function AnaliseScreen() {
             <Text className="text-sm tabular-nums">{moeda(data.limite_solicitado)}</Text>
           </View>
           <View className="flex-row justify-between gap-2">
-            <Text variant="muted" className="text-sm">Limite aprovado</Text>
+            <Text variant="muted" className="text-sm">Limite aprovado (seguradora)</Text>
             <Text className="text-sm font-semibold tabular-nums">{moeda(data.limite_aprovado)}</Text>
+          </View>
+          <View className="flex-row justify-between gap-2">
+            <Text variant="muted" className="text-sm">Limite operacional</Text>
+            <Text className="text-sm font-semibold tabular-nums">{moeda(data.limite_operacional)}</Text>
           </View>
           <View className="flex-row justify-between gap-2">
             <Text variant="muted" className="text-sm">Validade</Text>
@@ -97,6 +105,8 @@ export default function AnaliseScreen() {
           ) : null}
         </CardContent>
       </Card>
+
+      <AnalisePropriaMobile analiseCreditoId={data.id} />
 
       {data.empresa_id ? (
         <Button variant="outline" onPress={() => router.push(`/empresas/${data.empresa_id}` as never)}>

@@ -590,3 +590,24 @@ export async function dispararBackfillAtradius(): Promise<DispararJobResultado> 
 export async function dispararSyncAtradius(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/sync', {}, 'credito-sync')
 }
+
+/**
+ * Análise proprietária (04j): roda UMA análise do ponto em que ela parou.
+ *
+ * Chamada duas vezes no caminho de uma análise — depois de abrir (extração) e depois da
+ * revisão da extração (cálculo + parecer). É AÇÃO PAGA: cada corrida relê os documentos
+ * no modelo, e por isso recebe o id explícito, nunca "todas as pendentes".
+ */
+export async function dispararAnalisePropria(analiseId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/analise-propria', { analise_propria_id: analiseId }, 'credito-analise-propria')
+}
+
+/** Rede de segurança: retoma o que ficou em `processando` depois de um deploy. */
+export async function dispararDrenarAnalisesProprias(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/analises-drenar', {}, 'credito-analises-drenar')
+}
+
+/** Diário: SUGERE reanálise do que vence em 60 dias. Nunca executa em lote. */
+export async function dispararSugerirReanalises(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/sugerir-reanalises', {}, 'credito-reanalises')
+}

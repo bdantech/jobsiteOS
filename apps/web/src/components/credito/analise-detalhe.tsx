@@ -14,12 +14,13 @@ import {
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { moverAnaliseAction, registrarDocAction } from '@/actions/credito'
 import { createClient } from '@/lib/supabase/client'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
+import { PainelSacado } from './analise-propria/painel-sacado'
 import { buscarAnalise, buscarCreditoConfig, buscarDocs, creditoKeys } from './queries'
 
 /**
@@ -228,6 +229,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Dados da análise</CardTitle>
+            <CardDescription>O que a SEGURADORA disse. A nossa leitura fica abaixo.</CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3 sm:grid-cols-2">
@@ -236,8 +238,17 @@ export function AnaliseDetalhe({ id }: { id: string }) {
                 <dd className="text-sm tabular-nums">{moeda(data.limite_solicitado)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Limite aprovado</dt>
+                <dt className="text-xs text-muted-foreground">Limite aprovado (seguradora)</dt>
                 <dd className="text-sm font-medium tabular-nums">{moeda(data.limite_aprovado)}</dd>
+              </div>
+              {/*
+               * O limite OPERACIONAL fica ao lado do da seguradora, e não no lugar dele:
+               * em "só nós aprovamos" existe operacional sem aprovado, e em "só a
+               * seguradora" existe aprovado sem operacional. São duas verdades.
+               */}
+              <div>
+                <dt className="text-xs text-muted-foreground">Limite operacional (nossa decisão)</dt>
+                <dd className="text-sm font-medium tabular-nums">{moeda(data.limite_operacional)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Validade</dt>
@@ -277,6 +288,8 @@ export function AnaliseDetalhe({ id }: { id: string }) {
 
         <Docs analiseId={id} />
       </div>
+
+      <PainelSacado analiseCreditoId={id} />
     </div>
   )
 }

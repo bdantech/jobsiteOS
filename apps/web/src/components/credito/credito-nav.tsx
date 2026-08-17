@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Settings, SlidersHorizontal, Workflow } from 'lucide-react'
+import { Calculator, LayoutDashboard, Settings, SlidersHorizontal, Workflow } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Navegação interna do módulo Crédito. Mesmo padrão do Radar. */
@@ -10,6 +10,7 @@ const ITENS = [
   { href: '/credito', label: 'Esteira', icon: Workflow },
   { href: '/credito/painel', label: 'Painel', icon: LayoutDashboard },
   { href: '/credito/scorecard', label: 'Scorecard', icon: SlidersHorizontal },
+  { href: '/credito/parametros', label: 'Parâmetros da análise', icon: Calculator },
   { href: '/credito/config', label: 'Configurações', icon: Settings },
 ] as const
 

@@ -1,16 +1,26 @@
 import {
   ativarScorecardSchema,
   definirExClienteMotivoSchema,
+  editarParecerSchema,
   moverAnaliseSchema,
+  registrarDecisaoCreditoSchema,
   registrarDocSchema,
+  revisarExtracaoSchema,
+  rodarAnalisePropriaSchema,
   salvarCreditoConfigSchema,
+  salvarParametrosAnaliseSchema,
   salvarScorecardSchema,
   solicitarAnaliseSchema,
   type AtivarScorecardInput,
   type DefinirExClienteMotivoInput,
+  type EditarParecerInput,
   type MoverAnaliseInput,
+  type RegistrarDecisaoCreditoInput,
   type RegistrarDocInput,
+  type RevisarExtracaoInput,
+  type RodarAnalisePropriaInput,
   type SalvarCreditoConfigInput,
+  type SalvarParametrosAnaliseInput,
   type SalvarScorecardInput,
   type SolicitarAnaliseInput,
 } from './schemas.js'
@@ -100,4 +110,60 @@ export async function salvarCreditoConfig(
   const { data, error } = await supabase.rpc('app_salvar_credito_config', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'credito_config'>
+}
+
+// ─── Análise proprietária (04j) ─────────────────────────────────────────────
+//
+// Nenhuma destas decide crédito. `rodarAnalisePropria` abre o registro e o worker faz o
+// trabalho; `registrarDecisaoCredito` grava a decisão de um humano do perfil Crédito, e
+// o RPC recusa a divergência sem motivo escrito.
+
+export async function rodarAnalisePropria(
+  supabase: Supabase,
+  input: RodarAnalisePropriaInput | unknown,
+): Promise<Tables<'analises_proprietarias'>> {
+  const dados = parseOuFalhar(rodarAnalisePropriaSchema, input)
+  const { data, error } = await supabase.rpc('app_rodar_analise_propria', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_proprietarias'>
+}
+
+export async function revisarExtracao(
+  supabase: Supabase,
+  input: RevisarExtracaoInput | unknown,
+): Promise<Tables<'analises_proprietarias'>> {
+  const dados = parseOuFalhar(revisarExtracaoSchema, input)
+  const { data, error } = await supabase.rpc('app_revisar_extracao', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_proprietarias'>
+}
+
+export async function editarParecer(
+  supabase: Supabase,
+  input: EditarParecerInput | unknown,
+): Promise<Tables<'analises_proprietarias'>> {
+  const dados = parseOuFalhar(editarParecerSchema, input)
+  const { data, error } = await supabase.rpc('app_editar_parecer', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_proprietarias'>
+}
+
+export async function registrarDecisaoCredito(
+  supabase: Supabase,
+  input: RegistrarDecisaoCreditoInput | unknown,
+): Promise<Tables<'analises_proprietarias'>> {
+  const dados = parseOuFalhar(registrarDecisaoCreditoSchema, input)
+  const { data, error } = await supabase.rpc('app_registrar_decisao_credito', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_proprietarias'>
+}
+
+export async function salvarParametrosAnalise(
+  supabase: Supabase,
+  input: SalvarParametrosAnaliseInput | unknown,
+): Promise<Tables<'analise_parametros'>> {
+  const dados = parseOuFalhar(salvarParametrosAnaliseSchema, input)
+  const { data, error } = await supabase.rpc('app_salvar_parametros_analise', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analise_parametros'>
 }
