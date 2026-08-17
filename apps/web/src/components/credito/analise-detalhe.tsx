@@ -304,7 +304,15 @@ export function AnaliseDetalhe({ id }: { id: string }) {
     <div className="space-y-4">
       <VoltarContextual padrao={{ href: '/credito', label: 'Esteira' }} />
 
-      <FichaTopo titulo="Análise de crédito" descricao={formatCnpj(esteira.cnpj)} />
+      {/*
+       * O título é a CONSTRUTORA, não "Análise de crédito".
+       *
+       * Quem chega aqui já sabe que está numa análise — veio da esteira, ou de um link
+       * que dizia isso. O que ela precisa confirmar em meio segundo é DE QUEM é esta, e
+       * um título igual em todas as análises não confirma nada. O que a tela é vira a
+       * linha de baixo, junto do CNPJ, que é onde ela basta.
+       */}
+      <FichaTopo titulo={nome} descricao={`Análise de crédito · ${formatCnpj(esteira.cnpj)}`} />
 
       {/*
        * A banda de status ANTES das abas e fora da grade: ela vale para a tela inteira,
