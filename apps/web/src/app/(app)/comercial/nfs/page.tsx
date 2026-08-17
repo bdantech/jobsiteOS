@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
  * uma conclusão errada sobre o próprio trabalho. Por isso a checagem explícita.
  */
 export default async function Pagina() {
-  const { context, vendedor } = await contextoComercial()
+  const { context, vendedor, ehGestor } = await contextoComercial()
 
   if (!context.grantedModuleIds.includes('antecipacao')) {
     return (
@@ -39,5 +39,7 @@ export default async function Pagina() {
 
   // Gestor sem cadastro de vendedor vê o funil inteiro: para ele a pergunta é "onde está
   // a receita", não "onde está a minha".
-  return <FunilKanban vendedorId={vendedor?.id} />
+  // Gestor sem recorte enxerga o dono em cada card e pode trocar ali mesmo; o
+  // originador vê a própria carteira, onde o nome seria constante e inútil.
+  return <FunilKanban vendedorId={vendedor?.id} ehGestor={ehGestor} />
 }

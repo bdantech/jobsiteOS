@@ -296,6 +296,25 @@ export const moverVendaSchema = z
   })
 export type MoverVendaInput = z.infer<typeof moverVendaSchema>
 
+/**
+ * Reatribuição de dono, nos dois funis que têm dono no próprio card.
+ *
+ * O funil de NFs já tinha o seu (`atribuirNfSchema`); o de certificados não entra —
+ * lá o dono vem de `vendedor_carteira`, e trocar move a empresa de carteira junto com
+ * as NFs e a comissão dela.
+ */
+export const atribuirLeadSdrSchema = z.object({
+  lead_id: uuid,
+  sdr_id: uuid,
+})
+export type AtribuirLeadSdrInput = z.infer<typeof atribuirLeadSdrSchema>
+
+export const atribuirVendaSchema = z.object({
+  venda_id: uuid,
+  vendedor_id: uuid,
+})
+export type AtribuirVendaInput = z.infer<typeof atribuirVendaSchema>
+
 export const atribuirNfSchema = z.object({
   access_key: z.string().min(10),
   vendedor_id: uuid.nullable(),

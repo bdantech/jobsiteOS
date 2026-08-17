@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import { cn } from '@/lib/utils'
 import {
   buscarFunilCertificados,
@@ -182,13 +183,18 @@ function ListaCnpjs({ cnpjs }: { cnpjs: CnpjDoCard[] }) {
  * (é a que decide se dá para ganhar), agora do tamanho de um selo; a frase inteira
  * mora no modal, onde é lida uma vez e importa.
  */
-function CardDoFunil({ c, onAbrir }: { c: CardCertificado; onAbrir: () => void }) {
+function CardDoFunil({
+  c,
+  onAbrir,
+  mostrarDono,
+}: {
+  c: CardCertificado
+  onAbrir: () => void
+  mostrarDono: boolean
+}) {
   return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      className="w-full space-y-2 rounded-md border p-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent/40"
-    >
+    <div className="w-full space-y-2 rounded-md border p-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent/40">
+      <button type="button" onClick={onAbrir} className="w-full space-y-2 text-left">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <p className="line-clamp-2 font-medium">{c.nome}</p>
@@ -200,8 +206,21 @@ function CardDoFunil({ c, onAbrir }: { c: CardCertificado; onAbrir: () => void }
           <ShieldAlert className="h-4 w-4 shrink-0 text-destructive" aria-label="Matriz sem certificado" />
         )}
       </div>
-      <Cobertura cobertos={c.cobertos} total={c.total} />
-    </button>
+        <Cobertura cobertos={c.cobertos} total={c.total} />
+      </button>
+
+      {/*
+       * Só MOSTRA. Aqui o dono não é do card: vem da carteira de originação, e trocar
+       * moveria a empresa inteira — NFs e comissão junto. O link leva para a Carteira,
+       * onde a decisão tem o contexto que exige.
+       *
+       * Fora do <button> do card: um link dentro de botão é HTML inválido e o clique
+       * dispararia os dois.
+       */}
+      {mostrarDono && (
+        <DonoDoCard nome={c.dono_nome} tipos={['originador']} podeTrocar={false} href="/comercial/carteira" />
+      )}
+    </div>
   )
 }
 
@@ -548,7 +567,13 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
                     </div>
                     <div className="space-y-2">
                       {itens.map((c) => (
-                        <CardDoFunil key={c.card_id} c={c} onAbrir={() => setAbertoId(c.card_id)} />
+                        <CardDoFunil
+                          key={c.card_id}
+                          c={c}
+                          onAbrir={() => setAbertoId(c.card_id)}
+                          // Com o filtro de originador ligado o nome seria constante.
+                          mostrarDono={ehGestor && !vendedorId}
+                        />
                       ))}
                     </div>
                   </div>

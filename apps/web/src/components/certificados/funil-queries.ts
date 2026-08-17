@@ -44,6 +44,13 @@ export interface CardCertificado {
   matriz_coberta: boolean
   matriz_expira_em: string | null
   cnpjs: CnpjDoCard[]
+  /**
+   * De quem é a CARTEIRA desta empresa (`vendedor_carteira`), não do card: o funil de
+   * certificados não tem dono próprio. Por isso o card só mostra e manda para a tela
+   * de Carteira — trocar ali moveria as NFs e a comissão da empresa junto.
+   */
+  dono_id: string | null
+  dono_nome: string | null
 }
 
 export interface FunilCertificados {

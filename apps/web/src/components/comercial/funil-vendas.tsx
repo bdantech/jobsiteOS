@@ -19,8 +19,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { moverVendaAction } from '@/actions/comercial'
+import { atribuirVendaAction, moverVendaAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
+import { DonoDoCard } from './dono-do-card'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   type VendaComEmpresa,
@@ -86,6 +87,18 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   const closersVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'vendedor')
   const mostrarSeletor = ehGestor || closersVisiveis.length > 1
   const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
+
+  async function reatribuir(v: VendaComEmpresa, destino: string) {
+    setAgindo(true)
+    const r = await atribuirVendaAction({ venda_id: v.id, vendedor_id: destino })
+    setAgindo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(`Negócio agora é de ${nomePorId.get(destino) ?? 'outro vendedor'}.`)
+    void qc.invalidateQueries({ queryKey: ['comercial'] })
+  }
 
   async function mover(v: VendaComEmpresa, estagio: EstagioVenda) {
     setAgindo(true)
@@ -261,6 +274,17 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                               <Badge variant="secondary" className="text-[10px]">Já operando</Badge>
                             ) : null}
                           </div>
+                          {/* Só sem filtro: com ele o nome repetiria em cada card o
+                              que o seletor no topo já diz. */}
+                          {!vendedorId && (
+                            <DonoDoCard
+                              nome={nomePorId.get(v.vendedor_id) ?? null}
+                              tipos={['vendedor']}
+                              podeTrocar={ehGestor}
+                              ocupado={agindo}
+                              onTrocar={(id) => reatribuir(v, id)}
+                            />
+                          )}
                           {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
                             <p className="text-[11px] text-muted-foreground">
                               Aguardando a seguradora. O card anda sozinho quando ela decidir.

@@ -26,8 +26,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { moverLeadAction } from '@/actions/comercial'
+import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
+import { DonoDoCard } from './dono-do-card'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
   comercialKeys,
@@ -101,6 +102,22 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
 
   function recarregar() {
     void qc.invalidateQueries({ queryKey: ['comercial'] })
+  }
+
+  const nomeDoVendedor = (id: string | null) => (id ? (nomePorId.get(id) ?? null) : null)
+
+  async function reatribuir(lead: LeadComEmpresa, sdrDestino: string) {
+    setAgindo(true)
+    const r = await atribuirLeadSdrAction({ lead_id: lead.id, sdr_id: sdrDestino })
+    setAgindo(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    // O SLA reinicia junto (o RPC zera `ultimo_toque_em`): quem acabou de receber não
+    // pode nascer atrasado pelo tempo que o anterior deixou o lead parado.
+    toast.success(`Lead agora é de ${nomeDoVendedor(sdrDestino) ?? 'outro SDR'}.`)
+    recarregar()
   }
 
   async function mover(lead: LeadComEmpresa, estagio: EstagioSdr, extra: Record<string, unknown> = {}) {
@@ -285,6 +302,20 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                           <p className="text-xs tabular-nums text-muted-foreground">
                             {brl(l.empresas?.valor_esperado_mensal)}/mês esperado
                           </p>
+                          {/*
+                            O dono só aparece na lista NÃO filtrada: com o filtro
+                            ligado ele repetiria em cada card o que o seletor no topo
+                            já diz, e informação constante rouba espaço do que varia.
+                          */}
+                          {!sdrId && (
+                            <DonoDoCard
+                              nome={nomeDoVendedor(l.sdr_id)}
+                              tipos={['sdr']}
+                              podeTrocar={ehGestor}
+                              ocupado={agindo}
+                              onTrocar={(id) => reatribuir(l, id)}
+                            />
+                          )}
                           {/*
                             Só os próximos passos plausíveis, e o julgamento do fit em
                             separado. Um menu com os seis estágios transformaria "mover"

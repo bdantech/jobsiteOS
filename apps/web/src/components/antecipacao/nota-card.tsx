@@ -48,11 +48,18 @@ export function NotaCard({
   fornecedor,
   minimoOperavel,
   compacto = false,
+  dono,
 }: {
   nota: NotaFunil
   fornecedor?: FornecedorFunil
   minimoOperavel: number
   compacto?: boolean
+  /**
+   * O dono da nota, só quando a lista NÃO está recortada por vendedor. Vem pronto de
+   * cima em vez de ser buscado aqui: são dezenas de cards por coluna, e cada um
+   * resolvendo o próprio nome seria uma leitura por card.
+   */
+  dono?: React.ReactNode
 }) {
   const [notaAberta, setNotaAberta] = React.useState(false)
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
@@ -133,6 +140,14 @@ export function NotaCard({
               </span>
               <span className="font-medium tabular-nums">{formatarMoedaExata(nota.valor)}</span>
             </div>
+
+            {/* O dono, quando a lista não está recortada por vendedor. Fora do modal:
+                o clique abre o dropdown, não a nota. */}
+            {dono ? (
+              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                {dono}
+              </div>
+            ) : null}
 
             {!compacto && (
               <footer className="mt-3 space-y-2 border-t pt-2">

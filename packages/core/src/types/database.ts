@@ -4543,6 +4543,14 @@ export type Database = {
         Args: { p: Json }
         Returns: Json
       }
+      app_atribuir_lead_sdr: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      app_atribuir_venda: {
+        Args: { p: Json }
+        Returns: Json
+      }
       app_processar_submissao: {
         Args: { p: Json }
         Returns: Json

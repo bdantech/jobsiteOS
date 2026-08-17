@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, RefreshCw, Search, X } from 'lucide-react'
 import {
   ESTAGIOS_ABERTOS,
@@ -19,10 +19,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
+import { atribuirNfAction } from '@/actions/comercial'
+import { buscarVendedores, comercialKeys } from '@/components/comercial/queries'
 import { useDebounce } from '@/components/empresas/use-debounce'
 import { cn } from '@/lib/utils'
 import { formatarInteiro, formatarMoeda } from './format'
 import { NotaCard } from './nota-card'
+import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import {
   PAGINA_FUNIL,
   antecipacaoKeys,
@@ -63,8 +67,13 @@ const TITULO_COLUNA: Record<string, string> = {
  * `vendedorId` recorta o mesmo Kanban para UMA carteira — é o funil de NFs do
  * originador. Mesma tela, mesmas ações: o trabalho é idêntico, o que muda é o escopo.
  */
-export function FunilKanban({ vendedorId }: { vendedorId?: string } = {}) {
+export function FunilKanban({
+  vendedorId,
+  ehGestor = false,
+}: { vendedorId?: string; ehGestor?: boolean } = {}) {
+  const qc = useQueryClient()
   const [termo, setTermo] = React.useState('')
+  const [atribuindo, setAtribuindo] = React.useState<string | null>(null)
   const [faixa, setFaixa] = React.useState<Faixa | undefined>()
   const [tipagem, setTipagem] = React.useState<Tipagem | undefined>()
   const termoDebounced = useDebounce(termo, 350)
@@ -76,6 +85,30 @@ export function FunilKanban({ vendedorId }: { vendedorId?: string } = {}) {
   })
   const minimoOperavel =
     (config?.funil as { minimo_operavel_dias?: number } | undefined)?.minimo_operavel_dias ?? 7
+
+  /*
+   * A lista de vendedores só é buscada quando o dono aparece — ou seja, no funil
+   * inteiro. No recorte do originador ela não é usada, e não vale uma ida ao banco.
+   */
+  const vendedores = useQuery({
+    queryKey: comercialKeys.vendedores(),
+    queryFn: buscarVendedores,
+    enabled: !vendedorId,
+    staleTime: 5 * 60_000,
+  })
+  const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
+
+  async function atribuir(accessKey: string, destino: string) {
+    setAtribuindo(accessKey)
+    const r = await atribuirNfAction({ access_key: accessKey, vendedor_id: destino })
+    setAtribuindo(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(`Nota agora é de ${nomePorId.get(destino) ?? 'outro originador'}.`)
+    void qc.invalidateQueries({ queryKey: antecipacaoKeys.all })
+  }
 
   const base: FiltrosFunil = React.useMemo(
     () => ({ termo: termoDebounced || undefined, faixa, tipagem, vendedorId }),
@@ -248,6 +281,19 @@ export function FunilKanban({ vendedorId }: { vendedorId?: string } = {}) {
                           nota.fornecedor_cnpj ? porCnpj.get(nota.fornecedor_cnpj) : undefined
                         }
                         minimoOperavel={minimoOperavel}
+                        dono={
+                          // Só no funil inteiro: recortado por vendedor, o nome
+                          // repetiria em cada card o que o recorte já diz.
+                          vendedorId ? undefined : (
+                            <DonoDoCard
+                              nome={nota.vendedor_id ? (nomePorId.get(nota.vendedor_id) ?? null) : null}
+                              tipos={['originador']}
+                              podeTrocar={ehGestor}
+                              ocupado={atribuindo === nota.access_key}
+                              onTrocar={(id) => atribuir(nota.access_key ?? '', id)}
+                            />
+                          )
+                        }
                       />
                     ))}
                     {total > notas.length && (

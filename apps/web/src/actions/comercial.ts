@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import {
+  atribuirLeadSdr,
   atribuirNf,
+  atribuirVenda,
   definirCarteira,
   definirCarteiraPassiva,
   definirGestaoOperacao,
@@ -104,6 +106,28 @@ export async function moverVendaAction(input: unknown): Promise<ActionResult<{ i
   try {
     const v = (await moverVenda(supabase, input)) as { id?: string } | null
     return { ok: true, data: { id: v?.id ?? null } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function atribuirLeadSdrAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await atribuirLeadSdr(supabase, input)
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function atribuirVendaAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await atribuirVenda(supabase, input)
+    return { ok: true, data: { ok: true } }
   } catch (error) {
     return falha(error)
   }
