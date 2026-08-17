@@ -41,5 +41,7 @@ export default async function Pagina() {
   // a receita", não "onde está a minha".
   // Gestor sem recorte enxerga o dono em cada card e pode trocar ali mesmo; o
   // originador vê a própria carteira, onde o nome seria constante e inútil.
-  return <FunilKanban vendedorId={vendedor?.id} ehGestor={ehGestor} />
+  // `padraoComercial`: aqui o funil é um entre quatro irmãos, e a moldura tem de ser a
+  // mesma deles. Em /antecipacao ele é a tela inteira e continua como está.
+  return <FunilKanban vendedorId={vendedor?.id} ehGestor={ehGestor} padraoComercial />
 }

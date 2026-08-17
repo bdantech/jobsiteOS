@@ -16,7 +16,7 @@ import {
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
@@ -70,7 +70,8 @@ const TITULO_COLUNA: Record<string, string> = {
 export function FunilKanban({
   vendedorId,
   ehGestor = false,
-}: { vendedorId?: string; ehGestor?: boolean } = {}) {
+  padraoComercial = false,
+}: { vendedorId?: string; ehGestor?: boolean; padraoComercial?: boolean } = {}) {
   const qc = useQueryClient()
   const [termo, setTermo] = React.useState('')
   const [atribuindo, setAtribuindo] = React.useState<string | null>(null)
@@ -150,9 +151,10 @@ export function FunilKanban({
 
   const filtrando = Boolean(termoDebounced || faixa || tipagem)
 
-  return (
-    <div className="space-y-4">
-      {/* ─── Filtros ──────────────────────────────────────────────────────── */}
+  const totalGeral = colunas.reduce((soma, q) => soma + (q?.data?.total ?? 0), 0)
+  const carregando = colunas.some((q) => q?.isPending)
+
+  const filtros = (
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[16rem] flex-1">
           <Search
@@ -224,9 +226,22 @@ export function FunilKanban({
           Atualizar
         </Button>
       </div>
+  )
 
-      {/* ─── Colunas ──────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 lg:grid-cols-5">
+  /*
+   * As colunas em DUAS formas, e a diferença é só a moldura.
+   *
+   * Em /antecipacao o funil é a tela inteira e mora numa grade de cinco. Em
+   * /comercial/nfs ele é um funil entre quatro irmãos — reuniões, vendas, NFs e
+   * certificados — e ali a forma tem de ser a mesma dos outros três: um cartão com
+   * cabeçalho, cabeçalhos de coluna discretos e rolagem horizontal. Duas telas que
+   * respondem à mesma pergunta com layouts diferentes obrigam a pessoa a reaprender a
+   * ler a cada troca de menu.
+   *
+   * O NotaCard NÃO muda: o que se lê sobre uma nota é o mesmo nos dois lugares.
+   */
+  const grade = (
+      <div className={cn(padraoComercial ? 'flex gap-3 overflow-x-auto pb-2' : 'grid gap-3 lg:grid-cols-5')}>
         {COLUNAS.map((estagio, i) => {
           const q = colunas[i]
           const notas = q?.data?.notas ?? []
@@ -234,19 +249,41 @@ export function FunilKanban({
           const valor = notas.reduce((s, n) => s + Number(n.valor ?? 0), 0)
 
           return (
-            <section key={estagio} className="flex min-w-0 flex-col gap-2">
-              <header className="flex items-baseline justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
-                <h2 className="truncate text-sm font-medium">{TITULO_COLUNA[estagio]}</h2>
-                <Badge variant="secondary" className="tabular-nums">
-                  {q?.isPending ? '…' : formatarInteiro(total)}
-                </Badge>
-              </header>
+            <section
+              key={estagio}
+              className={cn('flex flex-col gap-2', padraoComercial ? 'w-72 shrink-0' : 'min-w-0')}
+            >
+              {padraoComercial ? (
+                <header className="border-b pb-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h2 className="truncate text-xs font-medium">{TITULO_COLUNA[estagio]}</h2>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {q?.isPending ? '…' : formatarInteiro(total)}
+                    </span>
+                  </div>
+                  {notas.length > 0 && (
+                    <p className="mt-0.5 text-[10px] tabular-nums leading-tight text-muted-foreground">
+                      {formatarMoeda(valor)}
+                      {total > notas.length && ` nos ${notas.length} primeiros`}
+                    </p>
+                  )}
+                </header>
+              ) : (
+                <>
+                  <header className="flex items-baseline justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
+                    <h2 className="truncate text-sm font-medium">{TITULO_COLUNA[estagio]}</h2>
+                    <Badge variant="secondary" className="tabular-nums">
+                      {q?.isPending ? '…' : formatarInteiro(total)}
+                    </Badge>
+                  </header>
 
-              {notas.length > 0 && (
-                <p className="px-1 text-xs tabular-nums text-muted-foreground">
-                  {formatarMoeda(valor)}
-                  {total > notas.length && ` nos ${notas.length} primeiros`}
-                </p>
+                  {notas.length > 0 && (
+                    <p className="px-1 text-xs tabular-nums text-muted-foreground">
+                      {formatarMoeda(valor)}
+                      {total > notas.length && ` nos ${notas.length} primeiros`}
+                    </p>
+                  )}
+                </>
               )}
 
               <div className="flex flex-col gap-2">
@@ -309,6 +346,35 @@ export function FunilKanban({
           )
         })}
       </div>
+  )
+
+  if (padraoComercial) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <CardTitle className="text-base">Funil de NFs</CardTitle>
+              <CardDescription>
+                {carregando ? '…' : formatarInteiro(totalGeral)} nota(s) na carteira.{' '}
+                <strong>O card não se move por arrastar</strong> — converter e perder exigem
+                decisão, e as duas vivem no menu de ações dentro da nota.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {filtros}
+          {grade}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {filtros}
+      {grade}
     </div>
   )
 }
