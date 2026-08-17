@@ -74,8 +74,12 @@ export interface FiltrosFunil {
  * consulta paga, escondia o valor protestado e cobrava o preço da base nacional
  * porque a UF também não vinha. Três colunas a mais por card é barato perto disso.
  */
+// `vendedor_id` e `vendedor_origem` entram aqui e não em outro lugar: o dono no card
+// (0121) lia uma coluna que o select nunca trouxe, e TODA nota aparecia como "sem
+// dono". Mesmo defeito do card de protesto — a lista de colunas é a única fonte de
+// verdade do que existe no objeto, e esquecer uma falha em silêncio.
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
+  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem'
 
 export const PAGINA_FUNIL = 40
 

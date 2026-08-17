@@ -42,7 +42,26 @@ function baixar(nome: string, conteudo: string) {
   URL.revokeObjectURL(url)
 }
 
-export function NotaModal({ accessKey, titulo, subtitulo, aberto, onOpenChange }: NotaModalProps) {
+export function NotaModal({
+  accessKey,
+  titulo,
+  subtitulo,
+  aberto,
+  onOpenChange,
+  abasExtras = [],
+  acoes,
+}: NotaModalProps & {
+  /**
+   * Abas do funil (fornecedor, mensagens), NO MESMO NÍVEL de Documento e XML.
+   *
+   * Aninhar um segundo conjunto de abas dentro da aba "Documento" faria a pessoa
+   * procurar em qual das duas barras está o que ela quer — e as quatro respondem
+   * perguntas irmãs sobre a mesma nota.
+   */
+  abasExtras?: { id: string; label: string; conteudo: React.ReactNode }[]
+  /** As ações da nota, que antes ficavam no card. */
+  acoes?: React.ReactNode
+}) {
   const [copiado, setCopiado] = React.useState(false)
 
   const { data, isPending, isError, error, refetch } = useQuery({
@@ -135,6 +154,11 @@ export function NotaModal({ accessKey, titulo, subtitulo, aberto, onOpenChange }
                   <Code2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
                   XML
                 </TabsTrigger>
+                {abasExtras.map((a) => (
+                  <TabsTrigger key={a.id} value={a.id}>
+                    {a.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
 
               <TabsContent value="documento" className="mt-0">
@@ -158,9 +182,21 @@ export function NotaModal({ accessKey, titulo, subtitulo, aberto, onOpenChange }
                   <code>{data?.raw_xml ?? '(sem XML)'}</code>
                 </pre>
               </TabsContent>
+
+              {abasExtras.map((a) => (
+                <TabsContent key={a.id} value={a.id} className="mt-0">
+                  {a.conteudo}
+                </TabsContent>
+              ))}
             </Tabs>
           )}
         </div>
+
+        {acoes ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 py-3 print:hidden">
+            {acoes}
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

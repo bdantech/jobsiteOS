@@ -15,6 +15,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { MenuAcoesNota } from './acoes-nota'
 import { NotaModal } from './documento/nota-modal'
+import { AbaEmpresa } from '@/components/comercial/aba-empresa'
+import { AbaMensagens } from '@/components/comercial/modal-card'
 import {
   FAIXA_BADGE,
   TIPAGEM_BADGE,
@@ -121,10 +123,8 @@ export function NotaCard({
                 </div>
               </div>
 
-              {/* O menu não pode disparar o modal ao ser aberto. */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <MenuAcoesNota nota={nota} />
-              </div>
+              {/* As ações foram para o modal: um menu por card, vezes dezenas de
+                  cards, é um clique de decisão tomado sem abrir a nota. */}
             </header>
 
             {/* Identificação da nota + valor, numa linha só. */}
@@ -284,6 +284,17 @@ export function NotaCard({
           subtitulo={`${nomeFornecedor} → ${nota.sacado_nome ?? nota.sacado_cnpj ?? '—'}`}
           aberto={notaAberta}
           onOpenChange={setNotaAberta}
+          abasExtras={[
+            {
+              id: 'fornecedor',
+              label: 'Fornecedor',
+              // Aqui a "empresa" do card é o FORNECEDOR: é com ele que se fala sobre
+              // antecipar esta nota, não com o sacado.
+              conteudo: <AbaEmpresa empresaId={nota.fornecedor_empresa_id} />,
+            },
+            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+          ]}
+          acoes={<MenuAcoesNota nota={nota} />}
         />
       ) : null}
     </>

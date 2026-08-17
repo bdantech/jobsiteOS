@@ -25,14 +25,6 @@ import { buscarVendedoresVisiveis, comercialKeys } from '@/components/comercial/
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -42,7 +34,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { DonoDoCard } from '@/components/comercial/dono-do-card'
+import { AbaMensagens, ModalDoCard } from '@/components/comercial/modal-card'
 import { cn } from '@/lib/utils'
 import {
   buscarFunilCertificados,
@@ -243,25 +237,68 @@ function DetalheDoCard({
   const seguinte = proxima(c.estagio as EstagioCertificado)
   const encerrado = c.estagio === 'ganho' || c.estagio === 'perdido'
 
-  return (
-    /*
-     * FLEX COLUNA COM TETO, e não o `grid` sem altura do primitivo.
-     *
-     * O conteúdo aqui é variável — a lista chega a 371 CNPJs — e num grid sem
-     * max-height a caixa cresce além da tela: o `bg-background` acompanha o box, mas o
-     * box sai da viewport e cabeçalho, tabela e rodapé aparecem fora do fundo pintado.
-     *
-     * Com flex-col + max-h, o miolo é o único que rola (`min-h-0` é obrigatório: sem
-     * ele o filho com overflow se recusa a encolher e empurra o container de volta) e
-     * título e botões ficam sempre visíveis dentro do fundo.
-     */
-    <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 p-0">
-      <DialogHeader className="border-b p-6 pb-4">
-        <DialogTitle className="pr-6">{c.nome}</DialogTitle>
-        <DialogDescription className="font-mono tabular-nums">{formatCnpj(c.cnpj)}</DialogDescription>
-      </DialogHeader>
+  const acoes = (
+    <>
+      {encerrado ? (
+        <Button size="sm" variant="outline" disabled={agindo} onClick={() => onMover('universo')}>
+          Reabrir
+        </Button>
+      ) : perdendo ? (
+        <>
+          <Button size="sm" variant="ghost" onClick={() => setPerdendo(false)}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={!motivo || agindo}
+            onClick={() => onMover('perdido', motivo)}
+          >
+            Marcar como perdido
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setPerdendo(true)}>
+            Perdi
+          </Button>
+          {seguinte && (
+            <Button size="sm" variant="outline" disabled={agindo} onClick={() => onMover(seguinte)}>
+              {ESTAGIO_CERTIFICADO_LABELS[seguinte]}
+              <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+            </Button>
+          )}
+          {/*
+           * Desabilitado sem a matriz, com o motivo no title. O banco recusa de
+           * qualquer jeito; desabilitar evita o clique que só serve para receber
+           * um erro.
+           */}
+          <Button
+            size="sm"
+            disabled={agindo || !c.matriz_coberta}
+            title={c.matriz_coberta ? 'Marcar como ganho' : 'Sem o certificado da matriz não dá para ganhar'}
+            onClick={() => onMover('ganho')}
+          >
+            Ganhei
+          </Button>
+        </>
+      )}
+    </>
+  )
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+  return (
+    <ModalDoCard
+      aberto
+      onOpenChange={(a) => !a && onFechar()}
+      titulo={c.nome}
+      subtitulo={<span className="font-mono tabular-nums">{formatCnpj(c.cnpj)}</span>}
+      acoes={acoes}
+      abas={[
+        {
+          id: 'certificados',
+          label: 'Certificados',
+          conteudo: (
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">
             {encerrado
@@ -325,59 +362,12 @@ function DetalheDoCard({
           </div>
         )}
       </div>
-
-      <DialogFooter className="flex-wrap gap-2 border-t p-6 pt-4 sm:justify-between">
-        <Button variant="ghost" size="sm" onClick={onFechar}>
-          Fechar
-        </Button>
-        <div className="flex flex-wrap gap-2">
-          {encerrado ? (
-            <Button size="sm" variant="outline" disabled={agindo} onClick={() => onMover('universo')}>
-              Reabrir
-            </Button>
-          ) : perdendo ? (
-            <>
-              <Button size="sm" variant="ghost" onClick={() => setPerdendo(false)}>
-                Cancelar
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={!motivo || agindo}
-                onClick={() => onMover('perdido', motivo)}
-              >
-                Marcar como perdido
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setPerdendo(true)}>
-                Perdi
-              </Button>
-              {seguinte && (
-                <Button size="sm" variant="outline" disabled={agindo} onClick={() => onMover(seguinte)}>
-                  {ESTAGIO_CERTIFICADO_LABELS[seguinte]}
-                  <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                </Button>
-              )}
-              {/*
-               * Desabilitado sem a matriz, com o motivo no title. O banco recusa de
-               * qualquer jeito; desabilitar evita o clique que só serve para receber
-               * um erro.
-               */}
-              <Button
-                size="sm"
-                disabled={agindo || !c.matriz_coberta}
-                title={c.matriz_coberta ? 'Marcar como ganho' : 'Sem o certificado da matriz não dá para ganhar'}
-                onClick={() => onMover('ganho')}
-              >
-                Ganhei
-              </Button>
-            </>
-          )}
-        </div>
-      </DialogFooter>
-    </DialogContent>
+          ),
+        },
+        { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={c.empresa_id} /> },
+        { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+      ]}
+    />
   )
 }
 
@@ -584,17 +574,17 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
         </CardContent>
       </Card>
 
-      <Dialog open={aberto !== null} onOpenChange={(o) => !o && setAbertoId(null)}>
-        {aberto && (
-          <DetalheDoCard
-            c={aberto}
-            agindo={agindo}
-            motivos={motivos ?? []}
-            onFechar={() => setAbertoId(null)}
-            onMover={(estagio, m) => void mover(aberto, estagio, m)}
-          />
-        )}
-      </Dialog>
+      {/* Sem <Dialog> por fora: o ModalDoCard já é um, e aninhar dois deixa a tecla
+          Esc fechando só o de dentro. */}
+      {aberto && (
+        <DetalheDoCard
+          c={aberto}
+          agindo={agindo}
+          motivos={motivos ?? []}
+          onFechar={() => setAbertoId(null)}
+          onMover={(estagio, m) => void mover(aberto, estagio, m)}
+        />
+      )}
     </div>
   )
 }

@@ -28,7 +28,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
+import { AbaEmpresa } from './aba-empresa'
 import { DonoDoCard } from './dono-do-card'
+import { AbaMensagens, ModalDoCard } from './modal-card'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
   comercialKeys,
@@ -75,6 +77,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   const [agendando, setAgendando] = React.useState<LeadComEmpresa | null>(null)
   const [semFit, setSemFit] = React.useState<LeadComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
+  const [aberto, setAberto] = React.useState<LeadComEmpresa | null>(null)
   // Encerrados escondidos por padrão: o kanban é a fila de trabalho, e o que morreu não
   // pede trabalho. O toggle existe porque revisar as mortes é o uso da semana seguinte.
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
@@ -129,6 +132,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
       return false
     }
     toast.success(`Movido para ${ESTAGIO_SDR_LABELS[estagio]}.`)
+    setAberto(null)
     recarregar()
     return true
   }
@@ -143,8 +147,71 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
       return false
     }
     toast.success(fit ? 'Marcado com fit.' : 'Marcado sem fit — o lead foi encerrado aqui.')
+    setAberto(null)
     recarregar()
     return true
+  }
+
+  /**
+   * As ações do lead — as mesmas que ficavam no card, agora no rodapé do modal.
+   *
+   * Continuam sendo só os próximos passos PLAUSÍVEIS do estágio atual: um menu com os
+   * nove estágios transformaria "mover" numa decisão, quando é um registro. E lead
+   * encerrado não mostra ação nenhuma além de reabrir — oferecer "agendar" num lead
+   * morto é convidar ao erro.
+   */
+  function acoesDoLead(l: LeadComEmpresa) {
+    if (l.encerrado_em) {
+      return l.encerrado_motivo === 'sem_fit' ? (
+        <Button size="sm" variant="ghost" disabled={agindo} onClick={() => void julgar(l, true)}>
+          Reabrir (era engano)
+        </Button>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          Encerrado sem toque — volta na próxima distribuição.
+        </span>
+      )
+    }
+    return (
+      <>
+        {l.estagio !== 'a_contatar' && (
+          <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setSemFit(l)}>
+            Sem fit
+          </Button>
+        )}
+        {l.estagio !== 'a_contatar' && l.fit !== true && (
+          <Button size="sm" variant="ghost" disabled={agindo} onClick={() => void julgar(l, true)}>
+            Com fit
+          </Button>
+        )}
+        {l.estagio === 'a_contatar' && (
+          <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'em_conversa')}>
+            Em conversa
+          </Button>
+        )}
+        {l.estagio === 'reuniao_agendada' && (
+          <>
+            <Button size="sm" variant="ghost" disabled={agindo} onClick={() => void mover(l, 'no_show')}>
+              No-show
+            </Button>
+            <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'reuniao_realizada')}>
+              Realizada
+            </Button>
+          </>
+        )}
+        {l.estagio === 'reuniao_realizada' && (
+          <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'qualificada')}>
+            Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+          </Button>
+        )}
+        {(l.estagio === 'em_conversa' || l.estagio === 'no_show') && (
+          <Button size="sm" disabled={agindo} onClick={() => setAgendando(l)}>
+            <CalendarPlus className="mr-1 h-3 w-3" aria-hidden />
+            {l.estagio === 'no_show' ? 'Reagendar' : 'Agendar'}
+          </Button>
+        )}
+      </>
+    )
   }
 
   if (leads.isPending) return <Skeleton className="h-96 w-full rounded-lg" />
@@ -316,79 +383,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                               onTrocar={(id) => reatribuir(l, id)}
                             />
                           )}
-                          {/*
-                            Só os próximos passos plausíveis, e o julgamento do fit em
-                            separado. Um menu com os seis estágios transformaria "mover"
-                            numa decisão, quando é um registro. Lead encerrado não mostra
-                            ação nenhuma além de reabrir — oferecer "agendar" num lead
-                            morto é convidar ao erro.
-                          */}
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {l.encerrado_em ? (
-                              l.encerrado_motivo === 'sem_fit' ? (
-                                <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                  onClick={() => void julgar(l, true)}>
-                                  Reabrir (era engano)
-                                </Button>
-                              ) : (
-                                <span className="text-[11px] text-muted-foreground">
-                                  Encerrado sem toque — volta na próxima distribuição.
-                                </span>
-                              )
-                            ) : (
-                              <>
-                                {coluna === 'a_contatar' && (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void mover(l, 'em_conversa')}>
-                                    Em conversa
-                                  </Button>
-                                )}
-                                {coluna === 'em_conversa' && (
-                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => setAgendando(l)}>
-                                    <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Agendar
-                                  </Button>
-                                )}
-                                {coluna === 'reuniao_agendada' && (
-                                  <>
-                                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                      onClick={() => void mover(l, 'reuniao_realizada')}>
-                                      Realizada
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                      onClick={() => void mover(l, 'no_show')}>
-                                      No-show
-                                    </Button>
-                                  </>
-                                )}
-                                {coluna === 'no_show' && (
-                                  <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => setAgendando(l)}>
-                                    <CalendarPlus className="mr-1 h-3 w-3" aria-hidden /> Reagendar
-                                  </Button>
-                                )}
-                                {coluna === 'reuniao_realizada' && (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void mover(l, 'qualificada')}>
-                                    Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                                  </Button>
-                                )}
-                                {/* Julgar fit: disponível de em_conversa em diante. */}
-                                {coluna !== 'a_contatar' && l.fit !== true && (
-                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void julgar(l, true)}>
-                                    Com fit
-                                  </Button>
-                                )}
-                                {coluna !== 'a_contatar' && (
-                                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => setSemFit(l)}>
-                                    Sem fit
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
+                          {/* As ações vivem no modal: seis botões por card, vezes
+                              nove colunas, viravam uma parede — e cada clique era uma
+                              decisão tomada sem abrir o lead. */}
+                          <button
+                            type="button"
+                            onClick={() => setAberto(l)}
+                            className="w-full rounded border border-dashed py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                          >
+                            Abrir
+                          </button>
                         </div>
                       ))}
                       {itens.length === 0 && (
@@ -453,6 +457,82 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
       </Card>
 
       {/* ── Agendar ── */}
+      {/*
+        O modal do card. Agendar e "sem fit" continuam em diálogos próprios: os dois
+        exigem preenchimento obrigatório (data + closer; motivo), e empilhar um
+        formulário desses dentro de outro modal esconde justamente o campo que decide.
+      */}
+      {aberto && (
+        <ModalDoCard
+          aberto
+          onOpenChange={(o) => !o && setAberto(null)}
+          titulo={aberto.empresas?.razao_social ?? 'Lead'}
+          subtitulo={ESTAGIO_SDR_LABELS[aberto.estagio as EstagioSdr] ?? aberto.estagio}
+          cabecalho={
+            <div className="flex flex-wrap items-center gap-2">
+              {aberto.empresas?.uf ? <Badge variant="outline">{aberto.empresas.uf}</Badge> : null}
+              {aberto.fit === true ? (
+                <Badge className="bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
+                  Com fit
+                </Badge>
+              ) : aberto.fit === false ? (
+                <Badge variant="destructive">Sem fit</Badge>
+              ) : null}
+              {aberto.origem === 'inbound' ? <Badge variant="secondary">inbound</Badge> : null}
+              <DonoDoCard
+                nome={nomeDoVendedor(aberto.sdr_id)}
+                tipos={['sdr']}
+                podeTrocar={ehGestor}
+                ocupado={agindo}
+                onTrocar={(id) => reatribuir(aberto, id)}
+              />
+            </div>
+          }
+          abas={[
+            {
+              id: 'lead',
+              label: 'Lead',
+              conteudo: (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    Estágio:{' '}
+                    <strong className="text-foreground">
+                      {ESTAGIO_SDR_LABELS[aberto.estagio as EstagioSdr] ?? aberto.estagio}
+                    </strong>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Valor esperado:{' '}
+                    <strong className="text-foreground tabular-nums">
+                      {brl(aberto.empresas?.valor_esperado_mensal)}/mês
+                    </strong>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Distribuído em {new Date(aberto.distribuido_em).toLocaleDateString('pt-BR')}
+                    {aberto.ultimo_toque_em
+                      ? ` · último toque em ${new Date(aberto.ultimo_toque_em).toLocaleDateString('pt-BR')}`
+                      : ' · ainda sem toque'}
+                  </p>
+                  {aberto.reuniao_em ? (
+                    <p className="text-muted-foreground">
+                      Reunião em {new Date(aberto.reuniao_em).toLocaleString('pt-BR')}
+                    </p>
+                  ) : null}
+                  {aberto.encerrado_em ? (
+                    <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      Encerrado ({aberto.encerrado_motivo ?? 'sem motivo'}). O estágio continua
+                      dizendo até onde ele chegou.
+                    </p>
+                  ) : null}
+                </div>
+              ),
+            },
+            { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
+            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+          ]}
+          acoes={acoesDoLead(aberto)}
+        />
+      )}
+
       <Dialog open={agendando !== null} onOpenChange={(v) => !v && setAgendando(null)}>
         <DialogContent className="sm:max-w-md">
           <form
@@ -468,7 +548,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                 reuniao_em: iso,
                 vendedor_destino_id: destino,
               })
-              if (ok) setAgendando(null)
+              // Fecha os dois: o diálogo e o modal do card que o abriu.
+              if (ok) {
+                setAgendando(null)
+                setAberto(null)
+              }
             }}
           >
             <DialogHeader>
@@ -532,7 +616,10 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               if (!semFit) return
               const motivo = String(new FormData(e.currentTarget).get('motivo') ?? '')
               const ok = await julgar(semFit, false, motivo)
-              if (ok) setSemFit(null)
+              if (ok) {
+                setSemFit(null)
+                setAberto(null)
+              }
             }}
           >
             <DialogHeader>

@@ -456,6 +456,39 @@ Três decisões que a tela toma por quem usa:
 Os campos de configuração salvam no **blur**, não a cada tecla: salvar por tecla mandaria
 `2`, `25`, `250` ao banco, e o job pegaria o número do meio se rodasse no instante errado.
 
+## O card e o modal (0121)
+
+Os quatro funis do Comercial — reuniões, vendas, NFs e certificados — compartilham dois
+componentes: `DonoDoCard` e `ModalDoCard`.
+
+**O dono no card** só aparece quando a lista NÃO está filtrada por vendedor: com o
+filtro ligado o nome repetiria em cada card o que o seletor no topo já diz. Só gestor
+troca, seguindo `app_atribuir_nf`; quem não é vê o nome como texto. Reatribuir um lead
+**reinicia o SLA** (zera `ultimo_toque_em`) — o novo dono não herda o atraso de quem não
+tocou.
+
+No funil de certificados o dono é só leitura e leva para a Carteira: lá ele vem de
+`vendedor_carteira`, e trocar moveria a empresa inteira, levando junto o roteamento das
+NFs e a comissão.
+
+**As ações moram no modal, não no card.** Seis botões por card, vezes nove colunas,
+viravam uma parede — e cada clique era uma decisão tomada sem abrir o item. O modal tem
+três camadas fixas em abas:
+
+| aba | o quê |
+|---|---|
+| a primeira | o ITEM: a nota (documento + XML), o lead, o negócio, os certificados |
+| Empresa / Fornecedor | o resumo compartilhado (`AbaEmpresa`) + contatos + link para a Company 360 |
+| Mensagens | **vazia de propósito** — o histórico de e-mail/WhatsApp é do Prompt 05 |
+
+A aba de mensagens existe vazia para que o lugar dela já seja conhecido. Uma aba que
+aparece depois muda o mapa da tela; uma aba vazia e honesta não.
+
+Os diálogos que exigem preenchimento obrigatório — agendar (data + closer), sem fit
+(motivo), perder (motivo) — continuam separados. Empilhar um formulário obrigatório
+dentro de outro modal esconde justamente o campo que decide.
+
+
 ## Ponte para o Prompt 05
 
 As mensagens da outbox já nascem com o fornecedor e as notas; o que 05 acrescenta é o

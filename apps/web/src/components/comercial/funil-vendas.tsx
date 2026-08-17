@@ -21,7 +21,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { atribuirVendaAction, moverVendaAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
+import { AbaEmpresa } from './aba-empresa'
 import { DonoDoCard } from './dono-do-card'
+import { AbaMensagens, ModalDoCard } from './modal-card'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   type VendaComEmpresa,
@@ -67,6 +69,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
   const [perdendo, setPerdendo] = React.useState<VendaComEmpresa | null>(null)
+  const [aberto, setAberto] = React.useState<VendaComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
   // Fora do funil = perdido, ou ganho que já operou. Escondidos por padrão: o kanban é
   // a fila de trabalho, e nenhum dos dois pede trabalho.
@@ -109,6 +112,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
       return false
     }
     toast.success(`Movido para ${ESTAGIO_VENDA_LABELS[estagio]}.`)
+    setAberto(null)
     void qc.invalidateQueries({ queryKey: ['comercial'] })
     return true
   }
@@ -133,6 +137,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
           ? 'Venda perdida. O card fica onde estava, e é isso que diz até onde ela chegou.'
           : 'Negócio reaberto.',
     )
+    setAberto(null)
     void qc.invalidateQueries({ queryKey: ['comercial'] })
     return true
   }
@@ -295,38 +300,16 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                               Ganho, sem operar ainda — sai do funil na primeira antecipação.
                             </p>
                           )}
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {v.situacao === 'perdido' ? (
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                onClick={() => void encerrar(v, 'em_andamento')}>
-                                Reabrir
-                              </Button>
-                            ) : (
-                              <>
-                                {/* Avançar o estágio vale mesmo já ganho: onboarding é
-                                    trabalho, e é a etapa que o card ainda percorre. */}
-                                {seguinte && (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={agindo}
-                                    onClick={() => void mover(v, seguinte)}>
-                                    {ESTAGIO_VENDA_LABELS[seguinte]}
-                                    <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                                  </Button>
-                                )}
-                                {v.situacao === 'em_andamento' && (
-                                  <>
-                                    <Button size="sm" className="h-7 text-xs" disabled={agindo}
-                                      onClick={() => void encerrar(v, 'ganho')}>
-                                      Ganhei
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={agindo}
-                                      onClick={() => setPerdendo(v)}>
-                                      Perdi
-                                    </Button>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </div>
+                          {/* As ações vivem no modal. Três botões por card, vezes
+                              oito colunas, viravam uma parede — e cada clique era uma
+                              decisão tomada sem abrir o negócio. */}
+                          <button
+                            type="button"
+                            onClick={() => setAberto(v)}
+                            className="w-full rounded border border-dashed py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                          >
+                            Abrir
+                          </button>
                         </div>
                       ))}
                       {itens.length === 0 && (
@@ -387,6 +370,102 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
         </CardContent>
       </Card>
 
+      {/*
+        O modal do card. As ações que estavam no card vivem no rodapé dele; o diálogo
+        de perda continua separado porque exige motivo, e empilhar um formulário
+        obrigatório dentro de outro modal esconde o campo que decide.
+      */}
+      {aberto && (
+        <ModalDoCard
+          aberto
+          onOpenChange={(o) => !o && setAberto(null)}
+          titulo={aberto.empresas?.razao_social ?? 'Negócio'}
+          subtitulo={ESTAGIO_VENDA_LABELS[aberto.estagio as EstagioVenda] ?? aberto.estagio}
+          cabecalho={
+            <div className="flex flex-wrap items-center gap-2">
+              {aberto.empresas?.uf ? <Badge variant="outline">{aberto.empresas.uf}</Badge> : null}
+              {aberto.situacao !== 'em_andamento' ? (
+                <Badge variant={aberto.situacao === 'perdido' ? 'destructive' : 'default'}>
+                  {SITUACAO_VENDA_LABELS[aberto.situacao as SituacaoVenda]}
+                </Badge>
+              ) : null}
+              <DonoDoCard
+                nome={nomePorId.get(aberto.vendedor_id) ?? null}
+                tipos={['vendedor']}
+                podeTrocar={ehGestor}
+                ocupado={agindo}
+                onTrocar={(id) => reatribuir(aberto, id)}
+              />
+            </div>
+          }
+          abas={[
+            {
+              id: 'negocio',
+              label: 'Negócio',
+              conteudo: (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    Estágio: <strong className="text-foreground">
+                      {ESTAGIO_VENDA_LABELS[aberto.estagio as EstagioVenda] ?? aberto.estagio}
+                    </strong>
+                  </p>
+                  {aberto.primeira_operacao_em ? (
+                    <p className="text-muted-foreground">
+                      Já operando desde {new Date(aberto.primeira_operacao_em).toLocaleDateString('pt-BR')}.
+                    </p>
+                  ) : null}
+                  {aberto.estagio === 'em_analise_credito' && aberto.situacao === 'em_andamento' ? (
+                    <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      Aguardando a seguradora. O card anda sozinho quando ela decidir — não há
+                      botão de avançar aqui de propósito.
+                    </p>
+                  ) : null}
+                  {aberto.situacao === 'ganho' && !aberto.primeira_operacao_em ? (
+                    <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      Ganho, sem operar ainda — sai do funil na primeira antecipação.
+                    </p>
+                  ) : null}
+                </div>
+              ),
+            },
+            { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
+            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+          ]}
+          acoes={
+            aberto.situacao === 'perdido' ? (
+              <Button size="sm" variant="outline" disabled={agindo} onClick={() => void encerrar(aberto, 'em_andamento')}>
+                Reabrir
+              </Button>
+            ) : (
+              <>
+                {aberto.situacao === 'em_andamento' && (
+                  <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setPerdendo(aberto)}>
+                    Perdi
+                  </Button>
+                )}
+                {/* Avançar vale mesmo já ganho: onboarding é trabalho. */}
+                {proximo(aberto.estagio as EstagioVenda) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={agindo}
+                    onClick={() => void mover(aberto, proximo(aberto.estagio as EstagioVenda)!)}
+                  >
+                    {ESTAGIO_VENDA_LABELS[proximo(aberto.estagio as EstagioVenda)!]}
+                    <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
+                  </Button>
+                )}
+                {aberto.situacao === 'em_andamento' && (
+                  <Button size="sm" disabled={agindo} onClick={() => void encerrar(aberto, 'ganho')}>
+                    Ganhei
+                  </Button>
+                )}
+              </>
+            )
+          }
+        />
+      )}
+
       <Dialog open={perdendo !== null} onOpenChange={(v) => !v && setPerdendo(null)}>
         <DialogContent className="sm:max-w-md">
           <form
@@ -395,7 +474,11 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
               if (!perdendo) return
               const motivo = String(new FormData(e.currentTarget).get('motivo') ?? '')
               const ok = await encerrar(perdendo, 'perdido', motivo)
-              if (ok) setPerdendo(null)
+              // Fecha os dois: o diálogo de motivo e o modal do card que o abriu.
+              if (ok) {
+                setPerdendo(null)
+                setAberto(null)
+              }
             }}
           >
             <DialogHeader>
