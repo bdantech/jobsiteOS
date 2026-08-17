@@ -5,7 +5,9 @@ import {
   escolherSdrInbound,
   haDivergenciaDePapel,
   inferirPapel,
+  rotearInbound,
   rotuloDaIntencao,
+  type CandidatoInbound,
   type SdrCandidato,
 } from './roteamento.ts'
 import { normalizarCampos, normalizarUtm, utmDaUrl, validarSubmissao, type Campo } from './schemas.ts'
@@ -123,6 +125,69 @@ test('empate de carga desempata pelo nome, para o resultado ser estável', () =>
     faturamento: null,
   })
   assert.equal(a?.nome, 'Ana')
+})
+
+// ─── A cascata completa ─────────────────────────────────────────────────────
+
+function cand(over: Partial<CandidatoInbound> = {}): CandidatoInbound {
+  return { ...sdr(), ehSdr: true, ...over }
+}
+
+test('havendo SDR de inbound, é ele e sem aviso nenhum', () => {
+  const r = rotearInbound([cand({ id: 'sdr1', direcao: 'both' })], { uf: 'SP', faturamento: null }, null)
+  assert.equal(r.vendedorId, 'sdr1')
+  assert.equal(r.nivel, 'sdr_inbound')
+  assert.equal(r.aviso, null)
+})
+
+test('SDR marcado só como outbound ainda recebe — o funil de reuniões é a tela dele', () => {
+  const r = rotearInbound([cand({ id: 'so-out', direcao: 'out' })], { uf: 'SP', faturamento: null }, null)
+  assert.equal(r.vendedorId, 'so-out')
+  assert.equal(r.nivel, 'sdr_qualquer')
+  assert.match(r.aviso ?? '', /inbound/i)
+})
+
+/**
+ * O caso REAL que motivou a cascata: na primeira submissão da base o único vendedor
+ * cadastrado era um originador. O roteador devolveu null e o lead virou empresa e
+ * contato sem aparecer em funil algum — silenciosamente.
+ */
+test('sem SDR nenhum, cai no vendedor de destino do formulário, com aviso', () => {
+  const r = rotearInbound(
+    [cand({ id: 'originador', ehSdr: false })],
+    { uf: 'SP', faturamento: null },
+    'originador',
+  )
+  assert.equal(r.vendedorId, 'originador')
+  assert.equal(r.nivel, 'destino_do_formulario')
+  assert.match(r.aviso ?? '', /cadastre um sdr/i, 'o aviso tem de dizer o que consertar')
+})
+
+test('sem SDR e sem destino no formulário, o lead ainda assim tem dono', () => {
+  const r = rotearInbound(
+    [cand({ id: 'a', nome: 'Ana', ehSdr: false, carga: 7 }), cand({ id: 'b', nome: 'Bia', ehSdr: false, carga: 1 })],
+    { uf: 'SP', faturamento: null },
+    null,
+  )
+  assert.equal(r.vendedorId, 'b')
+  assert.equal(r.nivel, 'ultimo_recurso')
+  assert.ok(r.aviso, 'um degrau improvisado tem de parecer improvisado')
+})
+
+test('sem vendedor ativo nenhum, admite que não há dono — e diz', () => {
+  const r = rotearInbound([], { uf: 'SP', faturamento: null }, null)
+  assert.equal(r.vendedorId, null)
+  assert.equal(r.nivel, 'ninguem')
+  assert.match(r.aviso ?? '', /à mão/i)
+})
+
+test('o destino do formulário não passa na frente de um SDR de verdade', () => {
+  const r = rotearInbound(
+    [cand({ id: 'sdr1', nome: 'SDR' }), cand({ id: 'chefe', nome: 'Chefe', ehSdr: false })],
+    { uf: 'SP', faturamento: null },
+    'chefe',
+  )
+  assert.equal(r.vendedorId, 'sdr1')
 })
 
 // ─── Supressão ──────────────────────────────────────────────────────────────

@@ -79,6 +79,22 @@ qualquer corpo. As defesas, nesta ordem:
 CNPJ primeiro faria o bot receber "CNPJ inválido" e aprender o formato certo na segunda
 tentativa.
 
+### O que a LP valida ao vivo
+
+- **CNPJ**: dígito verificador checado a cada tecla, e o **botão fica travado** até
+  fechar. O erro só aparece com os 14 dígitos digitados — acusar no terceiro é discutir
+  com quem ainda está digitando. Antes o erro só surgia no submit, e a pessoa preenchia
+  tudo para descobrir no fim que o primeiro campo estava errado.
+- **Telefone**: máscara `(11) 98765-4321` enquanto digita, fechando o hífen só quando
+  sabe se é fixo ou celular.
+- **E-mail**: formato barra; **provedor pessoal apenas avisa**, em âmbar, e deixa
+  seguir. Muita gente de obra usa gmail, e vermelho ensinaria que ela errou — ela não
+  errou. A lista de provedores vem de `packages/core` (a mesma da cascata de domínio),
+  interpolada no script.
+- **Consentimento nasce marcado**: a pessoa está preenchendo um formulário para pedir
+  contato, e o texto descreve o que ela veio fazer. Desmarcado, viraria obstáculo em vez
+  de transparência. Ela pode desmarcar — e aí o envio é barrado, como deve ser.
+
 **Spam recebe 200 e a tela de sucesso.** O bot não pode aprender o que o denunciou, e
 um humano que caiu como falso-positivo não vê erro nenhum. A linha fica em
 `descartada_spam` para alguém achar depois — uma porta que descarta sem registro é uma
@@ -103,14 +119,28 @@ metade é pior que uma submissão perdida — o SDR liga sem saber o que a pesso
 
 ### Quem atende
 
-`escolherSdrInbound` (core, com testes): quem faz inbound (`settings.direcao in|both`) →
-quem cobre o território → **menor carga**, desempatando por nome para o resultado ser
-estável.
+`rotearInbound` (core, com testes) desce uma cascata até achar dono:
 
-O último recurso importa mais que os outros: **se ninguém cobre o território, o lead vai
-para o SDR de inbound menos carregado assim mesmo**. Um lead inbound é alguém pedindo
-contato agora; deixá-lo órfão porque o território do RS não estava configurado seria
-jogar fora a única vantagem que o inbound tem sobre o outbound.
+| degrau | quem | aviso na submissão |
+|---|---|---|
+| 1 | SDR com `direcao in\|both`, cobrindo o território, menor carga | — |
+| 2 | qualquer SDR ativo, menor carga | "nenhum SDR marcado para inbound" |
+| 3 | `vendedor_destino_id` do formulário | "não há SDR cadastrado" |
+| 4 | qualquer vendedor ativo, menor carga | "não há SDR nem destino" |
+| 5 | ninguém | "atribua à mão" |
+
+Dentro do degrau 1, **se ninguém cobre o território o lead vai para o SDR de inbound
+menos carregado assim mesmo**. Um lead inbound é alguém pedindo contato agora; deixá-lo
+órfão porque o território do RS não estava configurado jogaria fora a única vantagem que
+o inbound tem sobre o outbound.
+
+**A cascata existe por causa de um lead perdido de verdade.** A primeira versão parava
+no degrau 1 e devolvia `null` quando não havia SDR nenhum. Na primeira submissão real da
+base — onde o único vendedor cadastrado era um originador — o lead virou empresa e
+contato e não apareceu em funil algum, silenciosamente. Cada degrau abaixo do primeiro
+grava um aviso visível na tela de Leads: atribuir um lead de reunião a quem não trabalha
+reuniões é uma solução temporária, e precisa parecer temporária em vez de virar o normal
+que ninguém nota.
 
 ### Supressão não bloqueia
 

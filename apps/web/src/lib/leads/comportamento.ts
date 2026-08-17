@@ -1,4 +1,5 @@
 import 'server-only'
+import { PROVEDORES_EMAIL_GENERICOS } from '@jobsiteos/core'
 
 /**
  * O JavaScript que roda no navegador do visitante — na página standalone e dentro da
@@ -12,6 +13,10 @@ export function scriptDoFormulario(base: string): string {
   return `
 (function () {
   var BASE = ${JSON.stringify(base)};
+  // A lista vem de packages/core (radar/dominio.ts), interpolada no build do script.
+  // Copiá-la à mão aqui criaria uma segunda opinião sobre o que é e-mail corporativo,
+  // e as duas divergiriam no primeiro provedor novo.
+  var GENERICOS = ${JSON.stringify(PROVEDORES_EMAIL_GENERICOS)};
 
   /**
    * O tema vem da LUMINÂNCIA DO FUNDO, subindo a árvore até achar cor opaca.
@@ -61,6 +66,33 @@ export function scriptDoFormulario(base: string): string {
     return calc(d, p1) === parseInt(d[12], 10) && calc(d, p2) === parseInt(d[13], 10);
   }
 
+  /**
+   * Telefone no padrão brasileiro enquanto se digita: (11) 98765-4321.
+   *
+   * O 9º dígito decide o formato, então a máscara só fecha o hífen quando sabe se é
+   * fixo (8 dígitos) ou celular (9). Formatar cedo demais faria o cursor pular no
+   * meio da digitação, que é o defeito clássico de máscara em campo de telefone.
+   */
+  function mascaraTelefone(v) {
+    var d = v.replace(/\\D/g, '').slice(0, 11);
+    if (d.length <= 2) return d.length ? '(' + d : '';
+    if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+    if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+  }
+
+  function emailFormatoOk(v) {
+    return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(v.trim());
+  }
+
+  /** Provedor pessoal? Vira AVISO, nunca bloqueio — muita gente de obra usa gmail. */
+  function ehEmailPessoal(v) {
+    var m = v.trim().toLowerCase().split('@')[1];
+    if (!m) return false;
+    var host = m.split('.')[0];
+    return GENERICOS.indexOf(host) >= 0;
+  }
+
   function utmDaPagina() {
     var out = {};
     try {
@@ -95,11 +127,71 @@ export function scriptDoFormulario(base: string): string {
       }).catch(function () {});
     } catch (e) {}
 
+    function erroDe(campo) { return raiz.querySelector('[data-erro="' + campo + '"]'); }
+    function avisoDe(campo) { return raiz.querySelector('[data-aviso="' + campo + '"]'); }
+
+    function marcar(campo, el, msg) {
+      var alvo = erroDe(campo);
+      if (alvo) { alvo.textContent = msg || ''; alvo.hidden = !msg; }
+      if (el) el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    }
+    function avisar(campo, msg) {
+      var alvo = avisoDe(campo);
+      if (alvo) { alvo.textContent = msg || ''; alvo.hidden = !msg; }
+    }
+
     var cnpjEl = form.querySelector('[name="cnpj"]');
     var razaoEl = form.querySelector('[name="razao_social"]');
+    var emailEl = form.querySelector('[name="email"]');
+    var telEls = form.querySelectorAll('[name="telefone"], [name="whatsapp"]');
+    var botaoEl = form.querySelector('button[type="submit"]');
+
+    /*
+     * O botão fica DESABILITADO enquanto o CNPJ não fecha.
+     *
+     * Antes o erro só aparecia no submit: a pessoa preenchia o formulário inteiro
+     * para descobrir no fim que o primeiro campo estava errado. Validar ao vivo e
+     * travar o envio é mais honesto — e o erro aparece no campo, não num alerta no
+     * topo que some da vista em celular.
+     */
+    function revalidar() {
+      if (!cnpjEl || !botaoEl) return;
+      var bruto = cnpjEl.value.replace(/\\D/g, '');
+      var ok = cnpjValido(cnpjEl.value);
+      // Só reclama quando os 14 dígitos estão lá: acusar erro no terceiro dígito é
+      // discutir com quem ainda está digitando.
+      marcar('cnpj', cnpjEl, bruto.length === 14 && !ok ? 'Este CNPJ não existe — confira os dígitos.' : '');
+      botaoEl.disabled = !ok;
+    }
+
+    for (var i = 0; i < telEls.length; i++) {
+      (function (el) {
+        el.addEventListener('input', function () { el.value = mascaraTelefone(el.value); });
+      })(telEls[i]);
+    }
+
+    if (emailEl) {
+      emailEl.addEventListener('blur', function () {
+        var v = emailEl.value.trim();
+        if (!v) { marcar('email', emailEl, ''); avisar('email', ''); return; }
+        if (!emailFormatoOk(v)) {
+          marcar('email', emailEl, 'Confira o e-mail — falta o @ ou o domínio.');
+          avisar('email', '');
+          return;
+        }
+        marcar('email', emailEl, '');
+        avisar(
+          'email',
+          ehEmailPessoal(v) ? 'É um e-mail pessoal. Se tiver o corporativo, o atendimento fica mais rápido.' : '',
+        );
+      });
+    }
+
     if (cnpjEl) {
+      cnpjEl.addEventListener('blur', revalidar);
       cnpjEl.addEventListener('input', function () {
         cnpjEl.value = mascaraCnpj(cnpjEl.value);
+        revalidar();
         /*
          * Autocomplete da razão social pela BrasilAPI aos 14 dígitos. O ganho não é
          * cosmético: quem digita o próprio nome de empresa erra, e um lead com razão
@@ -123,6 +215,8 @@ export function scriptDoFormulario(base: string): string {
       if (razaoEl) {
         razaoEl.addEventListener('input', function () { razaoEl.dataset.tocado = '1'; });
       }
+      // Nasce travado: o CNPJ é obrigatório e ainda está vazio.
+      revalidar();
     }
 
     function mostrarErro(msg, campo) {
@@ -145,8 +239,11 @@ export function scriptDoFormulario(base: string): string {
         dados[k] = v;
       });
 
+      // Cinto e suspensório: o botão já fica travado, mas o submit também chega por
+      // Enter no teclado e por navegador que ignora o disabled em campo autopreenchido.
       if (cnpjEl && !cnpjValido(cnpjEl.value)) {
-        mostrarErro('Confira o CNPJ — os dígitos não fecham.', 'cnpj');
+        marcar('cnpj', cnpjEl, 'Este CNPJ não existe — confira os dígitos.');
+        cnpjEl.focus();
         return;
       }
 
@@ -172,6 +269,11 @@ export function scriptDoFormulario(base: string): string {
           // Spam recebe 200 e a tela de sucesso: o bot não pode aprender o que o
           // denunciou, e um humano falso-positivo não vê erro nenhum.
           if (res.ok) {
+            // O CABEÇALHO SOME JUNTO. Sem isto a tela fica dizendo "Responda em 30
+            // segundos e o time entra em contato" logo acima de "Recebemos seu
+            // contato" — duas mensagens que se contradizem no mesmo instante.
+            var cab = raiz.querySelector('[data-cabecalho]');
+            if (cab) cab.hidden = true;
             form.hidden = true;
             sucesso.hidden = false;
             return;

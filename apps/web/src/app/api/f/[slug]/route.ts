@@ -2,16 +2,16 @@ import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import {
   decidirDestino,
-  escolherSdrInbound,
+  rotearInbound,
   normalizarEmail,
   normalizarTelefone,
   normalizarUtm,
   rotuloDaIntencao,
   submissaoSchema,
   validarSubmissao,
+  type CandidatoInbound,
   type Campo,
   type Json,
-  type SdrCandidato,
 } from '@jobsiteos/core'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -167,7 +167,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const destino = decidirDestino({ suprimido: !!sup, motivoSupressao: sup?.motivo ?? null })
 
   // ─── Quem atende ──────────────────────────────────────────────────────────
-  const sdrId = destino.criarLead ? await escolherSdr(supabase, entrada.dados) : null
+  const rota = destino.criarLead
+    ? await escolherAtendente(supabase, entrada.dados, form.vendedor_destino_id)
+    : { vendedorId: null, aviso: null }
   const rotulo = rotuloDaIntencao(entrada.intencao ?? null)
 
   const { data: resultado, error: erroRpc } = await supabase.rpc('app_processar_submissao', {
@@ -179,9 +181,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       campos_snapshot: campos as unknown as Json,
       intencao: entrada.intencao ?? null,
       status: destino.status,
-      motivo_revisao: destino.motivoRevisao,
+      // O aviso de roteamento viaja no mesmo campo do motivo de revisão: os dois são
+      // "o que uma pessoa precisa saber sobre esta submissão", e a tela já os mostra.
+      motivo_revisao: destino.motivoRevisao ?? rota.aviso,
       criar_lead: destino.criarLead,
-      sdr_id: sdrId,
+      sdr_id: rota.vendedorId,
       tipagem_antecipacao: rotulo.tipagemAntecipacao,
       razao_social: texto(entrada.dados.razao_social),
       uf: texto(entrada.dados.uf)?.toUpperCase().slice(0, 2) ?? null,
@@ -234,19 +238,23 @@ function texto(v: unknown): string | null {
 }
 
 /**
- * O SDR que recebe. A regra mora em packages/core (`escolherSdrInbound`, com testes);
+ * Quem recebe o lead. A cascata mora em packages/core (`rotearInbound`, com testes);
  * aqui só se busca o que ela precisa saber.
+ *
+ * Carrega TODOS os vendedores ativos, não só os SDRs: os degraus de baixo da cascata
+ * precisam deles. Na primeira submissão real da base não havia SDR nenhum, o roteador
+ * antigo devolveu null e o lead virou empresa e contato sem entrar em funil algum.
  */
-async function escolherSdr(
+async function escolherAtendente(
   supabase: ReturnType<typeof createAdminClient>,
   dados: Record<string, unknown>,
-): Promise<string | null> {
+  destinoDoFormulario: string | null,
+): Promise<{ vendedorId: string | null; aviso: string | null }> {
   const { data: vendedores } = await supabase
     .from('vendedores')
-    .select('id, nome, settings')
-    .eq('tipo', 'sdr')
+    .select('id, nome, tipo, settings')
     .eq('ativo', true)
-  if (!vendedores?.length) return null
+  if (!vendedores?.length) return { vendedorId: null, aviso: 'Nenhum vendedor ativo para receber o lead.' }
 
   const ids = vendedores.map((v) => v.id)
   const [{ data: terrs }, { data: leads }] = await Promise.all([
@@ -261,12 +269,13 @@ async function escolherSdr(
   const carga = new Map<string, number>()
   for (const l of leads ?? []) carga.set(l.sdr_id, (carga.get(l.sdr_id) ?? 0) + 1)
 
-  const candidatos: SdrCandidato[] = vendedores.map((v) => {
+  const candidatos: CandidatoInbound[] = vendedores.map((v) => {
     const s = (v.settings ?? {}) as { direcao?: string }
     const t = porVendedor.get(v.id)
     return {
       id: v.id,
       nome: v.nome,
+      ehSdr: v.tipo === 'sdr',
       direcao: s.direcao === 'in' || s.direcao === 'out' ? s.direcao : 'both',
       ufs: (t?.ufs ?? []) as string[],
       faturamentoMin: t?.faturamento_min == null ? null : Number(t.faturamento_min),
@@ -276,10 +285,13 @@ async function escolherSdr(
   })
 
   const faturamento = Number(dados.faturamento_declarado)
-  return (
-    escolherSdrInbound(candidatos, {
+  const r = rotearInbound(
+    candidatos,
+    {
       uf: texto(dados.uf)?.toUpperCase().slice(0, 2) ?? null,
       faturamento: Number.isFinite(faturamento) && faturamento > 0 ? faturamento : null,
-    })?.id ?? null
+    },
+    destinoDoFormulario,
   )
+  return { vendedorId: r.vendedorId, aviso: r.aviso }
 }

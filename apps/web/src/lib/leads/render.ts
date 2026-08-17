@@ -78,6 +78,11 @@ const CSS = `
 .jos-textarea { min-height: 84px; resize: vertical; }
 .jos-ajuda { margin: 4px 0 0; font-size: 12px; color: var(--jos-muted); }
 .jos-erro-campo { margin: 4px 0 0; font-size: 12px; color: var(--jos-erro); }
+/* Aviso NÃO impede o envio (e-mail de provedor pessoal, por exemplo). Âmbar, e não
+   vermelho, porque vermelho ensina a pessoa que ela errou — e ela não errou. */
+.jos-aviso-campo { margin: 4px 0 0; font-size: 12px; color: #a16207; }
+.jos-dark .jos-aviso-campo { color: #fbbf24; }
+.jos-input[aria-invalid="true"] { border-color: var(--jos-erro); }
 .jos-fieldset { margin: 0 0 12px; padding: 0; border: 0; }
 .jos-legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
 .jos-opcao {
@@ -143,6 +148,7 @@ export function htmlDoFormulario(f: FormularioPublico): string {
   ${inputDoCampo(c)}
   ${ajuda ? `<p class="jos-ajuda" data-ajuda="${esc(c.key)}">${esc(ajuda)}</p>` : ''}
   <p class="jos-erro-campo" data-erro="${esc(c.key)}" hidden></p>
+  <p class="jos-aviso-campo" data-aviso="${esc(c.key)}" hidden></p>
 </div>`
     })
     .join('\n')
@@ -159,13 +165,27 @@ export function htmlDoFormulario(f: FormularioPublico): string {
 </fieldset>`
     : ''
 
+  /*
+   * O consentimento nasce MARCADO.
+   *
+   * O opt-in aqui não é o de uma newsletter: a pessoa está preenchendo um formulário
+   * para pedir contato, e o consentimento descreve exatamente o que ela veio fazer.
+   * Deixá-lo desmarcado transforma um checkbox de transparência num obstáculo, e o
+   * campo mais abandonado de um formulário é o que a pessoa não entende por que está
+   * ali. Ela continua podendo desmarcar — e aí o envio é barrado, como deve ser.
+   */
   const consentimento = f.consentimento_texto
-    ? `<label class="jos-consent"><input type="checkbox" name="consentimento"${f.consentimento_obrigatorio ? ' required' : ''} /><span>${esc(f.consentimento_texto)}</span></label>`
+    ? `<label class="jos-consent"><input type="checkbox" name="consentimento" checked${f.consentimento_obrigatorio ? ' required' : ''} /><span>${esc(f.consentimento_texto)}</span></label>`
     : ''
 
+  // Título e subtítulo ficam DENTRO de [data-cabecalho]: no sucesso o formulário some
+  // e eles têm de sumir junto, senão a tela fica dizendo "Responda em 30 segundos"
+  // logo acima de "Recebemos seu contato".
   return `<div class="jos-root" data-slug="${esc(f.slug)}">
+  <div data-cabecalho>
   ${f.titulo ? `<h2 class="jos-titulo">${esc(f.titulo)}</h2>` : ''}
   ${f.subtitulo ? `<p class="jos-sub">${esc(f.subtitulo)}</p>` : ''}
+  </div>
   <form novalidate data-jos-form>
     <div class="jos-alerta" data-alerta hidden></div>
     ${camposHtml}

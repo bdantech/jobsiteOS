@@ -134,11 +134,92 @@ export function escolherSdrInbound(
   const inbound = candidatos.filter((s) => s.direcao === 'in' || s.direcao === 'both')
   if (inbound.length === 0) return null
 
-  const menorCarga = (lista: readonly SdrCandidato[]) =>
-    [...lista].sort((a, b) => a.carga - b.carga || a.nome.localeCompare(b.nome))[0] ?? null
-
   const noTerritorio = inbound.filter((s) => cobre(s, alvo))
   return menorCarga(noTerritorio.length > 0 ? noTerritorio : inbound)
+}
+
+function menorCarga(lista: readonly SdrCandidato[]): SdrCandidato | null {
+  return [...lista].sort((a, b) => a.carga - b.carga || a.nome.localeCompare(b.nome))[0] ?? null
+}
+
+/**
+ * A CASCATA COMPLETA — e ela existe por causa de um lead perdido de verdade.
+ *
+ * `escolherSdrInbound` cobria "ninguém cobre o território" mas não "não existe SDR
+ * nenhum". Na primeira submissão real da base isso aconteceu: o único vendedor
+ * cadastrado era um originador, o roteador devolveu `null`, e o lead virou empresa e
+ * contato sem nunca aparecer em funil algum. Silenciosamente, que é o pior modo.
+ *
+ * A regra agora é: alguém SEMPRE recebe, enquanto existir um vendedor ativo. E cada
+ * degrau abaixo do primeiro deixa um aviso gravado na submissão — porque atribuir um
+ * lead de reunião a quem não trabalha reuniões é uma solução temporária que precisa
+ * parecer temporária, em vez de virar o normal que ninguém nota.
+ */
+export type NivelRoteamento =
+  | 'sdr_inbound'
+  | 'sdr_qualquer'
+  | 'destino_do_formulario'
+  | 'ultimo_recurso'
+  | 'ninguem'
+
+export interface CandidatoInbound extends SdrCandidato {
+  /** `vendedores.tipo = 'sdr'`. Quem não é, só entra nos degraus de baixo. */
+  ehSdr: boolean
+}
+
+export interface Roteamento {
+  vendedorId: string | null
+  nivel: NivelRoteamento
+  /** Texto para a tela de Leads quando o lead caiu num degrau improvisado. */
+  aviso: string | null
+}
+
+export function rotearInbound(
+  candidatos: readonly CandidatoInbound[],
+  alvo: AlvoInbound,
+  destinoDoFormulario: string | null,
+): Roteamento {
+  const sdrs = candidatos.filter((c) => c.ehSdr)
+
+  const porInbound = escolherSdrInbound(sdrs, alvo)
+  if (porInbound) return { vendedorId: porInbound.id, nivel: 'sdr_inbound', aviso: null }
+
+  // Um SDR marcado só como `out` ainda é um SDR: o funil de reuniões é a tela dele, e
+  // um lead parado lá é melhor que um lead em lugar nenhum.
+  const qualquerSdr = menorCarga(sdrs)
+  if (qualquerSdr) {
+    return {
+      vendedorId: qualquerSdr.id,
+      nivel: 'sdr_qualquer',
+      aviso: 'Nenhum SDR está marcado para inbound — o lead foi para o SDR menos carregado.',
+    }
+  }
+
+  const destino = candidatos.find((c) => c.id === destinoDoFormulario)
+  if (destino) {
+    return {
+      vendedorId: destino.id,
+      nivel: 'destino_do_formulario',
+      aviso:
+        'Não há SDR cadastrado. O lead foi para o vendedor de destino do formulário — cadastre um SDR para o funil de reuniões funcionar sozinho.',
+    }
+  }
+
+  const ultimo = menorCarga(candidatos)
+  if (ultimo) {
+    return {
+      vendedorId: ultimo.id,
+      nivel: 'ultimo_recurso',
+      aviso:
+        'Não há SDR cadastrado nem vendedor de destino no formulário. O lead foi para o vendedor ativo menos carregado.',
+    }
+  }
+
+  return {
+    vendedorId: null,
+    nivel: 'ninguem',
+    aviso: 'Nenhum vendedor ativo para receber o lead. Atribua à mão.',
+  }
 }
 
 // ─── O destino final da submissão ───────────────────────────────────────────
