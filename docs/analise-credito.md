@@ -55,8 +55,10 @@ Confirmar **sem alterar** também é um ato e fica gravado. Corrigir guarda o qu
 tinha lido em `valor_original`: a primeira pergunta que se faz de um extrator é "com que
 frequência ele erra", e ela não tem resposta se a correção sobrescrever.
 
-Campo crítico que veio `null` **não** entra na fila de revisão: isso é lacuna, e a tela
-não pede confirmação de linha em branco.
+Campo crítico que veio `null` **não** entra na fila de confirmação — isso é lacuna, e
+ninguém confirma linha em branco. Mas ele **aparece na tela**, com entrada vazia e o motivo:
+deixar em branco segue como lacuna, preencher é ato humano e fica gravado como tal. Sem
+isso, um analista com o número na mão não teria onde pô-lo.
 
 ---
 
@@ -78,6 +80,42 @@ Três decisões que valem a pena registrar:
 - **O CAGR usa os ANOS declarados**, não a contagem de linhas: exercícios de 2021 e 2024
   são três períodos, e tratá-los como dois inflaria o crescimento de uma base que só tem
   furo.
+- **Custo e despesa são MAGNITUDES.** A aritmética toma o módulo de `cmv`,
+  `despesas_operacionais` e `depreciacao_amortizacao`. Só `resultado_financeiro` carrega
+  sinal, porque nele o sinal É a informação. Em 17/08/2026 uma extração trouxe `cmv`
+  negativo enquanto o documento o publicava positivo — inofensivo então, e fatal no dia em
+  que o CMV passou a entrar numa subtração.
+
+### O EBITDA que o documento não publica
+
+O formulário padrão da CAIXA — que é o que a maioria dos sacados manda — tem dezesseis
+linhas e **nenhuma delas é EBITDA, depreciação ou amortização**. A extração faz certo em
+não montar o número. Mas deixar três indicadores apagados por causa do formato de um
+formulário é jogar fora informação que o documento tem.
+
+`derivarEbitda()` resolve isso na camada determinística, em cascata:
+
+| | Fonte | Ressalva |
+|---|---|---|
+| 1 | EBITDA explícito no documento | — |
+| 2 | (lucro bruto − despesas operacionais) + D&A | — |
+| 3 | lucro bruto − despesas operacionais, ou seja **EBIT** | **sim**, à vista no indicador |
+| 4 | nada | `null`, com o motivo |
+
+O degrau 3 é **conservador por construção**: EBIT ≤ EBITDA sempre, então a alavancagem
+sai pior e a margem menor do que a realidade. Errar para o lado que aperta o crédito é o
+único erro aceitável numa régua de crédito.
+
+**A equivalência patrimonial fica fora do EBIT.** Não é caixa gerado pela operação, e num
+grupo com SPEs ela pode ser enorme: no DRE da ANTONINI era 17% do resultado de 2024 e zero
+em 2025 — incluí-la tornaria o indicador incomparável entre dois anos da mesma empresa.
+Fica registrada nos insumos, fora da conta.
+
+**EBITDA não é lucro líquido**, e a tela de revisão diz isso onde a tentação existe. Naquele
+DRE os dois davam quase o mesmo (0,2% de diferença) por coincidência — impostos zerados e
+resultado financeiro irrisório. Numa empresa com dívida e IR/CSLL o lucro líquido fica em
+torno de 57% do EBIT, e trocar um pelo outro quase dobraria a dívida líquida/EBITDA, que é
+a que dispara knockout.
 
 ### Os cinco tetos — vale o MENOR entre os aplicáveis
 

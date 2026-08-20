@@ -96,6 +96,12 @@ export interface Indicador {
   insumos: Record<string, number | null>
   /** Preenchido quando `valor` é null — é a metade acionável da resposta. */
   motivo_sem_valor?: string
+  /**
+   * Preenchido quando o número SAIU, mas não do jeito ideal — hoje só o EBITDA
+   * aproximado por EBIT. Um número com ressalva ainda é um número; um número com a
+   * ressalva escondida é uma armadilha.
+   */
+  ressalva?: string
 }
 
 // ─── §4.2 Tetos ─────────────────────────────────────────────────────────────
@@ -238,6 +244,12 @@ export interface ExercicioContabil {
   receita_liquida: number | null
   cmv: number | null
   lucro_bruto: number | null
+  /** Despesas operacionais totais (SG&A). Insumo do EBIT. */
+  despesas_operacionais: number | null
+  /** Depreciação + amortização, quando o documento as publica. É o "DA" do EBITDA. */
+  depreciacao_amortizacao: number | null
+  /** Equivalência patrimonial. Fica FORA do EBIT — ver `derivarEbitda`. */
+  resultado_equivalencia_patrimonial: number | null
   ebitda: number | null
   resultado_financeiro: number | null
   lucro_liquido: number | null
@@ -289,6 +301,114 @@ function soma(...vs: Array<number | null>): number | null {
   return validos.reduce<number>((a, b) => a + (b as number), 0)
 }
 
+/**
+ * Custo e despesa são MAGNITUDES: o sinal delas varia por documento e por como o modelo
+ * leu a linha. Em 17/08/2026 a extração de um DRE trouxe `cmv` negativo enquanto o
+ * documento o publicava positivo — inofensivo ali porque o CMV não entrava em conta
+ * nenhuma, e fatal aqui, onde `lucro_bruto − despesas` inverteria de sinal.
+ *
+ * A aritmética não pode depender de uma convenção que ninguém garante. Só o
+ * `resultado_financeiro` carrega sinal de verdade, porque nele o sinal É a informação
+ * (receita financeira líquida vs. despesa financeira líquida).
+ */
+const magnitude = (v: number | null | undefined): number | null => {
+  const n = num(v)
+  return n === null ? null : Math.abs(n)
+}
+
+export type OrigemEbitda = 'explicito' | 'ebit_mais_da' | 'ebit_proxy'
+
+export interface EbitdaDerivado {
+  valor: number | null
+  origem: OrigemEbitda | null
+  /** Como se chegou nele — vai para `insumos` e para a ressalva do indicador. */
+  formula: string
+  ressalva?: string
+  motivo_sem_valor?: string
+}
+
+/**
+ * O EBITDA, na melhor forma que os documentos permitirem.
+ *
+ * ─── POR QUE ISTO EXISTE ────────────────────────────────────────────────────
+ * O formulário padrão da CAIXA — que é o que a maioria dos sacados manda — tem dezesseis
+ * linhas e nenhuma delas é EBITDA, depreciação ou amortização. A extração faz certo em
+ * não montar o número (a composição varia, e um EBITDA montado por um modelo não é
+ * auditável). Mas deixar três indicadores permanentemente apagados por causa do formato
+ * de um formulário é jogar fora informação que o documento TEM.
+ *
+ * Então a derivação vive aqui, na camada determinística: fórmula fixa, insumos à vista,
+ * versionada, testável. A IA continua sem inventar nada — ela extrai o que está escrito,
+ * e a matemática deriva o que é derivável.
+ *
+ * ─── A CASCATA ──────────────────────────────────────────────────────────────
+ *   1. EBITDA explícito no documento           → usa, sem ressalva.
+ *   2. EBIT + depreciação e amortização        → usa, sem ressalva.
+ *   3. EBIT sozinho                            → usa COM RESSALVA de que é proxy.
+ *   4. nada                                    → null, com o motivo.
+ *
+ * O degrau 3 é CONSERVADOR por construção: EBIT ≤ EBITDA sempre, então a alavancagem sai
+ * pior e a margem sai menor do que a realidade. Errar para o lado que aperta o crédito é
+ * o único erro aceitável numa régua de crédito.
+ *
+ * ─── A EQUIVALÊNCIA PATRIMONIAL FICA DE FORA ────────────────────────────────
+ * Resultado de equivalência é lucro de participação em coligada — não é caixa gerado pela
+ * operação, e num grupo de construção com SPEs ele pode ser enorme. Neste mesmo DRE ele
+ * era 17% do resultado de 2024 e zero em 2025: incluí-lo tornaria o indicador incomparável
+ * entre dois anos da MESMA empresa. Fica registrado nos insumos, fora da conta.
+ */
+export function derivarEbitda(ex: ExercicioContabil | undefined): EbitdaDerivado {
+  if (!ex) {
+    return { valor: null, origem: null, formula: '—', motivo_sem_valor: 'Nenhum exercício extraído.' }
+  }
+
+  const explicito = num(ex.ebitda)
+  if (explicito !== null) {
+    return { valor: explicito, origem: 'explicito', formula: 'EBITDA publicado no documento' }
+  }
+
+  // O lucro bruto extraído é preferido ao derivado: é uma linha própria do DRE, sem
+  // depender da convenção de sinal do custo.
+  const lucroBruto =
+    num(ex.lucro_bruto) ??
+    (() => {
+      const rl = num(ex.receita_liquida)
+      const c = magnitude(ex.cmv)
+      return rl === null || c === null ? null : rl - c
+    })()
+  const despesas = magnitude(ex.despesas_operacionais)
+
+  if (lucroBruto === null || despesas === null) {
+    return {
+      valor: null,
+      origem: null,
+      formula: 'EBITDA publicado, ou (lucro bruto − despesas operacionais) + D&A',
+      motivo_sem_valor:
+        'O documento não publica EBITDA, e faltam insumos para derivá-lo (lucro bruto e despesas operacionais).',
+    }
+  }
+
+  const ebit = lucroBruto - despesas
+  const da = magnitude(ex.depreciacao_amortizacao)
+
+  if (da !== null) {
+    return {
+      valor: ebit + da,
+      origem: 'ebit_mais_da',
+      formula: '(lucro bruto − despesas operacionais) + depreciação e amortização',
+    }
+  }
+
+  return {
+    valor: ebit,
+    origem: 'ebit_proxy',
+    formula: 'lucro bruto − despesas operacionais (EBIT)',
+    ressalva:
+      'O documento não publica EBITDA nem depreciação/amortização. O valor usado é o EBIT, ' +
+      'que é MENOR ou igual ao EBITDA — a leitura sai conservadora, nunca otimista.',
+  }
+}
+
 export function classificar(valor: number | null, faixa: FaixaIndicador | undefined): Semaforo | null {
   const v = num(valor)
   if (v === null || !faixa) return null
@@ -312,6 +432,7 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
     formula: string,
     insumos: Record<string, number | null>,
     motivo = 'Faltam insumos nos documentos enviados.',
+    ressalva?: string,
   ): Indicador => ({
     id,
     label: INDICADOR_LABELS[id],
@@ -321,6 +442,7 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
     formula,
     insumos,
     ...(valor === null ? { motivo_sem_valor: motivo } : {}),
+    ...(valor !== null && ressalva ? { ressalva } : {}),
   })
 
   if (!ex) {
@@ -328,6 +450,12 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
       montar(id, null, '—', {}, 'Nenhum exercício contábil foi extraído dos documentos.'),
     )
   }
+
+
+  // Derivado UMA vez e reusado: se cada indicador refizesse a cascata, dois deles
+  // poderiam acabar em degraus diferentes dela — e a tela mostraria duas leituras do
+  // mesmo EBITDA na mesma coluna.
+  const ebitda = derivarEbitda(ex)
 
   const ativoTotal = soma(ex.ativo_circulante, ex.ativo_nao_circulante)
   const passivoTotal = soma(ex.passivo_circulante, ex.passivo_nao_circulante)
@@ -370,14 +498,26 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
     }),
     montar(
       'divida_liquida_ebitda',
-      div(dividaLiquida, ex.ebitda),
-      '(empréstimos CP + LP − caixa) ÷ EBITDA',
-      { divida_liquida: dividaLiquida, ebitda: num(ex.ebitda) },
+      div(dividaLiquida, ebitda.valor),
+      `(empréstimos CP + LP − caixa) ÷ EBITDA, onde EBITDA = ${ebitda.formula}`,
+      {
+        divida_liquida: dividaLiquida,
+        ebitda: ebitda.valor,
+        despesas_operacionais: magnitude(ex.despesas_operacionais),
+        depreciacao_amortizacao: magnitude(ex.depreciacao_amortizacao),
+        equivalencia_patrimonial_fora_da_conta: num(ex.resultado_equivalencia_patrimonial),
+      },
+      ebitda.motivo_sem_valor ?? 'Faltam insumos nos documentos enviados.',
+      ebitda.ressalva,
     ),
-    montar('margem_ebitda', div(ex.ebitda, ex.receita_liquida), 'EBITDA ÷ receita líquida', {
-      ebitda: num(ex.ebitda),
-      receita_liquida: num(ex.receita_liquida),
-    }),
+    montar(
+      'margem_ebitda',
+      div(ebitda.valor, ex.receita_liquida),
+      `EBITDA ÷ receita líquida, onde EBITDA = ${ebitda.formula}`,
+      { ebitda: ebitda.valor, receita_liquida: num(ex.receita_liquida) },
+      ebitda.motivo_sem_valor ?? 'Faltam insumos nos documentos enviados.',
+      ebitda.ressalva,
+    ),
     montar('margem_liquida', div(ex.lucro_liquido, ex.receita_liquida), 'lucro líquido ÷ receita líquida', {
       lucro_liquido: num(ex.lucro_liquido),
       receita_liquida: num(ex.receita_liquida),
@@ -412,12 +552,13 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
     ),
     montar(
       'cobertura_juros',
-      div(ex.ebitda, despesaFinanceira),
-      'EBITDA ÷ despesa financeira',
-      { ebitda: num(ex.ebitda), despesa_financeira: despesaFinanceira },
+      div(ebitda.valor, despesaFinanceira),
+      `EBITDA ÷ despesa financeira, onde EBITDA = ${ebitda.formula}`,
+      { ebitda: ebitda.valor, despesa_financeira: despesaFinanceira },
       num(ex.resultado_financeiro) !== null && (num(ex.resultado_financeiro) as number) >= 0
         ? 'Resultado financeiro positivo no exercício: não há despesa de juros a cobrir.'
-        : 'Faltam insumos nos documentos enviados.',
+        : (ebitda.motivo_sem_valor ?? 'Faltam insumos nos documentos enviados.'),
+      ebitda.ressalva,
     ),
   ]
 }
@@ -934,6 +1075,9 @@ export function achatarExtracao(dados: DadosExtraidos | null | undefined): Exerc
         receita_liquida: v('receita_liquida'),
         cmv: v('cmv'),
         lucro_bruto: v('lucro_bruto'),
+        despesas_operacionais: v('despesas_operacionais'),
+        depreciacao_amortizacao: v('depreciacao_amortizacao'),
+        resultado_equivalencia_patrimonial: v('resultado_equivalencia_patrimonial'),
         ebitda: v('ebitda'),
         resultado_financeiro: v('resultado_financeiro'),
         lucro_liquido: v('lucro_liquido'),

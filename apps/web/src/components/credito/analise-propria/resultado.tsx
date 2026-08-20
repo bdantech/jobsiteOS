@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, CheckCircle2, MinusCircle, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, MinusCircle, XCircle } from 'lucide-react'
 import {
   INDICADOR_LABELS,
   TETO_LABELS,
@@ -91,6 +91,19 @@ export function Indicadores({ indicadores }: { indicadores: Indicador[] }) {
                 <span className="shrink-0 text-sm font-medium tabular-nums">{formatarIndicador(i)}</span>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">{i.formula}</p>
+              {/*
+                * A ressalva fica COLADA no número, não num rodapé. Ela existe para os
+                * casos em que o valor saiu por aproximação — hoje, o EBITDA derivado do
+                * EBIT quando o documento não publica depreciação. Um número aproximado
+                * com a ressalva longe dele é pior do que número nenhum: ele é lido como
+                * exato.
+                */}
+              {i.ressalva ? (
+                <p className="mt-1 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-1.5 text-xs">
+                  <Info className="mt-0.5 size-3 shrink-0 text-amber-600" aria-hidden />
+                  <span>{i.ressalva}</span>
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

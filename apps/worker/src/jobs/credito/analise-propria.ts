@@ -203,6 +203,9 @@ const CAMPOS_ALVO = [
   'receita_liquida',
   'cmv',
   'lucro_bruto',
+  'despesas_operacionais',
+  'depreciacao_amortizacao',
+  'resultado_equivalencia_patrimonial',
   'ebitda',
   'resultado_financeiro',
   'lucro_liquido',
@@ -232,11 +235,20 @@ const INSTRUCOES_EXTRACAO =
   `3. Valores numéricos SEM separador de milhar e com ponto decimal. Se o documento ` +
   `estiver em milhares ou milhões, converta para a unidade cheia e diga isso no ` +
   `trecho_curto.\n` +
-  `4. Despesa aparece com sinal NEGATIVO (resultado_financeiro de despesa é negativo).\n` +
+  `4. SINAL: custos e despesas vão como MAGNITUDE POSITIVA (cmv, despesas_operacionais, ` +
+  `depreciacao_amortizacao). A ÚNICA exceção é resultado_financeiro, em que o sinal É a ` +
+  `informação: positivo quando as receitas financeiras superam as despesas, negativo no ` +
+  `contrário. Não generalize a regra do sinal negativo para as outras linhas.\n` +
   `5. Se o mesmo campo aparecer com valores diferentes em documentos diferentes, ` +
   `registre em conflitos[] com os dois valores e as duas origens — não escolha um.\n` +
-  `6. EBITDA: se estiver explícito, use-o. Se não estiver, OMITA — não o monte a partir ` +
-  `de outras linhas, porque a composição varia e o número resultante não seria auditável.`
+  `6. EBITDA: se estiver explícito, use-o. Se não estiver, OMITA — continue não o montando. ` +
+  `Em vez disso, extraia com cuidado as três linhas que permitem derivá-lo depois: ` +
+  `despesas_operacionais (o total de despesas operacionais/SG&A), depreciacao_amortizacao ` +
+  `(some as duas se vierem separadas; omita se nenhuma aparecer) e ` +
+  `resultado_equivalencia_patrimonial. Muitos formulários brasileiros — o padrão da CAIXA, ` +
+  `por exemplo — não publicam EBITDA nem depreciação, e é normal que esses campos faltem.\n` +
+  `7. Lucro líquido NÃO é EBITDA, e resultado antes dos tributos NÃO é EBITDA. Cada um vai ` +
+  `para o seu próprio campo; nenhum deles serve de substituto para outro.`
 
 /**
  * Sobe os PDFs ao modelo e devolve a extração.

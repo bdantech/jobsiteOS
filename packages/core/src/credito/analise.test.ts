@@ -11,6 +11,7 @@ import {
   classificar,
   classificarQuadrante,
   criticosPendentes,
+  derivarEbitda,
   menorTeto,
   motivoObrigatorio,
   type ContextoAnalise,
@@ -25,6 +26,9 @@ const vazio: ExercicioContabil = {
   receita_liquida: null,
   cmv: null,
   lucro_bruto: null,
+  despesas_operacionais: null,
+  depreciacao_amortizacao: null,
+  resultado_equivalencia_patrimonial: null,
   ebitda: null,
   resultado_financeiro: null,
   lucro_liquido: null,
@@ -142,6 +146,124 @@ describe('indicadores', () => {
     assert.equal(classificar(0.7, PARAMETROS_PADRAO.indicadores.endividamento_geral), 'amarelo')
     assert.equal(classificar(0.9, PARAMETROS_PADRAO.indicadores.endividamento_geral), 'vermelho')
     assert.equal(classificar(null, PARAMETROS_PADRAO.indicadores.roe), null)
+  })
+})
+
+describe('EBITDA derivado', () => {
+  it('EBITDA explícito no documento manda, sem ressalva', () => {
+    const r = derivarEbitda({ ...saudavel, ebitda: 13_500_000, lucro_bruto: 27_000_000, despesas_operacionais: 5_000_000 })
+    assert.equal(r.valor, 13_500_000)
+    assert.equal(r.origem, 'explicito')
+    assert.equal(r.ressalva, undefined)
+  })
+
+  it('sem EBITDA mas com D&A, monta EBIT + D&A sem ressalva', () => {
+    const r = derivarEbitda({
+      ...vazio,
+      ebitda: null,
+      lucro_bruto: 27_000_000,
+      despesas_operacionais: 5_000_000,
+      depreciacao_amortizacao: 1_200_000,
+    })
+    assert.equal(r.valor, 23_200_000)
+    assert.equal(r.origem, 'ebit_mais_da')
+    assert.equal(r.ressalva, undefined)
+  })
+
+  it('sem EBITDA e sem D&A, usa EBIT COM ressalva de que é proxy', () => {
+    const r = derivarEbitda({ ...vazio, lucro_bruto: 27_000_000, despesas_operacionais: 5_000_000 })
+    assert.equal(r.valor, 22_000_000)
+    assert.equal(r.origem, 'ebit_proxy')
+    assert.match(r.ressalva ?? '', /conservadora/)
+  })
+
+  /*
+   * O caso real que originou tudo isto: DRE padrão CAIXA da ANTONINI, exercício 2025.
+   * Dezesseis linhas, nenhuma delas EBITDA, depreciação ou amortização.
+   */
+  it('reproduz o DRE padrão CAIXA que não publica EBITDA', () => {
+    const antonini2025: ExercicioContabil = {
+      ...vazio,
+      exercicio: 2025,
+      receita_bruta: 54_746_367.3,
+      receita_liquida: 52_556_512.62,
+      cmv: 18_914_917.07,
+      lucro_bruto: 33_641_595.55,
+      despesas_operacionais: 3_941_738.42,
+      resultado_equivalencia_patrimonial: 0,
+      resultado_financeiro: 59_342,
+      lucro_liquido: 29_759_199.13,
+    }
+    const r = derivarEbitda(antonini2025)
+    assert.equal(r.origem, 'ebit_proxy')
+    // 33.641.595,55 − 3.941.738,42
+    assert.ok(Math.abs((r.valor as number) - 29_699_857.13) < 0.01)
+  })
+
+  it('custo e despesa são MAGNITUDES: o sinal do documento não inverte a conta', () => {
+    const positivo = derivarEbitda({ ...vazio, lucro_bruto: 27_000_000, despesas_operacionais: 5_000_000 })
+    const negativo = derivarEbitda({ ...vazio, lucro_bruto: 27_000_000, despesas_operacionais: -5_000_000 })
+    assert.equal(positivo.valor, negativo.valor)
+    // E o mesmo vale para o CMV, quando o lucro bruto precisa ser derivado dele.
+    const comCmvNegativo = derivarEbitda({
+      ...vazio,
+      receita_liquida: 52_556_512.62,
+      cmv: -18_914_917.07,
+      despesas_operacionais: 3_941_738.42,
+    })
+    assert.ok(Math.abs((comCmvNegativo.valor as number) - 29_699_857.13) < 0.01)
+  })
+
+  it('o lucro bruto EXTRAÍDO tem precedência sobre o derivado do CMV', () => {
+    const r = derivarEbitda({
+      ...vazio,
+      lucro_bruto: 30_000_000,
+      receita_liquida: 50_000_000,
+      cmv: 10_000_000, // daria 40M se fosse usado
+      despesas_operacionais: 5_000_000,
+    })
+    assert.equal(r.valor, 25_000_000)
+  })
+
+  it('a equivalência patrimonial fica FORA do EBIT', () => {
+    const r = derivarEbitda({
+      ...vazio,
+      lucro_bruto: 12_276_822.22,
+      despesas_operacionais: 1_181_426.64,
+      resultado_equivalencia_patrimonial: 2_275_210.9,
+    })
+    assert.ok(Math.abs((r.valor as number) - 11_095_395.58) < 0.01)
+  })
+
+  it('sem lucro bruto nem despesas, não há EBITDA — e o motivo diz por quê', () => {
+    const r = derivarEbitda({ ...vazio, lucro_bruto: 27_000_000 })
+    assert.equal(r.valor, null)
+    assert.equal(r.origem, null)
+    assert.match(r.motivo_sem_valor ?? '', /não publica EBITDA/)
+  })
+
+  it('o proxy chega aos indicadores COM a ressalva à vista', () => {
+    const ex: ExercicioContabil = {
+      ...vazio,
+      receita_liquida: 52_556_512.62,
+      lucro_bruto: 33_641_595.55,
+      despesas_operacionais: 3_941_738.42,
+      emprestimos_curto_prazo: 540_744.56,
+      emprestimos_longo_prazo: 8_490_346.58,
+      caixa: 1_949_869.34,
+    }
+    const r = calcularIndicadores(contexto({ exercicios: [ex] }), PARAMETROS_PADRAO)
+    const alav = ind(r, 'divida_liquida_ebitda')
+    assert.ok(alav.valor !== null, 'o indicador deixou de ficar apagado')
+    assert.match(alav.ressalva ?? '', /EBIT/)
+    // (540.744,56 + 8.490.346,58 − 1.949.869,34) ÷ 29.699.857,13
+    assert.ok(Math.abs((alav.valor as number) - 7_081_221.8 / 29_699_857.13) < 1e-9)
+    assert.match(ind(r, 'margem_ebitda').ressalva ?? '', /EBIT/)
+  })
+
+  it('indicador SEM valor não carrega ressalva — ela seria sobre um número que não existe', () => {
+    const r = calcularIndicadores(contexto({ exercicios: [vazio] }), PARAMETROS_PADRAO)
+    assert.equal(ind(r, 'divida_liquida_ebitda').ressalva, undefined)
   })
 })
 

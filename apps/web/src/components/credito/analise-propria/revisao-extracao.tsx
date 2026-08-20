@@ -39,6 +39,21 @@ const LABELS: Record<string, string> = {
   caixa: 'Caixa e equivalentes',
 }
 
+/**
+ * O que dizer quando um crítico não veio dos documentos.
+ *
+ * O EBITDA tem texto próprio porque é o caso comum e o mais mal-entendido: o formulário
+ * padrão da CAIXA não publica EBITDA nem depreciação, e a tentação de digitar ali o lucro
+ * líquido é grande — são coisas diferentes, e trocá-las distorce justamente a alavancagem,
+ * que é a que dispara knockout.
+ */
+const AJUDA_AUSENTE: Record<string, string> = {
+  ebitda:
+    'Não publicado no documento. O cálculo já deriva o EBIT (lucro bruto − despesas operacionais) ' +
+    'e o usa como aproximação conservadora. Preencha só se você tiver o EBITDA de verdade — ' +
+    'lucro líquido e resultado antes dos tributos NÃO servem no lugar dele.',
+}
+
 const numeroBr = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 export function RevisaoExtracao({
@@ -81,14 +96,17 @@ export function RevisaoExtracao({
     const correcoes = (dados?.exercicios ?? []).flatMap((bloco) =>
       CAMPOS_CRITICOS.flatMap((campo) => {
         const c = bloco.campos?.[campo]
-        if (!c || c.valor === null || c.valor === undefined) return []
         const chave = `${bloco.exercicio}:${campo}`
         const bruto = edicoes[chave]
-        const valor =
-          bruto === undefined || bruto.trim() === ''
-            ? c.valor
-            : Number(bruto.replace(/\./g, '').replace(',', '.'))
-        if (!Number.isFinite(valor)) return []
+        const digitado = bruto !== undefined && bruto.trim() !== ''
+        const extraido = c?.valor ?? null
+
+        // Ausente e não preenchido: continua sendo LACUNA. Mandá-lo como null aqui o
+        // transformaria em "conferido e inexistente", que é uma afirmação que ninguém fez.
+        if (extraido === null && !digitado) return []
+
+        const valor = digitado ? Number((bruto as string).replace(/\./g, '').replace(',', '.')) : extraido
+        if (valor === null || !Number.isFinite(valor)) return []
         return [{ exercicio: bloco.exercicio, campo, valor }]
       }),
     )
@@ -143,16 +161,36 @@ export function RevisaoExtracao({
             </CardHeader>
             <CardContent>
               <ul className="divide-y rounded-lg border">
+                {/*
+                  * TODO campo crítico aparece, inclusive o que a extração NÃO achou.
+                  *
+                  * Antes a lista só mostrava os que tinham valor — a regra de "não pedir
+                  * confirmação de linha em branco", que continua certa para a CONFIRMAÇÃO.
+                  * Só que ela também escondia o campo, e com ele a única forma de alguém
+                  * informar um número que o documento não publica. O EBITDA do formulário
+                  * padrão da CAIXA caía exatamente aí: a pessoa tinha o número e não tinha
+                  * onde pôr.
+                  *
+                  * Deixar em branco segue sendo lacuna. Preencher é ato humano, e fica
+                  * gravado como tal.
+                  */}
                 {CAMPOS_CRITICOS.map((campo) => {
                   const c = bloco.campos?.[campo]
-                  if (!c) return null
+                  const ausente = !c || c.valor === null || c.valor === undefined
                   const chave = `${bloco.exercicio}:${campo}`
                   return (
                     <li key={campo} className="space-y-1.5 px-3 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{LABELS[campo] ?? campo}</span>
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          {LABELS[campo] ?? campo}
+                          {ausente && (
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              não localizado
+                            </Badge>
+                          )}
+                        </span>
                         <div className="flex items-center gap-2">
-                          {c.revisado && (
+                          {c?.revisado && (
                             <Badge variant="secondary" className="text-[10px]">
                               revisado
                             </Badge>
@@ -160,7 +198,8 @@ export function RevisaoExtracao({
                           <Input
                             inputMode="decimal"
                             className="h-8 w-44 text-right tabular-nums"
-                            defaultValue={c.valor === null ? '' : numeroBr(c.valor)}
+                            defaultValue={ausente ? '' : numeroBr(c!.valor as number)}
+                            placeholder={ausente ? 'opcional' : undefined}
                             onChange={(e) =>
                               setEdicoes((s) => ({ ...s, [chave]: e.target.value }))
                             }
@@ -168,13 +207,18 @@ export function RevisaoExtracao({
                           />
                         </div>
                       </div>
-                      {c.origem ? (
+                      {ausente ? (
+                        <p className="text-xs text-muted-foreground">
+                          {AJUDA_AUSENTE[campo] ??
+                            'Não localizado nos documentos. Deixe em branco para seguir como lacuna, ou informe o valor se você o tiver.'}
+                        </p>
+                      ) : c!.origem ? (
                         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                           <FileText className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
                           <span>
-                            {nomeDoDoc(c.origem.documento_id)}
-                            {c.origem.pagina !== null ? `, p. ${c.origem.pagina}` : ''} —{' '}
-                            <em>&ldquo;{c.origem.trecho_curto}&rdquo;</em>
+                            {nomeDoDoc(c!.origem!.documento_id)}
+                            {c!.origem!.pagina !== null ? `, p. ${c!.origem!.pagina}` : ''} —{' '}
+                            <em>&ldquo;{c!.origem!.trecho_curto}&rdquo;</em>
                           </span>
                         </p>
                       ) : (
