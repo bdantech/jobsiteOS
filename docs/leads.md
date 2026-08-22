@@ -259,3 +259,39 @@ Sem `enriquecimento_pago`, funcionários não é buscado — e funcionários é 
 do estimador. Para um lead que não é do Simples e não tem ERP conhecido, **o faturamento
 não sai**, e sem faturamento o score fica pobre. O caminho gratuito cobre bem o lead do
 Simples; para o resto, o toggle é o que fecha a conta.
+
+### O cadastral é o primeiro elo, e ele não estava garantido
+
+`app_processar_submissao` só enfileira `cnpj_lookup_fila` quando a empresa é **NOVA**. Um
+CNPJ que já existia por outra via — importação de lista, por exemplo — podia estar fora de
+`mercado_universo`, e aí não há CNAE, não há Simples, não há situação cadastral, não há
+idade.
+
+Isso mata dois elos de uma vez:
+
+- o **estimador** exige ao menos um sinal (funcionários, ERP ou Simples) e não encontra
+  nenhum → sem faturamento;
+- o **scorecard** não consegue avaliar idade, regularidade nem capital social → completude
+  abaixo do mínimo → `dados_insuficientes`.
+
+Foi exatamente o que aconteceu com o primeiro lead real (22/08/2026): domínio resolvido,
+faturamento vazio, score vazio — e a causa estava dois passos antes de onde o sintoma
+aparecia. O job agora verifica `mercado_universo`, enfileira e **drena a fila ali mesmo**,
+com orçamento curto, antes das outras etapas.
+
+### O diário do enriquecimento
+
+`formulario_submissoes.enriquecimento_resultado` (0124) guarda, por etapa, o que aconteceu
+e por que não aconteceu.
+
+O motivo é concreto: no primeiro lead real, `processada_em` estava preenchido e nada
+enriquecido. Descobrir por quê exigiu cruzar `empresas`, `enriquecimentos`,
+`mercado_universo` e `cnpj_lookup_fila` — e mesmo assim o erro da etapa que falhou só
+existia no log do container.
+
+Um job que registra "terminei" sem registrar **o que fez** obriga alguém a fazer
+arqueologia toda vez que o resultado decepciona. `processada_em` diz que o job passou; o
+diário diz o que ele conseguiu, e as duas respostas são diferentes.
+
+Etapa pulada também vira linha: "enriquecimento pago desligado neste formulário" e "sem
+domínio: o Apollo não teria por onde buscar" são respostas, e silêncio não é.

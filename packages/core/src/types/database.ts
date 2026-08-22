@@ -484,6 +484,7 @@ export type Database = {
           divergencia_papel: boolean
           consentimento_aceito: boolean | null
           consentimento_em: string | null
+          enriquecimento_resultado: Json | null
           erro: string | null
           criada_em: string
           processada_em: string | null
@@ -512,6 +513,7 @@ export type Database = {
           divergencia_papel?: boolean
           consentimento_aceito?: boolean | null
           consentimento_em?: string | null
+          enriquecimento_resultado?: Json | null
           erro?: string | null
           processada_em?: string | null
         }
