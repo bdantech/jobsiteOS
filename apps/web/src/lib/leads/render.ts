@@ -40,26 +40,39 @@ export function esc(v: unknown): string {
 }
 
 /**
- * Tokens da plataforma (zinc + verde #1a7a4a), com as duas paletas declaradas.
+ * Tokens da marca (zinc + verde #269237), com as duas paletas declaradas.
  *
  * O tema não vem de `prefers-color-scheme`: vem da LUMINÂNCIA DO FUNDO do container.
  * Uma landing page escura no sistema claro de quem visita é o caso comum, e seguir a
  * preferência do sistema deixaria o formulário claro dentro de uma página preta.
+ *
+ * ─── O VERDE É O MESMO NOS DOIS TEMAS ───────────────────────────────────────
+ * Antes o tema escuro clareava o verde e escurecia a letra do botão, para ganhar
+ * contraste. Cor de marca não muda com o fundo da página de quem hospeda: quem colou o
+ * formulário espera o botão da marca, e um verde diferente em metade das páginas é a
+ * marca aparecendo errada em metade das vezes. #269237 com letra branca dá 4,0:1 — passa
+ * o limiar de 3:1 de componente de UI e o de texto grande, e é a cor pedida.
+ *
+ * ─── POPPINS COM PILHA DE RESERVA ───────────────────────────────────────────
+ * A fonte é carregada pelo `garantirFonte()` do comportamento.ts, que injeta o link no
+ * `document.head` — `@font-face` dentro de shadow DOM é ignorado por parte dos
+ * navegadores. Se a CSP da página do cliente bloquear o Google Fonts, a pilha de reserva
+ * assume e o formulário continua legível: é por isso que ela existe por extenso.
  */
 const CSS = `
 :host, .jos-root { all: initial; }
 .jos-root {
   --jos-bg: #ffffff; --jos-fg: #18181b; --jos-muted: #71717a;
-  --jos-border: #e4e4e7; --jos-input: #ffffff; --jos-accent: #1a7a4a;
+  --jos-border: #e4e4e7; --jos-input: #ffffff; --jos-accent: #269237;
   --jos-accent-fg: #ffffff; --jos-erro: #b91c1c;
   display: block; box-sizing: border-box; width: 100%;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--jos-fg); font-size: 15px; line-height: 1.5;
 }
 .jos-root.jos-dark {
   --jos-bg: transparent; --jos-fg: #fafafa; --jos-muted: #a1a1aa;
-  --jos-border: #3f3f46; --jos-input: #18181b; --jos-accent: #22a366;
-  --jos-accent-fg: #08130d; --jos-erro: #f87171;
+  --jos-border: #3f3f46; --jos-input: #18181b; --jos-accent: #269237;
+  --jos-accent-fg: #ffffff; --jos-erro: #f87171;
 }
 .jos-root *, .jos-root *::before, .jos-root *::after { box-sizing: border-box; }
 .jos-titulo { margin: 0 0 4px; font-size: 20px; font-weight: 600; line-height: 1.3; }
@@ -94,7 +107,7 @@ const CSS = `
 .jos-consent { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 14px; font-size: 13px; color: var(--jos-muted); }
 .jos-consent input { margin: 3px 0 0; accent-color: var(--jos-accent); }
 .jos-botao {
-  width: 100%; padding: 11px 16px; font: inherit; font-size: 15px; font-weight: 600;
+  width: 100%; padding: 12px 16px; font: inherit; font-size: 16px; font-weight: 600;
   color: var(--jos-accent-fg); background: var(--jos-accent);
   border: 0; border-radius: 8px; cursor: pointer;
 }

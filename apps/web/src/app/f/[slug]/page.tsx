@@ -45,6 +45,18 @@ export default async function Pagina(props: { params: Promise<{ slug: string }> 
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 py-10">
+      {/*
+       * A fonte também aqui, e não só pelo `garantirFonte()` do comportamento: nesta
+       * página o HTML é nosso, e o link no markup começa a baixar a Poppins junto do
+       * documento em vez de esperar o JS. O helper continua rodando e é idempotente pelo
+       * id — dois links iguais seriam dois downloads.
+       */}
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        id="jos-fonte"
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      />
       <style dangerouslySetInnerHTML={{ __html: cssDoFormulario() }} />
       <div dangerouslySetInnerHTML={{ __html: htmlDoFormulario(f) }} />
       <script

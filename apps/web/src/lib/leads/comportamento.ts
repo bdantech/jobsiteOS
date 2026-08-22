@@ -105,10 +105,46 @@ export function scriptDoFormulario(base: string): string {
     return out;
   }
 
+  /*
+   * A Poppins entra pelo document.head, e nao pelo CSS do shadow root.
+   *
+   * @font-face declarado dentro de um shadow root e ignorado por parte dos navegadores —
+   * o carregamento de fonte e escopo do DOCUMENTO, nao da arvore de sombra. Declarar la
+   * dentro funcionaria em alguns navegadores e falharia em silencio nos outros, que e a
+   * pior das duas.
+   *
+   * Idempotente pelo id: a mesma pagina pode ter dois formularios embutidos, e dois links
+   * iguais no head sao dois downloads.
+   *
+   * display=swap de proposito: o texto aparece na hora com a fonte de reserva e troca
+   * quando a Poppins chegar. Um formulario invisivel por 3s esperando fonte e um
+   * formulario que ninguem preenche.
+   *
+   * Se a CSP da pagina do cliente bloquear o Google Fonts, isto falha em silencio e a
+   * pilha de reserva do CSS assume. E o certo: fonte e acabamento, formulario e funcao.
+   */
+  function garantirFonte() {
+    try {
+      if (document.getElementById('jos-fonte')) return;
+      var pre = document.createElement('link');
+      pre.rel = 'preconnect';
+      pre.href = 'https://fonts.gstatic.com';
+      pre.crossOrigin = 'anonymous';
+      document.head.appendChild(pre);
+
+      var link = document.createElement('link');
+      link.id = 'jos-fonte';
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap';
+      document.head.appendChild(link);
+    } catch (e) { /* head inacessivel nao pode derrubar o formulario */ }
+  }
+
   window.__josMontar = function (raiz, slug) {
     var form = raiz.querySelector('[data-jos-form]');
     if (!form || form.dataset.josPronto) return;
     form.dataset.josPronto = '1';
+    garantirFonte();
 
     var root = raiz.querySelector('.jos-root') || raiz;
     if (ehFundoEscuro(root.parentElement || root)) root.classList.add('jos-dark');
