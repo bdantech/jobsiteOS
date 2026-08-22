@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import {
   decidirDestino,
   rotearInbound,
@@ -227,18 +227,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   }
 
   /*
-   * Acorda o enriquecimento e NÃO espera por ele.
+   * Acorda o enriquecimento SEM segurar a resposta — mas com `after()`, não com uma
+   * promessa solta.
    *
-   * Quem preencheu o formulário está olhando um spinner; domínio, funcionários e score
-   * levam segundos ou minutos de rede. Fazer a pessoa esperar por trabalho que não é
-   * dela seria trocar a experiência de quem vira cliente pela conveniência de quem
-   * escreve o código.
+   * A primeira versão fazia `void dispararEnriquecerLeads()`. Numa função serverless
+   * isso não é "rodar em segundo plano": é começar um fetch e devolver a resposta, e a
+   * plataforma pode congelar a invocação no instante seguinte. Foi o que aconteceu em
+   * 22/08/2026 — três leads seguidos ficaram pendentes e só foram enriquecidos pelo cron
+   * da hora cheia, com até uma hora de atraso. O disparo imediato simplesmente não
+   * acontecia, e nada no código dizia isso.
    *
-   * Best-effort de propósito: se o worker estiver fora do ar, o lead JÁ está gravado e
-   * roteado, e o cron diário varre o que ficou pendente. Falhar a resposta aqui perderia
-   * um lead real por causa de um enriquecimento acessório.
+   * `after()` registra a tarefa no runtime: a resposta vai embora na hora e a invocação
+   * fica viva até o trabalho terminar. É a diferença entre pedir para o navegador esperar
+   * (o que seria injusto com quem preencheu) e torcer para o processo sobreviver (o que
+   * não é uma estratégia).
+   *
+   * Continua best-effort: o worker devolve 202 na hora, e se ele estiver fora do ar o
+   * lead JÁ está gravado e roteado — o cron varre o que ficar pendente.
    */
-  void dispararEnriquecerLeads().catch(() => undefined)
+  after(dispararEnriquecerLeads().catch(() => undefined))
 
   return NextResponse.json(
     { ok: true, submissao: (resultado as { submissao_id?: string } | null)?.submissao_id ?? null },
