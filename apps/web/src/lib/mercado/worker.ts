@@ -607,6 +607,17 @@ export async function dispararDrenarAnalisesProprias(): Promise<DispararJobResul
   return postar('/jobs/credito/analises-drenar', {}, 'credito-analises-drenar')
 }
 
+/**
+ * Enriquece os leads pendentes do formulário (04i): domínio, faturamento e score sempre;
+ * funcionários e Apollo só nos formulários com `enriquecimento_pago`.
+ *
+ * Sem argumentos de propósito: quem chama não escolhe QUAIS leads, e por isso não pode
+ * escolher gastar. A varredura decide a partir do que está pendente no banco.
+ */
+export async function dispararEnriquecerLeads(): Promise<DispararJobResultado> {
+  return postar('/jobs/leads/enriquecer', {}, 'leads-enriquecer')
+}
+
 /** Diário: SUGERE reanálise do que vence em 60 dias. Nunca executa em lote. */
 export async function dispararSugerirReanalises(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/sugerir-reanalises', {}, 'credito-reanalises')

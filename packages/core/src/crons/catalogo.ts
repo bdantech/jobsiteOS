@@ -139,6 +139,14 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/comercial/distribuir-sdr',
   },
   {
+    path: '/api/cron/leads-enriquecer',
+    nome: 'Enriquecimento de leads',
+    moduloId: 'comercial',
+    descricao:
+      'Domínio, faturamento e score dos leads que chegaram pelo formulário — e, só nos formulários com enriquecimento pago ligado, funcionários e contatos Apollo. É rede de segurança: o caminho normal é o próprio formulário acordar o worker no envio. De hora em hora porque um SDR que liga hoje de manhã não se beneficia de um score que chega amanhã.',
+    destino: 'POST /jobs/leads/enriquecer',
+  },
+  {
     path: '/api/cron/comercial-sla',
     nome: 'SLA de leads e inatividade',
     moduloId: 'comercial',

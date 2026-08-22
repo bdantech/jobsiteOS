@@ -210,7 +210,18 @@ async function cnpjsComValorReal(ano: number): Promise<Set<string>> {
  * ninguém promoveu produziria um número sem onde morar. Os sinais do Simples vêm de
  * `mercado_universo` pelo join — é a Receita que sabe se a empresa é optante.
  */
-export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
+export async function estimarFaturamentoJob(
+  /**
+   * Sem `cnpjs`, varre a base inteira — é o job mensal. COM `cnpjs`, estima só aqueles:
+   * é o que permite um lead recém-chegado receber a estimativa na hora, em vez de esperar
+   * o dia 6 do mês que vem.
+   *
+   * A regra de elegibilidade é a MESMA nos dois casos, de propósito: um recorte que
+   * relaxasse o `where` produziria, para o lead, uma estimativa que o job mensal depois
+   * apagaria por não considerá-lo elegível.
+   */
+  opts: { cnpjs?: readonly string[] } = {},
+): Promise<ResultadoEstimativaJob> {
   const cfg = await lerConfigFaturamento()
   const ano = anoReferenciaEstimativa()
 
@@ -256,7 +267,9 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
   // nada e ainda aparece na ficha competindo com ela.
   const sabidos = await cnpjsComValorReal(ano)
 
-  const { rows } = await pool.query<LinhaSinais>(`
+  const recorte = opts.cnpjs && opts.cnpjs.length > 0 ? [[...opts.cnpjs]] : []
+  const { rows } = await pool.query<LinhaSinais>(
+    `
     select
       e.cnpj,
       e.id as empresa_id,
@@ -270,12 +283,15 @@ export async function estimarFaturamentoJob(): Promise<ResultadoEstimativaJob> {
       e.regime_tributario
     from empresas e
     left join mercado_universo u on u.cnpj = e.cnpj
-    where coalesce(e.funcionarios, 0) > 0
+    where (${recorte.length > 0 ? 'e.cnpj = any($1)' : 'true'})
+      and (coalesce(e.funcionarios, 0) > 0
        or coalesce(e.erp_mrr, 0) > 0
        or coalesce((e.erp_detalhes ->> 'qtd_usuarios')::int, 0) > 0
        or coalesce(u.opcao_simples, false)
-       or u.data_exclusao_simples is not null
-  `)
+       or u.data_exclusao_simples is not null)
+  `,
+    ...recorte,
+  )
 
   for (const linha of rows) {
     acc.avaliadas++

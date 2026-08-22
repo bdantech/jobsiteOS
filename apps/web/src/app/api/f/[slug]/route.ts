@@ -14,6 +14,7 @@ import {
   type Json,
 } from '@jobsiteos/core'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dispararEnriquecerLeads } from '@/lib/mercado/worker'
 
 export const dynamic = 'force-dynamic'
 
@@ -224,6 +225,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     })
     return NextResponse.json({ ok: true }, { status: 200, headers: CORS })
   }
+
+  /*
+   * Acorda o enriquecimento e NÃO espera por ele.
+   *
+   * Quem preencheu o formulário está olhando um spinner; domínio, funcionários e score
+   * levam segundos ou minutos de rede. Fazer a pessoa esperar por trabalho que não é
+   * dela seria trocar a experiência de quem vira cliente pela conveniência de quem
+   * escreve o código.
+   *
+   * Best-effort de propósito: se o worker estiver fora do ar, o lead JÁ está gravado e
+   * roteado, e o cron diário varre o que ficou pendente. Falhar a resposta aqui perderia
+   * um lead real por causa de um enriquecimento acessório.
+   */
+  void dispararEnriquecerLeads().catch(() => undefined)
 
   return NextResponse.json(
     { ok: true, submissao: (resultado as { submissao_id?: string } | null)?.submissao_id ?? null },

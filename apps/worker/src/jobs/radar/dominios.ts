@@ -302,7 +302,16 @@ export async function resolverDominio(
  * Registra em `enriquecimentos` como qualquer outra tentativa: é de lá que sai o TTL, e um
  * caminho que não registra é um caminho que reconsulta para sempre sem aparecer no custo.
  */
-export async function dominioEmpresa(empresaId: string): Promise<{
+export async function dominioEmpresa(
+  empresaId: string,
+  /**
+   * `incluirClaude` decide se a etapa 5 (busca web paga) entra. Default `true` para
+   * preservar o botão da ficha, que é um clique deliberado sobre uma empresa. O
+   * enriquecimento automático de lead passa `false`: ele roda em todo lead que chega, e
+   * "em todo lead que chega" é a pior frase possível ao lado de uma chamada paga.
+   */
+  opts: { incluirClaude?: boolean } = {},
+): Promise<{
   dominio: string | null
   origem: string | null
   confianca: string | null
@@ -315,7 +324,9 @@ export async function dominioEmpresa(empresaId: string): Promise<{
     .maybeSingle()
   if (!emp) throw new Error('Empresa não encontrada.')
 
-  const { achado, custo } = await resolverDominio(emp.cnpj, emp.id, { incluirClaude: true })
+  const { achado, custo } = await resolverDominio(emp.cnpj, emp.id, {
+    incluirClaude: opts.incluirClaude ?? true,
+  })
 
   await supabaseAdmin.from('enriquecimentos').insert({
     tipo: 'dominio',

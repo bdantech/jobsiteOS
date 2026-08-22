@@ -189,3 +189,73 @@ responde "não chegou" nos dois casos em que chegou e foi barrado.
 
 WhatsApp (campo e toggle já previstos, desabilitados), sequências de nutrição,
 Google Calendar, A/B test automático, CAPTCHA.
+
+## Enriquecimento do lead
+
+Até 22/08/2026 isto não existia, e o buraco era grande: o formulário criava a empresa,
+enfileirava o cadastral da Receita e parava. Domínio, funcionários, faturamento e score só
+aconteciam por botão na ficha ou pelo lote mensal — um lead que chegava no dia 8 ficava
+quase trinta dias sem faturamento estimado e sem score. E é o score que alimenta o
+`valor_esperado_mensal`, que é a régua pela qual o SDR decide para quem ligar primeiro: o
+lead novo entrava na fila **sem a nota que define a ordem**.
+
+Pior: `formularios.enriquecimento_pago` já existia como Switch no construtor e como badge
+na lista, e **nada o lia**. Era um botão que prometia um poder que não existia.
+
+### A ordem é dependência, não preferência
+
+```
+domínio  →  funcionários  →  faturamento  →  score
+```
+
+- **domínio** é a chave que o Apollo usa para achar contato;
+- **funcionários** é o sinal principal do estimador de faturamento;
+- **faturamento** é a base do limite potencial e entra no score;
+- **score** vem por último porque lê tudo que veio antes.
+
+Inverter qualquer par produz um resultado pior **em silêncio**: o score sai de uma base
+mais pobre e ninguém nota, porque um score sempre sai.
+
+### O que é grátis roda sempre; o que custa espera o toggle
+
+| Etapa | Custo | Quando roda |
+|---|---|---|
+| Domínio (e-mail do contato, e-mail da Receita, heurística, validação DNS) | zero | sempre |
+| Faturamento estimado | zero | sempre |
+| Score | zero | sempre |
+| Funcionários | por consulta | só com `enriquecimento_pago` |
+| Contatos Apollo | por consulta | só com `enriquecimento_pago` |
+| Domínio via busca Claude (etapa 5) | por consulta | só com `enriquecimento_pago` |
+
+"Em todo lead que chega" é a pior frase possível ao lado de uma chamada paga: lead de
+teste, concorrente curioso e spam que passou pelo filtro também chegam.
+
+### O e-mail digitado vira domínio
+
+`app_processar_submissao` salva o e-mail da submissão como **contato** (e o primeiro vira
+ponto focal). A etapa 2 do resolvedor de domínio lê exatamente os e-mails dos contatos da
+empresa. Provedor genérico é descartado em `dominioDeEmail` → `motivoDescarteDominio`, e o
+domínio derivado ainda passa por validação de DNS/MX contra o CNPJ — **gmail.com nunca
+vira o domínio de ninguém**, e um domínio que não resolve não é aceito.
+
+### Dois gatilhos, um deles é rede de segurança
+
+O caminho normal é o próprio endpoint do formulário acordar o worker assim que a submissão
+entra — `void dispararEnriquecerLeads()`, sem esperar. Quem preencheu está olhando um
+spinner, e fazer a pessoa esperar por trabalho que não é dela seria trocar a experiência de
+quem vira cliente pela conveniência de quem escreve o código.
+
+O cron `/api/cron/leads-enriquecer` (de hora em hora) varre o que aquele caminho perdeu:
+worker fora do ar, deploy no meio do envio, erro de rede entre a Vercel e o Railway. Sem
+ele um lead ficaria para sempre sem domínio e sem score, e ninguém descobriria — o lead
+aparece na lista de qualquer jeito.
+
+A varredura usa o índice `formulario_submissoes_pendentes_idx`, criado na 0120 esperando
+exatamente por ela.
+
+### Limitação honesta
+
+Sem `enriquecimento_pago`, funcionários não é buscado — e funcionários é o sinal principal
+do estimador. Para um lead que não é do Simples e não tem ERP conhecido, **o faturamento
+não sai**, e sem faturamento o score fica pobre. O caminho gratuito cobre bem o lead do
+Simples; para o resto, o toggle é o que fecha a conta.

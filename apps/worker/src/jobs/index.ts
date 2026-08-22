@@ -70,6 +70,7 @@ import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 import { recalcularPerfil } from './perfil/recalcular.js'
+import { enriquecerLeads } from './leads/enriquecer.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -123,6 +124,7 @@ export type TipoJob =
   | 'credito-analise-propria'
   | 'credito-analises-drenar'
   | 'credito-reanalises'
+  | 'leads-enriquecer'
   | 'perfil-recalcular'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
@@ -991,6 +993,17 @@ export function dispararDrenarAnalisesProprias(): string {
 /** Diário: sugere (não executa) reanálise do que vence em menos de 60 dias. */
 export function dispararSugerirReanalises(): string {
   return dispararAvulso('credito-reanalises', async () => sugerirReanalises())
+}
+
+/**
+ * Enriquecimento dos leads que chegaram pelo formulário (04i).
+ *
+ * Single-flight por tipo, e aqui isso é o certo: a varredura já pega TUDO que está
+ * pendente, então uma segunda corrida simultânea trabalharia sobre as mesmas linhas —
+ * pagando duas vezes pelas etapas pagas.
+ */
+export function dispararEnriquecerLeads(): string {
+  return dispararAvulso('leads-enriquecer', async () => enriquecerLeads())
 }
 
 // ─── Perfil de Quem Opera (Prompt 04f) ───────────────────────────────────────

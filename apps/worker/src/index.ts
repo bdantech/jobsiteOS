@@ -47,6 +47,7 @@ import {
   dispararAnalisePropria,
   dispararDrenarAnalisesProprias,
   dispararExpirarAnalises,
+  dispararEnriquecerLeads,
   dispararSugerirReanalises,
   dispararPollDecisoes,
   dispararRecalcularScores,
@@ -585,6 +586,19 @@ app.post('/jobs/credito/analises-drenar', (_req: Request, res: Response, next: N
 app.post('/jobs/credito/sugerir-reanalises', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararSugerirReanalises(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Enriquecimento dos leads pendentes. Sem corpo: a varredura decide o que fazer a partir
+ * de `formulario_submissoes` — quem chama não escolhe leads, e por isso não pode escolher
+ * gastar.
+ */
+app.post('/jobs/leads/enriquecer', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEnriquecerLeads(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

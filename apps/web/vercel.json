@@ -62,6 +62,10 @@
       "schedule": "0 10 * * 1"
     },
     {
+      "path": "/api/cron/leads-enriquecer",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/comercial-sla",
       "schedule": "0 11 * * *"
     },
