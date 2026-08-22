@@ -12,7 +12,31 @@ import { PROVEDORES_EMAIL_GENERICOS } from '@jobsiteos/core'
 export function scriptDoFormulario(base: string): string {
   return `
 (function () {
-  var BASE = ${JSON.stringify(base)};
+  /*
+   * De onde o formulário fala com o servidor.
+   *
+   * ─── POR QUE ELE SE DESCOBRE SOZINHO ──────────────────────────────────────
+   * O valor injetado vem de NEXT_PUBLIC_APP_URL. Quando essa variável não está no
+   * ambiente, ela virava string vazia — e string vazia faz \`BASE + '/api/f/...'\`
+   * resultar numa URL RELATIVA. Na nossa própria página isso funciona; embutido na
+   * landing page de um cliente, o POST vai para o domínio DELE e o formulário responde
+   * "sem conexão com o servidor". Foi exatamente o que aconteceu em 22/08/2026.
+   *
+   * O embed roda, por definição, em domínio de terceiro. Uma URL relativa nunca pode
+   * estar certa aqui — então, em vez de depender de uma variável de ambiente que alguém
+   * precisa lembrar de configurar, o script deriva a origem do PRÓPRIO src. Ele sabe de
+   * onde foi baixado; é a única fonte que não pode estar errada.
+   *
+   * O fallback vazio no fim é para a página standalone, onde o script é inline (sem src)
+   * e relativo é justamente o certo — mesma origem.
+   */
+  var BASE = ${JSON.stringify(base)} || (function () {
+    try {
+      var s = document.currentScript || document.querySelector('script[src*="/f/"][src$=".js"]');
+      if (s && s.src) return new URL(s.src).origin;
+    } catch (e) { /* origem exótica não pode derrubar o formulário */ }
+    return '';
+  })();
   // A lista vem de packages/core (radar/dominio.ts), interpolada no build do script.
   // Copiá-la à mão aqui criaria uma segunda opinião sobre o que é e-mail corporativo,
   // e as duas divergiriam no primeiro provedor novo.

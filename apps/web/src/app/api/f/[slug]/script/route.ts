@@ -21,9 +21,17 @@ export const dynamic = 'force-dynamic'
  * 60s com `stale-while-revalidate`. Editar o formulário tem que refletir na página
  * do cliente sem ele mexer em nada — mas sem que cada visita bata no banco.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  /*
+   * Segunda linha de defesa: a origem do próprio request, e nunca string vazia.
+   *
+   * String vazia produz URL relativa, e o embed roda em domínio de terceiro — relativo
+   * ali aponta para a landing page do cliente. O script também se descobre sozinho pelo
+   * `src` (ver comportamento.ts); as duas defesas existem porque esta falha é invisível
+   * em teste (na nossa página relativo funciona) e total em produção.
+   */
+  const base = process.env.NEXT_PUBLIC_APP_URL || origemDe(req)
 
   const supabase = createAdminClient()
   const { data, error } = await supabase.rpc('formulario_publico', { p_slug: slug })
@@ -80,6 +88,15 @@ ${scriptDoFormulario(base)}
 `
 
   return new NextResponse(js, { status: 200, headers: cabecalhos() })
+}
+
+/** A origem de quem pediu o script. É de lá que o formulário vai falar de volta. */
+function origemDe(req: Request): string {
+  try {
+    return new URL(req.url).origin
+  } catch {
+    return ''
+  }
 }
 
 function cabecalhos(): HeadersInit {
