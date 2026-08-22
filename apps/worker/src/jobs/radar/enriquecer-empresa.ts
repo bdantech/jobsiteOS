@@ -3,7 +3,7 @@ import { logger } from '../../logger.js'
 import { dominioEmpresa } from './dominios.js'
 import { estimarFaturamentoJob } from './estimador.js'
 import { funcionariosEmpresa } from './funcionarios.js'
-import { recalcularScoresDeCnpjs } from '../credito/potencial.js'
+import { estimarPotencialJob, recalcularScoresDeCnpjs } from '../credito/potencial.js'
 import { lookupCadastral } from '../antecipacao/lookup-cadastral.js'
 
 /**
@@ -16,7 +16,12 @@ import { lookupCadastral } from '../antecipacao/lookup-cadastral.js'
  * consulta ao Apollo sem chave de busca, e quem pontuasse antes de estimar teria o score
  * de uma base mais pobre. A tela cobrava do usuário um conhecimento que é do código.
  *
- *   cadastral → domínio → funcionários → faturamento → score
+ *   cadastral → domínio → funcionários → faturamento → score → limite
+ *
+ * O limite fecha a fila porque ele é CACHE de uma conta sobre o faturamento e a chance:
+ * os dois acabaram de mudar. Sem este último passo, a ficha mostraria um limite derivado
+ * de um faturamento que não está mais nela — foi o que apareceu na 2MS ENGENHARIA, com
+ * limite preso a R$ 49 mi de faturamento enquanto a tela exibia R$ 37,6 mi.
  *
  * ─── A JANELA DE FRESCOR ────────────────────────────────────────────────────
  * Dado obtido há menos de `frescorDias` é reaproveitado, e a etapa é PULADA — não
@@ -28,7 +33,13 @@ import { lookupCadastral } from '../antecipacao/lookup-cadastral.js'
  * exatamente o comportamento caro que a janela existe para evitar.
  */
 
-export type EtapaEmpresa = 'cadastral' | 'dominio' | 'funcionarios' | 'faturamento' | 'score'
+export type EtapaEmpresa =
+  | 'cadastral'
+  | 'dominio'
+  | 'funcionarios'
+  | 'faturamento'
+  | 'score'
+  | 'limite'
 
 export interface PassoEnriquecimento {
   etapa: EtapaEmpresa
@@ -182,6 +193,21 @@ export async function enriquecerEmpresa(opts: {
       sc.com_score > 0
         ? 'Score recalculado.'
         : 'Completude abaixo do mínimo — o score não sai, e isso é uma resposta.',
+    )
+  }
+
+  // ── Limite potencial ─────────────────────────────────────────────────────
+  // Por último de verdade: ele lê o faturamento recém-estimado E a chance recém-pontuada.
+  const pot = await tentar('limite', () => estimarPotencialJob({ cnpjs: [empresa.cnpj] }))
+  if (pot) {
+    anotar(
+      'limite',
+      pot.com_limite ? 'ok' : 'pulado',
+      pot.com_limite
+        ? 'Limite potencial e receita prevista recalculados.'
+        : pot.sem_faturamento
+          ? 'Sem faturamento — não há de que tirar proporção.'
+          : 'Sem calibração vigente do ratio limite/faturamento.',
     )
   }
 

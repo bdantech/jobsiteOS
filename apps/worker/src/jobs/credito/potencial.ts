@@ -143,14 +143,18 @@ interface LinhaSacado {
 async function paginarSacados(
   aplicar: (linhas: LinhaSacado[]) => Promise<void>,
   tamanho = 500,
+  /** Recorte por CNPJ. Ausente = a base inteira, que é o job mensal. */
+  cnpjs?: readonly string[],
 ): Promise<number> {
   let de = 0
   let total = 0
   for (;;) {
-    const { data, error } = await supabaseAdmin
+    let q = supabaseAdmin
       .from('empresas')
       .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal')
       .in('tipo', SACADOS)
+    if (cnpjs && cnpjs.length > 0) q = q.in('cnpj', [...cnpjs])
+    const { data, error } = await q
       .order('id', { ascending: true })
       .range(de, de + tamanho - 1)
     if (error) throw new Error(error.message)
@@ -440,7 +444,19 @@ export async function recalcularScoresDeCnpjs(cnpjs: readonly string[]): Promise
 
 // ─── §2.2 Potencial ─────────────────────────────────────────────────────────
 
-export async function estimarPotencialJob(): Promise<{
+/**
+ * O limite potencial e a receita prevista.
+ *
+ * COM `cnpjs`, recalcula só aqueles. Sem, varre a base — que é o job mensal.
+ *
+ * O recorte existe porque o limite é CACHE de uma conta sobre o faturamento, e o
+ * faturamento muda fora do calendário mensal: uma estimativa nova, uma declaração do
+ * cliente, um enriquecimento sob demanda. Sem recalcular, a ficha mostra um limite
+ * derivado de um faturamento que não está mais na tela — foi o que se viu na 2MS
+ * ENGENHARIA em 22/08/2026, com o limite preso a um faturamento de R$ 49 mi enquanto a
+ * ficha exibia R$ 37,6 mi.
+ */
+export async function estimarPotencialJob(opts: { cnpjs?: readonly string[] } = {}): Promise<{
   status: 'ok' | 'sem_calibracao'
   avaliados?: number
   com_limite?: number
@@ -474,7 +490,8 @@ export async function estimarPotencialJob(): Promise<{
   const taxas = await taxasConhecidas()
   const acc = { avaliados: 0, com_limite: 0, sem_faturamento: 0, sem_calibracao: 0, com_taxa_real: 0 }
 
-  await paginarSacados(async (linhas) => {
+  await paginarSacados(
+    async (linhas) => {
     for (const e of linhas) {
       acc.avaliados++
 
@@ -548,7 +565,10 @@ export async function estimarPotencialJob(): Promise<{
         })
       }
     }
-  })
+    },
+    500,
+    opts.cnpjs,
+  )
 
   logger.info(acc, 'Potencial de crédito estimado.')
   return { status: 'ok', ...acc }

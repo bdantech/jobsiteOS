@@ -4,7 +4,7 @@ import { contatosEmpresa } from '../radar/contatos.js'
 import { dominioEmpresa } from '../radar/dominios.js'
 import { estimarFaturamentoJob } from '../radar/estimador.js'
 import { funcionariosEmpresa } from '../radar/funcionarios.js'
-import { recalcularScoresDeCnpjs } from '../credito/potencial.js'
+import { estimarPotencialJob, recalcularScoresDeCnpjs } from '../credito/potencial.js'
 import { lookupCadastral } from '../antecipacao/lookup-cadastral.js'
 
 /**
@@ -40,7 +40,14 @@ import { lookupCadastral } from '../antecipacao/lookup-cadastral.js'
 const LOTE = 25
 
 /** O que cada etapa fez, gravado na submissão. Ver `enriquecimento_resultado` (0124). */
-type Etapa = 'cadastral' | 'dominio' | 'funcionarios' | 'contatos' | 'faturamento' | 'score'
+type Etapa =
+  | 'cadastral'
+  | 'dominio'
+  | 'funcionarios'
+  | 'contatos'
+  | 'faturamento'
+  | 'score'
+  | 'limite'
 type Desfecho = { ok: boolean; detalhe: string }
 type Diario = Partial<Record<Etapa, Desfecho>>
 
@@ -250,6 +257,19 @@ export async function enriquecerLeads(): Promise<ResultadoEnriquecimento> {
     const sc = await tentar('score', comum, () => recalcularScoresDeCnpjs(cnpjsParaEstimar))
     acc.scores = (sc as { gravados?: number } | null)?.gravados ?? 0
     comum.score ??= { ok: !!sc, detalhe: sc ? 'recalculado' : 'não rodou' }
+
+    // O limite é a última peça, e é cache de uma conta sobre faturamento e chance — os
+    // dois acabaram de mudar. Sem isto, o lead entra na fila com um limite derivado de um
+    // faturamento que não é mais o dele.
+    const pot = await tentar('limite', comum, () =>
+      estimarPotencialJob({ cnpjs: cnpjsParaEstimar }),
+    )
+    comum.limite ??= {
+      ok: !!pot?.com_limite,
+      detalhe: pot?.com_limite
+        ? `${pot.com_limite} com limite`
+        : (pot?.sem_faturamento ? 'sem faturamento' : 'sem calibração'),
+    }
 
     // As duas últimas etapas rodam em bloco, então o desfecho delas é o mesmo para todas
     // as submissões da corrida — cada uma recebe a sua cópia.
