@@ -64,7 +64,7 @@ const VAZIO: FormularioCompleto = {
   nome: '',
   descricao: null,
   titulo: 'Vamos conversar',
-  subtitulo: 'Preenche com os seus dados e nossa equipe entrará em contato rapidamente.',
+  subtitulo: 'Preencha seus dados e nossa equipe entrará em contato rapidamente',
   texto_botao: 'Enviar',
   mensagem_sucesso: null,
   ajuda_cnpj: AJUDA_CNPJ_DEFAULT,
