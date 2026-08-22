@@ -245,12 +245,52 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
    * Continua best-effort: o worker devolve 202 na hora, e se ele estiver fora do ar o
    * lead JÁ está gravado e roteado — o cron varre o que ficar pendente.
    */
-  after(dispararEnriquecerLeads().catch(() => undefined))
+  const submissaoId = (resultado as { submissao_id?: string } | null)?.submissao_id ?? null
 
-  return NextResponse.json(
-    { ok: true, submissao: (resultado as { submissao_id?: string } | null)?.submissao_id ?? null },
-    { status: 200, headers: CORS },
+  after(
+    (async () => {
+      const r = await dispararEnriquecerLeads()
+
+      /*
+       * O RESULTADO DO DISPARO FICA GRAVADO — inclusive o sucesso.
+       *
+       * A primeira versão fazia `.catch(() => undefined)` e jogava fora o retorno.
+       * `postar()` NÃO lança quando o worker recusa: ele devolve `{ ok: false }`. Ou
+       * seja, um worker fora do ar, um 401 de segredo trocado ou um 409 de job já em
+       * execução produziam exatamente o mesmo que sucesso — silêncio. Três testes
+       * seguidos não enriqueceram e não havia uma linha em lugar nenhum dizendo por quê.
+       *
+       * Gravar o SUCESSO também é diagnóstico, e não enfeite: se a linha ficar só com
+       * `disparo.ok = true` e nunca ganhar o diário das etapas, isso aponta o dedo para o
+       * worker — ele aceitou o job e não o executou. Sem esse registro, "aceitou e não
+       * rodou" e "nunca foi chamado" são indistinguíveis.
+       */
+      if (!r.ok) {
+        console.error('[leads] worker recusou o enriquecimento', {
+          submissao: submissaoId,
+          code: r.code,
+        })
+      }
+      if (submissaoId) {
+        await supabase
+          .from('formulario_submissoes')
+          .update({
+            enriquecimento_resultado: {
+              disparo: {
+                ok: r.ok,
+                em: new Date().toISOString(),
+                detalhe: r.ok ? 'Worker aceitou o job (202).' : r.message,
+              },
+            } as never,
+          })
+          .eq('id', submissaoId)
+      }
+    })().catch((e) => {
+      console.error('[leads] falha ao acordar o enriquecimento', { erro: String(e) })
+    }),
   )
+
+  return NextResponse.json({ ok: true, submissao: submissaoId }, { status: 200, headers: CORS })
 }
 
 function texto(v: unknown): string | null {

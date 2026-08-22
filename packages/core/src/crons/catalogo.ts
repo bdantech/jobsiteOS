@@ -143,7 +143,7 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Enriquecimento de leads',
     moduloId: 'comercial',
     descricao:
-      'Domínio, faturamento e score dos leads que chegaram pelo formulário — e, só nos formulários com enriquecimento pago ligado, funcionários e contatos Apollo. É rede de segurança: o caminho normal é o próprio formulário acordar o worker no envio. De hora em hora porque um SDR que liga hoje de manhã não se beneficia de um score que chega amanhã.',
+      'Domínio, faturamento e score dos leads que chegaram pelo formulário — e, só nos formulários com enriquecimento pago ligado, funcionários e contatos Apollo. É rede de segurança: o caminho normal é o próprio formulário acordar o worker no envio. De 5 em 5 minutos, e não de hora em hora, porque em 22/08/2026 o disparo imediato falhou em silêncio e a espera virou a hora cheia — quando o caminho principal é frágil, a rede embaixo dele tem de ser curta.',
     destino: 'POST /jobs/leads/enriquecer',
   },
   {
