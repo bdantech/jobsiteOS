@@ -3,7 +3,16 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Banknote, Globe, History, RefreshCw, TrendingDown, TrendingUp, Users } from 'lucide-react'
+import {
+  Banknote,
+  Globe,
+  History,
+  RefreshCw,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Users,
+} from 'lucide-react'
 import {
   ORIGEM_METRICA_LABELS,
   anoReferenciaEstimativa,
@@ -28,7 +37,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { atualizarFuncionariosAction, resolverDominioEmpresaAction } from '@/actions/radar'
+import {
+  atualizarFuncionariosAction,
+  enriquecerEmpresaAction,
+  resolverDominioEmpresaAction,
+} from '@/actions/radar'
 import { declararMetricaAction } from '@/actions/empresas'
 import { cn } from '@/lib/utils'
 import { empresasKeys, buscarMetricas } from './queries'
@@ -519,13 +532,36 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
             </CardDescription>
           </div>
           {/*
-           * Dois botões numa ordem que é uma dependência, não uma preferência: o Apollo é
-           * consultado por DOMÍNIO. Sem domínio, "Atualizar funcionários" só sabe devolver
-           * `sem_dominio` — e devolvia isso depois de exibir "Consultando o Apollo",
-           * porque o worker responde 202 antes de descobrir que não tinha o que consultar.
-           * Bloquear aqui troca um sucesso falso por uma explicação e o botão que resolve.
+           * ─── UM BOTÃO QUE SABE A ORDEM, E OS AVULSOS AO LADO ──────────────────
+           * Os botões individuais estavam numa ordem que é DEPENDÊNCIA, não preferência:
+           * o Apollo é consultado por domínio, e o estimador de faturamento tem os
+           * funcionários como sinal principal. A tela cobrava da pessoa um conhecimento
+           * que é do código — e quem clicasse fora de ordem pagava uma consulta para
+           * receber `sem_dominio`.
+           *
+           * "Enriquecer tudo" roda a cadeia inteira na ordem certa e reaproveita o que já
+           * foi obtido há menos de 30 dias. Os avulsos ficam: quem quer só o domínio não
+           * deve ter de pagar o resto.
            */}
           <div className="flex shrink-0 flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={() =>
+                void disparar(
+                  'tudo',
+                  () => enriquecerEmpresaAction(props.empresaId),
+                  'Enriquecendo: domínio → funcionários → faturamento → score. O resultado aparece aqui em instantes.',
+                )
+              }
+              disabled={atualizando !== null}
+              title="Roda a cadeia inteira na ordem em que uma etapa depende da outra. Dado obtido há menos de 30 dias é reaproveitado, não reconsultado."
+            >
+              <Sparkles
+                className={cn('mr-1 h-3.5 w-3.5', atualizando === 'tudo' && 'animate-spin')}
+                aria-hidden
+              />
+              {atualizando === 'tudo' ? 'Disparando…' : 'Enriquecer tudo'}
+            </Button>
             {!props.dominio && (
               <Button
                 variant="outline"

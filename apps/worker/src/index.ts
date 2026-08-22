@@ -47,6 +47,7 @@ import {
   dispararAnalisePropria,
   dispararDrenarAnalisesProprias,
   dispararExpirarAnalises,
+  dispararEnriquecerEmpresa,
   dispararEnriquecerLeads,
   dispararSugerirReanalises,
   dispararPollDecisoes,
@@ -599,6 +600,24 @@ app.post('/jobs/credito/sugerir-reanalises', (_req: Request, res: Response, next
 app.post('/jobs/leads/enriquecer', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararEnriquecerLeads(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const enriquecerEmpresaSchema = z.object({
+  empresa_id: z.string().uuid(),
+  incluir_pagos: z.boolean().default(true),
+})
+
+/** Domínio → funcionários → faturamento → score, na ordem, sobre uma empresa. */
+app.post('/jobs/radar/enriquecer-empresa', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { empresa_id, incluir_pagos } = enriquecerEmpresaSchema.parse(req.body ?? {})
+    res.status(202).json({
+      job_id: dispararEnriquecerEmpresa({ empresaId: empresa_id, incluirPagos: incluir_pagos }),
+      status: 'executando',
+    })
   } catch (erro) {
     next(erro)
   }

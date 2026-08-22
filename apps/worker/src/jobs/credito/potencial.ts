@@ -135,6 +135,7 @@ interface LinhaSacado {
   funcionarios_crescimento_12m: number | null
   score_faixa: string | null
   limite_potencial: number | null
+  receita_mensal_prevista: number | null
   valor_esperado_mensal: number | null
 }
 
@@ -148,7 +149,7 @@ async function paginarSacados(
   for (;;) {
     const { data, error } = await supabaseAdmin
       .from('empresas')
-      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, valor_esperado_mensal')
+      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal')
       .in('tipo', SACADOS)
       .order('id', { ascending: true })
       .range(de, de + tamanho - 1)
@@ -333,6 +334,26 @@ async function pontuarLote(linhas: LinhaSacado[], regua: Regua, acc: AccScores):
         scorecard_versao: versao,
       })
 
+      /*
+       * O VALOR ESPERADO SAI JUNTO, na mesma escrita.
+       *
+       * `valor_esperado_mensal` é `receita_mensal_prevista × chance_concessao`, e a chance
+       * acabou de mudar aqui. Antes esta função gravava a chance nova e deixava o valor
+       * esperado com a chance ANTIGA — a régua de ordenação da base ficava mentindo até o
+       * job mensal passar.
+       *
+       * O job mensal escondia o defeito: ele pontua e SÓ DEPOIS estima o potencial, então
+       * a ordem certa acontecia por acidente uma vez por mês. Em todo o resto — decisão de
+       * crédito, expiração de análise, enriquecimento de lead, análise proprietária — o
+       * score é repontuado sozinho e o valor esperado ficava para trás.
+       *
+       * Não é preciso refazer a cadeia inteira: a receita prevista NÃO depende do score.
+       * Só o último elo depende, e é só ele que se refaz.
+       */
+      const receita = e.receita_mensal_prevista
+      const valorEsperado =
+        receita === null || receita === undefined ? null : Number(receita) * chance
+
       await supabaseAdmin
         .from('empresas')
         .update({
@@ -340,6 +361,7 @@ async function pontuarLote(linhas: LinhaSacado[], regua: Regua, acc: AccScores):
           score_completude: r.completude,
           score_faixa: r.faixa,
           chance_concessao: chance,
+          valor_esperado_mensal: valorEsperado,
           score_calculado_em: new Date().toISOString(),
         })
         .eq('id', e.id)
@@ -406,7 +428,7 @@ export async function recalcularScoresDeCnpjs(cnpjs: readonly string[]): Promise
 
   const { data } = await supabaseAdmin
     .from('empresas')
-    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, valor_esperado_mensal')
+    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal')
     .in('cnpj', unicos)
     .in('tipo', SACADOS)
   if (!data?.length) return acc
@@ -439,6 +461,7 @@ export async function estimarPotencialJob(): Promise<{
     tac: cfg.tac,
     valor_medio_nf: cfg.valor_medio_nf,
     prazo_medio_dias: cfg.prazo_medio_dias,
+    utilizacao_media: cfg.utilizacao_media,
     giro_mensal: cfg.giro_mensal,
   }
   const limite: ParametrosLimite = {

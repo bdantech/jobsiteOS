@@ -48,12 +48,27 @@ const CAMPOS: Array<{ chave: string; titulo: string; descricao: string; campos: 
         descricao: 'Converte volume em número de operações, que é o que multiplica a TAC.',
         step: '0.01',
       },
-      { chave: 'economia', campo: 'prazo_medio_dias', label: 'Prazo médio (dias)' },
+      {
+        chave: 'economia',
+        campo: 'prazo_medio_dias',
+        label: 'Prazo médio (dias)',
+        descricao:
+          'Quantas vezes o limite gira no mês: 30 ÷ prazo. Com 45 dias, o limite gira 0,67 vez.',
+      },
+      {
+        chave: 'economia',
+        campo: 'utilizacao_media',
+        label: 'Utilização média do limite (0–1)',
+        descricao:
+          'Quanto do limite a empresa de fato usa. Em branco = usa o medido na carteira. É a premissa mais forte da conta, e por isso ela tem um campo em vez de ficar diluída no giro.',
+        step: '0.01',
+      },
       {
         chave: 'economia',
         campo: 'giro_mensal',
-        label: 'Giro mensal (override)',
-        descricao: 'Em branco = usa o giro calibrado na carteira real (volume ÷ limite).',
+        label: 'Giro mensal (legado)',
+        descricao:
+          'Só é lido quando a utilização acima está em branco e não há utilização calibrada — aí ela é derivada daqui (giro × prazo ÷ 30). Novas configurações devem usar o campo de utilização.',
         step: '0.001',
       },
     ],

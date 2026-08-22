@@ -15,6 +15,7 @@ const ECONOMIA: ParametrosEconomia = {
   tac: 150,
   valor_medio_nf: 25_000,
   prazo_medio_dias: 45,
+  utilizacao_media: null,
   giro_mensal: null,
 }
 
@@ -27,6 +28,7 @@ const LIMITE: ParametrosLimite = {
 const COEF: CoeficientesCredito = {
   ratio_limite: { global: 0.1, porTipo: {} },
   giro_mensal: 0.15,
+  utilizacao_media: null,
   n_clientes: 40,
   n_declarantes: 12,
 }
@@ -136,7 +138,8 @@ test('a cadeia inteira, com número conferível', () => {
   // limite = min(10M × 0,10 ; 5M ; 10M × 0,15) = 1.000.000
   assert.equal(r.limite_potencial, 1_000_000)
   assert.equal(r.cap_aplicado, 'ratio')
-  // volume = 1M × 0,15 = 150.000
+  // volume = 1M × (30/45 giros) × 0,225 de utilização = 150.000
+  // (o giro calibrado 0,15 vira utilização 0,15 × 45/30 = 0,225 — a mesma coisa)
   assert.equal(r.volume_mensal, 150_000)
   // financeira = 150.000 × 1,9% × (45/30) = 4.275
   assert.equal(r.receita_financeira, 4_275)
@@ -290,4 +293,77 @@ test('o giro manual da config vence o calibrado', () => {
     CHANCE,
   )
   assert.equal(r.volume_mensal, 300_000)
+})
+
+/*
+ * A troca de `giro` por `(30/prazo) × utilização` é uma REESCRITA, não uma mudança de
+ * resultado: as duas formas medem o mesmo fato. Estes testes existem para provar isso —
+ * uma reescrita que muda o número em silêncio é a pior espécie de refatoração.
+ */
+test('a utilização derivada do giro antigo reproduz o número antigo', () => {
+  const r = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: 0.15, utilizacao_media: null },
+    { ...ECONOMIA, utilizacao_media: null },
+    LIMITE,
+    CHANCE,
+  )
+  assert.equal(r.volume_mensal, 150_000)
+})
+
+test('utilização explícita na config vence a derivada do giro', () => {
+  const r = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: 0.15 },
+    { ...ECONOMIA, utilizacao_media: 1 },
+    LIMITE,
+    CHANCE,
+  )
+  // Uso de 100%: o limite gira 30/45 vezes e nada o freia.
+  assert.ok(Math.abs((r.volume_mensal as number) - 1_000_000 * (30 / 45)) < 1e-6)
+  // E aí a receita financeira é o limite inteiro rendendo a taxa do mês.
+  assert.ok(Math.abs((r.receita_financeira as number) - 1_000_000 * 0.019) < 1e-6)
+})
+
+test('a utilização calibrada vence a derivação, e perde para o override manual', () => {
+  const calibrada = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: 0.15, utilizacao_media: 0.5 },
+    { ...ECONOMIA, utilizacao_media: null },
+    LIMITE,
+    CHANCE,
+  )
+  assert.ok(Math.abs((calibrada.volume_mensal as number) - 1_000_000 * (30 / 45) * 0.5) < 1e-6)
+
+  const manual = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: 0.15, utilizacao_media: 0.5 },
+    { ...ECONOMIA, utilizacao_media: 0.2 },
+    LIMITE,
+    CHANCE,
+  )
+  assert.ok(Math.abs((manual.volume_mensal as number) - 1_000_000 * (30 / 45) * 0.2) < 1e-6)
+})
+
+test('prazo zero não vira giro infinito — a conta se recusa', () => {
+  const r = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: 0.15, utilizacao_media: null },
+    { ...ECONOMIA, prazo_medio_dias: 0, utilizacao_media: null },
+    LIMITE,
+    CHANCE,
+  )
+  assert.equal(r.limite_potencial, null)
+  assert.equal(r.motivo, 'sem_calibracao')
+})
+
+test('sem utilização e sem giro, a conta não fecha', () => {
+  const r = calcularPotencial(
+    { faturamento_estimado: 10_000_000, faturamento_confianca: 'media' },
+    { ...COEF, giro_mensal: null, utilizacao_media: null },
+    { ...ECONOMIA, utilizacao_media: null },
+    LIMITE,
+    CHANCE,
+  )
+  assert.equal(r.motivo, 'sem_calibracao')
 })

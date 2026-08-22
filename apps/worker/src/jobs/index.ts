@@ -71,6 +71,7 @@ import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 import { recalcularPerfil } from './perfil/recalcular.js'
 import { enriquecerLeads } from './leads/enriquecer.js'
+import { enriquecerEmpresa } from './radar/enriquecer-empresa.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -125,6 +126,7 @@ export type TipoJob =
   | 'credito-analises-drenar'
   | 'credito-reanalises'
   | 'leads-enriquecer'
+  | 'enriquecer-empresa'
   | 'perfil-recalcular'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
@@ -1004,6 +1006,22 @@ export function dispararSugerirReanalises(): string {
  */
 export function dispararEnriquecerLeads(): string {
   return dispararAvulso('leads-enriquecer', async () => enriquecerLeads())
+}
+
+/**
+ * A cadeia inteira sobre UMA empresa, do botão da ficha.
+ *
+ * Single-flight por tipo, como os outros jobs de empresa (protestos, contatos): dois
+ * cliques concorrentes sobre empresas diferentes serializam, e no volume de uma ficha
+ * aberta por vez isso é aceitável — enquanto reconsultar o Apollo em paralelo não é.
+ */
+export function dispararEnriquecerEmpresa(opts: {
+  empresaId: string
+  incluirPagos: boolean
+}): string {
+  return dispararAvulso('enriquecer-empresa', async () =>
+    enriquecerEmpresa({ empresaId: opts.empresaId, incluirPagos: opts.incluirPagos }),
+  )
 }
 
 // ─── Perfil de Quem Opera (Prompt 04f) ───────────────────────────────────────

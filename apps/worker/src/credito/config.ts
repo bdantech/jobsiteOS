@@ -14,6 +14,7 @@ export interface ConfigCredito {
   tac: number
   valor_medio_nf: number
   prazo_medio_dias: number
+  utilizacao_media: number | null
   giro_mensal: number | null
   // limite
   ratio_limite_manual: number | null
@@ -51,6 +52,7 @@ export async function lerConfigCredito(): Promise<ConfigCredito> {
       tac: 150,
       valor_medio_nf: 25_000,
       prazo_medio_dias: 45,
+      utilizacao_media: null as number | null,
       giro_mensal: null as number | null,
     }),
     ler('limite', {

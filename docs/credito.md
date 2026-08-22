@@ -530,3 +530,66 @@ seguradora. `analises_credito` ganhou `limite_operacional`, `decisao_interna` e
 que o fator "histórico de análises" e a view `analise_vigente` leem.
 
 Ver **[docs/analise-credito.md](analise-credito.md)**.
+
+## A receita prevista, e por que a fórmula mudou de forma (22/08/2026)
+
+A conta era `volume = limite × giro`, com o giro calibrado na carteira. O resultado estava
+certo, mas a forma escondia a premissa mais forte de todas: **a carteira usa cerca de 35%
+do que os limites permitiriam**. Esses 35% estavam dissolvidos dentro do giro, e o prazo
+médio — que APARECE na tela de Economia da operação — praticamente se anulava contra ele.
+
+Quem abria a tela via taxa, TAC, NF média e prazo, e não conseguia reconstruir o número.
+Uma fórmula que não se reconstrói a partir dos parâmetros visíveis é uma fórmula que
+ninguém confere.
+
+Agora:
+
+```
+volume mensal     = limite × (30 / prazo médio) × utilização média
+receita financeira = volume × taxa × (prazo / 30)     ( = limite × utilização × taxa )
+receita TAC        = (volume ÷ NF média) × TAC
+```
+
+O primeiro fator é quantas vezes o limite gira no mês; o segundo é quanto dele se usa. Os
+dois são visíveis, e **discordar de um deles virou uma conversa possível**.
+
+`utilizacao_media` em branco significa "usa o medido na carteira" — e, para configurações
+gravadas antes desta mudança, é derivada do giro antigo: `giro × prazo ÷ 30`. A conversão é
+exata, e há teste provando que o número não muda. Uma reescrita que altera o resultado em
+silêncio é a pior espécie de refatoração.
+
+## O valor esperado acompanha o score
+
+`valor_esperado_mensal = receita_mensal_prevista × chance_concessao`, e a chance vem da
+faixa do score. `pontuarLote` gravava a chance nova e deixava o valor esperado com a chance
+**antiga** — a régua de ordenação da base ficava mentindo até o job mensal passar.
+
+O job mensal escondia o defeito: ele pontua e só depois estima o potencial, então a ordem
+certa acontecia por acidente uma vez por mês. Em todo o resto — decisão de crédito,
+expiração de análise, enriquecimento de lead, análise proprietária — o score é repontuado
+sozinho e o valor esperado ficava para trás.
+
+Agora o último elo se refaz na mesma escrita. Não é preciso refazer a cadeia inteira: a
+receita prevista **não depende do score**.
+
+## Enriquecer tudo, num clique
+
+Na ficha havia um botão para domínio, outro para funcionários, o faturamento só saía na
+recalibração mensal e o scorecard era um terceiro botão. Quatro cliques numa ordem que é
+**dependência, não preferência**:
+
+```
+cadastral → domínio → funcionários → faturamento → score
+```
+
+O Apollo é consultado por domínio; os funcionários são o sinal principal do estimador; o
+score lê tudo que veio antes. Quem clicasse fora de ordem pagava uma consulta para receber
+`sem_dominio`. A tela cobrava da pessoa um conhecimento que é do código.
+
+`enriquecer-empresa.ts` roda a cadeia inteira e **pula** o que foi obtido há menos de 30
+dias — domínio e funcionários são pagos por CNPJ, e um botão que reconsulta tudo a cada
+clique é um botão que ninguém aperta duas vezes sem culpa. Cada etapa devolve o que fez ou
+por que não fez: um botão "enriquecer tudo" que termina em silêncio faz a pessoa clicar de
+novo, que é exatamente o comportamento caro que a janela existe para evitar.
+
+Os botões avulsos ficam. Quem quer só o domínio não deve ter de pagar o resto.

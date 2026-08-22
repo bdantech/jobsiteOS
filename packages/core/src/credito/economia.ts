@@ -25,12 +25,25 @@ export interface CoeficientesCredito {
   ratio_limite: { global: number | null; porTipo: Record<string, number> }
   /** Mediana de (gross_value_last_2m / 2) / credit_limit. Sai da carteira, não de chute. */
   giro_mensal: number | null
+  /**
+   * Quanto do limite a carteira usa, em média (0–1): o giro medido, dividido pelos giros
+   * que o prazo médio permitiria. É o mesmo fato do `giro_mensal`, expresso na unidade em
+   * que dá para discutir — "usam 35% do limite" é uma frase que alguém confirma ou nega;
+   * "o giro é 0,235" não é.
+   */
+  utilizacao_media: number | null
   n_clientes: number
   n_declarantes: number
 }
 
 export function coeficientesVazios(): CoeficientesCredito {
-  return { ratio_limite: { global: null, porTipo: {} }, giro_mensal: null, n_clientes: 0, n_declarantes: 0 }
+  return {
+    ratio_limite: { global: null, porTipo: {} },
+    giro_mensal: null,
+    utilizacao_media: null,
+    n_clientes: 0,
+    n_declarantes: 0,
+  }
 }
 
 /**
@@ -89,6 +102,10 @@ export function calibrarCredito(
   return {
     ratio_limite: { global: ratioGlobal, porTipo },
     giro_mensal: giro,
+    // O prazo é parâmetro de configuração e a calibração não o recebe; a conversão fica
+    // para `utilizacaoEfetiva`, que tem os dois na mão. Gravar aqui uma utilização
+    // derivada de um prazo suposto seria congelar a suposição dentro do dado medido.
+    utilizacao_media: null,
     n_clientes: comLimite.length,
     n_declarantes: declarantes.length,
   }
@@ -101,7 +118,31 @@ export interface ParametrosEconomia {
   tac: number
   valor_medio_nf: number
   prazo_medio_dias: number
-  /** Override manual; null = usar o calibrado. */
+  /**
+   * Quanto do limite a empresa efetivamente usa, em média (0–1).
+   *
+   * ─── POR QUE ESTE NÚMERO GANHOU NOME ───────────────────────────────────────
+   * A conta era `volume = limite × giro`, com o giro calibrado na carteira. Funcionava,
+   * mas escondia a premissa mais forte de todas: a carteira usa cerca de 35% do que os
+   * limites permitiriam. Esse 35% estava dissolvido dentro do giro, e o prazo médio —
+   * que APARECE na tela de Economia da operação — praticamente se anulava contra ele.
+   *
+   * Quem abria a tela via taxa, TAC, NF média e prazo, e não conseguia reconstruir o
+   * número. Uma fórmula que não se reconstrói a partir dos parâmetros visíveis é uma
+   * fórmula que ninguém confere — e foi exatamente essa a suspeita levantada.
+   *
+   * Agora: `volume = limite × (30 / prazo) × utilização`. O primeiro fator é quantas
+   * vezes o limite gira no mês; o segundo é o quanto dele se usa. Os dois são visíveis, e
+   * discordar de um deles é uma conversa possível.
+   *
+   * `null` = usar o calibrado na carteira. Override manual continua valendo.
+   */
+  utilizacao_media: number | null
+  /**
+   * @deprecated Sobrevive só para ler configurações gravadas antes da mudança acima.
+   * Quando `utilizacao_media` é null e este tem valor, a utilização é derivada dele:
+   * `giro × prazo / 30` — que é a mesma conta, do avesso.
+   */
   giro_mensal: number | null
 }
 
@@ -192,11 +233,13 @@ export function calcularPotencial(
   const tipo = sinais.tipo ?? 'desconhecido'
   const ratio =
     limite.ratio_limite_manual ?? coef.ratio_limite.porTipo[tipo] ?? coef.ratio_limite.global
-  const giro = economia.giro_mensal ?? coef.giro_mensal
+  const utilizacao = utilizacaoEfetiva(economia, coef)
 
-  // Sem ratio OU sem giro a cadeia não fecha. Devolver zero seria pior que devolver
+  // Sem ratio OU sem utilização a cadeia não fecha. Devolver zero seria pior que devolver
   // nada: zero ordena a base como "não vale nada", e o que se sabe é que não se sabe.
-  if (ratio === null || ratio === undefined || giro === null) return semPotencial('sem_calibracao')
+  if (ratio === null || ratio === undefined || utilizacao === null) {
+    return semPotencial('sem_calibracao')
+  }
 
   const porRatio = faturamento * ratio
   const porPct = faturamento * limite.cap_pct_faturamento
@@ -212,7 +255,15 @@ export function calcularPotencial(
     sinais.taxa_mensal_am > 0
   const taxa = taxaReal ? (sinais.taxa_mensal_am as number) : economia.taxa_padrao_am
 
-  const volumeMensal = limitePotencial * giro
+  // Quantas vezes o limite gira no mês, pelo prazo médio da operação. Prazo zero ou
+  // negativo é configuração inválida, não "gira infinito".
+  const girosNoMes = economia.prazo_medio_dias > 0 ? 30 / economia.prazo_medio_dias : 0
+  const volumeMensal = limitePotencial * girosNoMes * utilizacao
+
+  // A receita financeira é sobre o volume, pelo prazo em que cada operação fica de pé.
+  // Com `girosNoMes = 30/prazo`, isto se reduz a `limite × utilização × taxa` — o dinheiro
+  // parado no limite rendendo a taxa do mês. A forma longa fica porque é a que se lê ao
+  // lado da tela de parâmetros.
   const receitaFinanceira = volumeMensal * (taxa / 100) * (economia.prazo_medio_dias / 30)
   const receitaTac =
     economia.valor_medio_nf > 0 ? (volumeMensal / economia.valor_medio_nf) * economia.tac : 0
@@ -232,6 +283,27 @@ export function calcularPotencial(
     cap_aplicado,
     motivo: null,
   }
+}
+
+/**
+ * A utilização que vale: override manual > calibrada > derivada do giro antigo.
+ *
+ * O terceiro degrau existe para não invalidar calibrações já gravadas: `giro` e
+ * `utilização` medem a mesma coisa em unidades diferentes, e a conversão é exata.
+ */
+export function utilizacaoEfetiva(
+  economia: ParametrosEconomia,
+  coef: CoeficientesCredito,
+): number | null {
+  if (economia.utilizacao_media !== null && economia.utilizacao_media !== undefined) {
+    return economia.utilizacao_media
+  }
+  if (coef.utilizacao_media !== null && coef.utilizacao_media !== undefined) {
+    return coef.utilizacao_media
+  }
+  const giro = economia.giro_mensal ?? coef.giro_mensal
+  if (giro === null || giro === undefined || !(economia.prazo_medio_dias > 0)) return null
+  return (giro * economia.prazo_medio_dias) / 30
 }
 
 export const MOTIVO_SEM_POTENCIAL_LABELS: Record<MotivoSemPotencial, string> = {

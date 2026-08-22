@@ -20,6 +20,7 @@ import {
   dispararBackfillFuncionarios,
   dispararContatosEmpresa,
   dispararDominioEmpresa,
+  dispararEnriquecerEmpresa,
   dispararEstimadorMensal,
   dispararFuncionariosEmpresa,
   dispararFuncionariosLote,
@@ -212,6 +213,27 @@ export async function atualizarFuncionariosAction(
   const { erro } = await autorizar()
   if (erro) return erro
   const r = await dispararFuncionariosEmpresa(empresaId)
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * A cadeia inteira de uma empresa, num clique: domínio → funcionários → faturamento →
+ * score.
+ *
+ * Os botões individuais continuam existindo — quem quer só o domínio não deve precisar
+ * pagar o resto. Este é o caminho de quem acabou de abrir uma ficha crua e quer que ela
+ * fique completa, sem ter de saber que funcionários precisa vir antes do faturamento.
+ *
+ * A ordem e a janela de 30 dias moram no worker (`enriquecer-empresa.ts`), não aqui: são
+ * regra de domínio, e a action é só a camada que autoriza.
+ */
+export async function enriquecerEmpresaAction(
+  empresaId: string,
+  incluirPagos = true,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  const r = await dispararEnriquecerEmpresa(empresaId, incluirPagos)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

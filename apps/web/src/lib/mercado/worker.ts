@@ -618,6 +618,23 @@ export async function dispararEnriquecerLeads(): Promise<DispararJobResultado> {
   return postar('/jobs/leads/enriquecer', {}, 'leads-enriquecer')
 }
 
+/**
+ * A cadeia inteira sobre UMA empresa: domínio → funcionários → faturamento → score.
+ *
+ * Substitui quatro botões que exigiam da pessoa saber a ordem em que eles dependem uns
+ * dos outros. Dado obtido há menos de 30 dias é reaproveitado, não reconsultado.
+ */
+export async function dispararEnriquecerEmpresa(
+  empresaId: string,
+  incluirPagos: boolean,
+): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/radar/enriquecer-empresa',
+    { empresa_id: empresaId, incluir_pagos: incluirPagos },
+    'enriquecer-empresa',
+  )
+}
+
 /** Diário: SUGERE reanálise do que vence em 60 dias. Nunca executa em lote. */
 export async function dispararSugerirReanalises(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/sugerir-reanalises', {}, 'credito-reanalises')
