@@ -29,6 +29,7 @@ import {
   type EstagioAnalise,
   type FaixaScore,
   type Knockout,
+  type OpcoesProtesto,
   type Quadrante,
   type StatusAnalisePropria,
 } from '@jobsiteos/core'
@@ -49,6 +50,7 @@ import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import { enviarAnalisesAction, moverAnaliseAction } from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
+import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
 import { DetalheCarregandoFicha } from './analise-propria/carregando'
@@ -105,6 +107,11 @@ function Acoes({
   estagio,
   statusPropria,
   jaTemPropria,
+  empresaId,
+  temGrupo,
+  protestoConsultadoEm,
+  recenciaDias,
+  anosAtrasPadrao,
   onMudou,
 }: {
   analiseId: string
@@ -112,10 +119,16 @@ function Acoes({
   estagio: EstagioAnalise
   statusPropria: StatusAnalisePropria | null
   jaTemPropria: boolean
+  empresaId: string | null
+  temGrupo: boolean
+  protestoConsultadoEm: string | null
+  recenciaDias: number
+  anosAtrasPadrao: number
   onMudou: () => void
 }) {
   const [movendo, setMovendo] = React.useState(false)
   const [rodando, setRodando] = React.useState(false)
+  const [confirmandoRodar, setConfirmandoRodar] = React.useState(false)
   const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false)
   const [enviando, setEnviando] = React.useState(false)
 
@@ -156,14 +169,16 @@ function Acoes({
     onMudou()
   }
 
-  async function rodar() {
+  async function rodar(protestos: OpcoesProtesto) {
     setRodando(true)
     const r = await rodarAnalisePropriaAction({
       analise_credito_id: analiseId,
       tipo: jaTemPropria ? 'reanalise' : 'inicial',
       gatilho: 'manual',
+      protestos,
     })
     setRodando(false)
+    setConfirmandoRodar(false)
     if (!r.ok) {
       toast.error(r.message)
       return
@@ -185,7 +200,12 @@ function Acoes({
         </Button>
       )}
       {podeRodar && (
-        <Button size="sm" variant={podeEnviar ? 'outline' : 'default'} onClick={() => void rodar()} disabled={rodando}>
+        <Button
+          size="sm"
+          variant={podeEnviar ? 'outline' : 'default'}
+          onClick={() => setConfirmandoRodar(true)}
+          disabled={rodando}
+        >
           {jaTemPropria ? (
             <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
           ) : (
@@ -208,6 +228,19 @@ function Acoes({
           </SelectContent>
         </Select>
       )}
+
+      <DialogoRodarAnalise
+        aberto={confirmandoRodar}
+        onOpenChange={setConfirmandoRodar}
+        empresaId={empresaId}
+        temGrupo={temGrupo}
+        protestoConsultadoEm={protestoConsultadoEm}
+        recenciaDias={recenciaDias}
+        anosAtrasPadrao={anosAtrasPadrao}
+        jaTemPropria={jaTemPropria}
+        rodando={rodando}
+        onConfirmar={(protestos) => void rodar(protestos)}
+      />
 
       {/*
        * Diálogo, e não clique direto: `resolverBuyer` pode ser cobrado, uma vez por CNPJ
@@ -337,6 +370,11 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             estagio={estagio}
             statusPropria={status}
             jaTemPropria={propria !== null}
+            empresaId={empresa?.id ?? null}
+            temGrupo={(data.metricas?.grupo_spes_total ?? 0) > 0}
+            protestoConsultadoEm={data.protestos?.consultado_em ?? null}
+            recenciaDias={data.parametros_ativos?.protestos?.recencia_dias ?? 90}
+            anosAtrasPadrao={data.parametros_ativos?.protestos?.spes_anos_atras_padrao ?? 5}
             onMudou={invalidar}
           />
         }

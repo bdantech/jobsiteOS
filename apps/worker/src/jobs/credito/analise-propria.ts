@@ -18,7 +18,9 @@ import {
   calcularAnalise,
   classificarQuadrante,
   criticosPendentes,
+  protestoVencido,
   type ContextoAnalise,
+  type OpcoesProtesto,
   type DadosExtraidos,
   type ParametrosAnalise,
 } from '../../../../../packages/core/src/credito/analise.js'
@@ -29,6 +31,8 @@ import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
 import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { protestosEmpresa } from '../radar/protestos.js'
+import { recalcularScoresDeCnpjs } from './potencial.js'
 
 /**
  * Análise de crédito proprietária (04j): as três etapas, no worker.
@@ -71,6 +75,7 @@ interface LinhaAnalise {
   dados_extraidos: DadosExtraidos | null
   parametros_versao: number
   criada_por: string | null
+  protestos_opcoes: OpcoesProtesto | null
 }
 
 interface DocParaLer {
@@ -405,6 +410,122 @@ async function gerarParecer(
 
 // ─── As etapas, encadeadas ──────────────────────────────────────────────────
 
+/**
+ * Etapa 0: os protestos, antes de qualquer leitura de documento.
+ *
+ * ─── POR QUE ANTES, E NÃO DEPOIS ────────────────────────────────────────────
+ * Protesto não entra na análise por uma porta direta — ele é fator do scorecard (04d), o
+ * scorecard vira faixa, e a faixa É o teto 5. Consultar depois do cálculo não mudaria
+ * nada: o teto já teria saído com o fator inavaliável, que derruba a completude e pode
+ * empurrar o score inteiro para `dados_insuficientes`. O limite sairia menor por falta de
+ * um dado que ninguém foi buscar.
+ *
+ * Por isso a consulta roda aqui E o score é recalculado logo em seguida, na mesma corrida.
+ * Consultar sem recalcular seria pagar pela informação e não usá-la — o score só se
+ * atualizaria sozinho no job mensal.
+ *
+ * ─── FALHA AQUI NÃO DERRUBA A ANÁLISE ───────────────────────────────────────
+ * Protesto é enriquecimento. Se a DirectD estiver fora do ar ou sem chave, o que se perde
+ * é um fator do scorecard; perder junto a extração inteira seria trocar um problema por
+ * dois. O erro fica gravado em `protestos_resultado` e a análise segue.
+ */
+async function etapaProtestos(linha: LinhaAnalise, p: ParametrosAnalise): Promise<void> {
+  const opcoes: OpcoesProtesto = linha.protestos_opcoes ?? {
+    incluir_spes: false,
+    ano_min: null,
+    somente_afiancadas: false,
+  }
+  const recencia = p.protestos?.recencia_dias ?? 90
+
+  const { data: atual } = await supabaseAdmin
+    .from('protestos_atual')
+    .select('consultado_em')
+    .eq('cnpj', linha.cnpj)
+    .maybeSingle()
+
+  const matrizVencida = protestoVencido(atual?.consultado_em, recencia, new Date())
+
+  // Nada a fazer: a matriz esta fresca e ninguem pediu SPEs. Nao e um caso de erro — e o
+  // caso comum de quem roda a analise duas vezes na mesma semana.
+  if (!matrizVencida && !opcoes.incluir_spes) {
+    await supabaseAdmin
+      .from('analises_proprietarias')
+      .update({
+        etapa: 'extracao',
+        protestos_resultado: {
+          consultados: 0,
+          custo: 0,
+          pulou_matriz_por_recencia: true,
+          consultado_em: atual?.consultado_em ?? null,
+          recencia_dias: recencia,
+        } as never,
+      } as never)
+      .eq('id', linha.id)
+    logger.info({ analise: linha.id, cnpj: linha.cnpj }, 'Protesto recente reaproveitado.')
+    return
+  }
+
+  if (!linha.empresa_id) {
+    await supabaseAdmin
+      .from('analises_proprietarias')
+      .update({
+        etapa: 'extracao',
+        protestos_resultado: {
+          consultados: 0,
+          custo: 0,
+          erro: 'A analise nao esta ligada a uma empresa cadastrada; a consulta parte de empresas.id.',
+        } as never,
+      } as never)
+      .eq('id', linha.id)
+    return
+  }
+
+  try {
+    const r = await protestosEmpresa({
+      empresaId: linha.empresa_id,
+      incluirSpes: opcoes.incluir_spes,
+      anoMin: opcoes.ano_min,
+      somenteAfiancadas: opcoes.somente_afiancadas,
+    })
+
+    // O recalculo e a metade que da sentido a consulta. Sem ele o score continuaria o de
+    // antes, e o teto 5 sairia da analise como se o protesto nunca tivesse sido visto.
+    await recalcularScoresDeCnpjs([linha.cnpj])
+
+    await supabaseAdmin
+      .from('analises_proprietarias')
+      .update({
+        etapa: 'extracao',
+        protestos_resultado: {
+          consultados: r.processados,
+          itens: r.itens,
+          custo: r.custo,
+          lote_id: r.lote_id,
+          incluiu_spes: opcoes.incluir_spes,
+          ano_min: opcoes.ano_min,
+          somente_afiancadas: opcoes.somente_afiancadas,
+          score_recalculado: true,
+        } as never,
+      } as never)
+      .eq('id', linha.id)
+
+    logger.info(
+      { analise: linha.id, cnpj: linha.cnpj, consultados: r.processados, custo: r.custo },
+      'Protestos consultados antes da analise.',
+    )
+  } catch (e) {
+    const texto = e instanceof Error ? e.message : String(e)
+    logger.error({ analise: linha.id, erro: texto }, 'Consulta de protesto falhou; a analise segue.')
+    await supabaseAdmin
+      .from('analises_proprietarias')
+      .update({
+        etapa: 'extracao',
+        protestos_resultado: { consultados: 0, custo: 0, erro: texto } as never,
+      } as never)
+      .eq('id', linha.id)
+  }
+}
+
 async function etapaExtracao(linha: LinhaAnalise): Promise<void> {
   if (!linha.analise_credito_id) {
     throw new Error('Análise sem vínculo com a esteira: não há documentos para ler.')
@@ -681,7 +802,7 @@ async function etapaCalculoEParecer(linha: LinhaAnalise): Promise<void> {
 // ─── Os jobs ────────────────────────────────────────────────────────────────
 
 const COLUNAS =
-  'id, analise_credito_id, empresa_id, cnpj, tipo, status, etapa, dados_extraidos, parametros_versao, criada_por'
+  'id, analise_credito_id, empresa_id, cnpj, tipo, status, etapa, dados_extraidos, parametros_versao, criada_por, protestos_opcoes'
 
 /** Uma análise, do ponto em que ela parou até onde der. */
 export async function processarAnalisePropria(id: string): Promise<{ id: string; status: string }> {
@@ -696,24 +817,36 @@ export async function processarAnalisePropria(id: string): Promise<{ id: string;
   const linha = data as unknown as LinhaAnalise
   if (linha.status !== 'processando') return { id, status: linha.status }
 
+  const reler = async (): Promise<LinhaAnalise | null> => {
+    const { data: depois } = await supabaseAdmin
+      .from('analises_proprietarias')
+      .select(COLUNAS)
+      .eq('id', id)
+      .maybeSingle()
+    return (depois as unknown as LinhaAnalise | null) ?? null
+  }
+
   try {
-    if (linha.etapa === 'extracao') {
-      await etapaExtracao(linha)
-      // Relê: a extração pode ter parado em `aguardando_revisao` ou seguido direto.
-      const { data: depois } = await supabaseAdmin
-        .from('analises_proprietarias')
-        .select(COLUNAS)
-        .eq('id', id)
-        .maybeSingle()
-      const atual = depois as unknown as LinhaAnalise | null
+    let atual: LinhaAnalise | null = linha
+
+    // Protestos → extração → (revisão humana) → cálculo → parecer. Cada etapa relê a
+    // linha antes de passar adiante: ela grava a própria conclusão no banco, e seguir com
+    // a cópia em memória faria a etapa seguinte trabalhar sobre um estado que já mudou.
+    if (atual.etapa === 'protestos') {
+      await etapaProtestos(atual, await parametros(atual.parametros_versao))
+      atual = await reler()
+      if (!atual || atual.status !== 'processando') return { id, status: atual?.status ?? 'falhou' }
+    }
+
+    if (atual.etapa === 'extracao') {
+      await etapaExtracao(atual)
+      atual = await reler()
       if (!atual || atual.status !== 'processando') {
         return { id, status: atual?.status ?? 'aguardando_revisao' }
       }
-      await etapaCalculoEParecer(atual)
-      return { id, status: 'concluida' }
     }
 
-    await etapaCalculoEParecer(linha)
+    await etapaCalculoEParecer(atual)
     return { id, status: 'concluida' }
   } catch (e) {
     await marcarFalha(id, linha.etapa ?? 'desconhecida', e)

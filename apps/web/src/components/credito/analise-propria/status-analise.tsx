@@ -113,7 +113,7 @@ function leituraDaEsteira(estagio: EstagioAnalise): { tom: Tom; frase: string } 
 
 // ─── A trilha da análise proprietária ───────────────────────────────────────
 
-const PASSOS_PROPRIA = ['Extração', 'Revisão', 'Cálculo', 'Parecer', 'Decisão'] as const
+const PASSOS_PROPRIA = ['Protestos', 'Extração', 'Revisão', 'Cálculo', 'Parecer', 'Decisão'] as const
 
 interface EstadoPropria {
   tom: Tom
@@ -141,24 +141,37 @@ function leituraDaPropria(
       trabalhando: false,
     }
   }
+  // A etapa gravada é o passo em que a corrida ESTÁ; o índice segue a ordem de
+  // PASSOS_PROPRIA. Um mapa explícito, e não aritmética sobre a lista: acrescentar um
+  // passo no meio — foi o que aconteceu com "Protestos" — não pode deslocar os outros em
+  // silêncio.
+  const PASSO_DA_ETAPA: Record<string, number> = { protestos: 0, extracao: 1, revisao: 2, calculo: 3 }
+
   if (status === 'falhou') {
     return {
       tom: 'ruim',
       rotulo: 'Falhou',
       frase: erro ?? 'A análise parou com erro.',
-      passo: etapa === 'calculo' ? 2 : 0,
+      passo: PASSO_DA_ETAPA[etapa ?? ''] ?? 1,
       trabalhando: false,
     }
   }
   if (status === 'processando') {
     const noCalculo = etapa === 'calculo'
+    const nosProtestos = etapa === 'protestos'
     return {
       tom: 'andamento',
-      rotulo: noCalculo ? 'Calculando e escrevendo o parecer' : 'Lendo os documentos',
-      frase: noCalculo
-        ? 'Os números já foram conferidos. O cálculo é determinístico e o parecer vem logo depois.'
-        : 'A extração roda no worker e leva alguns minutos. A tela se atualiza sozinha.',
-      passo: noCalculo ? 2 : 0,
+      rotulo: nosProtestos
+        ? 'Consultando protestos'
+        : noCalculo
+          ? 'Calculando e escrevendo o parecer'
+          : 'Lendo os documentos',
+      frase: nosProtestos
+        ? 'A consulta roda antes da leitura dos documentos, e o score é recalculado em seguida — é por ele que o protesto chega ao limite.'
+        : noCalculo
+          ? 'Os números já foram conferidos. O cálculo é determinístico e o parecer vem logo depois.'
+          : 'A extração roda no worker e leva alguns minutos. A tela se atualiza sozinha.',
+      passo: PASSO_DA_ETAPA[etapa ?? ''] ?? 1,
       trabalhando: true,
     }
   }
@@ -167,7 +180,7 @@ function leituraDaPropria(
       tom: 'atencao',
       rotulo: 'Aguardando sua revisão',
       frase: 'Nada foi calculado ainda: os campos críticos precisam ser confirmados contra o trecho de origem.',
-      passo: 1,
+      passo: 2,
       trabalhando: false,
     }
   }
@@ -177,7 +190,7 @@ function leituraDaPropria(
       tom: recomendacao === 'operar' ? 'bom' : 'ruim',
       rotulo: 'Decisão registrada',
       frase: 'A análise está fechada e o limite operacional foi aplicado na esteira.',
-      passo: 4,
+      passo: 5,
       trabalhando: false,
     }
   }
@@ -185,7 +198,7 @@ function leituraDaPropria(
     tom: recomendacao === 'operar' ? 'bom' : 'ruim',
     rotulo: recomendacao === 'operar' ? 'Concluída — OPERAR' : 'Concluída — NÃO OPERAR',
     frase: 'O cálculo está pronto e o parecer, escrito. Falta a decisão humana.',
-    passo: 3,
+    passo: 4,
     trabalhando: false,
   }
 }
@@ -363,7 +376,7 @@ export function StatusAnalise({
                   passos={PASSOS_PROPRIA}
                   atual={propria.passo}
                   tom={propria.tom}
-                  concluido={propria.passo === 4}
+                  concluido={propria.passo === 5}
                 />
               </div>
             )}

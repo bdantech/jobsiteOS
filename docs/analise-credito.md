@@ -152,6 +152,46 @@ condicionante é só um número maior.
 dívida líquida/EBITDA acima do teto, liquidez abaixo do mínimo, menor teto abaixo do
 mínimo operacional, ou **nenhum teto calculável** (que é motivo explícito, não silêncio).
 
+
+### Protesto vem antes, e o score é recalculado no meio
+
+Protesto entra na análise por uma porta indireta e fácil de esquecer: ele é **fator do
+scorecard** (04d), o scorecard vira faixa, e a faixa **é o teto 5**. Uma análise rodada
+sobre um CNPJ nunca consultado não sai "sem protesto" — sai com o fator inavaliável, o que
+derruba a completude e pode empurrar o score para `dados_insuficientes`, apagando o teto
+inteiro. O limite saía menor por falta de um dado que ninguém foi buscar, e a falta não
+aparecia como causa em lugar nenhum.
+
+Por isso a análise ganhou uma **etapa 0**:
+
+```
+protestos → RECALCULA O SCORE → extração → revisão → cálculo → parecer
+```
+
+O recálculo é a metade que dá sentido à consulta: sem ele, pagaríamos pela informação e o
+teto 5 sairia como se o protesto nunca tivesse sido visto — o score só se atualizaria
+sozinho no job mensal.
+
+**A matriz é automática; as SPEs são perguntadas.** Consulta é paga e por CNPJ. A matriz é
+uma só e sempre importa, então entra sozinha — perguntar "quer consultar a matriz?" seria
+pedir para alguém decidir algo que tem resposta certa. As SPEs de um grupo podem ser
+dezenas, e quais importam é julgamento: o diálogo usa o mesmo corte por ano de criação (ou
+"somente as afiançadas") que a ficha da empresa já oferece, porque a mesma pergunta merece
+a mesma forma.
+
+**A janela de recência evita repagar.** `protestos.recencia_dias` (v2 dos parâmetros, 90
+dias): dentro dela a consulta anterior é reaproveitada e o diálogo diz isso, com a data.
+Fora dela, reconsulta. `null` em `consultado_em` significa **nunca consultado**, que é
+diferente de "consultado e limpo" — e é o caso em que consultar mais importa.
+
+**Falha aqui não derruba a análise.** Protesto é enriquecimento; se a DirectD estiver fora
+do ar, o que se perde é um fator do scorecard. Perder junto a extração inteira seria trocar
+um problema por dois. O erro fica em `protestos_resultado` e a análise segue.
+
+`protestos_opcoes` (o que foi pedido) e `protestos_resultado` (o que aconteceu, com custo e
+lote) são colunas separadas de propósito: "pedi SPEs desde 2020" e "consultei 7 CNPJs por
+R$ 21,00" são perguntas diferentes, e a segunda é a que vira linha na fatura.
+
 ---
 
 ## Parâmetros versionados
@@ -279,8 +319,9 @@ registro que já foi gravado — e deixaria alguém olhando um spinner que nunca
 
 ## Onde tudo mora
 
-- **Migração**: `0122_analise_de_credito_propria.sql`, aplicada em quatro partes
-  (`0122a_analise_propria_tabelas` … `0122d_analise_propria_painel`).
+- **Migrações**: `0122_analise_de_credito_propria.sql`, aplicada em quatro partes
+  (`0122a_analise_propria_tabelas` … `0122d_analise_propria_painel`), e
+  `0123_protestos_antes_da_analise.sql` (etapa 0, colunas de protesto, parâmetros v2).
 - **Core** (`packages/core/src/credito/analise.ts`): indicadores, tetos, cenários,
   knockouts, quadrantes, vocabulário da extração. **37 testes** — cada fórmula, teto não
   aplicável fora do mínimo, cada knockout, os cenários, o motivo obrigatório.

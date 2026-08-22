@@ -14,6 +14,7 @@ import {
   derivarEbitda,
   menorTeto,
   motivoObrigatorio,
+  protestoVencido,
   type ContextoAnalise,
   type DadosExtraidos,
   type ExercicioContabil,
@@ -146,6 +147,34 @@ describe('indicadores', () => {
     assert.equal(classificar(0.7, PARAMETROS_PADRAO.indicadores.endividamento_geral), 'amarelo')
     assert.equal(classificar(0.9, PARAMETROS_PADRAO.indicadores.endividamento_geral), 'vermelho')
     assert.equal(classificar(null, PARAMETROS_PADRAO.indicadores.roe), null)
+  })
+})
+
+describe('recência do protesto', () => {
+  const agora = new Date('2026-08-22T12:00:00Z')
+  const dias = (n: number) => new Date(agora.getTime() - n * 86_400_000).toISOString()
+
+  it('nunca consultado exige consulta — e não é "sem protesto"', () => {
+    assert.equal(protestoVencido(null, 90, agora), true)
+    assert.equal(protestoVencido(undefined, 90, agora), true)
+  })
+
+  it('consulta recente é reaproveitada, e não repaga', () => {
+    assert.equal(protestoVencido(dias(1), 90, agora), false)
+    assert.equal(protestoVencido(dias(89), 90, agora), false)
+  })
+
+  it('na borda exata da janela, reconsulta', () => {
+    assert.equal(protestoVencido(dias(90), 90, agora), true)
+    assert.equal(protestoVencido(dias(400), 90, agora), true)
+  })
+
+  it('data corrompida não vira consulta válida por acidente', () => {
+    assert.equal(protestoVencido('não é data', 90, agora), true)
+  })
+
+  it('janela zero força consulta sempre', () => {
+    assert.equal(protestoVencido(dias(0), 0, agora), true)
   })
 })
 

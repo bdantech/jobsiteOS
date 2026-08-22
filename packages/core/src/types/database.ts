@@ -1036,6 +1036,8 @@ export type Database = {
           parecer_markdown: string | null
           parecer_modelo: string | null
           parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
           quadrante: string | null
           recomendacao: string | null
           status: string
@@ -1075,6 +1077,8 @@ export type Database = {
           parecer_markdown?: string | null
           parecer_modelo?: string | null
           parecer_tokens?: number | null
+          protestos_opcoes?: Json | null
+          protestos_resultado?: Json | null
           quadrante?: string | null
           recomendacao?: string | null
           status?: string
@@ -1114,6 +1118,8 @@ export type Database = {
           parecer_markdown?: string | null
           parecer_modelo?: string | null
           parecer_tokens?: number | null
+          protestos_opcoes?: Json | null
+          protestos_resultado?: Json | null
           quadrante?: string | null
           recomendacao?: string | null
           status?: string

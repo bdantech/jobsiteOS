@@ -180,6 +180,18 @@ export const rodarAnalisePropriaSchema = z.object({
     .describe('A análise da esteira. É nela que os documentos contábeis estão pendurados.'),
   tipo: z.enum(['inicial', 'reanalise']).default('inicial'),
   gatilho: z.enum(['manual', 'automatico_envio_atradius']).default('manual'),
+  /**
+   * O que consultar de protesto ANTES de analisar. A matriz entra sozinha (sujeita à
+   * janela de recência); as SPEs são escolha humana, porque consulta é paga por CNPJ e um
+   * grupo pode ter dezenas delas.
+   */
+  protestos: z
+    .object({
+      incluir_spes: z.boolean().default(false),
+      ano_min: z.coerce.number().int().min(1900).max(2200).nullable().default(null),
+      somente_afiancadas: z.boolean().default(false),
+    })
+    .default({ incluir_spes: false, ano_min: null, somente_afiancadas: false }),
 })
 export type RodarAnalisePropriaInput = z.infer<typeof rodarAnalisePropriaSchema>
 

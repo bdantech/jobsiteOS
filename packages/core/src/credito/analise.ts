@@ -183,6 +183,20 @@ export interface ParametrosAnalise {
     divida_liquida_ebitda_acima_de: number | null
     liquidez_corrente_abaixo_de: number | null
   }
+  protestos: {
+    /**
+     * Quantos dias uma consulta de protesto continua valendo.
+     *
+     * Consulta de protesto é PAGA e por CNPJ. Reconsultar uma matriz vista ontem é
+     * dinheiro no lixo; usar uma consulta de dois anos atrás é decidir crédito com
+     * informação velha. A janela é o único jeito de a automação não cair num dos dois.
+     */
+    recencia_dias: number
+    /** As SPEs entram por escolha humana a cada análise — isto é só o padrão do diálogo. */
+    incluir_spes_padrao: boolean
+    /** Corte por ano de criação, contado para trás a partir de hoje. */
+    spes_anos_atras_padrao: number
+  }
   /** O prompt do parecer é parâmetro, não constante de código: ele muda com a leitura. */
   parecer: { instrucoes_extras: string }
 }
@@ -232,7 +246,54 @@ export const PARAMETROS_PADRAO: ParametrosAnalise = {
     divida_liquida_ebitda_acima_de: 5,
     liquidez_corrente_abaixo_de: 0.6,
   },
+  protestos: { recencia_dias: 90, incluir_spes_padrao: false, spes_anos_atras_padrao: 5 },
   parecer: { instrucoes_extras: '' },
+}
+
+// ─── Protestos, antes da análise ────────────────────────────────────────────
+
+/**
+ * A consulta de protesto ainda vale?
+ *
+ * Protesto entra na análise por uma via indireta e fácil de esquecer: ele é fator do
+ * scorecard (04d), o scorecard vira faixa, e a faixa é o TETO 5. Uma análise rodada sobre
+ * um CNPJ que nunca teve protesto consultado não sai "sem protesto" — sai com o fator
+ * inavaliável, o que derruba a completude e pode empurrar o score para
+ * `dados_insuficientes`, que apaga o teto inteiro.
+ *
+ * Por isso a consulta passou a ser automática antes de analisar. E por isso ela precisa
+ * desta função: automática sem janela de validade seria reconsultar (e repagar) a mesma
+ * matriz toda vez que alguém apertasse o botão.
+ *
+ * `null` em `consultadoEm` significa NUNCA consultado — que é diferente de "consultado e
+ * sem protesto", e é o caso em que consultar mais importa.
+ */
+export function protestoVencido(
+  consultadoEm: string | null | undefined,
+  recenciaDias: number,
+  agora: Date,
+): boolean {
+  if (!consultadoEm) return true
+  const quando = new Date(consultadoEm)
+  if (Number.isNaN(quando.getTime())) return true
+  const dias = (agora.getTime() - quando.getTime()) / 86_400_000
+  return dias >= recenciaDias
+}
+
+/** O que a tela pediu para consultar junto da análise. */
+export interface OpcoesProtesto {
+  /** SPEs do grupo entram? A matriz entra sempre (sujeita à recência). */
+  incluir_spes: boolean
+  /** Só SPEs criadas neste ano ou depois. `null` quando o modo é "afiançadas". */
+  ano_min: number | null
+  /** Em vez do corte por ano, as SPEs marcadas no monitoramento mensal. */
+  somente_afiancadas: boolean
+}
+
+export const OPCOES_PROTESTO_PADRAO: OpcoesProtesto = {
+  incluir_spes: false,
+  ano_min: null,
+  somente_afiancadas: false,
 }
 
 // ─── A entrada do cálculo ───────────────────────────────────────────────────
