@@ -267,7 +267,19 @@ export async function estimarFaturamentoJob(
   // nada e ainda aparece na ficha competindo com ela.
   const sabidos = await cnpjsComValorReal(ano)
 
-  const recorte = opts.cnpjs && opts.cnpjs.length > 0 ? [[...opts.cnpjs]] : []
+  /*
+   * UM parâmetro, cujo VALOR é o array — e não N parâmetros.
+   *
+   * A primeira versão fazia `...recorte` com `recorte = [[...cnpjs]]`, espalhando o array
+   * na posição de `values`. Com um CNPJ, `$1` chegava como texto e o Postgres respondia
+   * "malformed array literal"; com três, virava "bind message supplies 3 parameters, but
+   * prepared statement requires 1". Duas mensagens diferentes para o mesmo erro, que é o
+   * que torna esse tipo de bug difícil de reconhecer.
+   *
+   * O cast `::text[]` é explícito de propósito: sem ele o Postgres precisa inferir o tipo
+   * do parâmetro a partir do contexto, e é justamente essa inferência que falhava.
+   */
+  const cnpjsDoRecorte = opts.cnpjs && opts.cnpjs.length > 0 ? [...opts.cnpjs] : null
   const { rows } = await pool.query<LinhaSinais>(
     `
     select
@@ -283,14 +295,14 @@ export async function estimarFaturamentoJob(
       e.regime_tributario
     from empresas e
     left join mercado_universo u on u.cnpj = e.cnpj
-    where (${recorte.length > 0 ? 'e.cnpj = any($1)' : 'true'})
+    where (${cnpjsDoRecorte ? 'e.cnpj = any($1::text[])' : 'true'})
       and (coalesce(e.funcionarios, 0) > 0
        or coalesce(e.erp_mrr, 0) > 0
        or coalesce((e.erp_detalhes ->> 'qtd_usuarios')::int, 0) > 0
        or coalesce(u.opcao_simples, false)
        or u.data_exclusao_simples is not null)
   `,
-    ...recorte,
+    cnpjsDoRecorte ? [cnpjsDoRecorte] : [],
   )
 
   for (const linha of rows) {
