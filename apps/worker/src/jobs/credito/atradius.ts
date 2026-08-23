@@ -66,8 +66,13 @@ const ROTAS = {
    * não 401.
    */
   token: '/authenticate/v2/tokens',
-  apolices: (q: string) =>
-    `/credit-insurance/policy-management/v1/policies/details${q ? `?${q}` : ''}`,
+  /**
+   * DETALHE de uma apólice conhecida — não uma listagem. Exige `policyId` e RECUSA
+   * `customerId` ("Unknown query parameter"). Foi por acreditar que ele listava que a
+   * descoberta da apólice nasceu torta.
+   */
+  apolice: (policyId: string) =>
+    `/credit-insurance/policy-management/v1/policies/details?policyId=${encodeURIComponent(policyId)}`,
   buyerPorIdentificador: (pais: string, uid: string, tipo: string) =>
     `/credit-insurance/organisation-management/v1/buyers?country=${encodeURIComponent(pais)}` +
     `&uid=${encodeURIComponent(uid)}&uidType=${encodeURIComponent(tipo)}`,
@@ -489,20 +494,6 @@ async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
   if (!c.ok) return c
   const cred = c.dados
 
-  if (cred.policy_id_override) {
-    // Ver o `moeda: null` abaixo: sem consultar, não sabemos a moeda da apólice fixada.
-    return {
-      ok: true,
-      dados: {
-        policy_id: cred.policy_id_override,
-        descricao: `${cred.policy_id_override} (fixada por env)`,
-        // Fixada à mão, não sabemos a moeda dela — e inventar uma apagaria o aviso de
-        // divergência em `pedirCobertura`, que é justamente onde ele importa.
-        moeda: null,
-      },
-    }
-  }
-
   if (
     apoliceCache &&
     apoliceCache.ambiente === cred.ambiente &&
@@ -511,47 +502,112 @@ async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
     return { ok: true, dados: apoliceCache.apolice }
   }
 
-  // O `customerId` vai na consulta. Os endpoints de cobertura exigem "ao menos um entre
-  // customerId e policyId", e não há motivo para o de apólices ser diferente: sem escopo,
-  // a pergunta "quais apólices?" não tem sujeito. Enviar o que temos é mais barato que
-  // descobrir pelo 400.
-  const { organizacao_id } = await lerIntegracaoSeguradora()
-  const qs = organizacao_id ? `customerId=${encodeURIComponent(organizacao_id)}` : ''
-
-  const r = await chamar<unknown>(ROTAS.apolices(qs))
-  if (!r.ok) return r
-
-  const lista = extrairApolices(r.dados)
-  const vigentes = lista.filter(estaVigente).map(mapearApolice).filter((a): a is Apolice => a !== null)
   const prefixo = cred.ambiente === 'producao' ? 'ATRADIUS_PROD' : 'ATRADIUS_SANDBOX'
 
-  if (vigentes.length === 0) {
+  // ── 1. O id ────────────────────────────────────────────────────────────
+  let policyId = cred.policy_id_override
+  if (!policyId) {
+    const achado = await descobrirPolicyId()
+    if (!achado.ok) return achado
+    policyId = achado.dados
+    logger.info({ ambiente: cred.ambiente, apolice: policyId }, 'Apólice descoberta pelas coberturas.')
+  }
+
+  // ── 2. Os detalhes ─────────────────────────────────────────────────────
+  // Enriquecer é opcional; ter o id não é. Se o detalhe falhar, seguimos com o id — as
+  // outras chamadas só precisam dele. Perder a moeda e a validade é pior que parar? Não:
+  // parar aqui transformaria uma indisponibilidade momentânea do policy-management em
+  // esteira inteira fora do ar, sendo que cover-management pode estar de pé.
+  const r = await chamar<unknown>(ROTAS.apolice(policyId))
+  if (!r.ok) {
+    logger.warn(
+      { apolice: policyId, erro: r.erro },
+      'Detalhes da apólice indisponíveis; seguindo só com o id.',
+    )
+    const apolice: Apolice = { policy_id: policyId, descricao: `${policyId} (detalhes indisponíveis)`, moeda: null }
+    apoliceCache = { apolice, ambiente: cred.ambiente, lidaEm: Date.now() }
+    return { ok: true, dados: apolice }
+  }
+
+  const lidas = extrairApolices(r.dados)
+  const bruta = lidas[0]
+  if (!bruta) {
     return {
       ok: false,
-      erro:
-        `Nenhuma apólice vigente em ${cred.ambiente} (${lista.length} devolvida(s) pela API). ` +
-        `Se a apólice existe e a leitura é que não a reconheceu, fixe ${prefixo}_POLICY_ID.`,
-      // Não é falha de transporte: retentar devolve a mesma lista.
+      erro: `A apólice ${policyId} não foi encontrada em ${cred.ambiente}. Confira ${prefixo}_POLICY_ID.`,
       recuperavel: false,
     }
   }
 
-  if (vigentes.length > 1) {
+  // A vigência é checada AQUI porque agora há uma apólice concreta para checar. Uma
+  // apólice cancelada continua respondendo detalhes — e receber pedido sob ela é o
+  // acidente que esta verificação existe para impedir.
+  if (!estaVigente(bruta)) {
     return {
       ok: false,
-      erro:
-        `${vigentes.length} apólices vigentes em ${cred.ambiente} (${vigentes
-          .map((a) => a.policy_id)
-          .join(', ')}). Escolher sozinho seria decidir sob qual contrato a cobertura é ` +
-        `pedida — defina ${prefixo}_POLICY_ID.`,
+      erro: `A apólice ${policyId} não está vigente (status ${bruta.policyStatus ?? bruta.status ?? 'desconhecido'}).`,
       recuperavel: false,
     }
   }
 
-  const apolice = vigentes[0] as Apolice
+  const apolice = mapearApolice(bruta) ?? { policy_id: policyId, descricao: policyId, moeda: null }
   apoliceCache = { apolice, ambiente: cred.ambiente, lidaEm: Date.now() }
   logger.info({ ambiente: cred.ambiente, apolice: apolice.descricao }, 'Apólice da Atradius resolvida.')
   return { ok: true, dados: apolice }
+}
+
+/**
+ * Descobre o id da apólice pelas COBERTURAS.
+ *
+ * `policies/details` exige o id que queremos descobrir, então a descoberta vem por outro
+ * caminho: cada cobertura diz a que apólice pertence, e `/covers` aceita `customerId`
+ * sozinho. Uma chamada, e o id sai do próprio dado.
+ *
+ * Não usa `filtroAtual()` — ele chama esta função, e a recursão seria infinita.
+ *
+ * ── OS DOIS MODOS DE FALHA, E POR QUE NENHUM É CHUTE ─────────────────────────
+ * Carteira vazia (apólice nova, sem cobertura ainda) não tem de onde tirar o id. E mais de
+ * uma apólice não permite escolher: pedido submetido sob o contrato errado não dá erro, dá
+ * um limite sob uma cobertura que a operação não assumiu, e isso só aparece num sinistro.
+ * Nos dois casos a saída é a mesma — dizer o que houve e nomear a variável que resolve.
+ */
+async function descobrirPolicyId(): Promise<ResultadoSeguradora<string>> {
+  const { organizacao_id } = await lerIntegracaoSeguradora()
+  const c = await credenciais()
+  if (!c.ok) return c
+  const prefixo = c.dados.ambiente === 'producao' ? 'ATRADIUS_PROD' : 'ATRADIUS_SANDBOX'
+
+  if (!organizacao_id) {
+    return {
+      ok: false,
+      erro: `Sem apólice e sem Organization ID: defina ${prefixo}_POLICY_ID ou o Organization ID em Crédito → Configurações.`,
+      recuperavel: false,
+    }
+  }
+
+  const r = await chamar<unknown>(
+    ROTAS.coberturas(`customerId=${encodeURIComponent(organizacao_id)}`),
+  )
+  if (!r.ok) return r
+
+  const ids = [
+    ...new Set(
+      extrairCoberturas(r.dados)
+        .map((d) => (d.policyId === undefined || d.policyId === null ? '' : String(d.policyId)))
+        .filter((v) => v !== ''),
+    ),
+  ]
+
+  if (ids.length === 1) return { ok: true, dados: ids[0] as string }
+
+  return {
+    ok: false,
+    erro:
+      ids.length === 0
+        ? `Nenhuma cobertura devolvida para o cliente ${organizacao_id}, então não há de onde deduzir a apólice. Defina ${prefixo}_POLICY_ID.`
+        : `${ids.length} apólices nas coberturas (${ids.join(', ')}). Escolher sozinho seria decidir sob qual contrato a cobertura é pedida — defina ${prefixo}_POLICY_ID.`,
+    recuperavel: false,
+  }
 }
 
 /** Apólice + organização resolvidas na query que todo endpoint de cobertura aceita. */
@@ -608,6 +664,8 @@ interface BuyerBruto {
  */
 interface DecisaoBruta {
   coverId?: string | number
+  /** Cada cobertura diz a que apólice pertence — e é daí que a apólice é descoberta. */
+  policyId?: string | number
   buyerId?: string | number
   buyerName?: string
   uniqueIdentifiers?: unknown[]

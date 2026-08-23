@@ -223,17 +223,28 @@ numa constante para a correção ser uma linha.
 
 ### A apólice é descoberta, não configurada
 
-O id da apólice não aparece no portal de desenvolvedores, e a própria API sabe informá-lo:
-`GET /credit-insurance/policy-management/v1/policies/details`. `apoliceVigente()` pergunta,
-filtra pela que está em vigor e cacheia por uma hora (por ambiente) — um contrato se renova
-uma vez por ano, e uma consulta por chamada colocaria uma ida à rede na frente de cada
-página do backfill.
+O id da apólice não aparece no portal de desenvolvedores. `policies/details` **não** lista
+apólices — exige `policyId` e recusa `customerId` ("Unknown query parameter"); foi por
+acreditar que ele listava que a primeira versão da descoberta nasceu torta.
 
-**Com mais de uma apólice vigente, ele para em vez de escolher.** Pegar "a primeira" é o
-default que funciona por um ano e um dia: o pedido submetido contra o contrato errado não
-dá erro, dá um limite aprovado sob uma cobertura que a operação não assumiu — e isso só
-aparece num sinistro. O erro nomeia `ATRADIUS_*_POLICY_ID`, que existe exatamente para esse
-caso e não para o caso comum.
+A descoberta vem das **coberturas**: cada uma diz a que apólice pertence, e `/covers` aceita
+`customerId` sozinho. Uma chamada, e o id sai do próprio dado. Com o id em mãos,
+`policies/details?policyId=X` enriquece com status, moeda e validade. O resultado é cacheado
+por uma hora, por ambiente — um contrato se renova uma vez por ano, e consultar a cada
+chamada colocaria uma ida à rede na frente de cada página do backfill.
+
+Detalhe indisponível **não** derruba a esteira: seguimos com o id, que é do que as outras
+chamadas precisam. Parar aí transformaria uma indisponibilidade do `policy-management` em
+esteira fora do ar, com `cover-management` de pé. Já apólice **não vigente** derruba: ela
+continua respondendo detalhes, e receber pedido sob contrato cancelado é o acidente que a
+verificação existe para impedir.
+
+**A descoberta tem dois modos de falha, e nenhum vira chute.** Carteira vazia (apólice nova,
+sem cobertura) não tem de onde tirar o id. Mais de uma apólice não permite escolher: o pedido
+submetido sob o contrato errado não dá erro, dá um limite aprovado sob uma cobertura que a
+operação não assumiu — e isso só aparece num sinistro. Nos dois casos a saída é a mesma:
+dizer o que houve e nomear `ATRADIUS_*_POLICY_ID`, que existe para esses casos e não para o
+comum.
 
 A apólice é resolvida **uma vez, antes do laço** de `enviarAnalises`, e não dentro dele:
 `resolverBuyer` pode ser cobrado e roda antes do pedido, então uma apólice irresolvível
