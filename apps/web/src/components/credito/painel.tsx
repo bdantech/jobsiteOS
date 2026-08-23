@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   backfillAtradiusAction,
+  simularBackfillAtradiusAction,
   pollDecisoesAction,
   recalcularScoresAction,
   reestimarPotencialAction,
@@ -240,8 +241,17 @@ export function CreditoPainel() {
                 variant="outline"
                 size="sm"
                 disabled={rodando !== null}
+                onClick={() => void rodar('Ensaio do backfill', simularBackfillAtradiusAction)}
+                title="Lê e mapeia tudo, relata no log o que faria e NÃO grava nada. Roda em qualquer ambiente."
+              >
+                Ensaiar backfill
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={rodando !== null}
                 onClick={() => void rodar('Backfill da apólice', backfillAtradiusAction)}
-                title="Lê os limites e as decisões que a apólice já tem. Não descobre buyer novo."
+                title="GRAVA no banco os limites e as decisões que a apólice já tem. Só roda com a seguradora em produção. Não descobre buyer novo."
               >
                 Backfill
               </Button>

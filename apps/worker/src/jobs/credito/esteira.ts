@@ -396,14 +396,18 @@ export async function pollDecisoes(): Promise<{
  * motivo preenchido) em vez de ser casado por nome — dois homônimos viram uma empresa
  * só, e o erro só aparece quando alguém aprova o limite errado.
  */
-export async function backfillAtradius(): Promise<{
+export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Promise<{
   status: 'ok' | 'nao_configurada' | 'erro'
+  simulado?: boolean
   lidos?: number
   inseridos?: number
   atualizados?: number
   sem_cnpj?: number
+  sem_empresa?: number
+  amostra?: unknown[]
   erro?: string
 }> {
+  const simular = opcoes.simular === true
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
   // ── O backfill é o único job que ESCREVE o que veio da seguradora ──────────
@@ -419,7 +423,9 @@ export async function backfillAtradius(): Promise<{
   //
   // O ambiente de teste existe para que errar não custe. Aqui custaria, então ele recusa.
   const { ambiente } = await lerIntegracaoSeguradora()
-  if (ambiente !== 'producao') {
+  // A simulação passa em qualquer ambiente: ela não escreve, e é justamente em homologação
+  // que se quer ensaiar o backfill antes de deixá-lo tocar o banco real.
+  if (!simular && ambiente !== 'producao') {
     logger.warn(
       { ambiente },
       'Backfill recusado fora de produção: ele grava no banco real o que ler da seguradora.',
@@ -433,7 +439,10 @@ export async function backfillAtradius(): Promise<{
   }
 
   const cfg = await lerConfigCredito()
-  const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0 }
+  const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0, sem_empresa: 0 }
+  // Poucas linhas, e sem valor de limite: a amostra existe para conferir MAPEAMENTO
+  // (o CNPJ saiu? o estágio bate com o que a apólice mostra?), não para relatar carteira.
+  const amostra: unknown[] = []
   const cnpjPorBuyer = new Map<string, string | null>()
   const tocados: string[] = []
 
@@ -514,6 +523,27 @@ export async function backfillAtradius(): Promise<{
           .eq('atradius_case_id', d.case_id)
           .maybeSingle()
 
+        if (!empresa) acc.sem_empresa++
+
+        if (simular) {
+          // Contabiliza o que ACONTECERIA e não toca em nada. É o ensaio: exercita
+          // autenticação, listagem, resolução de CNPJ e mapeamento — tudo que pode estar
+          // errado — parando exatamente antes da única linha irreversível.
+          if (existente) acc.atualizados++
+          else acc.inseridos++
+          if (amostra.length < 5) {
+            amostra.push({
+              cnpj,
+              case_id: d.case_id,
+              estagio: d.estagio,
+              moeda: d.moeda,
+              tem_empresa: !!empresa,
+              acao: existente ? 'atualizaria' : 'inseriria',
+            })
+          }
+          continue
+        }
+
         if (existente) {
           const { mudou } = await aplicarDecisao(
             existente.id,
@@ -562,8 +592,14 @@ export async function backfillAtradius(): Promise<{
   // Reportar isso como sucesso faria alguém concluir que o histórico está completo — e o
   // backfill é justamente o job que se roda UMA vez, confiando que trouxe tudo.
   if (falha) {
-    logger.error({ ...acc, erro: falha }, 'Backfill da Atradius FALHOU.')
-    return { status: 'erro', erro: falha, ...acc }
+    logger.error({ ...acc, simulado: simular, erro: falha }, 'Backfill da Atradius FALHOU.')
+    return { status: 'erro', simulado: simular, erro: falha, ...acc }
+  }
+
+  if (simular) {
+    // Nem repontuação: o scorecard leria um histórico que não existe.
+    logger.info({ ...acc, amostra }, 'Backfill SIMULADO — nada foi gravado.')
+    return { status: 'ok', simulado: true, amostra, ...acc }
   }
 
   // O backfill traz histórico de decisões, e histórico é um fator do scorecard: sem

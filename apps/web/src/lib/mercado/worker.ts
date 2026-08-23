@@ -581,9 +581,14 @@ export async function dispararPollDecisoes(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/poll', {}, 'credito-poll')
 }
 
-/** Backfill do histórico da apólice. Uma vez; não descobre buyer novo. */
-export async function dispararBackfillAtradius(): Promise<DispararJobResultado> {
-  return postar('/jobs/credito/backfill', {}, 'credito-backfill')
+/**
+ * Backfill do histórico da apólice. Uma vez; não descobre buyer novo.
+ *
+ * `simular` lê e mapeia tudo sem gravar — é o ensaio, e o único modo permitido fora de
+ * produção, porque o backfill real insere no banco o que ler da seguradora.
+ */
+export async function dispararBackfillAtradius(simular = false): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/backfill', { simular }, 'credito-backfill')
 }
 
 /** Diário: sync do que já está na apólice + poll + expiração. */

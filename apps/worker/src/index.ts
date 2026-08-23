@@ -519,10 +519,16 @@ app.post('/jobs/credito/poll', (_req: Request, res: Response, next: NextFunction
   }
 })
 
-/** Backfill do histórico da apólice. Roda uma vez; não descobre buyer novo. */
-app.post('/jobs/credito/backfill', (_req: Request, res: Response, next: NextFunction) => {
+/**
+ * Backfill do histórico da apólice. Roda uma vez; não descobre buyer novo.
+ *
+ * `{ simular: true }` faz o ensaio: lê e mapeia tudo, relata o que faria e não grava nada.
+ * É o único modo que roda fora de produção.
+ */
+app.post('/jobs/credito/backfill', (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.status(202).json({ job_id: dispararBackfillAtradius(), status: 'executando' })
+    const simular = (req.body as { simular?: unknown } | undefined)?.simular === true
+    res.status(202).json({ job_id: dispararBackfillAtradius(simular), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

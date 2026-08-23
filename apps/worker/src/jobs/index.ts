@@ -909,8 +909,8 @@ export function dispararPollDecisoes(): string {
  * Backfill do histórico da apólice. Roda UMA vez — e nunca descobre buyer novo: lê o
  * portfólio e as decisões que a apólice já tem.
  */
-export function dispararBackfillAtradius(): string {
-  return dispararAvulso('credito-backfill', async () => backfillAtradius())
+export function dispararBackfillAtradius(simular = false): string {
+  return dispararAvulso('credito-backfill', async () => backfillAtradius({ simular }))
 }
 
 /** Sync incremental diário do que já está na apólice + expiração das aprovações vencidas. */

@@ -196,4 +196,8 @@ export const recalcularScoresAction = async (): Promise<Disparo> => disparar(dis
 export const pollDecisoesAction = async (): Promise<Disparo> => disparar(dispararPollDecisoes)
 export const syncAtradiusAction = async (): Promise<Disparo> => disparar(dispararSyncAtradius)
 /** Backfill do histórico da apólice. Roda uma vez; não descobre buyer novo. */
-export const backfillAtradiusAction = async (): Promise<Disparo> => disparar(dispararBackfillAtradius)
+export const backfillAtradiusAction = async (): Promise<Disparo> =>
+  disparar(() => dispararBackfillAtradius(false))
+/** O ensaio: lê e mapeia tudo, relata o que faria e não grava nada. */
+export const simularBackfillAtradiusAction = async (): Promise<Disparo> =>
+  disparar(() => dispararBackfillAtradius(true))
