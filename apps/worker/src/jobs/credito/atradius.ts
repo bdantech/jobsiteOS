@@ -207,6 +207,7 @@ async function obterToken(cred: Credenciais): Promise<ResultadoSeguradora<string
       client_id: cred.client_id,
       client_secret: cred.client_secret,
     })
+    const correlacao = crypto.randomUUID()
     // `fetch` cru, e não `requisitarJson`: o token é form-urlencoded e aquele helper
     // faz JSON.stringify no body, o que transformaria `a=b` na string `"a=b"`.
     const res = await fetch(url(cred, ROTAS.token), {
@@ -215,12 +216,28 @@ async function obterToken(cred: Credenciais): Promise<ResultadoSeguradora<string
         'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json',
         [CABECALHO_APP_KEY]: cred.app_key,
-        [CABECALHO_CORRELACAO]: crypto.randomUUID(),
+        [CABECALHO_CORRELACAO]: correlacao,
       },
       body: corpo.toString(),
       signal: AbortSignal.timeout(20_000),
     })
     if (!res.ok) {
+      // O CORPO da recusa é logado, e é seguro: a resposta de erro do gateway diz o que
+      // ele não aceitou (chave desconhecida, caminho inexistente, escopo ausente) e nunca
+      // devolve o que mandamos. Sem ele, um 403 é indistinguível de outro 403 — e a
+      // diferença entre "application key inválida" e "esta rota não existe" é a diferença
+      // entre trocar uma variável e trocar uma linha de código.
+      const detalhe = await res.text().catch(() => '')
+      logger.error(
+        {
+          status: res.status,
+          ambiente: cred.ambiente,
+          url_token: url(cred, ROTAS.token),
+          correlacao,
+          resposta: detalhe.slice(0, 500),
+        },
+        'A Atradius recusou a autenticação.',
+      )
       return { ok: false, erro: `A Atradius recusou a autenticação (${res.status}).`, recuperavel: res.status >= 500 }
     }
     const resp = (await res.json()) as { access_token?: string; expires_in?: number }
