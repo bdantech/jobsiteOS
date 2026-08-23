@@ -443,6 +443,18 @@ diário (09h UTC):         sync da apólice → poll → expirar
 A expiração roda mesmo sem seguradora configurada: a data de validade é nossa, e uma
 aprovação vencida contando como vigente valeria pontos no scorecard que ela não tem mais.
 
+### O backfill recusa rodar fora de produção
+
+O interruptor de ambiente troca a **seguradora**, não o nosso banco. Sync e poll só tocam
+análises que nasceram aqui, então rodá-los contra a sandbox é inofensivo. O backfill
+**insere**: cobertura da apólice que não existe na nossa base vira linha nova em
+`analises_credito`.
+
+Rodando em homologação, isso grava os buyers de mentira da sandbox no banco de produção como
+análises indistinguíveis das reais — e uma vez dentro, elas contam no funil, no scorecard e
+em qualquer conciliação de carteira. O ambiente de teste existe para que errar não custe;
+aqui custaria.
+
 ### Zero lido não é o mesmo que não consegui ler
 
 Os três jobs que falam com a seguradora distinguem `ok`, `nao_configurada` e **`erro`**, e

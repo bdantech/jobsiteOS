@@ -7,7 +7,7 @@ import type {
 import type { Json } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { lerConfigCredito } from '../../credito/config.js'
+import { lerConfigCredito, lerIntegracaoSeguradora } from '../../credito/config.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { aplicarDecisaoCreditoEmVendas } from '../comercial/comissoes.js'
 import { atradius } from './atradius.js'
@@ -405,6 +405,32 @@ export async function backfillAtradius(): Promise<{
   erro?: string
 }> {
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
+
+  // ── O backfill é o único job que ESCREVE o que veio da seguradora ──────────
+  //
+  // Sync e poll só tocam análises que nasceram aqui, então rodá-los contra a sandbox é
+  // inofensivo. Este INSERE: as coberturas da apólice que não existem na nossa base viram
+  // linhas novas em `analises_credito`.
+  //
+  // E aí está a assimetria que quase me escapou: o interruptor de ambiente troca a
+  // SEGURADORA, não o nosso banco. Rodando em homologação, os buyers de mentira da
+  // sandbox entram no banco de produção como análises indistinguíveis das reais — e uma
+  // vez dentro, elas contam no funil, no scorecard e em qualquer conciliação de carteira.
+  //
+  // O ambiente de teste existe para que errar não custe. Aqui custaria, então ele recusa.
+  const { ambiente } = await lerIntegracaoSeguradora()
+  if (ambiente !== 'producao') {
+    logger.warn(
+      { ambiente },
+      'Backfill recusado fora de produção: ele grava no banco real o que ler da seguradora.',
+    )
+    return {
+      status: 'erro',
+      erro:
+        'O backfill só roda com a seguradora em produção: ele insere no nosso banco o que ' +
+        'ler da apólice, e o ambiente de homologação não tem um banco separado para receber isso.',
+    }
+  }
 
   const cfg = await lerConfigCredito()
   const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0 }
