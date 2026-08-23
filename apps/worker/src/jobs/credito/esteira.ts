@@ -567,6 +567,20 @@ export async function syncAtradius(): Promise<{
   const acc = { lidos: 0, atualizados: 0 }
   const decididos: string[] = []
 
+  // Um retrato do que foi LIDO, e não só do que foi escrito.
+  //
+  // `lidos: 14, atualizados: 0` é o resultado normal enquanto a apólice tem coberturas que
+  // não vieram daqui — e não diz nada sobre se a leitura está certa. O retrato diz: se
+  // todas as decisões caem em `em_analise`, o mapa de códigos não está batendo; se nenhuma
+  // traz CNPJ, o backfill não vai conseguir casar linha nenhuma; e a moeda revela em que
+  // moeda a apólice realmente opera, que é uma pergunta de negócio.
+  const retrato = {
+    por_estagio: {} as Record<string, number>,
+    moedas: new Set<string>(),
+    com_cnpj: 0,
+    com_pendencia: 0,
+  }
+
   let cursor: string | undefined
   let falha: string | null = null
   for (let pagina = 0; pagina < 200; pagina++) {
@@ -577,6 +591,10 @@ export async function syncAtradius(): Promise<{
     }
     for (const d of r.dados.itens) {
       acc.lidos++
+      retrato.por_estagio[d.estagio] = (retrato.por_estagio[d.estagio] ?? 0) + 1
+      retrato.moedas.add(d.moeda)
+      if (d.identificador_nacional) retrato.com_cnpj++
+      if (d.pendencia) retrato.com_pendencia++
       const { data: existente } = await supabaseAdmin
         .from('analises_credito')
         .select('id, cnpj, empresa_id, estagio, limite_aprovado')
@@ -611,7 +629,10 @@ export async function syncAtradius(): Promise<{
     return { status: 'erro', erro: falha, ...acc }
   }
 
-  logger.info(acc, 'Sync da Atradius concluído.')
+  logger.info(
+    { ...acc, ...retrato, moedas: [...retrato.moedas] },
+    'Sync da Atradius concluído.',
+  )
   return { status: 'ok', ...acc }
 }
 
