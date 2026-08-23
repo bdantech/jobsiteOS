@@ -784,6 +784,43 @@ menos de seis meses" — escrevê-la com data obriga a pessoa a fazer a conta de
   `ATRADIUS_SANDBOX_*`. `ATRADIUS_*_POLICY_ID` é override e normalmente fica vazia — a
   apólice é descoberta pela API. A base URL **não** é env: vem do ambiente escolhido na tela.
 
+## A carteira: limite concedido × cobertura (23/08/2026)
+
+**`/credito/carteira`**, view [`credito_carteira`](../supabase/migrations/0127_carteira_de_credito.sql).
+Um FULL OUTER JOIN por CNPJ entre `analises_plataforma_atual` (o que a plataforma concedeu)
+e as análises com limite aprovado vigente (o que a seguradora ampara).
+
+A página é **um número** — exposição descoberta em R$ — com a lista como detalhamento. A
+lista responde "quais empresas"; o cabeçalho responde "quanto estamos arriscando sem seguro",
+que é a pergunta que faz alguém agir.
+
+Quatro situações, com donos diferentes — misturá-las produziria uma tela que ninguém sabe de
+quem é:
+
+| Situação | Significa | Dono |
+| --- | --- | --- |
+| `descoberto` / `parcial` | Limite operando com cobertura insuficiente | Crédito |
+| `ocioso` | Cobertura vigente sem limite na plataforma | Comercial |
+| `aguardando_plataforma` | A esteira aprovou, o limite ainda não veio | Operações |
+| `coberto` | Nada a fazer | — |
+
+Três recortes que mudam o número:
+
+**Cobertura é por VALOR, não por estágio.** DC05 ("refusal for increase") produz uma
+cobertura em vigor cujo *pedido* foi recusado. Na primeira carga eram 6 linhas e R$ 7,15
+milhões — filtrar por estágio diria que estamos mais descobertos do que estamos.
+
+**`blocked` não entra.** Tem limite registrado na plataforma mas o cliente não opera;
+contá-lo inflaria o descoberto com risco que não existe.
+
+**`descoberto` nunca é negativo.** Cobertura acima do limite é folga, não exposição, e somar
+folga como dívida inverteria o sinal do total.
+
+A coluna `plataforma_diz_ter_seguro` vem do `has_insurance` do endpoint da plataforma. Ela
+não é usada no cálculo — é uma **terceira opinião**, e a tela marca quando ela discorda da
+seguradora. Na primeira carga, 1 das 55 análises aprovadas dizia ter seguro enquanto a
+apólice tinha 84 coberturas: alguém está errado, e até aqui ninguém olhava.
+
 ## Fora de escopo
 
 Calibração estatística automática dos pesos do scorecard (chega com histórico de decisões

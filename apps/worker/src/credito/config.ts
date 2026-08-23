@@ -39,7 +39,6 @@ export interface ConfigCredito {
   n_minimo_calibracao_por_tipo: number
   variacao_minima_snapshot: number
   poll_intervalo_horas: number
-  validade_padrao_meses: number
 }
 
 export interface TipoDoc {
@@ -76,7 +75,9 @@ export async function lerConfigCredito(): Promise<ConfigCredito> {
       chance_por_faixa: { alta: 0.8, media: 0.5, improvavel: 0.1 } as Record<string, number>,
       chance_sem_score: 0.5,
     }),
-    ler('atradius', { poll_intervalo_horas: 6, validade_padrao_meses: 12 }),
+    // `validade_padrao_meses` saiu: cobertura Atradius viva não tem prazo, e carimbar um
+    // fazia a aprovação expirar sozinha meses depois sem a seguradora ter retirado nada.
+    ler('atradius', { poll_intervalo_horas: 6 }),
   ])
 
   return {

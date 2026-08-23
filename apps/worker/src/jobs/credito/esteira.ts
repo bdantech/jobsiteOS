@@ -30,13 +30,6 @@ import { processarAnalisePropria } from './analise-propria.js'
 
 const seguradora: Seguradora = atradius
 
-/** Meses → data ISO, para a validade default quando a seguradora não devolve uma. */
-function validadeDefault(meses: number): string {
-  const d = new Date()
-  d.setMonth(d.getMonth() + meses)
-  return d.toISOString().slice(0, 10)
-}
-
 // ─── §4.2 Envio ─────────────────────────────────────────────────────────────
 
 export async function enviarAnalises(analiseIds?: string[]): Promise<{
@@ -213,9 +206,15 @@ async function aplicarDecisao(
   empresaId: string | null,
   anterior: { estagio: string; limite_aprovado: number | null },
   d: DecisaoSeguradora,
-  validadeMeses: number,
 ): Promise<{ mudou: boolean; reduziu: boolean }> {
-  const expira = d.expira_em ?? (d.estagio === 'aprovada' || d.estagio === 'aprovada_parcial' ? validadeDefault(validadeMeses) : null)
+  // A VALIDADE NÃO É INVENTADA AQUI. Uma cobertura Atradius viva não tem prazo — ela vale
+  // até ser cancelada, e `withdrawalDate`/`effectiveToDate` só aparecem quando já acabou.
+  //
+  // Antes, este caminho carimbava `hoje + validade_padrao_meses` em toda aprovação sem
+  // data, enquanto o insert do backfill gravava null. A mesma cobertura ficava com prazos
+  // diferentes conforme qual job a visse primeiro — e a inventada expirava sozinha meses
+  // depois, tirando do ar uma cobertura que a seguradora nunca retirou.
+  const expira = d.expira_em
   const mudou = anterior.estagio !== d.estagio || Number(anterior.limite_aprovado ?? 0) !== Number(d.limite_aprovado ?? 0)
   if (!mudou) return { mudou: false, reduziu: false }
 
@@ -226,6 +225,7 @@ async function aplicarDecisao(
       limite_aprovado: d.limite_aprovado,
       moeda: d.moeda,
       rating_seguradora: d.rating,
+      rating_classe_seguradora: d.rating_classe ?? null,
       expira_em: expira,
       decidida_em: d.decidida_em ?? new Date().toISOString(),
       motivo: d.motivo,
@@ -361,7 +361,6 @@ export async function pollDecisoes(): Promise<{
       a.empresa_id,
       { estagio: a.estagio, limite_aprovado: a.limite_aprovado },
       r.dados,
-      cfg.validade_padrao_meses,
     )
     if (mudou) {
       acc.decididas++
@@ -551,7 +550,6 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
             empresa?.id ?? null,
             { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
             d,
-            cfg.validade_padrao_meses,
           )
           if (mudou) {
             acc.atualizados++
@@ -570,6 +568,7 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
           atradius_buyer_id: d.buyer_id,
           atradius_case_id: d.case_id,
           rating_seguradora: d.rating,
+          rating_classe_seguradora: d.rating_classe ?? null,
           expira_em: d.expira_em,
           decidida_em: d.decidida_em,
           motivo: d.motivo,
@@ -670,7 +669,6 @@ export async function syncAtradius(): Promise<{
         existente.empresa_id,
         { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
         d,
-        cfg.validade_padrao_meses,
       )
       if (mudou) {
         acc.atualizados++

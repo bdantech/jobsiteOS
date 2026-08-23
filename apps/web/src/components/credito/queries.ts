@@ -10,6 +10,7 @@ export const creditoKeys = {
   score: (cnpj: string) => [...creditoKeys.all, 'score', cnpj] as const,
   scorecards: () => [...creditoKeys.all, 'scorecards'] as const,
   config: () => [...creditoKeys.all, 'config'] as const,
+  carteira: () => [...creditoKeys.all, 'carteira'] as const,
   versao: () => [...creditoKeys.all, 'versao'] as const,
   painel: () => [...creditoKeys.all, 'painel'] as const,
 }
@@ -106,6 +107,33 @@ export async function buscarScorecards(): Promise<Tables<'scorecard_versoes'>[]>
     .from('scorecard_versoes')
     .select('*')
     .order('versao', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export type SituacaoCarteira =
+  | 'descoberto'
+  | 'parcial'
+  | 'coberto'
+  | 'ocioso'
+  | 'aguardando_plataforma'
+
+export type LinhaCarteira = Tables<'credito_carteira'>
+
+/**
+ * A carteira inteira, uma linha por CNPJ.
+ *
+ * Vem sem paginação de propósito: são dezenas de linhas, não milhares, e a página precisa
+ * do TOTAL de exposição descoberta no cabeçalho. Somar uma página só daria um número menor
+ * que o real — e um número de risco subestimado é pior que número nenhum.
+ */
+export async function buscarCarteiraCredito(): Promise<LinhaCarteira[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('credito_carteira')
+    .select('*')
+    .order('descoberto', { ascending: false })
+    .limit(5000)
   if (error) throw new Error(error.message)
   return data ?? []
 }

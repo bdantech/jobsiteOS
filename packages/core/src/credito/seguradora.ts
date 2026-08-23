@@ -114,6 +114,8 @@ export interface DecisaoSeguradora {
   decidida_em: string | null
   motivo: string | null
   rating: string | null
+  /** A CLASSE do rating (`currentBuyerRatingClass`), que é a régua grossa ao lado da fina. */
+  rating_classe?: string | null
   /**
    * CNPJ e nome do buyer, quando a própria decisão os carrega.
    *

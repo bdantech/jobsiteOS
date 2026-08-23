@@ -685,6 +685,7 @@ interface DecisaoBruta {
   withdrawalDate?: string
   effectiveToDate?: string
   currentBuyerRating?: string
+  currentBuyerRatingClass?: string
   notes?: string
 }
 
@@ -788,7 +789,7 @@ const DECISAO_PARA_ESTAGIO: Record<string, EstagioSeguradora> = {
   DC02: 'aprovada', // Approved with conditions and/or comments
   DC03: 'negada', // Refused
   DC04: 'aprovada_parcial', // Partially approved — final
-  DC05: 'negada', // Refusal for increase
+  // DC05 (refusal for increase) NÃO está aqui: ele depende do valor. Ver `mapearEstagio`.
   DC06: 'aprovada_parcial', // Partially approved — preliminary
   DC07: 'negada', // Preliminary refusal
   DC08: 'cancelada', // Withdrawal decided by Atradius
@@ -883,7 +884,19 @@ function mapearEstagio(d: DecisaoBruta): EstagioSeguradora {
   const historico = HISTORICO_PARA_ESTAGIO[(d.historicCode ?? '').trim().toUpperCase()]
   if (historico) return historico
 
-  const decisao = DECISAO_PARA_ESTAGIO[(d.decisionCode ?? '').trim().toUpperCase()]
+  const codigo = (d.decisionCode ?? '').trim().toUpperCase()
+  const concedidoAgora = numeroOuNull(d.totalDecision?.decisionAmtInPolicyCurrency)
+
+  // DC05 — "refusal for increase, current cover remains unchanged" — é o único código cujo
+  // significado depende do valor. O AUMENTO foi recusado, mas a cobertura anterior segue
+  // valendo, e o campo de decisão traz justamente o quanto ela vale.
+  //
+  // Chamar isso de `negada` estava certo para o pedido e errado para a carteira: são
+  // coberturas em vigor, e uma conciliação que as ignorasse diria que estamos mais
+  // descobertos do que estamos. Como esta linha representa a COBERTURA, o valor manda.
+  if (codigo === 'DC05') return concedidoAgora !== null && concedidoAgora > 0 ? 'aprovada' : 'negada'
+
+  const decisao = DECISAO_PARA_ESTAGIO[codigo]
   if (decisao) return decisao
 
   // Daqui para baixo é fallback para vocabulário novo. `pendingProcessStatus` NUNCA entra:
@@ -898,7 +911,7 @@ function mapearEstagio(d: DecisaoBruta): EstagioSeguradora {
   const fim = dataDaAtradius(d.withdrawalDate ?? d.effectiveToDate)
   if (fim && fim < new Date().toISOString().slice(0, 10)) return 'expirada'
 
-  const concedido = numeroOuNull(d.totalDecision?.decisionAmtInPolicyCurrency)
+  const concedido = concedidoAgora
   const pedido = numeroOuNull(d.creditLimitApplicationAmountInPolicyCurrency)
   if (concedido !== null) {
     if (concedido <= 0) return 'negada'
@@ -957,6 +970,7 @@ function mapearDecisao(d: DecisaoBruta | null | undefined): DecisaoSeguradora | 
     decidida_em: d.decisionDate ?? null,
     motivo: motivoDaDecisao(d),
     rating: d.currentBuyerRating ?? null,
+    rating_classe: d.currentBuyerRatingClass ?? null,
     // A própria cobertura carrega o buyer: o backfill deixa de precisar detalhar um a um.
     identificador_nacional: cnpjDosIdentificadores(d.uniqueIdentifiers),
     nome_buyer: d.buyerName ?? null,

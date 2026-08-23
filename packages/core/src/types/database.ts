@@ -3728,6 +3728,27 @@ export type Database = {
     }
 
     Views: {
+      credito_carteira: {
+        Row: {
+          cnpj: string | null
+          company_name: string | null
+          empresa_id: string | null
+          razao_social: string | null
+          limite_concedido: number | null
+          consumed_limit: number | null
+          available_limit: number | null
+          limite_expira_em: string | null
+          plataforma_diz_ter_seguro: boolean | null
+          limite_segurado: number | null
+          segurado_em: string | null
+          rating: string | null
+          rating_classe: string | null
+          coberturas: number | null
+          descoberto: number | null
+          situacao: string | null
+        }
+        Relationships: []
+      }
       analises_plataforma_atual: {
         Row: {
           available_limit: number | null
