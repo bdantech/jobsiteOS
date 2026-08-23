@@ -7,6 +7,17 @@ import { env } from './env.js'
  */
 export const logger = pino({
   level: env.LOG_LEVEL,
+  /**
+   * O nível vai como RÓTULO ("error"), não como número (50).
+   *
+   * O pino emite o número por padrão, e o Railway não o traduz: um `logger.error` chegava
+   * lá marcado como `severity: info`, igual a qualquer outra linha. Isso esvazia a única
+   * coisa que um log de produção precisa entregar rápido — "me mostre só o que quebrou" —
+   * e faz um job que falha todo dia parecer um job que roda todo dia.
+   */
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
   redact: {
     paths: [
       'req.headers.authorization',

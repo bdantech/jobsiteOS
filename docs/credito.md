@@ -265,6 +265,21 @@ Domínio `organisation-management`, confirmados em 22/08/2026:
 | `GET /credit-insurance/organisation-management/v1/buyers/{buyerId}` | `detalharBuyer` |
 | `GET /credit-insurance/organisation-management/v1/buyers/my-buyers?customerId=&policyId=` | **ainda não usado** — ver abaixo |
 
+#### Autenticação
+
+`POST /authenticate/v2/tokens`, com **Basic auth** (client id e secret em base64),
+`Content-Type: application/json` e **corpo vazio**. Devolve
+`{ data: { access_token, token_type: "Bearer", expires_in: 1800 } }`.
+
+Não é o `POST /oauth2/token` com `grant_type=client_credentials` no form que eu tinha
+escrito — três coisas erradas de uma vez: caminho, forma de autenticar e content-type. O
+sintoma foi **403, não 401**, e a distinção importa: o gateway barra rota fora do contrato
+antes de olhar credencial. Um 401 teria mandado caçar a credencial errada; o 403 apontava
+para a rota, que era o problema.
+
+Meia hora de validade é curta o bastante para o token vencer no meio de um backfill — daí a
+margem de 60s antes do vencimento existir de verdade, e não por precaução teórica.
+
 Correções que os exemplos reais impuseram:
 
 - O cabeçalho é **`Atradius-App-Key`**, não o `x-application-key` que eu tinha suposto. Toda

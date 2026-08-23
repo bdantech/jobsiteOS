@@ -60,7 +60,12 @@ import { requisitarJson } from '../../net/http.js'
  * `decisionCode`, `historicCode` e a lista de `coverStatus`. Ver `mapearEstagio`.
  */
 const ROTAS = {
-  token: '/oauth2/token',
+  /**
+   * CONFIRMADO. Não é `/oauth2/token`, que era chute meu e rendeu 403 — o gateway barra
+   * rota fora do contrato antes de olhar credencial, e é por isso que o erro vinha 403 e
+   * não 401.
+   */
+  token: '/authenticate/v2/tokens',
   apolices: '/credit-insurance/policy-management/v1/policies/details',
   buyerPorIdentificador: (pais: string, uid: string, tipo: string) =>
     `/credit-insurance/organisation-management/v1/buyers?country=${encodeURIComponent(pais)}` +
@@ -192,41 +197,70 @@ function filtroDaApolice(policyId: string, organizacao: string | null): string {
 }
 
 /**
- * OAuth2 client-credentials, com o token guardado até 60s antes de vencer. A margem
- * existe porque um token que vence NO MEIO de uma paginação do backfill derruba a
- * corrida inteira em vez de uma página.
+ * Lê o token da resposta: `{ "data": { "access_token", "token_type": "Bearer",
+ * "expires_in": 1800 } }` — mesmo envelope `data` do resto da API.
+ *
+ * Aceita também o corpo sem envelope e os nomes alternativos porque a alternativa seria
+ * um null silencioso virando "não devolveu access_token" numa mudança de versão. O que
+ * NÃO se faz aqui é logar o corpo: diferente da resposta de erro, esta carrega a
+ * credencial.
+ */
+function tokenDaResposta(corpo: unknown): { valor: string; expiraEmSegundos: number } | null {
+  const candidatos: unknown[] = []
+  if (corpo && typeof corpo === 'object') {
+    const d = (corpo as { data?: unknown }).data
+    if (Array.isArray(d)) candidatos.push(...d)
+    else if (d && typeof d === 'object') candidatos.push(d)
+    candidatos.push(corpo)
+  }
+
+  for (const c of candidatos) {
+    if (!c || typeof c !== 'object') continue
+    const o = c as Record<string, unknown>
+    const valor = o.access_token ?? o.accessToken ?? o.token
+    if (typeof valor !== 'string' || valor === '') continue
+    const bruto = o.expires_in ?? o.expiresIn
+    const segundos = typeof bruto === 'number' ? bruto : Number(bruto)
+    // 3600 como piso de segurança: um `expires_in` ausente não pode virar um token
+    // guardado para sempre, nem um token descartado a cada chamada.
+    return { valor, expiraEmSegundos: Number.isFinite(segundos) && segundos > 0 ? segundos : 3600 }
+  }
+  return null
+}
+
+/**
+ * Autenticação (`/authenticate/v2/tokens`), com o token guardado até 60s antes de vencer.
+ * A margem existe porque um token que vence NO MEIO de uma paginação do backfill derruba a
+ * corrida inteira em vez de uma página — e com `expires_in: 1800` ela é curta o bastante
+ * para isso ser real.
  */
 async function obterToken(cred: Credenciais): Promise<ResultadoSeguradora<string>> {
   if (token && token.ambiente === cred.ambiente && token.expiraEm > Date.now() + 60_000) {
     return { ok: true, dados: token.valor }
   }
 
+  const correlacao = crypto.randomUUID()
   try {
-    const corpo = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: cred.client_id,
-      client_secret: cred.client_secret,
-    })
-    const correlacao = crypto.randomUUID()
-    // `fetch` cru, e não `requisitarJson`: o token é form-urlencoded e aquele helper
-    // faz JSON.stringify no body, o que transformaria `a=b` na string `"a=b"`.
+    // CONFIRMADO contra a doc: Basic auth com client id e secret, `Content-Type: json` e
+    // NENHUM corpo. Não é o client-credentials com `grant_type` no form que eu tinha
+    // escrito — e essa diferença sozinha já explicaria a recusa, mesmo com a rota certa.
+    const basic = Buffer.from(`${cred.client_id}:${cred.client_secret}`).toString('base64')
     const res = await fetch(url(cred, ROTAS.token), {
       method: 'POST',
       headers: {
-        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basic}`,
+        'content-type': 'application/json',
         accept: 'application/json',
         [CABECALHO_APP_KEY]: cred.app_key,
         [CABECALHO_CORRELACAO]: correlacao,
       },
-      body: corpo.toString(),
       signal: AbortSignal.timeout(20_000),
     })
     if (!res.ok) {
       // O CORPO da recusa é logado, e é seguro: a resposta de erro do gateway diz o que
-      // ele não aceitou (chave desconhecida, caminho inexistente, escopo ausente) e nunca
-      // devolve o que mandamos. Sem ele, um 403 é indistinguível de outro 403 — e a
-      // diferença entre "application key inválida" e "esta rota não existe" é a diferença
-      // entre trocar uma variável e trocar uma linha de código.
+      // ele não aceitou e nunca ecoa o que mandamos. Sem ele, um 403 é indistinguível de
+      // outro 403 — e a diferença entre "chave inválida" e "esta rota não existe" é a
+      // diferença entre trocar uma variável e trocar uma linha de código.
       const detalhe = await res.text().catch(() => '')
       logger.error(
         {
@@ -240,20 +274,29 @@ async function obterToken(cred: Credenciais): Promise<ResultadoSeguradora<string
       )
       return { ok: false, erro: `A Atradius recusou a autenticação (${res.status}).`, recuperavel: res.status >= 500 }
     }
-    const resp = (await res.json()) as { access_token?: string; expires_in?: number }
-    if (!resp.access_token) return { ok: false, erro: 'A Atradius não devolveu access_token.', recuperavel: true }
+
+    const lido = tokenDaResposta(await res.json())
+    if (!lido) {
+      return { ok: false, erro: 'A Atradius não devolveu access_token.', recuperavel: true }
+    }
     token = {
-      valor: resp.access_token,
-      expiraEm: Date.now() + (resp.expires_in ?? 3600) * 1000,
+      valor: lido.valor,
+      expiraEm: Date.now() + lido.expiraEmSegundos * 1000,
       ambiente: cred.ambiente,
     }
     // O ambiente no log é o que responde "por que este número veio diferente do que a
-    // tela mostrava?" sem precisar reproduzir a corrida.
-    logger.info({ ambiente: cred.ambiente }, 'Token da Atradius renovado.')
+    // tela mostrava?" sem precisar reproduzir a corrida. O TOKEN nunca entra aqui.
+    logger.info(
+      { ambiente: cred.ambiente, expira_em_s: lido.expiraEmSegundos },
+      'Token da Atradius renovado.',
+    )
     return { ok: true, dados: token.valor }
   } catch (e) {
     // Nunca ecoar o erro cru: numa URL malformada ele carrega host e às vezes a query.
-    logger.error({ erro: e instanceof Error ? e.name : 'desconhecido' }, 'Falha ao autenticar na Atradius.')
+    logger.error(
+      { erro: e instanceof Error ? e.name : 'desconhecido', correlacao },
+      'Falha ao autenticar na Atradius.',
+    )
     return { ok: false, erro: 'Não foi possível autenticar na Atradius.', recuperavel: true }
   }
 }
