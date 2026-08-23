@@ -47,10 +47,24 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
   analises_disparadas?: number
   detalhes?: Array<{ id: string; erro: string }>
 }> {
-  if (!seguradora.configurada()) {
+  // `configurada()` é assíncrono desde que o ambiente (sandbox/produção) virou setting:
+  // quais credenciais são exigidas depende do que a tela escolheu, e isso mora no banco.
+  // O motivo — qual variável falta, em qual ambiente — é logado dentro do provedor.
+  if (!(await seguradora.configurada())) {
     logger.warn('Seguradora não configurada; envio não roda.')
     return { status: 'nao_configurada' }
   }
+
+  // A apólice é resolvida UMA VEZ, antes do laço, e não dentro dele. `resolverBuyer` pode
+  // ser cobrado e roda antes do pedido: com a apólice irresolvível, cada análise pendente
+  // viraria uma busca de buyer paga seguida de falha — uma fatura produzida por um erro
+  // de configuração. Falhando aqui, nenhuma chamada cobrada acontece.
+  const apolice = await seguradora.apoliceVigente()
+  if (!apolice.ok) {
+    logger.error({ erro: apolice.erro, recuperavel: apolice.recuperavel }, 'Apólice indisponível; envio não roda.')
+    return { status: 'nao_configurada' }
+  }
+  logger.info({ apolice: apolice.dados.descricao }, 'Envio à seguradora sob esta apólice.')
 
   let q = supabaseAdmin
     .from('analises_credito')
@@ -311,7 +325,7 @@ export async function pollDecisoes(): Promise<{
   consultadas?: number
   decididas?: number
 }> {
-  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+  if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
   const cfg = await lerConfigCredito()
   const { data: abertas } = await supabaseAdmin
@@ -370,14 +384,46 @@ export async function backfillAtradius(): Promise<{
   atualizados?: number
   sem_cnpj?: number
 }> {
-  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+  if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
   const cfg = await lerConfigCredito()
   const acc = { lidos: 0, inseridos: 0, atualizados: 0, sem_cnpj: 0 }
   const cnpjPorBuyer = new Map<string, string | null>()
   const tocados: string[] = []
 
-  async function cnpjDoBuyer(buyerId: string): Promise<string | null> {
+  // O mapa CNPJ→buyer sai de UMA chamada (`my-buyers`) em vez de uma por buyer. Numa
+  // apólice com centenas de buyers, a diferença é entre uma requisição e centenas.
+  //
+  // Falhar aqui não interrompe nada: o backfill segue no plano B, detalhando um a um. Uma
+  // otimização que derruba o job quando indisponível é pior que a versão não otimizada.
+  const lista = await seguradora.listarBuyersDaApolice()
+  if (lista.ok && lista.dados) {
+    for (const b of lista.dados) cnpjPorBuyer.set(b.buyer_id, b.identificador_nacional)
+    logger.info({ buyers: lista.dados.length }, 'Buyers da apólice pré-carregados.')
+  } else {
+    logger.warn(
+      { erro: lista.ok ? 'listagem indisponível' : lista.erro },
+      'Sem listagem de buyers; o backfill vai detalhar um a um.',
+    )
+  }
+
+  /**
+   * O CNPJ do buyer, na ordem do mais barato para o mais caro:
+   *
+   * 1. o que a própria decisão trouxe (a Atradius embute `uniqueIdentifiers` em cada
+   *    cobertura) — custo zero;
+   * 2. o mapa pré-carregado da apólice — uma chamada para todos;
+   * 3. o detalhamento individual — uma chamada por buyer, e só para quem sobrou.
+   *
+   * Cada degrau existe porque o de cima pode faltar: nem toda cobertura traz identificador,
+   * e a listagem pode não estar disponível. O terceiro nunca deixou de funcionar, então
+   * continua sendo o piso.
+   */
+  async function cnpjDoBuyer(buyerId: string, daDecisao?: string | null): Promise<string | null> {
+    if (daDecisao) {
+      if (!cnpjPorBuyer.has(buyerId)) cnpjPorBuyer.set(buyerId, daDecisao)
+      return daDecisao
+    }
     if (cnpjPorBuyer.has(buyerId)) return cnpjPorBuyer.get(buyerId) ?? null
     const r = await seguradora.detalharBuyer(buyerId)
     const cnpj = r.ok ? (r.dados?.identificador_nacional ?? null) : null
@@ -402,7 +448,7 @@ export async function backfillAtradius(): Promise<{
       }
       for (const d of r.dados.itens) {
         acc.lidos++
-        const cnpj = await cnpjDoBuyer(d.buyer_id)
+        const cnpj = await cnpjDoBuyer(d.buyer_id, d.identificador_nacional)
         if (!cnpj) {
           acc.sem_cnpj++
           continue
@@ -483,7 +529,7 @@ export async function syncAtradius(): Promise<{
   lidos?: number
   atualizados?: number
 }> {
-  if (!seguradora.configurada()) return { status: 'nao_configurada' }
+  if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
   const desde = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
   const cfg = await lerConfigCredito()

@@ -185,6 +185,222 @@ handbook real é editar um arquivo.
 Sem credencial, `configurada()` devolve false: a esteira funciona inteira até "enviada à
 seguradora" e explica o que falta, em vez de estourar um erro de rede que parece um bug.
 
+### Sandbox ou produção é uma setting, não uma variável de ambiente
+
+O ambiente vive em `credito_config.atradius.ambiente` (`sandbox` | `producao`) e se troca
+em **/credito/config**. A alternativa — uma variável do worker — obrigaria um redeploy a
+cada ida e volta de quem está homologando, e o resultado prático disso é que ninguém
+alterna: o teste roda contra produção "só desta vez".
+
+| | Homologação (`sandbox`) | Produção (`producao`) |
+| --- | --- | --- |
+| Base URL | `https://api-uat.atradius.com` | `https://api.atradius.com` |
+| Credenciais | `ATRADIUS_SANDBOX_*` | `ATRADIUS_PROD_*` |
+
+As URLs moram no core (`AMBIENTES_SEGURADORA`) porque a tela precisa **mostrar** para onde
+o worker vai bater; uma segunda cópia no worker divergiria no dia em que o host mudasse, e
+a tela passaria a mentir.
+
+Três regras que o desenho impõe:
+
+1. **Nada herda entre ambientes.** Faltando `ATRADIUS_SANDBOX_CLIENT_SECRET`, a esteira
+   para com "credencial ausente" — nunca cai calada nas credenciais de produção. Um teste
+   que vira pedido de cobertura real é o acidente que isto existe para impedir.
+2. **O default é sandbox.** Linha de config ausente ou com valor desconhecido → homologação.
+   O pior caso de um erro de configuração tem de ser um teste que não valeu nada.
+3. **As credenciais não vêm para o banco.** `credito_config` é legível por qualquer usuário
+   com o módulo Crédito. O que a tela decide é *qual conjunto* o worker usa.
+
+`configurada()` é assíncrono por causa disto: quais variáveis são exigidas depende do que a
+tela escolheu, e isso mora no banco. O token OAuth é cacheado **por ambiente** — sem isso,
+alternar continuaria mandando o token da sandbox para a URL de produção por até uma hora, e
+o 401 pareceria credencial errada em vez de cache velho. A troca leva até 60s para valer no
+worker (TTL do cache de `lerAmbienteSeguradora`).
+
+O nome do cabeçalho da application key (`x-application-key`) tem a mesma ressalva de
+`ROTAS`: é a forma documentada publicamente, não confirmada contra o handbook. Está isolado
+numa constante para a correção ser uma linha.
+
+### A apólice é descoberta, não configurada
+
+O id da apólice não aparece no portal de desenvolvedores, e a própria API sabe informá-lo:
+`GET /credit-insurance/policy-management/v1/policies/details`. `apoliceVigente()` pergunta,
+filtra pela que está em vigor e cacheia por uma hora (por ambiente) — um contrato se renova
+uma vez por ano, e uma consulta por chamada colocaria uma ida à rede na frente de cada
+página do backfill.
+
+**Com mais de uma apólice vigente, ele para em vez de escolher.** Pegar "a primeira" é o
+default que funciona por um ano e um dia: o pedido submetido contra o contrato errado não
+dá erro, dá um limite aprovado sob uma cobertura que a operação não assumiu — e isso só
+aparece num sinistro. O erro nomeia `ATRADIUS_*_POLICY_ID`, que existe exatamente para esse
+caso e não para o caso comum.
+
+A apólice é resolvida **uma vez, antes do laço** de `enviarAnalises`, e não dentro dele:
+`resolverBuyer` pode ser cobrado e roda antes do pedido, então uma apólice irresolvível
+viraria uma busca de buyer paga por análise pendente, seguida de falha.
+
+Campos confirmados no retorno real (22/08/2026): o corpo vem embrulhado em **`data`**, com
+um objeto único — não uma lista, e não a página com `items` que os outros recursos usam.
+Dentro dele, `policyId`, `policyStatus` (`"live"`), `policyStartDate`, `policyExpiryDate` e
+`policyCurrency`.
+
+Duas lições que valem para os outros endpoints. A primeira: `"live"` não batia em nenhum
+dos termos que eu tinha imaginado para "vigente" (`active`, `in force`) — vocabulário de
+status se confirma contra resposta real, e o mesmo risco está de pé em `mapearEstagio`, que
+traduz o status das decisões. A segunda: o envelope `data` com objeto único teria estourado
+a leitura anterior, que assumia array.
+
+**A apólice do exemplo é em EUR.** Os nossos limites são em BRL. Pedir cobertura numa moeda
+que a apólice não opera raramente dá erro — dá um número aceito e lido na moeda dela.
+`pedirCobertura` registra um aviso quando as duas divergem, mas não bloqueia: como converter
+(ou se a apólice brasileira é outra) é decisão de negócio.
+
+### Buyer: três endpoints, e quase nada do que eu supus sobreviveu
+
+Domínio `organisation-management`, confirmados em 22/08/2026:
+
+| Endpoint | Uso aqui |
+| --- | --- |
+| `GET /credit-insurance/organisation-management/v1/buyers?country=&uid=&uidType=` | `resolverBuyer` — a busca por CNPJ |
+| `GET /credit-insurance/organisation-management/v1/buyers/{buyerId}` | `detalharBuyer` |
+| `GET /credit-insurance/organisation-management/v1/buyers/my-buyers?customerId=&policyId=` | **ainda não usado** — ver abaixo |
+
+Correções que os exemplos reais impuseram:
+
+- O cabeçalho é **`Atradius-App-Key`**, não o `x-application-key` que eu tinha suposto. Toda
+  chamada leva também um **`Atradius-Correlation-Id`** — gerado por chamada (não por
+  tentativa) e registrado no log de erro, porque sem ele um chamado com a Atradius sobre
+  "uma consulta que falhou ontem" descreve o problema em vez de apontá-lo.
+- `data` é **array** nos três, inclusive no de id único (devolve um array de um).
+- `buyerId` é **número**, não string.
+- O rating é **`currentBuyerRating`**, não `rating`. Há também `currentBuyerRatingClass`,
+  `previousBuyerRating` e `buyerRatingChange` — hoje só o primeiro é lido.
+- O identificador nacional **não é um campo**: vive dentro de `uniqueIdentifiers[]`, cujo
+  formato de item os exemplos não mostram (o array vem vazio nos três). Por isso
+  `cnpjDosIdentificadores` varre os valores de texto do item e aceita o que tiver 14
+  dígitos: 14 dígitos *é* a definição de CNPJ, e essa regra sobrevive ao nome da chave —
+  que é justamente o que não sabemos.
+- **O nome do buyer não aparece em exemplo nenhum.** Fica null até se confirmar, o que é
+  seguro porque a esteira nunca casa buyer por nome, só por CNPJ.
+
+#### `uidType`: o enum não tem CNPJ
+
+A busca aceita `country` (ISO 3166-1 Alpha-3, `BRA`) e um par `uid`/`uidType`, onde
+`uidType` é um enum **fechado**: `VAT`, `NRN`, `CR`, `DB`, `FC`, `SN`, `TK`. Nenhum é
+`CNPJ`. O apêndice da doc lista os aceitos por país.
+
+Por isso `uid_type` é **setting** (`credito_config.atradius.uid_type`, default `NRN`) e não
+constante: errar não devolve erro de rota — devolve "buyer não encontrado", que a esteira lê
+como "não existe na Atradius" e manda para revisão manual. Falha silenciosa numa chamada que
+pode ser cobrada, e descobrir o certo é tentar na sandbox. Tentar precisa ser um clique.
+
+`organizacao_id` (o customer id da ONE OS, `24953910`) mora na mesma linha. Identifica, não
+autentica — por isso não virou mais uma variável por ambiente.
+
+#### `my-buyers` é saúde, não cobertura
+
+`GET .../buyers/my-buyers` devolve **health information**: rating atual e anterior, data da
+mudança, e aceita `healthChange=up|down` e janelas por `buyerRatingUpdatedAfter/Before`.
+Basta `policyId` **ou** `customerId` (mandamos os dois).
+
+Usamos como listagem: o backfill pré-carrega o mapa CNPJ→buyer com **uma** chamada em vez de
+uma por buyer, e cai no detalhamento um a um se ela falhar — uma otimização que derruba o
+job quando indisponível é pior que a versão não otimizada.
+
+O uso que ele *permite* e que ainda não existe: alerta de **rebaixamento de rating**
+(`healthChange=down`). É o mesmo tipo de sinal que `houveReducaoDeLimite` já trata como
+evento próprio, e chega antes do corte de limite.
+
+### Cobertura: `cover-management`, e o que é uma "decisão" para a Atradius
+
+O que aqui se chama decisão, lá se chama **cover**. Todas confirmadas em 22/08/2026:
+
+| Endpoint | Uso aqui |
+| --- | --- |
+| `POST .../cover-management/v1/covers` | `pedirCobertura` |
+| `GET .../covers?customerId=&policyId=` | `listarPortfolio` |
+| `GET .../covers/decisions?...` | `listarDecisoes`, e metade do mapa do poll |
+| `GET .../covers/applications?...` | a outra metade: o que ainda **não** foi decidido |
+| `PUT .../covers` (`action: supersede`) | **não usado** — alteraria um limite já concedido |
+| `PATCH .../covers/{id}/cover-type` | não usado |
+
+Quatro decisões de leitura que valem registro:
+
+**Duas moedas, e só uma vale.** Todo valor vem em `...InPolicyCurrency` e
+`...InUserCurrency` (no exemplo, EUR e DKK). Lemos sempre a da apólice: é nela que a
+cobertura existe, e a "user currency" é conveniência de exibição de quem consultou. Misturar
+as duas produziria um limite numericamente plausível e factualmente errado.
+
+**O valor aplicado não é o valor aprovado.** `creditLimitApplicationAmount...` é o que
+pedimos; o que a Atradius concedeu está em `totalDecision.decisionAmtInPolicyCurrency`. Não
+há fallback de um para o outro — seria registrar como aprovado um número que ninguém aprovou.
+
+**Os códigos decidem o estágio.** Os apêndices abriram os enums, e `mapearEstagio` lê nesta
+ordem: `historicCode` (a cobertura acabou) → `decisionCode` → valor concedido. O terceiro
+degrau ficou como rede para código que a Atradius acrescente depois: melhor inferir pelo
+valor que travar o poll de todas as análises num código desconhecido.
+
+Três leituras dos apêndices que não são óbvias na tabela:
+
+- **DC05** ("refusal for increase — current cover remains unchanged") é `negada`: o que foi
+  recusado é o **pedido**, que é o que a esteira acompanha. A cobertura anterior seguir de pé
+  não torna o pedido aprovado.
+- **DC06/DC07** são preliminares. Marcá-los tira a análise do poll, mas não da história: o
+  sync diário casa por `atradius_case_id` em qualquer estágio e recolhe a decisão final
+  dentro da janela de 30 dias.
+- **ACLD, ICLD e MCLD** (amended, re-issued, maintained) ficaram **fora** do mapa de
+  históricos: encerram uma *versão* da cobertura, que segue existindo com outro conteúdo.
+  Forçar estágio a partir deles esconderia o que a decisão nova diz.
+
+**Pendência não é estágio — e isso era um bug.** `pendingProcessIndicator` é um apêndice
+próprio ("Batch Action Indicators"): `C` = pending cancellation, `W` = pending withdrawal, e
+por aí. A cobertura **ainda vale hoje**. Antes do apêndice, `pendingProcessStatus: "Pending
+Cancellation"` casava com a busca textual por "cancel" e derrubava para `cancelada` uma
+cobertura de pé — zerando um limite que a operação ainda podia usar. Agora vira o campo
+`pendencia`, que entra no motivo (a única superfície que a tela já mostra) sem mentir sobre o
+estágio. É o aviso mais antecipado que a seguradora dá de que vai cortar.
+
+**O poll virou um mapa.** Não existe `GET /covers/{coverId}` — só listagens por apólice.
+Consultar caso a caso baixaria a lista inteira uma vez por análise aberta. `mapaDeCoberturas`
+junta decisões + aplicações num índice por `coverId`, cacheado por dois minutos: uma rodada
+de poll, duas chamadas. As aplicações entram primeiro e as decisões por cima — a decisão é a
+informação mais nova, e a ordem inversa mostraria "em análise" para algo já decidido.
+
+**Paginação não existe na doc de cobertura.** Nenhum endpoint documenta cursor, página ou
+offset, então `proximoCursor` é sempre null. Inventar um parâmetro faria a API ignorá-lo em
+silêncio, e o backfill acharia que leu tudo tendo lido a primeira página. Pelo mesmo motivo,
+o recorte de data do sync é aplicado **por nós**, depois de receber a lista.
+
+**Datas vêm em UTC ou BST.** O apêndice de formato avisa que as respostas podem vir em
+UTC+01:00. `dataDaAtradius` corta os dez primeiros caracteres em vez de converter: isso
+preserva a data como a seguradora a apresenta — a mesma que aparece no portal e que alguém
+vai conferir. Converter para UTC recuaria um dia em qualquer carimbo entre 00:00 e 01:00 BST.
+
+**BRL está na lista de moedas suportadas**, e `BRA` na de países. A apólice do exemplo ser em
+EUR é característica daquela apólice, não limitação da API.
+
+**Validade não vem da Atradius.** Uma cobertura viva não tem "válido até" — ela vale até ser
+cancelada. `withdrawalDate`/`effectiveToDate` só aparecem quando já acabou. É por isso que
+`validade_padrao_meses` da nossa config segue preenchendo esse campo.
+
+#### O que o cover resolveu do buyer
+
+`uniqueIdentifiers` teve o formato confirmado — `[{uid, uidType, uidTypeDescription}]` — e
+cada cobertura já traz `buyerName` e os identificadores do buyer. O backfill passou a ler o
+CNPJ da própria decisão, caindo para a listagem da apólice e só então para o detalhamento
+individual. Na prática, o degrau caro quase nunca é alcançado.
+
+Ainda assim o CNPJ é validado por **14 dígitos**, e não pelo `uidType` declarado: qual
+`uidType` o Brasil usa é justamente o que não sabemos, e aceitar pelo tipo declarado gravaria
+um VAT europeu como CNPJ no dia em que um buyer estrangeiro entrasse na apólice.
+
+#### `customerId` é obrigatório no envio
+
+Diferente dos GETs, onde `policyId` sozinho basta, o corpo do POST exige `customerId`. Por
+isso o Organization ID entrou no gate de `configurada()` mesmo sem ser necessário para as
+leituras: `resolverBuyer` pode ser cobrado e roda antes do POST, então faltar esse campo
+sairia caro em vez de sair claro.
+
 ## Ordem dos jobs (é dependência, não preferência)
 
 ```
@@ -510,8 +726,10 @@ menos de seis meses" — escrevê-la com data obriga a pessoa a fazer a conta de
   O sync de análises da plataforma NÃO tem cron próprio: vai encadeado ao
   `/api/cron/radar-onepay`, **depois** do temperature report — a ordem é a regra, porque a
   detecção de saída consulta `clientes_onepay` para não rebaixar quem está ativo.
-- **Env**: `ATRADIUS_CLIENT_ID`, `ATRADIUS_CLIENT_SECRET`, `ATRADIUS_BASE_URL`,
-  `ATRADIUS_POLICY_ID` — todas opcionais.
+- **Env** (worker/Railway, todas opcionais): `ATRADIUS_PROD_CLIENT_ID`,
+  `ATRADIUS_PROD_CLIENT_SECRET`, `ATRADIUS_PROD_APP_KEY` e as equivalentes
+  `ATRADIUS_SANDBOX_*`. `ATRADIUS_*_POLICY_ID` é override e normalmente fica vazia — a
+  apólice é descoberta pela API. A base URL **não** é env: vem do ambiente escolhido na tela.
 
 ## Fora de escopo
 

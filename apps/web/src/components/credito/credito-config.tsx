@@ -3,11 +3,28 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, Plus, Save, Trash2 } from 'lucide-react'
+import {
+  AMBIENTES_SEGURADORA,
+  AMBIENTE_SEGURADORA_PADRAO,
+  UID_TYPES_SEGURADORA,
+  UID_TYPE_SEGURADORA_PADRAO,
+  ehAmbienteSeguradora,
+  ehUidTypeSeguradora,
+  type AmbienteSeguradora,
+  type UidTypeSeguradora,
+} from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { salvarCreditoConfigAction } from '@/actions/credito'
@@ -260,6 +277,225 @@ function TiposDeDocumento({
   )
 }
 
+/**
+ * O ambiente da seguradora (sandbox ou produção).
+ *
+ * ── POR QUE ISTO É UMA TELA, E NÃO UMA VARIÁVEL DE AMBIENTE ─────────────────
+ * Quem alterna é quem está homologando a integração, e por env cada ida e volta custaria
+ * um redeploy do worker. Na prática, isso significa que ninguém alterna — e o teste acaba
+ * rodando contra produção "só desta vez".
+ *
+ * ── O QUE NÃO ESTÁ AQUI ─────────────────────────────────────────────────────
+ * Client id, secret, application key e apólice. Eles ficam em variáveis do worker, um
+ * conjunto por ambiente, porque esta tabela é legível por qualquer usuário com o módulo
+ * Crédito — e um secret numa tabela lida pela tela é um secret vazado. O que este seletor
+ * decide é QUAL conjunto o worker usa.
+ *
+ * A confirmação de produção não é cerimônia: é o único ponto do sistema em que um clique
+ * transforma toda a esteira em pedidos de cobertura de verdade, com chamada cobrada.
+ */
+function AmbienteDaSeguradora({
+  atual,
+  onSalvar,
+  salvando,
+}: {
+  atual: AmbienteSeguradora
+  onSalvar: (a: AmbienteSeguradora) => Promise<void>
+  salvando: boolean
+}) {
+  const [rascunho, setRascunho] = React.useState<AmbienteSeguradora | null>(null)
+  const escolhido = rascunho ?? atual
+  const sujo = rascunho !== null && rascunho !== atual
+  const info = AMBIENTES_SEGURADORA[escolhido]
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Ambiente da seguradora</CardTitle>
+            <CardDescription>
+              Contra qual Atradius o worker bate: homologação ou produção. Vale para envio,
+              poll, sync e backfill — não há como um rodar num ambiente e outro no outro.
+            </CardDescription>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" disabled={!sujo} onClick={() => setRascunho(null)}>
+              Descartar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!sujo || salvando}
+              onClick={async () => {
+                await onSalvar(escolhido)
+                setRascunho(null)
+              }}
+            >
+              <Save className="mr-1 h-3.5 w-3.5" aria-hidden />
+              {salvando ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Label htmlFor="ambiente-seguradora" className="shrink-0">
+            Ambiente
+          </Label>
+          <Select
+            value={escolhido}
+            onValueChange={(v) => ehAmbienteSeguradora(v) && setRascunho(v)}
+          >
+            <SelectTrigger id="ambiente-seguradora" className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(AMBIENTES_SEGURADORA) as AmbienteSeguradora[]).map((a) => (
+                <SelectItem key={a} value={a}>
+                  {AMBIENTES_SEGURADORA[a].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            {info.base_url}
+          </code>
+        </div>
+
+        <p className="text-[0.8rem] text-muted-foreground">{info.descricao}</p>
+
+        {escolhido === 'producao' && (
+          <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+            <p className="text-[0.8rem] text-muted-foreground">
+              Em produção, cada envio da esteira é um pedido de cobertura de verdade e a busca
+              de buyer <strong>pode ser cobrada</strong> pela Atradius. Confira antes que as
+              credenciais de produção estejam no worker: sem elas, nada é enviado — a esteira
+              trava em &ldquo;não configurada&rdquo; em vez de cair nas de homologação.
+            </p>
+          </div>
+        )}
+
+        <p className="text-[0.8rem] text-muted-foreground">
+          As credenciais de cada ambiente ficam nas variáveis do worker
+          (<code className="text-[11px]">ATRADIUS_PROD_*</code> e{' '}
+          <code className="text-[11px]">ATRADIUS_SANDBOX_*</code>), nunca aqui — esta tela é
+          legível por todo o time de Crédito. A troca leva até um minuto para o worker
+          enxergar.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Como nos identificamos para a Atradius, e como o CNPJ se apresenta a ela.
+ *
+ * O `uidType` está numa tela de negócio porque o modo de falha dele é de negócio: errado,
+ * ele não devolve erro de rota — devolve "buyer não encontrado", e a análise vai para
+ * revisão manual como se a empresa não existisse na seguradora. Descobrir qual dos sete
+ * vale para o CNPJ é tentar na sandbox, e tentar precisa ser um clique.
+ */
+function IdentificacaoNaSeguradora({
+  organizacaoId,
+  uidType,
+  onSalvar,
+  salvando,
+}: {
+  organizacaoId: string
+  uidType: UidTypeSeguradora
+  onSalvar: (v: { organizacao_id: string; uid_type: UidTypeSeguradora }) => Promise<void>
+  salvando: boolean
+}) {
+  const [org, setOrg] = React.useState<string | null>(null)
+  const [tipo, setTipo] = React.useState<UidTypeSeguradora | null>(null)
+  const orgAtual = org ?? organizacaoId
+  const tipoAtual = tipo ?? uidType
+  const sujo = orgAtual !== organizacaoId || tipoAtual !== uidType
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Identificação na seguradora</CardTitle>
+            <CardDescription>
+              Quem somos para a Atradius, e como o CNPJ é apresentado na busca de buyer.
+            </CardDescription>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!sujo}
+              onClick={() => {
+                setOrg(null)
+                setTipo(null)
+              }}
+            >
+              Descartar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!sujo || salvando}
+              onClick={async () => {
+                await onSalvar({ organizacao_id: orgAtual.trim(), uid_type: tipoAtual })
+                setOrg(null)
+                setTipo(null)
+              }}
+            >
+              <Save className="mr-1 h-3.5 w-3.5" aria-hidden />
+              {salvando ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="organizacao-id">Organization ID</Label>
+          <Input
+            id="organizacao-id"
+            value={orgAtual}
+            onChange={(e) => setOrg(e.target.value)}
+            placeholder="—"
+          />
+          <p className="text-[0.8rem] text-muted-foreground">
+            O nosso <em>customer id</em> na Atradius. Identifica, não autentica — por isso mora
+            aqui e não nas variáveis do worker.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="uid-type">Tipo de identificador do buyer</Label>
+          <Select
+            value={tipoAtual}
+            onValueChange={(v) => ehUidTypeSeguradora(v) && setTipo(v)}
+          >
+            <SelectTrigger id="uid-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UID_TYPES_SEGURADORA.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[0.8rem] text-muted-foreground">
+            Como o CNPJ é enviado na busca (<code className="text-[11px]">uidType</code>). O enum
+            é fechado e <strong>não tem CNPJ</strong>; NRN e CR são os candidatos para um
+            registro nacional. Errado, a busca devolve &ldquo;buyer não encontrado&rdquo; em vez
+            de erro — teste na homologação antes de valer em produção.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function CreditoConfig() {
   const qc = useQueryClient()
   const [rascunho, setRascunho] = React.useState<Record<string, Record<string, string>>>({})
@@ -299,6 +535,38 @@ export function CreditoConfig() {
     void qc.invalidateQueries({ queryKey: creditoKeys.config() })
   }
 
+  async function salvarAmbiente(ambiente: AmbienteSeguradora) {
+    setSalvando('ambiente')
+    // Merge sobre o bloco inteiro: `poll_intervalo_horas` e `validade_padrao_meses` moram
+    // na mesma linha, e salvar só o ambiente apagaria os dois.
+    const bloco = { ...((config.data?.atradius ?? {}) as Record<string, unknown>), ambiente }
+    const r = await salvarCreditoConfigAction({ chave: 'atradius', valor: bloco })
+    setSalvando(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(
+      ambiente === 'producao'
+        ? 'Seguradora em PRODUÇÃO. Os próximos envios valem de verdade.'
+        : 'Seguradora em homologação. Nada enviado daqui vira cobertura.',
+    )
+    void qc.invalidateQueries({ queryKey: creditoKeys.config() })
+  }
+
+  async function salvarIdentificacao(v: { organizacao_id: string; uid_type: UidTypeSeguradora }) {
+    setSalvando('identificacao')
+    const bloco = { ...((config.data?.atradius ?? {}) as Record<string, unknown>), ...v }
+    const r = await salvarCreditoConfigAction({ chave: 'atradius', valor: bloco })
+    setSalvando(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success('Identificação salva. O worker leva até um minuto para enxergar.')
+    void qc.invalidateQueries({ queryKey: creditoKeys.config() })
+  }
+
   async function salvarTipos(tipos: TipoDoc[]) {
     setSalvando('docs')
     // Id gerado só para os NOVOS (os que ainda estão com o placeholder). Regerar o id de
@@ -320,6 +588,18 @@ export function CreditoConfig() {
   }
 
   if (config.isPending) return <Skeleton className="h-96 w-full rounded-lg" />
+
+  // Mesmo default do worker: valor ausente ou desconhecido é homologação, nunca produção.
+  const ambienteBruto = (config.data?.atradius as { ambiente?: unknown } | undefined)?.ambiente
+  const ambienteAtual = ehAmbienteSeguradora(ambienteBruto)
+    ? ambienteBruto
+    : AMBIENTE_SEGURADORA_PADRAO
+
+  const atradius = (config.data?.atradius ?? {}) as { organizacao_id?: unknown; uid_type?: unknown }
+  const organizacaoId = typeof atradius.organizacao_id === 'string' ? atradius.organizacao_id : ''
+  const uidType = ehUidTypeSeguradora(atradius.uid_type)
+    ? atradius.uid_type
+    : UID_TYPE_SEGURADORA_PADRAO
 
   const coef = (versao.data?.coeficientes ?? null) as
     | { ratio_limite?: { global?: number | null }; giro_mensal?: number | null }
@@ -360,6 +640,19 @@ export function CreditoConfig() {
           </div>
         </CardContent>
       </Card>
+
+      <AmbienteDaSeguradora
+        atual={ambienteAtual}
+        onSalvar={salvarAmbiente}
+        salvando={salvando === 'ambiente'}
+      />
+
+      <IdentificacaoNaSeguradora
+        organizacaoId={organizacaoId}
+        uidType={uidType}
+        onSalvar={salvarIdentificacao}
+        salvando={salvando === 'identificacao'}
+      />
 
       <TiposDeDocumento
         tipos={((config.data?.docs as { tipos?: TipoDoc[] } | undefined)?.tipos ?? []) as TipoDoc[]}

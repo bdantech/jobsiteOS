@@ -117,11 +117,38 @@ const envSchema = z.object({
   // Todas opcionais: sem elas a esteira funciona inteira até "enviada à seguradora",
   // e o envio explica que falta credencial em vez de falhar com erro de rede. É a
   // diferença entre "não configurado" e "quebrado", e ela importa na tela.
-  ATRADIUS_CLIENT_ID: z.string().optional(),
-  ATRADIUS_CLIENT_SECRET: z.string().optional(),
-  ATRADIUS_BASE_URL: z.string().url().optional(),
-  /** A apólice sobre a qual o portfólio e as decisões são lidos. */
-  ATRADIUS_POLICY_ID: z.string().optional(),
+  //
+  // ── DOIS CONJUNTOS, SEM HERANÇA ENTRE ELES ───────────────────────────────
+  // Qual conjunto vale é decidido pela setting `ambiente` em `credito_config`
+  // (/credito/config), não por env: alternar homologação↔produção é trabalho de quem
+  // está integrando, e não pode exigir redeploy do worker.
+  //
+  // NÃO existe fallback de sandbox para produção — de propósito. Uma variável faltando
+  // no conjunto de homologação tem de dar "credencial ausente", e nunca cair calada nas
+  // credenciais de produção: isso transformaria um teste em pedido de cobertura real.
+  //
+  // A BASE URL não está aqui: ela vem do ambiente escolhido (AMBIENTES_SEGURADORA, no
+  // core). Um override por env venceria a setting e a tela passaria a mentir sobre para
+  // onde o worker bate.
+  ATRADIUS_PROD_CLIENT_ID: z.string().optional(),
+  ATRADIUS_PROD_CLIENT_SECRET: z.string().optional(),
+  /** Chave da aplicação, emitida pelo portal de desenvolvedores da Atradius. */
+  ATRADIUS_PROD_APP_KEY: z.string().optional(),
+  /**
+   * OVERRIDE da apólice. Normalmente NÃO precisa ser definida: o worker pergunta à API
+   * qual é (`policy-management/v1/policies/details`) e usa a única vigente.
+   *
+   * Defina só quando a credencial alcançar MAIS DE UMA apólice vigente — aí a descoberta
+   * para de propósito, porque escolher sozinho seria decidir sob qual contrato a cobertura
+   * é pedida, e o pedido errado não dá erro: dá um limite sob uma apólice que a operação
+   * não assumiu.
+   */
+  ATRADIUS_PROD_POLICY_ID: z.string().optional(),
+
+  ATRADIUS_SANDBOX_CLIENT_ID: z.string().optional(),
+  ATRADIUS_SANDBOX_CLIENT_SECRET: z.string().optional(),
+  ATRADIUS_SANDBOX_APP_KEY: z.string().optional(),
+  ATRADIUS_SANDBOX_POLICY_ID: z.string().optional(),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })

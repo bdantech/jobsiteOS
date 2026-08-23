@@ -1,3 +1,11 @@
+import {
+  AMBIENTE_SEGURADORA_PADRAO,
+  UID_TYPE_SEGURADORA_PADRAO,
+  ehAmbienteSeguradora,
+  ehUidTypeSeguradora,
+  type AmbienteSeguradora,
+  type UidTypeSeguradora,
+} from '../../../../packages/core/src/credito/seguradora.js'
 import { supabaseAdmin } from '../db.js'
 
 /**
@@ -82,6 +90,58 @@ export async function lerConfigCredito(): Promise<ConfigCredito> {
     n_minimo_calibracao_por_tipo: 5,
     variacao_minima_snapshot: 0.1,
   }
+}
+
+/**
+ * Os parâmetros de integração com a seguradora, lidos de `credito_config.atradius`.
+ *
+ * Vivem aqui, e não em `atradius.ts`, porque `credito_config` tem UM leitor: dois lugares
+ * lendo a mesma linha divergem no dia em que uma chave mudar de nome.
+ *
+ * ── O cache, e por que ele é curto ───────────────────────────────────────────
+ * A pergunta é feita em toda chamada à seguradora — num backfill, centenas de vezes — e a
+ * resposta muda quando alguém clica na tela. Sessenta segundos é o teto de quanto tempo o
+ * worker segue com o valor antigo depois do clique: curto o bastante para quem está
+ * homologando não achar que o botão não funcionou, longo o bastante para uma paginação
+ * inteira não virar uma consulta por página.
+ *
+ * Cada campo tem um default seguro para valor ausente ou desconhecido. No ambiente, seguro
+ * é `sandbox`: um erro de digitação na configuração não pode ter como consequência pedir
+ * cobertura de verdade.
+ */
+export interface IntegracaoSeguradora {
+  ambiente: AmbienteSeguradora
+  /** O customer id da ONE OS na Atradius. Vazio quando não configurado. */
+  organizacao_id: string | null
+  /** Como o CNPJ se apresenta na busca de buyer. Ver o comentário do enum no core. */
+  uid_type: UidTypeSeguradora
+}
+
+const INTEGRACAO_TTL_MS = 60_000
+let integracaoCache: { valor: IntegracaoSeguradora; lidaEm: number } | null = null
+
+export async function lerIntegracaoSeguradora(): Promise<IntegracaoSeguradora> {
+  if (integracaoCache && Date.now() - integracaoCache.lidaEm < INTEGRACAO_TTL_MS) {
+    return integracaoCache.valor
+  }
+  const { data } = await supabaseAdmin
+    .from('credito_config')
+    .select('valor')
+    .eq('chave', 'atradius')
+    .maybeSingle()
+  const bruto = (data?.valor ?? {}) as {
+    ambiente?: unknown
+    organizacao_id?: unknown
+    uid_type?: unknown
+  }
+  const org = typeof bruto.organizacao_id === 'string' ? bruto.organizacao_id.trim() : ''
+  const valor: IntegracaoSeguradora = {
+    ambiente: ehAmbienteSeguradora(bruto.ambiente) ? bruto.ambiente : AMBIENTE_SEGURADORA_PADRAO,
+    organizacao_id: org === '' ? null : org,
+    uid_type: ehUidTypeSeguradora(bruto.uid_type) ? bruto.uid_type : UID_TYPE_SEGURADORA_PADRAO,
+  }
+  integracaoCache = { valor, lidaEm: Date.now() }
+  return valor
 }
 
 export async function lerTiposDoc(): Promise<TipoDoc[]> {
