@@ -321,9 +321,11 @@ async function emitirEventoAnalise(
 // ─── §4.3 Poll das decisões ─────────────────────────────────────────────────
 
 export async function pollDecisoes(): Promise<{
-  status: 'ok' | 'nao_configurada'
+  status: 'ok' | 'nao_configurada' | 'erro'
   consultadas?: number
   decididas?: number
+  falhas?: number
+  erro?: string
 }> {
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
@@ -334,13 +336,24 @@ export async function pollDecisoes(): Promise<{
     .in('estagio', ['enviada_seguradora', 'em_analise'])
     .not('atradius_case_id', 'is', null)
 
-  const acc = { consultadas: 0, decididas: 0 }
+  const acc = { consultadas: 0, decididas: 0, falhas: 0 }
   const decididos: string[] = []
+  let ultimoErro: string | null = null
 
   for (const a of abertas ?? []) {
     acc.consultadas++
     const r = await seguradora.consultarDecisao(a.atradius_case_id as string)
-    if (!r.ok || !r.dados) continue
+    if (!r.ok) {
+      // Contado, e não engolido: um `continue` calado transformava "a seguradora está
+      // fora do ar" em "nenhuma decisão saiu hoje" — que é o que se espera ver num dia
+      // normal, e por isso ninguém investiga.
+      acc.falhas++
+      ultimoErro = r.erro
+      continue
+    }
+    // Sem dados NÃO é falha: significa que a apólice não conhece este caso, e a análise
+    // fica onde está até alguém explicar por quê.
+    if (!r.dados) continue
 
     const { mudou } = await aplicarDecisao(
       a.id,
@@ -361,7 +374,13 @@ export async function pollDecisoes(): Promise<{
   // até a virada do mês, sendo multiplicada por uma chance que a seguradora desmentiu.
   await recalcularScoresDeCnpjs(decididos)
 
-  logger.info(acc, 'Poll de decisões concluído.')
+  // Toda consulta falhou: não é "nada mudou", é "não consegui perguntar".
+  if (acc.falhas > 0 && acc.falhas === acc.consultadas) {
+    logger.error({ ...acc, erro: ultimoErro }, 'Poll de decisões FALHOU.')
+    return { status: 'erro', erro: ultimoErro ?? undefined, ...acc }
+  }
+  if (acc.falhas > 0) logger.warn(acc, 'Poll de decisões concluído com falhas.')
+  else logger.info(acc, 'Poll de decisões concluído.')
   return { status: 'ok', ...acc }
 }
 
@@ -378,11 +397,12 @@ export async function pollDecisoes(): Promise<{
  * só, e o erro só aparece quando alguém aprova o limite errado.
  */
 export async function backfillAtradius(): Promise<{
-  status: 'ok' | 'nao_configurada'
+  status: 'ok' | 'nao_configurada' | 'erro'
   lidos?: number
   inseridos?: number
   atualizados?: number
   sem_cnpj?: number
+  erro?: string
 }> {
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
@@ -431,6 +451,8 @@ export async function backfillAtradius(): Promise<{
     return cnpj
   }
 
+  let falha: string | null = null
+
   async function consumir(
     ler: (cursor?: string) => Promise<
       | { ok: true; dados: { itens: DecisaoSeguradora[]; proximoCursor: string | null } }
@@ -443,7 +465,7 @@ export async function backfillAtradius(): Promise<{
     for (let pagina = 0; pagina < 200; pagina++) {
       const r = await ler(cursor)
       if (!r.ok) {
-        logger.error({ erro: r.erro }, 'Backfill interrompido pela seguradora.')
+        falha = r.erro
         return
       }
       for (const d of r.dados.itens) {
@@ -510,6 +532,14 @@ export async function backfillAtradius(): Promise<{
   await consumir((c) => seguradora.listarPortfolio(c))
   await consumir((c) => seguradora.listarDecisoes(undefined, c))
 
+  // Uma das duas listagens não veio: o backfill leu um pedaço da apólice e não a apólice.
+  // Reportar isso como sucesso faria alguém concluir que o histórico está completo — e o
+  // backfill é justamente o job que se roda UMA vez, confiando que trouxe tudo.
+  if (falha) {
+    logger.error({ ...acc, erro: falha }, 'Backfill da Atradius FALHOU.')
+    return { status: 'erro', erro: falha, ...acc }
+  }
+
   // O backfill traz histórico de decisões, e histórico é um fator do scorecard: sem
   // repontuar, a empresa que a apólice já aprovou continuaria contando como "nunca
   // analisada" na conta que decide a chance de concessão dela.
@@ -525,9 +555,10 @@ export async function backfillAtradius(): Promise<{
  * antigas que isso já foram vistas, e o backfill é quem recupera história.
  */
 export async function syncAtradius(): Promise<{
-  status: 'ok' | 'nao_configurada'
+  status: 'ok' | 'nao_configurada' | 'erro'
   lidos?: number
   atualizados?: number
+  erro?: string
 }> {
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
 
@@ -537,10 +568,11 @@ export async function syncAtradius(): Promise<{
   const decididos: string[] = []
 
   let cursor: string | undefined
+  let falha: string | null = null
   for (let pagina = 0; pagina < 200; pagina++) {
     const r = await seguradora.listarDecisoes(desde, cursor)
     if (!r.ok) {
-      logger.error({ erro: r.erro }, 'Sync da Atradius interrompido.')
+      falha = r.erro
       break
     }
     for (const d of r.dados.itens) {
@@ -570,6 +602,14 @@ export async function syncAtradius(): Promise<{
   }
 
   await recalcularScoresDeCnpjs(decididos)
+
+  // "Não consegui falar com a seguradora" e "falei e não havia nada" produziam a MESMA
+  // linha de log e os MESMOS zeros. Quem lia o log não tinha como distinguir os dois — e
+  // um sync que falha calado é um sync que ninguém percebe que parou de rodar.
+  if (falha) {
+    logger.error({ ...acc, erro: falha }, 'Sync da Atradius FALHOU.')
+    return { status: 'erro', erro: falha, ...acc }
+  }
 
   logger.info(acc, 'Sync da Atradius concluído.')
   return { status: 'ok', ...acc }

@@ -417,6 +417,21 @@ diário (09h UTC):         sync da apólice → poll → expirar
 A expiração roda mesmo sem seguradora configurada: a data de validade é nossa, e uma
 aprovação vencida contando como vigente valeria pontos no scorecard que ela não tem mais.
 
+### Zero lido não é o mesmo que não consegui ler
+
+Os três jobs que falam com a seguradora distinguem `ok`, `nao_configurada` e **`erro`**, e
+só logam "concluído" quando de fato concluíram. Antes, `listarDecisoes` falhando produzia
+`Sync da Atradius interrompido.` seguido de `Sync da Atradius concluído.` com `status: 'ok'`
+e zeros — a mesma linha final de um sync bem-sucedido num dia sem novidade. O poll era pior:
+engolia cada falha com um `continue` calado.
+
+Isso importa porque zeros são o resultado ESPERADO no dia a dia. Um job que falha
+produzindo exatamente o que se espera ver quando está tudo bem é um job que pode estar
+parado há semanas sem ninguém notar. Hoje: `Sync da Atradius FALHOU.`,
+`Poll de decisões FALHOU.` (ou "concluído com falhas", quando só parte falhou) e
+`Backfill da Atradius FALHOU.` — este último porque o backfill é o job que se roda uma vez,
+confiando que trouxe a apólice inteira.
+
 Evento de score só na **mudança de faixa**. Um aviso por empresa por rodada seriam 8 mil
 notificações por mês, que é o mesmo que nenhuma.
 
