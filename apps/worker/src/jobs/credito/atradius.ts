@@ -17,7 +17,7 @@ import type {
 import { lerIntegracaoSeguradora } from '../../credito/config.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
-import { requisitarJson } from '../../net/http.js'
+import { HttpError, requisitarJson } from '../../net/http.js'
 
 /**
  * Provedor Atradius (04d §4.2), atrás da interface `Seguradora` do core.
@@ -66,7 +66,8 @@ const ROTAS = {
    * não 401.
    */
   token: '/authenticate/v2/tokens',
-  apolices: '/credit-insurance/policy-management/v1/policies/details',
+  apolices: (q: string) =>
+    `/credit-insurance/policy-management/v1/policies/details${q ? `?${q}` : ''}`,
   buyerPorIdentificador: (pais: string, uid: string, tipo: string) =>
     `/credit-insurance/organisation-management/v1/buyers?country=${encodeURIComponent(pais)}` +
     `&uid=${encodeURIComponent(uid)}&uidType=${encodeURIComponent(tipo)}`,
@@ -333,11 +334,26 @@ async function chamar<T>(
     })
     return { ok: true, dados }
   } catch (e) {
-    const msg = String(e)
+    // `HttpError` carrega status e CORPO. Ler o objeto em vez de aplicar regex na string
+    // muda duas coisas: o status deixa de ser adivinhado a partir do texto da mensagem, e
+    // o corpo — que é onde a Atradius diz o que faltou — para de ser descartado.
+    //
+    // Um 4xx sem o corpo diz "a chamada falhou" e nada mais, que é o mesmo que nada: foi
+    // parâmetro obrigatório ausente? escopo? apólice fora do alcance da credencial? Cada
+    // uma dessas tem conserto diferente, e todas chegavam aqui idênticas.
+    const http = e instanceof HttpError ? e : null
     // 4xx é resposta, não falha de transporte: retentar só gasta chamada.
-    const recuperavel = !/\b4\d\d\b/.test(msg)
+    const recuperavel = http ? http.status >= 500 || http.status === 429 : true
     logger.error(
-      { rota: caminho, ambiente: cred.ambiente, correlacao, recuperavel },
+      {
+        rota: caminho,
+        ambiente: cred.ambiente,
+        correlacao,
+        status: http?.status,
+        resposta: http?.corpo?.slice(0, 500),
+        erro: http ? undefined : String(e).slice(0, 200),
+        recuperavel,
+      },
       'Chamada à Atradius falhou.',
     )
     return { ok: false, erro: `Atradius respondeu com erro${recuperavel ? ' temporário' : ''}.`, recuperavel }
@@ -474,6 +490,7 @@ async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
   const cred = c.dados
 
   if (cred.policy_id_override) {
+    // Ver o `moeda: null` abaixo: sem consultar, não sabemos a moeda da apólice fixada.
     return {
       ok: true,
       dados: {
@@ -494,7 +511,14 @@ async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
     return { ok: true, dados: apoliceCache.apolice }
   }
 
-  const r = await chamar<unknown>(ROTAS.apolices)
+  // O `customerId` vai na consulta. Os endpoints de cobertura exigem "ao menos um entre
+  // customerId e policyId", e não há motivo para o de apólices ser diferente: sem escopo,
+  // a pergunta "quais apólices?" não tem sujeito. Enviar o que temos é mais barato que
+  // descobrir pelo 400.
+  const { organizacao_id } = await lerIntegracaoSeguradora()
+  const qs = organizacao_id ? `customerId=${encodeURIComponent(organizacao_id)}` : ''
+
+  const r = await chamar<unknown>(ROTAS.apolices(qs))
   if (!r.ok) return r
 
   const lista = extrairApolices(r.dados)
