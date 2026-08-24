@@ -971,6 +971,8 @@ function mapearDecisao(d: DecisaoBruta | null | undefined): DecisaoSeguradora | 
     motivo: motivoDaDecisao(d),
     rating: d.currentBuyerRating ?? null,
     rating_classe: d.currentBuyerRatingClass ?? null,
+    codigo_decisao: d.decisionCode ?? null,
+    codigo_historico: d.historicCode ?? null,
     // A própria cobertura carrega o buyer: o backfill deixa de precisar detalhar um a um.
     identificador_nacional: cnpjDosIdentificadores(d.uniqueIdentifiers),
     nome_buyer: d.buyerName ?? null,

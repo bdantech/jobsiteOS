@@ -851,6 +851,9 @@ export type Database = {
         Row: {
           analise_propria_id: string | null
           atradius_buyer_id: string | null
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          rating_classe_seguradora: string | null
           atradius_case_id: string | null
           atualizada_em: string
           cnpj: string
@@ -876,6 +879,9 @@ export type Database = {
         Insert: {
           analise_propria_id?: string | null
           atradius_buyer_id?: string | null
+          codigo_decisao?: string | null
+          codigo_historico?: string | null
+          rating_classe_seguradora?: string | null
           atradius_case_id?: string | null
           atualizada_em?: string
           cnpj: string
@@ -901,6 +907,9 @@ export type Database = {
         Update: {
           analise_propria_id?: string | null
           atradius_buyer_id?: string | null
+          codigo_decisao?: string | null
+          codigo_historico?: string | null
+          rating_classe_seguradora?: string | null
           atradius_case_id?: string | null
           atualizada_em?: string
           cnpj?: string

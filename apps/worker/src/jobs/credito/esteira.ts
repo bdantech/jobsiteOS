@@ -204,7 +204,7 @@ async function aplicarDecisao(
   analiseId: string,
   cnpj: string,
   empresaId: string | null,
-  anterior: { estagio: string; limite_aprovado: number | null },
+  anterior: { estagio: string; limite_aprovado: number | null; codigo_decisao?: string | null },
   d: DecisaoSeguradora,
 ): Promise<{ mudou: boolean; reduziu: boolean }> {
   // A VALIDADE NÃO É INVENTADA AQUI. Uma cobertura Atradius viva não tem prazo — ela vale
@@ -215,7 +215,13 @@ async function aplicarDecisao(
   // diferentes conforme qual job a visse primeiro — e a inventada expirava sozinha meses
   // depois, tirando do ar uma cobertura que a seguradora nunca retirou.
   const expira = d.expira_em
-  const mudou = anterior.estagio !== d.estagio || Number(anterior.limite_aprovado ?? 0) !== Number(d.limite_aprovado ?? 0)
+  // `codigo_decisao` entra na comparação: sem isso, uma linha cujo código nunca foi
+  // gravado (as da primeira carga) jamais receberia o valor, porque estágio e limite já
+  // estariam iguais — e o campo que existe para diagnosticar ficaria eternamente nulo.
+  const mudou =
+    anterior.estagio !== d.estagio ||
+    Number(anterior.limite_aprovado ?? 0) !== Number(d.limite_aprovado ?? 0) ||
+    (anterior.codigo_decisao ?? null) !== (d.codigo_decisao ?? null)
   if (!mudou) return { mudou: false, reduziu: false }
 
   await supabaseAdmin
@@ -226,6 +232,8 @@ async function aplicarDecisao(
       moeda: d.moeda,
       rating_seguradora: d.rating,
       rating_classe_seguradora: d.rating_classe ?? null,
+      codigo_decisao: d.codigo_decisao ?? null,
+      codigo_historico: d.codigo_historico ?? null,
       expira_em: expira,
       decidida_em: d.decidida_em ?? new Date().toISOString(),
       motivo: d.motivo,
@@ -332,7 +340,7 @@ export async function pollDecisoes(): Promise<{
   const cfg = await lerConfigCredito()
   const { data: abertas } = await supabaseAdmin
     .from('analises_credito')
-    .select('id, cnpj, empresa_id, estagio, limite_aprovado, atradius_case_id')
+    .select('id, cnpj, empresa_id, estagio, limite_aprovado, codigo_decisao, atradius_case_id')
     .in('estagio', ['enviada_seguradora', 'em_analise'])
     .not('atradius_case_id', 'is', null)
 
@@ -518,7 +526,7 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
 
         const { data: existente } = await supabaseAdmin
           .from('analises_credito')
-          .select('id, estagio, limite_aprovado')
+          .select('id, estagio, limite_aprovado, codigo_decisao')
           .eq('atradius_case_id', d.case_id)
           .maybeSingle()
 
@@ -569,6 +577,8 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
           atradius_case_id: d.case_id,
           rating_seguradora: d.rating,
           rating_classe_seguradora: d.rating_classe ?? null,
+          codigo_decisao: d.codigo_decisao ?? null,
+          codigo_historico: d.codigo_historico ?? null,
           expira_em: d.expira_em,
           decidida_em: d.decidida_em,
           motivo: d.motivo,
@@ -658,7 +668,7 @@ export async function syncAtradius(): Promise<{
       if (d.pendencia) retrato.com_pendencia++
       const { data: existente } = await supabaseAdmin
         .from('analises_credito')
-        .select('id, cnpj, empresa_id, estagio, limite_aprovado')
+        .select('id, cnpj, empresa_id, estagio, limite_aprovado, codigo_decisao')
         .eq('atradius_case_id', d.case_id)
         .maybeSingle()
       if (!existente) continue // buyer que não passou por aqui: backfill resolve, sync não descobre

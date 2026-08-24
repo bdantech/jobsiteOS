@@ -117,6 +117,16 @@ export interface DecisaoSeguradora {
   /** A CLASSE do rating (`currentBuyerRatingClass`), que é a régua grossa ao lado da fina. */
   rating_classe?: string | null
   /**
+   * Os códigos CRUS da seguradora (`decisionCode`, `historicCode`).
+   *
+   * Guardados porque o estágio é uma TRADUÇÃO, e tradução perde o original: quando uma
+   * linha aparece classificada de um jeito que não bate com a realidade, sem o código não
+   * há como saber se o erro está no mapa ou no dado. Foi exatamente o que aconteceu com
+   * seis coberturas em vigor gravadas como negadas.
+   */
+  codigo_decisao?: string | null
+  codigo_historico?: string | null
+  /**
    * CNPJ e nome do buyer, quando a própria decisão os carrega.
    *
    * A Atradius devolve os dois dentro de cada cobertura — e isso poupa o backfill de
