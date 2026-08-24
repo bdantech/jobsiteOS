@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
@@ -122,21 +123,41 @@ function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
 
 export function Esteira() {
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
+  const [busca, setBusca] = React.useState('')
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: creditoKeys.esteira(),
     queryFn: buscarEsteira,
   })
 
+  /**
+   * A busca é local, sobre a lista já carregada — a esteira inteira já vem numa consulta,
+   * e ir ao banco a cada tecla trocaria um filtro instantâneo por um com latência.
+   *
+   * O CNPJ é comparado só por DÍGITOS: quem procura cola do documento, com pontuação, e
+   * quem lê a tela vê formatado. Comparar as duas formas cruas faria a busca falhar
+   * exatamente para quem copiou do lugar certo.
+   */
+  const filtradas = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+    if (!termo) return data ?? []
+    const digitos = termo.replace(/\D/g, '')
+    return (data ?? []).filter((a) => {
+      const nome = `${a.razao_social ?? ''} ${a.nome_fantasia ?? ''}`.toLowerCase()
+      if (nome.includes(termo)) return true
+      return digitos.length > 0 && a.cnpj.includes(digitos)
+    })
+  }, [data, busca])
+
   const porEstagio = React.useMemo(() => {
     const m = new Map<string, AnaliseNaEsteira[]>()
-    for (const a of data ?? []) {
+    for (const a of filtradas) {
       const lista = m.get(a.estagio) ?? []
       lista.push(a)
       m.set(a.estagio, lista)
     }
     return m
-  }, [data])
+  }, [filtradas])
 
   if (isPending) return <Skeleton className="h-96 w-full rounded-lg" />
 
@@ -167,7 +188,14 @@ export function Esteira() {
                 seguradora ou rodar a nossa.
               </CardDescription>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ"
+                className="h-9 w-56"
+                aria-label="Buscar na esteira por nome ou CNPJ"
+              />
               <Button
                 variant="outline"
                 size="sm"
@@ -196,6 +224,13 @@ export function Esteira() {
               <p className="mt-1">
                 As solicitações nascem na Company 360 de um sacado, ou vêm do backfill da apólice.
               </p>
+            </div>
+          ) : filtradas.length === 0 ? (
+            // Vazio POR BUSCA é outro estado: dizer "nenhuma análise ainda" aqui faria a
+            // pessoa achar que a esteira está vazia quando ela só não encontrou o termo.
+            <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Nada encontrado para “{busca}”.</p>
+              <p className="mt-1">{(data ?? []).length} análises na esteira.</p>
             </div>
           ) : vista === 'kanban' ? (
             <div className="flex gap-3 overflow-x-auto pb-2">

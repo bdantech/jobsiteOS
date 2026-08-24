@@ -102,6 +102,16 @@ function Tile({
   )
 }
 
+/** No mobile leva rótulo (não há cabeçalho); no desktop é só o número alinhado à direita. */
+function Celula({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 tabular-nums sm:block sm:text-right">
+      <span className="text-[11px] text-muted-foreground sm:hidden">{rotulo}</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
 function Linha({ l }: { l: LinhaCarteira }) {
   const s = ehSituacao(l.situacao) ? SITUACOES[l.situacao] : null
   const nome = l.razao_social ?? l.company_name ?? '—'
@@ -114,8 +124,12 @@ function Linha({ l }: { l: LinhaCarteira }) {
   const pct = concedido > 0 ? Math.min(100, Math.round((segurado / concedido) * 100)) : null
 
   return (
-    <div className="grid grid-cols-12 items-center gap-2 border-b px-3 py-2 text-sm last:border-0">
-      <div className="col-span-12 min-w-0 sm:col-span-4">
+    // Seis faixas em vez de `grid-cols-12`: a situação precisa de largura para caber
+    // "Parcialmente coberto" sem quebrar, e uma coluna de 12 avos não cabe. No mobile o
+    // grid some e cada célula vira uma linha com rótulo próprio — a tabela não tem cabeçalho
+    // ali, e número sem rótulo em telefone é adivinhação.
+    <div className="border-b px-3 py-2 text-sm last:border-0 sm:grid sm:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.25fr)] sm:items-center sm:gap-2">
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {l.empresa_id ? (
             <Link href={`/empresas/${l.empresa_id}`} className="truncate font-medium hover:underline">
@@ -123,11 +137,6 @@ function Linha({ l }: { l: LinhaCarteira }) {
             </Link>
           ) : (
             <span className="truncate font-medium">{nome}</span>
-          )}
-          {s && (
-            <Badge variant={s.badge} className="shrink-0 text-[10px]">
-              {s.label}
-            </Badge>
           )}
           {/* A divergência que só esta tela enxerga: a plataforma acha que tem seguro e a
               seguradora não confirma. É bug de dado de alguém, e hoje ninguém olha. */}
@@ -142,10 +151,11 @@ function Linha({ l }: { l: LinhaCarteira }) {
         </p>
       </div>
 
-      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
+      <Celula rotulo="Concedido">
         {concedido > 0 ? BRL.format(concedido) : <span className="text-muted-foreground">—</span>}
-      </div>
-      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
+      </Celula>
+
+      <Celula rotulo="Consumido">
         {consumido !== null && consumido > 0 ? (
           <>
             <span>{BRL.format(consumido)}</span>
@@ -161,11 +171,13 @@ function Linha({ l }: { l: LinhaCarteira }) {
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
-      </div>
-      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
+      </Celula>
+
+      <Celula rotulo="Segurado">
         {segurado > 0 ? BRL.format(segurado) : <span className="text-muted-foreground">—</span>}
-      </div>
-      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
+      </Celula>
+
+      <Celula rotulo="Descoberto">
         {descoberto > 0 ? (
           <span className="font-medium text-destructive">{BRL.format(descoberto)}</span>
         ) : (
@@ -173,6 +185,14 @@ function Linha({ l }: { l: LinhaCarteira }) {
         )}
         {pct !== null && (
           <span className="ml-1 text-[11px] text-muted-foreground">{pct}% seg.</span>
+        )}
+      </Celula>
+
+      <div className="mt-1 flex sm:mt-0 sm:justify-end">
+        {s && (
+          <Badge variant={s.badge} className="text-[10px]">
+            {s.label}
+          </Badge>
         )}
       </div>
     </div>
@@ -311,12 +331,13 @@ export function CarteiraCredito() {
           </div>
 
           <div className="rounded-lg border">
-            <div className="hidden grid-cols-12 gap-2 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground sm:grid">
-              <div className="col-span-4">Empresa</div>
-              <div className="col-span-2 text-right">Limite concedido</div>
-              <div className="col-span-2 text-right">Consumido</div>
-              <div className="col-span-2 text-right">Segurado</div>
-              <div className="col-span-2 text-right">Descoberto</div>
+            <div className="hidden gap-2 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,2.4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.25fr)]">
+              <div>Empresa</div>
+              <div className="text-right">Limite concedido</div>
+              <div className="text-right">Consumido</div>
+              <div className="text-right">Segurado</div>
+              <div className="text-right">Descoberto</div>
+              <div className="text-right">Situação</div>
             </div>
             {visiveis.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-muted-foreground">
