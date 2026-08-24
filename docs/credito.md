@@ -776,6 +776,9 @@ menos de seis meses" — escrevê-la com data obriga a pessoa a fazer a conta de
   "Ex-cliente desde {data}" na ficha — **não** há aba de clientes Onepay no mobile hoje,
   então não havia lista existente onde pôr o filtro segmentado que §4 pedia.
 - **Cron**: `/api/cron/credito-mensal` (dia 7, 08h) e `/api/cron/credito-sync` (diário, 09h).
+  A tela de Configurações lista os três com horário e explicação, **importando o
+  `vercel.json` de verdade** — uma cópia escrita à mão envelheceria em silêncio, e alguém
+  investigaria "por que a decisão só apareceu de manhã" contra um horário que já mudou.
   O sync de análises da plataforma NÃO tem cron próprio: vai encadeado ao
   `/api/cron/radar-onepay`, **depois** do temperature report — a ordem é a regra, porque a
   detecção de saída consulta `clientes_onepay` para não rebaixar quem está ativo.

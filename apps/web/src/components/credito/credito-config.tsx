@@ -496,7 +496,107 @@ function IdentificacaoNaSeguradora({
   )
 }
 
-export function CreditoConfig() {
+export interface CronDoCredito {
+  path: string
+  schedule: string
+}
+
+/**
+ * O que cada cron do Crédito faz. A CHAVE é o caminho, e a lista de horários vem do
+ * `vercel.json` — aqui mora só a explicação, que o arquivo de configuração não tem onde
+ * guardar.
+ */
+const OQUE_FAZ: Record<string, { titulo: string; detalhe: string }> = {
+  '/api/cron/credito-sync': {
+    titulo: 'Atualizações da seguradora',
+    detalhe:
+      'Lê as decisões da apólice, consulta as análises abertas e expira as aprovações vencidas. É este que traz o retorno da Atradius.',
+  },
+  '/api/cron/credito-mensal': {
+    titulo: 'Calibração mensal',
+    detalhe: 'Recalibra os coeficientes, repontua o scorecard e reestima o limite potencial da base.',
+  },
+  '/api/cron/credito-reanalises': {
+    titulo: 'Reanálises e fila própria',
+    detalhe: 'Sugere quem merece nova análise e destrava as análises proprietárias paradas.',
+  },
+}
+
+/** `0 9 * * *` → "todo dia às 09:00". Só as formas que a gente usa; o resto sai cru. */
+function lerCron(expr: string): string {
+  const [min, hora, dia, , semana] = expr.split(' ')
+  if (min === undefined || hora === undefined) return expr
+  const hhmm = `${hora.padStart(2, '0')}:${min.padStart(2, '0')}`
+  if (dia && dia !== '*') return `todo dia ${dia} do mês, às ${hhmm}`
+  if (semana && semana !== '*') return `semanalmente, às ${hhmm}`
+  return `todo dia, às ${hhmm}`
+}
+
+/**
+ * Os horários automáticos do módulo.
+ *
+ * Existe porque "o crédito atualiza sozinho?" era uma pergunta cuja resposta morava num
+ * arquivo de configuração do deploy — visível para quem lê o repositório e para mais
+ * ninguém. Quem opera a esteira precisa saber que a decisão da seguradora chega de manhã
+ * sem ninguém clicar, e a que horas, para não sair procurando o botão.
+ *
+ * Os horários são UTC porque é assim que o agendador os executa. Converter para o fuso de
+ * Brasília na tela pareceria gentileza e seria armadilha: quem for conferir o agendamento
+ * lá encontraria outro número e não saberia qual dos dois está certo. O horário local vai
+ * ao lado, rotulado, sem substituir o original.
+ */
+function Automacoes({ crons }: { crons: CronDoCredito[] }) {
+  if (crons.length === 0) return null
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Rotinas automáticas</CardTitle>
+        <CardDescription>
+          O que roda sozinho neste módulo, e quando. Todos podem ser disparados à mão no
+          Painel — o horário é só o piso.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {crons.map((c) => {
+          const info = OQUE_FAZ[c.path]
+          const [min, hora] = c.schedule.split(' ')
+          const horaBrt =
+            hora && min && /^\d+$/.test(hora)
+              ? `${String((Number(hora) + 24 - 3) % 24).padStart(2, '0')}:${min.padStart(2, '0')}`
+              : null
+          return (
+            <div key={c.path} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border p-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{info?.titulo ?? c.path}</p>
+                {info ? (
+                  <p className="text-[0.8rem] text-muted-foreground">{info.detalhe}</p>
+                ) : null}
+                <code className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                  {c.path}
+                </code>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-sm tabular-nums">{lerCron(c.schedule)} UTC</p>
+                {horaBrt && (
+                  <p className="text-[11px] tabular-nums text-muted-foreground">
+                    {horaBrt} em Brasília
+                  </p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        <p className="text-[0.8rem] text-muted-foreground">
+          A expiração de aprovações vencidas roda <strong>mesmo sem seguradora
+          configurada</strong>: a data de validade é nossa, e uma aprovação vencida contando
+          como vigente valeria pontos no scorecard que ela não tem mais.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function CreditoConfig({ crons = [] }: { crons?: CronDoCredito[] }) {
   const qc = useQueryClient()
   const [rascunho, setRascunho] = React.useState<Record<string, Record<string, string>>>({})
   const [salvando, setSalvando] = React.useState<string | null>(null)
@@ -646,6 +746,8 @@ export function CreditoConfig() {
         onSalvar={salvarAmbiente}
         salvando={salvando === 'ambiente'}
       />
+
+      <Automacoes crons={crons} />
 
       <IdentificacaoNaSeguradora
         organizacaoId={organizacaoId}
