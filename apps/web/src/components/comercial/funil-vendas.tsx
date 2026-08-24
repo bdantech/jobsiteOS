@@ -4,7 +4,15 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, LayoutGrid, RotateCcw, Table2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import {
+  AlertTriangle,
+  LayoutGrid,
+  RotateCcw,
+  Table2,
+  ThumbsDown,
+  ThumbsUp,
+  TrendingDown,
+} from 'lucide-react'
 import {
   ESTAGIOS_VENDA, ESTAGIO_ANALISE_LABELS, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS,
   vendaNoFunil,
@@ -210,6 +218,12 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                   </SelectContent>
                 </Select>
               )}
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/comercial/analise">
+                  <TrendingDown className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Análise
+                </Link>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

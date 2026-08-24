@@ -15,10 +15,18 @@ import {
   type TipoVendedorId,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buscarResumo, buscarVendedoresVisiveis, comercialKeys } from './queries'
+import { AnaliseFunil } from './analise-funil'
 
 /**
  * "Meu Painel" — a primeira tela de quem vende, montada pelo TIPO do vendedor.
@@ -221,6 +229,36 @@ export function MeuPainel({ ehGestor }: { ehGestor: boolean }) {
           />
         )}
       </div>
+
+      {/*
+        A análise do funil DO TIPO da pessoa, e do funil dela.
+        Um SDR não tem negócios e um closer não tem leads: mostrar os dois faria metade do
+        painel ser sempre uma tela vazia. O gestor vê o de vendas, que é o que ele cobra.
+      */}
+      {(tipo === 'sdr' || tipo === 'vendedor' || ehGestor) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <CardTitle className="text-base">Conversão e tempo por etapa</CardTitle>
+                <CardDescription>
+                  Onde o funil trava, e quanto tempo cada etapa segura o card.
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild className="shrink-0">
+                <Link href="/comercial/analise">Ver completo</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <AnaliseFunil
+              funil={tipo === 'sdr' ? 'sdr' : 'vendedor'}
+              vendedorId={data.vendedor?.id ?? null}
+              compacto
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {data.proximas_reunioes.length > 0 && (
         <Card>

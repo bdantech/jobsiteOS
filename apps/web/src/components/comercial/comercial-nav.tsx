@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Sparkles, Target, Users,
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Sparkles,
+  Target, TrendingDown, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -45,6 +46,9 @@ const ITENS: readonly ItemNav[] = [
   // Do originador: a carteira dele é o recorte, e capturar certificado é o trabalho
   // que destrava a ingestão das NFs que ele origina.
   { href: '/comercial/certificados', label: 'Funil de Certificados', icon: ShieldCheck, tipos: ['originador'] },
+  // Análise fica logo depois dos funis e antes do calendário: ela lê os mesmos cards, e
+  // quem termina de mexer no funil é quem pergunta onde ele trava.
+  { href: '/comercial/analise', label: 'Análise do Funil', icon: TrendingDown, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
   {

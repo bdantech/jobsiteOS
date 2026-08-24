@@ -11,6 +11,7 @@ import {
   Table2,
   ThumbsDown,
   ThumbsUp,
+  TrendingDown,
 } from 'lucide-react'
 import {
   ESTAGIOS_SDR,
@@ -304,6 +305,12 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                   </SelectContent>
                 </Select>
               )}
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/comercial/analise">
+                  <TrendingDown className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Análise
+                </Link>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
