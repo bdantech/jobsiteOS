@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -30,6 +29,18 @@ import { cn } from '@/lib/utils'
  * A ALTURA é fixa com teto e miolo rolável, e não o `grid` sem altura do primitivo:
  * conteúdo variável (uma nota fiscal inteira, 371 CNPJs) fazia a caixa crescer além da
  * viewport, e cabeçalho e rodapé apareciam fora do fundo pintado.
+ *
+ * ─── AS AÇÕES SUBIRAM PARA O CANTO SUPERIOR DIREITO ─────────────────────────
+ * Ganhar, perder e julgar fit são decisões sobre o item INTEIRO, e o rodapé as colocava
+ * depois de todo o conteúdo — atrás de uma rolagem, quando a aba era longa. No topo elas
+ * ficam onde o olho já está ao abrir o card, e a mesma posição em todos os funis.
+ *
+ * O rodapé deixou de existir junto: sem ele o miolo ganha altura, que é o recurso escasso
+ * num modal.
+ *
+ * ─── A TRILHA DE ETAPAS SUBSTITUIU AVANÇAR/RECUAR ───────────────────────────
+ * Ver `EtapasDoFunil`. Ela fica entre o cabeçalho e as abas porque é a informação que
+ * responde "onde este negócio está" — a primeira pergunta de quem abre um card.
  */
 
 export interface AbaModal {
@@ -46,9 +57,10 @@ export function ModalDoCard({
   titulo,
   subtitulo,
   cabecalho,
+  etapas,
   abas,
   acoes,
-  largura = 'max-w-2xl',
+  largura = 'max-w-4xl',
 }: {
   aberto: boolean
   onOpenChange: (a: boolean) => void
@@ -56,8 +68,10 @@ export function ModalDoCard({
   subtitulo?: React.ReactNode
   /** Badges e afins, sob o título e acima das abas. */
   cabecalho?: React.ReactNode
+  /** A trilha de etapas do funil. Fica logo abaixo do cabeçalho. */
+  etapas?: React.ReactNode
   abas: AbaModal[]
-  /** O rodapé fixo. É onde vivem as ações que antes ficavam no card. */
+  /** As decisões sobre o item inteiro (ganhar, perder, fit). Vão no canto superior direito. */
   acoes?: React.ReactNode
   largura?: string
 }) {
@@ -72,24 +86,46 @@ export function ModalDoCard({
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className={cn('flex max-h-[85vh] flex-col gap-0 p-0', largura)}>
-        <DialogHeader className="space-y-2 border-b p-5 pb-3">
-          <div className="pr-6">
-            <DialogTitle className="text-base">{titulo}</DialogTitle>
-            {subtitulo ? <DialogDescription>{subtitulo}</DialogDescription> : null}
+      {/* `h-[85vh]` e não `max-h`: com altura variável, trocar de aba fazia o modal pular
+          de tamanho e o conteúdo dançar sob o cursor. Altura fixa mantém a caixa parada. */}
+      <DialogContent className={cn('flex h-[85vh] flex-col gap-0 p-0', largura)}>
+        <DialogHeader className="space-y-3 border-b p-5 pb-3 text-left">
+          <div className="flex items-start justify-between gap-4">
+            {/* `pr-6` some daqui: o X do primitivo fica acima das ações, e o espaço para
+                ele é reservado pelo `pr-8` do bloco de ações. */}
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="truncate text-base">{titulo}</DialogTitle>
+              {subtitulo ? <DialogDescription>{subtitulo}</DialogDescription> : null}
+            </div>
+            {acoes ? (
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pr-8">
+                {acoes}
+              </div>
+            ) : null}
           </div>
           {cabecalho}
+          {etapas}
         </DialogHeader>
 
         <Tabs value={ativa} onValueChange={setAtiva} className="flex min-h-0 flex-1 flex-col">
-          <div className="border-b px-5 pt-3">
-            <TabsList className="h-9">
+          {/*
+           * Abas sublinhadas, alinhadas ao mesmo `px-5` do cabeçalho e dividindo a mesma
+           * linha de borda. A pílula cinza do primitivo flutuava com recuo próprio dentro
+           * de uma faixa com borda embaixo — duas molduras concorrentes, e nenhuma das duas
+           * alinhada com o título acima. É o mesmo desenho da navegação do Crédito, que já
+           * resolve isso no resto do sistema.
+           */}
+          <div className="border-b px-5">
+            <TabsList className="h-auto w-full justify-start gap-1 rounded-none bg-transparent p-0">
               {abas.map((a) => (
                 <TabsTrigger
                   key={a.id}
                   value={a.id}
                   disabled={a.desabilitada}
-                  className="text-xs"
+                  className={cn(
+                    'rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-xs shadow-none',
+                    'data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none',
+                  )}
                   title={a.desabilitada ? 'Ainda não implementado.' : undefined}
                 >
                   {a.label}
@@ -109,10 +145,6 @@ export function ModalDoCard({
             </TabsContent>
           ))}
         </Tabs>
-
-        {acoes ? (
-          <DialogFooter className="flex-wrap gap-2 border-t p-5 pt-3 sm:justify-end">{acoes}</DialogFooter>
-        ) : null}
       </DialogContent>
     </Dialog>
   )

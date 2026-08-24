@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, ChevronRight, LayoutGrid, Table2 } from 'lucide-react'
+import { AlertTriangle, LayoutGrid, RotateCcw, Table2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import {
   ESTAGIOS_VENDA, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS, vendaNoFunil,
   type EstagioVenda, type SituacaoVenda,
@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
+import { EtapasDoFunil } from './etapas-funil'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   type VendaComEmpresa,
@@ -247,17 +248,34 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                         <div
                           key={v.id}
                           className={cn(
-                            'space-y-1.5 rounded-md border p-2 text-sm',
+                            'relative space-y-1.5 rounded-md border p-2 text-sm transition-colors',
+                            'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
                             SITUACAO_CLASSE[v.situacao as SituacaoVenda],
                             v.primeira_operacao_em && 'opacity-70',
                           )}
                         >
-                          <Link
-                            href={v.empresas ? `/empresas/${v.empresas.id}` : '#'}
-                            className="line-clamp-2 font-medium hover:underline"
-                          >
+                          {/*
+                           * O card INTEIRO abre o negócio, e a área clicável é um <button>
+                           * de verdade esticado sobre ele — não um onClick no <div>.
+                           *
+                           * A diferença aparece em tudo que não é mouse: o botão entra na
+                           * ordem de tabulação, responde a Enter e Espaço, e é anunciado
+                           * como "Abrir {empresa}" em vez de silêncio. Um div com onClick
+                           * dá a mesma área e nada disso.
+                           *
+                           * O nome deixou de ser link para a empresa: dois destinos no
+                           * mesmo card fazem o clique virar loteria. A empresa continua a
+                           * um clique, na aba do modal.
+                           */}
+                          <button
+                            type="button"
+                            aria-label={`Abrir ${v.empresas?.razao_social ?? 'negócio'}`}
+                            onClick={() => setAberto(v)}
+                            className="absolute inset-0 z-0 rounded-md focus:outline-none"
+                          />
+                          <p className="line-clamp-2 font-medium">
                             {v.empresas?.razao_social ?? 'Empresa'}
-                          </Link>
+                          </p>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {v.empresas?.uf ? (
                               <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
@@ -282,6 +300,9 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                           {/* Só sem filtro: com ele o nome repetiria em cada card o
                               que o seletor no topo já diz. */}
                           {!vendedorId && (
+                            // `z-10`: o seletor de dono é interativo e precisa ficar ACIMA
+                            // da área que abre o card, senão trocar de dono viraria abrir.
+                            <div className="relative z-10">
                             <DonoDoCard
                               nome={nomePorId.get(v.vendedor_id) ?? null}
                               tipos={['vendedor']}
@@ -289,6 +310,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                               ocupado={agindo}
                               onTrocar={(id) => reatribuir(v, id)}
                             />
+                            </div>
                           )}
                           {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
                             <p className="text-[11px] text-muted-foreground">
@@ -300,16 +322,6 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                               Ganho, sem operar ainda — sai do funil na primeira antecipação.
                             </p>
                           )}
-                          {/* As ações vivem no modal. Três botões por card, vezes
-                              oito colunas, viravam uma parede — e cada clique era uma
-                              decisão tomada sem abrir o negócio. */}
-                          <button
-                            type="button"
-                            onClick={() => setAberto(v)}
-                            className="w-full rounded border border-dashed py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-                          >
-                            Abrir
-                          </button>
                         </div>
                       ))}
                       {itens.length === 0 && (
@@ -398,6 +410,21 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
               />
             </div>
           }
+          etapas={
+            <EtapasDoFunil
+              etapas={ESTAGIOS_VENDA.map((e) => ({
+                id: e,
+                label: ESTAGIO_VENDA_LABELS[e],
+                // Perdido não anda: o estágio é o que registra até onde o negócio chegou
+                // antes de morrer, e movê-lo apagaria essa informação. Reabrir primeiro.
+                bloqueada:
+                  aberto.situacao === 'perdido' ? 'negócio perdido — reabra para mover' : undefined,
+              }))}
+              atual={aberto.estagio}
+              ocupado={agindo}
+              onIr={(id) => void mover(aberto, id as EstagioVenda)}
+            />
+          }
           abas={[
             {
               id: 'negocio',
@@ -431,37 +458,42 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
           ]}
+          /*
+           * Ganhar e perder são as duas decisões terminais, e ficam lado a lado no topo
+           * com as cores que o resto do sistema já usa para isso: verde de aprovação
+           * (o mesmo do badge "ganho" no card) e o destrutivo do tema.
+           *
+           * Avançar saiu daqui — virou a trilha de etapas acima, que faz o mesmo e mais.
+           */
           acoes={
             aberto.situacao === 'perdido' ? (
               <Button size="sm" variant="outline" disabled={agindo} onClick={() => void encerrar(aberto, 'em_andamento')}>
+                <RotateCcw className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Reabrir
               </Button>
-            ) : (
+            ) : aberto.situacao === 'em_andamento' ? (
               <>
-                {aberto.situacao === 'em_andamento' && (
-                  <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setPerdendo(aberto)}>
-                    Perdi
-                  </Button>
-                )}
-                {/* Avançar vale mesmo já ganho: onboarding é trabalho. */}
-                {proximo(aberto.estagio as EstagioVenda) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={agindo}
-                    onClick={() => void mover(aberto, proximo(aberto.estagio as EstagioVenda)!)}
-                  >
-                    {ESTAGIO_VENDA_LABELS[proximo(aberto.estagio as EstagioVenda)!]}
-                    <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-                  </Button>
-                )}
-                {aberto.situacao === 'em_andamento' && (
-                  <Button size="sm" disabled={agindo} onClick={() => void encerrar(aberto, 'ganho')}>
-                    Ganhei
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={agindo}
+                  onClick={() => setPerdendo(aberto)}
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <ThumbsDown className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Perdi
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={agindo}
+                  onClick={() => void encerrar(aberto, 'ganho')}
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  <ThumbsUp className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Ganhei
+                </Button>
               </>
-            )
+            ) : null
           }
         />
       )}

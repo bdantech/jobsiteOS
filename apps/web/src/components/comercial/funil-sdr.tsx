@@ -4,7 +4,14 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, CalendarPlus, ChevronRight, LayoutGrid, Table2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarPlus,
+  LayoutGrid,
+  Table2,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react'
 import {
   ESTAGIOS_SDR,
   ESTAGIO_SDR_LABELS,
@@ -31,6 +38,7 @@ import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
+import { EtapasDoFunil } from './etapas-funil'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
   comercialKeys,
@@ -172,40 +180,40 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
         </span>
       )
     }
+    /*
+     * Fit é o julgamento sobre a EMPRESA e vale em qualquer etapa — por isso ele fica no
+     * topo, com as mesmas cores de aprovar/reprovar do resto do sistema, enquanto o
+     * movimento pelo funil desceu para a trilha de etapas.
+     *
+     * Agendar continua aqui: não é julgamento nem etapa, é uma ação que abre um formulário.
+     */
     return (
       <>
         {l.estagio !== 'a_contatar' && (
-          <Button size="sm" variant="ghost" disabled={agindo} onClick={() => setSemFit(l)}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={agindo}
+            onClick={() => setSemFit(l)}
+            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <ThumbsDown className="mr-1 h-3.5 w-3.5" aria-hidden />
             Sem fit
           </Button>
         )}
         {l.estagio !== 'a_contatar' && l.fit !== true && (
-          <Button size="sm" variant="ghost" disabled={agindo} onClick={() => void julgar(l, true)}>
+          <Button
+            size="sm"
+            disabled={agindo}
+            onClick={() => void julgar(l, true)}
+            className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            <ThumbsUp className="mr-1 h-3.5 w-3.5" aria-hidden />
             Com fit
           </Button>
         )}
-        {l.estagio === 'a_contatar' && (
-          <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'em_conversa')}>
-            Em conversa
-          </Button>
-        )}
-        {l.estagio === 'reuniao_agendada' && (
-          <>
-            <Button size="sm" variant="ghost" disabled={agindo} onClick={() => void mover(l, 'no_show')}>
-              No-show
-            </Button>
-            <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'reuniao_realizada')}>
-              Realizada
-            </Button>
-          </>
-        )}
-        {l.estagio === 'reuniao_realizada' && (
-          <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mover(l, 'qualificada')}>
-            Qualificada <ChevronRight className="ml-0.5 h-3 w-3" aria-hidden />
-          </Button>
-        )}
         {(l.estagio === 'em_conversa' || l.estagio === 'no_show') && (
-          <Button size="sm" disabled={agindo} onClick={() => setAgendando(l)}>
+          <Button size="sm" variant="outline" disabled={agindo} onClick={() => setAgendando(l)}>
             <CalendarPlus className="mr-1 h-3 w-3" aria-hidden />
             {l.estagio === 'no_show' ? 'Reagendar' : 'Agendar'}
           </Button>
@@ -341,17 +349,23 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                         <div
                           key={l.id}
                           className={cn(
-                            'space-y-1.5 rounded-md border p-2 text-sm',
+                            'relative space-y-1.5 rounded-md border p-2 text-sm transition-colors',
+                            'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
                             classeDoLead(l),
                             l.encerrado_em && 'opacity-70',
                           )}
                         >
-                          <Link
-                            href={l.empresas ? `/empresas/${l.empresas.id}` : '#'}
-                            className="line-clamp-2 font-medium hover:underline"
-                          >
+                          {/* Ver funil-vendas: <button> esticado, não onClick no <div> —
+                              é o que mantém teclado e leitor de tela funcionando. */}
+                          <button
+                            type="button"
+                            aria-label={`Abrir ${l.empresas?.razao_social ?? 'lead'}`}
+                            onClick={() => setAberto(l)}
+                            className="absolute inset-0 z-0 rounded-md focus:outline-none"
+                          />
+                          <p className="line-clamp-2 font-medium">
                             {l.empresas?.razao_social ?? 'Empresa'}
-                          </Link>
+                          </p>
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                             {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
                             {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
@@ -375,24 +389,17 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                             já diz, e informação constante rouba espaço do que varia.
                           */}
                           {!sdrId && (
-                            <DonoDoCard
-                              nome={nomeDoVendedor(l.sdr_id)}
-                              tipos={['sdr']}
-                              podeTrocar={ehGestor}
-                              ocupado={agindo}
-                              onTrocar={(id) => reatribuir(l, id)}
-                            />
+                            // `z-10`: interativo, tem de ficar acima da área que abre o card.
+                            <div className="relative z-10">
+                              <DonoDoCard
+                                nome={nomeDoVendedor(l.sdr_id)}
+                                tipos={['sdr']}
+                                podeTrocar={ehGestor}
+                                ocupado={agindo}
+                                onTrocar={(id) => reatribuir(l, id)}
+                              />
+                            </div>
                           )}
-                          {/* As ações vivem no modal: seis botões por card, vezes
-                              nove colunas, viravam uma parede — e cada clique era uma
-                              decisão tomada sem abrir o lead. */}
-                          <button
-                            type="button"
-                            onClick={() => setAberto(l)}
-                            className="w-full rounded border border-dashed py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-                          >
-                            Abrir
-                          </button>
                         </div>
                       ))}
                       {itens.length === 0 && (
@@ -487,6 +494,18 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                 onTrocar={(id) => reatribuir(aberto, id)}
               />
             </div>
+          }
+          etapas={
+            <EtapasDoFunil
+              etapas={ESTAGIOS_SDR.map((e) => ({
+                id: e,
+                label: ESTAGIO_SDR_LABELS[e],
+                bloqueada: aberto.encerrado_em ? 'lead encerrado — reabra para mover' : undefined,
+              }))}
+              atual={aberto.estagio}
+              ocupado={agindo}
+              onIr={(id) => void mover(aberto, id as EstagioSdr)}
+            />
           }
           abas={[
             {
