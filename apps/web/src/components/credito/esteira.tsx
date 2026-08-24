@@ -90,6 +90,23 @@ function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
               <span className="text-muted-foreground">{moeda(a.limite_solicitado)} solicitado</span>
             )}
           </p>
+          {a.motivo && (
+            /*
+             * A CONDIÇÃO DA SEGURADORA, no card.
+             *
+             * É onde mora a informação que muda a decisão de operar: "é uma condição
+             * suspensiva a existência de garantia incondicional" não é detalhe jurídico,
+             * é um limite que só vale se alguém providenciar a garantia. Enterrada na
+             * página de detalhe, ela era vista depois de a decisão já ter sido tomada.
+             *
+             * Três linhas e sem botão de expandir: o card inteiro já é um link para o
+             * detalhe, onde o texto aparece completo. Um "ver mais" aqui competiria com
+             * essa área clicável e daria duas formas de fazer a mesma coisa.
+             */
+            <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-muted-foreground">
+              {a.motivo}
+            </p>
+          )}
           {a.origem === 'atradius_backfill' && (
             // A marca importa: a esteira não pode levar crédito por decisões que ela não
             // tomou, e o funil de conversão ficaria errado se elas entrassem juntas.

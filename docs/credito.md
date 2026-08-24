@@ -807,14 +807,23 @@ quem é:
 Três recortes que mudam o número:
 
 **Cobertura é por VALOR, não por estágio.** DC05 ("refusal for increase") produz uma
-cobertura em vigor cujo *pedido* foi recusado. Na primeira carga eram 6 linhas e R$ 7,15
-milhões — filtrar por estágio diria que estamos mais descobertos do que estamos.
+cobertura em vigor cujo *pedido* foi recusado. Eram 6 linhas e R$ 7,15 milhões — filtrar por
+estágio diria que estamos mais descobertos do que estamos.
+
+Com `codigo_decisao` em coluna, o mapa pôde ser conferido contra a carga real e fecha: os 24
+`DC03` (recusa) têm valor **zero**, então nenhuma recusa esconde cobertura, e nenhuma
+cobertura está classificada como recusa. Os aprovados se distribuem em DC01 (22), DC10 (12),
+DC11 (7), DC05 (6), DC04 (5), DC22 e DC02.
 
 **`blocked` não entra.** Tem limite registrado na plataforma mas o cliente não opera;
 contá-lo inflaria o descoberto com risco que não existe.
 
 **`descoberto` nunca é negativo.** Cobertura acima do limite é folga, não exposição, e somar
 folga como dívida inverteria o sinal do total.
+
+A coluna **Consumido** é o que separa dois riscos de mesmo tamanho nominal: um limite de
+R$ 5 mi com 90% sacado e sem seguro não é o mesmo problema que um limite de R$ 5 mi parado.
+Por isso o tile de exposição descoberta mostra, embaixo, quanto dela **já saiu**.
 
 A coluna `plataforma_diz_ter_seguro` vem do `has_insurance` do endpoint da plataforma. Ela
 não é usada no cálculo — é uma **terceira opinião**, e a tela marca quando ela discorda da

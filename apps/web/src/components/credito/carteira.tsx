@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { AlertTriangle, Clock, PiggyBank, ShieldCheck, ShieldOff } from 'lucide-react'
+import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -107,6 +108,7 @@ function Linha({ l }: { l: LinhaCarteira }) {
   const concedido = Number(l.limite_concedido ?? 0)
   const segurado = Number(l.limite_segurado ?? 0)
   const descoberto = Number(l.descoberto ?? 0)
+  const consumido = l.consumed_limit === null ? null : Number(l.consumed_limit)
   // Sem limite concedido não há o que cobrir, e uma barra de 0% mentiria sobre a situação:
   // cobertura ociosa não é uma falha de cobertura, é falta de uso.
   const pct = concedido > 0 ? Math.min(100, Math.round((segurado / concedido) * 100)) : null
@@ -114,13 +116,18 @@ function Linha({ l }: { l: LinhaCarteira }) {
   return (
     <div className="grid grid-cols-12 items-center gap-2 border-b px-3 py-2 text-sm last:border-0">
       <div className="col-span-12 min-w-0 sm:col-span-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {l.empresa_id ? (
             <Link href={`/empresas/${l.empresa_id}`} className="truncate font-medium hover:underline">
               {nome}
             </Link>
           ) : (
             <span className="truncate font-medium">{nome}</span>
+          )}
+          {s && (
+            <Badge variant={s.badge} className="shrink-0 text-[10px]">
+              {s.label}
+            </Badge>
           )}
           {/* A divergência que só esta tela enxerga: a plataforma acha que tem seguro e a
               seguradora não confirma. É bug de dado de alguém, e hoje ninguém olha. */}
@@ -130,31 +137,42 @@ function Linha({ l }: { l: LinhaCarteira }) {
             </Badge>
           )}
         </div>
-        <p className="text-[11px] text-muted-foreground">{l.cnpj}</p>
+        <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+          {l.cnpj ? formatCnpj(l.cnpj) : '—'}
+        </p>
       </div>
 
-      <div className="col-span-4 text-right tabular-nums sm:col-span-2">
+      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
         {concedido > 0 ? BRL.format(concedido) : <span className="text-muted-foreground">—</span>}
       </div>
-      <div className="col-span-4 text-right tabular-nums sm:col-span-2">
+      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
+        {consumido !== null && consumido > 0 ? (
+          <>
+            <span>{BRL.format(consumido)}</span>
+            {/* O consumo é o que está EM RISCO agora, e por isso ele ganha o percentual:
+                um limite de 5 milhões com 90% usado e sem seguro não é o mesmo problema
+                que um limite de 5 milhões parado. */}
+            {concedido > 0 && (
+              <span className="ml-1 text-[11px] text-muted-foreground">
+                {Math.round((consumido / concedido) * 100)}%
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </div>
+      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
         {segurado > 0 ? BRL.format(segurado) : <span className="text-muted-foreground">—</span>}
       </div>
-      <div className="col-span-4 text-right tabular-nums sm:col-span-2">
+      <div className="col-span-3 text-right tabular-nums sm:col-span-2">
         {descoberto > 0 ? (
           <span className="font-medium text-destructive">{BRL.format(descoberto)}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
-      </div>
-
-      <div className="col-span-12 flex items-center justify-between gap-2 sm:col-span-2 sm:justify-end">
         {pct !== null && (
-          <span className="text-[11px] tabular-nums text-muted-foreground">{pct}%</span>
-        )}
-        {s && (
-          <Badge variant={s.badge} className="shrink-0 text-[10px]">
-            {s.label}
-          </Badge>
+          <span className="ml-1 text-[11px] text-muted-foreground">{pct}% seg.</span>
         )}
       </div>
     </div>
@@ -174,15 +192,21 @@ export function CarteiraCredito() {
   const totais = React.useMemo(() => {
     const t = {
       concedido: 0,
+      consumido: 0,
       segurado: 0,
       descoberto: 0,
       ocioso: 0,
+      descobertoConsumido: 0,
       porSituacao: {} as Record<string, { qtd: number; descoberto: number }>,
     }
     for (const l of linhas) {
       t.concedido += Number(l.limite_concedido ?? 0)
+      t.consumido += Number(l.consumed_limit ?? 0)
       t.segurado += Number(l.limite_segurado ?? 0)
       t.descoberto += Number(l.descoberto ?? 0)
+      // Consumo sob descoberto: dinheiro que JÁ SAIU e não tem seguro atrás. É o
+      // subconjunto da exposição que não depende de ninguém sacar mais nada.
+      if (l.situacao === 'descoberto') t.descobertoConsumido += Number(l.consumed_limit ?? 0)
       if (l.situacao === 'ocioso') t.ocioso += Number(l.limite_segurado ?? 0)
       const chave = l.situacao ?? 'desconhecido'
       const atual = t.porSituacao[chave] ?? { qtd: 0, descoberto: 0 }
@@ -224,13 +248,13 @@ export function CarteiraCredito() {
         <Tile
           titulo="Exposição descoberta"
           valor={BRL.format(totais.descoberto)}
-          detalhe="limite concedido sem cobertura"
+          detalhe={`${BRL.format(totais.descobertoConsumido)} já consumidos`}
           destaque={totais.descoberto > 0}
         />
         <Tile
           titulo="Limite concedido"
           valor={BRL.format(totais.concedido)}
-          detalhe="aprovado e vigente na plataforma"
+          detalhe={`${BRL.format(totais.consumido)} consumidos`}
         />
         <Tile
           titulo="Cobertura vigente"
@@ -290,9 +314,9 @@ export function CarteiraCredito() {
             <div className="hidden grid-cols-12 gap-2 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground sm:grid">
               <div className="col-span-4">Empresa</div>
               <div className="col-span-2 text-right">Limite concedido</div>
+              <div className="col-span-2 text-right">Consumido</div>
               <div className="col-span-2 text-right">Segurado</div>
               <div className="col-span-2 text-right">Descoberto</div>
-              <div className="col-span-2 text-right">Situação</div>
             </div>
             {visiveis.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-muted-foreground">
