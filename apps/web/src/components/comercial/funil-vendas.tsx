@@ -6,8 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertTriangle, LayoutGrid, RotateCcw, Table2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import {
-  ESTAGIOS_VENDA, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS, vendaNoFunil,
-  type EstagioVenda, type SituacaoVenda,
+  ESTAGIOS_VENDA, ESTAGIO_ANALISE_LABELS, ESTAGIO_VENDA_LABELS, SITUACAO_VENDA_LABELS,
+  vendaNoFunil,
+  type EstagioAnalise, type EstagioVenda, type SituacaoVenda,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ import { AbaEmpresa } from './aba-empresa'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
+import { AbaCredito } from './aba-credito'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   type VendaComEmpresa,
@@ -59,6 +61,12 @@ const SITUACAO_CLASSE: Record<SituacaoVenda, string> = {
 }
 
 /** O próximo passo natural. Null = não se avança daqui por clique. */
+const BRL_CARD = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 0,
+})
+
 function proximo(e: EstagioVenda): EstagioVenda | null {
   if (e === 'em_analise_credito') return null
   const i = ESTAGIOS_VENDA.indexOf(e)
@@ -312,9 +320,19 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                             />
                             </div>
                           )}
+                          {/* O limite aprovado no CARD, e não só no modal: é o número que
+                              decide se vale seguir, e quem varre a coluna precisa dele sem
+                              abrir oito negócios. */}
+                          {v.analises_credito?.limite_aprovado ? (
+                            <p className="text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+                              {BRL_CARD.format(Number(v.analises_credito.limite_aprovado))} aprovados
+                            </p>
+                          ) : null}
                           {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
                             <p className="text-[11px] text-muted-foreground">
-                              Aguardando a seguradora. O card anda sozinho quando ela decidir.
+                              {v.analises_credito
+                                ? `Crédito: ${ESTAGIO_ANALISE_LABELS[v.analises_credito.estagio as EstagioAnalise] ?? v.analises_credito.estagio}.`
+                                : 'Aguardando a seguradora. O card anda sozinho quando ela decidir.'}
                             </p>
                           )}
                           {v.situacao === 'ganho' && !v.primeira_operacao_em && (
@@ -387,7 +405,10 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
         de perda continua separado porque exige motivo, e empilhar um formulário
         obrigatório dentro de outro modal esconde o campo que decide.
       */}
-      {aberto && (
+      {aberto && (() => {
+        // Negado pela seguradora: trava o avanço e deixa só o caminho de perder.
+        const creditoNegado = aberto.analises_credito?.estagio === 'negada'
+        return (
         <ModalDoCard
           aberto
           onOpenChange={(o) => !o && setAberto(null)}
@@ -412,13 +433,20 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
           }
           etapas={
             <EtapasDoFunil
-              etapas={ESTAGIOS_VENDA.map((e) => ({
+              etapas={ESTAGIOS_VENDA.map((e, i) => ({
                 id: e,
                 label: ESTAGIO_VENDA_LABELS[e],
-                // Perdido não anda: o estágio é o que registra até onde o negócio chegou
-                // antes de morrer, e movê-lo apagaria essa informação. Reabrir primeiro.
                 bloqueada:
-                  aberto.situacao === 'perdido' ? 'negócio perdido — reabra para mover' : undefined,
+                  // Perdido não anda: o estágio registra até onde o negócio chegou antes
+                  // de morrer, e movê-lo apagaria essa informação. Reabrir primeiro.
+                  aberto.situacao === 'perdido'
+                    ? 'negócio perdido — reabra para mover'
+                    : // Crédito negado trava o que vem DEPOIS da análise. O que vem antes
+                      // segue livre: voltar para juntar documento e pedir de novo é um
+                      // caminho legítimo, e é o único que sobra além de marcar perdido.
+                      creditoNegado && i > ESTAGIOS_VENDA.indexOf('em_analise_credito')
+                      ? 'crédito negado — só resta marcar como perdido'
+                      : undefined,
               }))}
               atual={aberto.estagio}
               ocupado={agindo}
@@ -455,6 +483,17 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                 </div>
               ),
             },
+            {
+              id: 'credito',
+              label: 'Crédito e documentos',
+              conteudo: (
+                <AbaCredito
+                  vendaId={aberto.id}
+                  analise={aberto.analises_credito}
+                  onMudou={() => void qc.invalidateQueries({ queryKey: comercialKeys.vendas(vendedorId) })}
+                />
+              ),
+            },
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
           ]}
@@ -483,20 +522,26 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                   <ThumbsDown className="mr-1 h-3.5 w-3.5" aria-hidden />
                   Perdi
                 </Button>
-                <Button
-                  size="sm"
-                  disabled={agindo}
-                  onClick={() => void encerrar(aberto, 'ganho')}
-                  className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <ThumbsUp className="mr-1 h-3.5 w-3.5" aria-hidden />
-                  Ganhei
-                </Button>
+                {/* Crédito negado tira "Ganhei" da mesa: sem limite não há operação, e
+                    deixar o botão aceso convidaria a marcar ganho um negócio que a
+                    seguradora acabou de inviabilizar. */}
+                {!creditoNegado && (
+                  <Button
+                    size="sm"
+                    disabled={agindo}
+                    onClick={() => void encerrar(aberto, 'ganho')}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                  >
+                    <ThumbsUp className="mr-1 h-3.5 w-3.5" aria-hidden />
+                    Ganhei
+                  </Button>
+                )}
               </>
             ) : null
           }
         />
-      )}
+        )
+      })()}
 
       <Dialog open={perdendo !== null} onOpenChange={(v) => !v && setPerdendo(null)}>
         <DialogContent className="sm:max-w-md">

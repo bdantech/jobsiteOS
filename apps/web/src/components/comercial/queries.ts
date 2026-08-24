@@ -116,13 +116,32 @@ export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa
 
 export interface VendaComEmpresa extends Tables<'vendas'> {
   empresas: { id: string; razao_social: string | null; uf: string | null } | null
+  /** `null` quando não há análise ligada — ou quando a RLS não deixa esta pessoa ver. */
+  analises_credito: {
+    id: string
+    estagio: string
+    limite_solicitado: number | null
+    limite_aprovado: number | null
+    moeda: string | null
+    motivo: string | null
+    decidida_em: string | null
+  } | null
 }
 
 export async function buscarVendas(vendedorId?: string | null): Promise<VendaComEmpresa[]> {
   const supabase = createClient()
   let q = supabase
     .from('vendas')
-    .select('*, empresas(id, razao_social, uf)')
+    /*
+     * A análise vem junto, e não numa consulta por card: o funil mostra dezenas de
+     * negócios e a etapa do crédito é informação de card, não de detalhe. Buscar por
+     * card faria N requisições ao abrir a tela.
+     *
+     * A RLS decide o que volta: quem não é dono do negócio recebe `null` aqui, sem erro.
+     */
+    .select(
+      '*, empresas(id, razao_social, uf), analises_credito(id, estagio, limite_solicitado, limite_aprovado, moeda, motivo, decidida_em)',
+    )
     .order('atualizada_em', { ascending: false })
     .limit(500)
   if (vendedorId) q = q.eq('vendedor_id', vendedorId)

@@ -313,10 +313,38 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
  * NÃO anda: metade do limite pedido pode ser ótimo ou inviável, e essa leitura é de
  * quem está na mesa.
  */
+/**
+ * Avisa o DONO do negócio, e não o perfil inteiro.
+ *
+ * O fanout de `empresa_eventos` mira perfil ou usuário fixo, e nenhum dos dois serve aqui:
+ * a decisão do crédito interessa a uma pessoa — quem tem aquele negócio na mão. Mandar para
+ * todo o comercial treinaria o time a ignorar o sino, que é o oposto de notificar.
+ */
+async function avisarDonoDaVenda(
+  vendedorId: string,
+  titulo: string,
+  corpo: string,
+  vendaId: string,
+): Promise<void> {
+  const { data: vendedor } = await supabaseAdmin
+    .from('vendedores')
+    .select('usuario_id')
+    .eq('id', vendedorId)
+    .maybeSingle()
+  // Vendedor de IA não tem usuário, e é um caso normal — não é falha.
+  if (!vendedor?.usuario_id) return
+  await supabaseAdmin.from('notificacoes').insert({
+    usuario_id: vendedor.usuario_id,
+    titulo,
+    corpo,
+    url: `/comercial?venda=${vendaId}`,
+  })
+}
+
 export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: string): Promise<number> {
   const { data: vendas } = await supabaseAdmin
     .from('vendas')
-    .select('id, empresa_id, estagio')
+    .select('id, empresa_id, estagio, vendedor_id')
     .eq('analise_credito_id', analiseId)
     .eq('situacao', 'em_andamento')
   if (!vendas?.length) return 0
@@ -329,6 +357,12 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
         url: `/comercial/vendas/${v.id}`,
         venda_id: v.id,
       })
+      await avisarDonoDaVenda(
+        v.vendedor_id,
+        'Crédito aprovado parcialmente',
+        'A seguradora aprovou parte do limite. O card não andou sozinho — a decisão é sua.',
+        v.id,
+      )
     }
     return 0
   }
@@ -378,6 +412,15 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
       url: `/comercial/vendas/${v.id}`,
       venda_id: v.id,
     })
+
+    await avisarDonoDaVenda(
+      v.vendedor_id,
+      aprovada ? 'Crédito aprovado' : 'Crédito negado',
+      aprovada
+        ? 'A seguradora aprovou o limite. O negócio avançou para proposta enviada.'
+        : 'A seguradora negou o limite. O negócio foi encerrado como perdido.',
+      v.id,
+    )
   }
 
   logger.info({ analiseId, decisao, cards: vendas.length }, 'Decisão de crédito aplicada ao funil.')

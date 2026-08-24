@@ -111,6 +111,31 @@ export async function moverVendaAction(input: unknown): Promise<ActionResult<{ i
   }
 }
 
+/**
+ * Pede a análise de crédito a partir do negócio.
+ *
+ * O RPC reaproveita uma análise ABERTA do mesmo CNPJ quando existe, em vez de recusar como
+ * `app_solicitar_analise` faz: do lado do comercial, "já existe uma em andamento" é o caso
+ * feliz — o Crédito já está trabalhando — e apresentá-lo como erro faria a pessoa achar que
+ * o pedido falhou.
+ */
+export async function pedirAnaliseDaVendaAction(
+  input: { venda_id: string; limite_solicitado?: number },
+): Promise<ActionResult<{ id: string | null }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const { data, error } = await supabase.rpc('app_solicitar_analise_da_venda', {
+      p: input as never,
+    })
+    if (error) throw new Error(error.message)
+    revalidatePath('/comercial')
+    return { ok: true, data: { id: (data as { id?: string } | null)?.id ?? null } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
 export async function atribuirLeadSdrAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
   const { erro, supabase } = await autorizar()
   if (erro || !supabase) return erro as ActionResult<never>

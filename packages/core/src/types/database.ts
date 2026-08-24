@@ -4674,6 +4674,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_solicitar_analise_da_venda: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+      }
       app_solicitar_analise: {
         Args: { p: Json }
         Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
