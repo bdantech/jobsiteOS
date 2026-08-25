@@ -13,28 +13,35 @@ import { MesCorrente } from './comissao/mes-corrente'
 import { Reclassificacao } from './comissao/reclassificacao'
 import { Simulador } from './comissao/simulador'
 import { competenciaCorrente, useExtratoLive } from './comissao/use-extrato-live'
-import { ComissoesAntigas } from './comissao/modelo-anterior'
 
 /**
  * A aba Comissões (04k §7).
  *
- * O motor v2 substitui as regras do 04g — mas NÃO recalcula o que o 04g já apurou. As
- * competências antigas continuam sendo lidas da tabela antiga, marcadas como "modelo
- * anterior": mudar o número de uma folha já paga é pior que mostrar dois modelos.
+ * O motor v2 substitui as regras do 04g e NÃO recalcula o que o 04g já apurou —
+ * `comissao_lancamentos` continua no banco como histórico read-only. Ele não tem aba:
+ * enquanto não houver competência antiga que alguém precise consultar, uma aba vazia
+ * chamada "modelo anterior" só levanta a dúvida que deveria resolver.
  *
  * A ordem das abas é a ordem das perguntas: quanto tenho este mês → como foi ao longo do
  * ano → por que este valor. O extrato é a tela central, mas ela não é a primeira porque
  * a pergunta que traz a pessoa aqui é o número, e o extrato é a resposta ao "por quê"
  * que vem depois.
+ *
+ * Duas permissões diferentes, e a distinção não é burocracia: `ehGestor` (Admin OU
+ * Comercial) decide sobre a FOLHA — aprovar competência, simular uma taxa. `ehAdmin`
+ * decide sobre a POLÍTICA — reclassificar uma conta muda a taxa de todas as cessões
+ * futuras dela, e é a única ação daqui que reprecifica o trabalho de outra pessoa.
  */
 
-type Aba = 'mes' | 'historico' | 'extrato' | 'simulador' | 'reclassificacao' | 'aceites' | 'anterior'
+type Aba = 'mes' | 'historico' | 'extrato' | 'simulador' | 'reclassificacao' | 'aceites'
 
 export function Comissoes({
   ehGestor,
+  ehAdmin,
   vendedorId,
 }: {
   ehGestor: boolean
+  ehAdmin: boolean
   vendedorId: string | null
 }) {
   const [aba, setAba] = React.useState<Aba>('mes')
@@ -62,8 +69,7 @@ export function Comissoes({
     { id: 'extrato', rotulo: 'Extrato', visivel: true },
     { id: 'aceites', rotulo: 'Fila de aceite', visivel: true },
     { id: 'simulador', rotulo: 'Simulador', visivel: ehGestor },
-    { id: 'reclassificacao', rotulo: 'Reclassificação', visivel: ehGestor },
-    { id: 'anterior', rotulo: 'Modelo anterior', visivel: true },
+    { id: 'reclassificacao', rotulo: 'Reclassificação', visivel: ehAdmin },
   ]
 
   return (
@@ -137,8 +143,7 @@ export function Comissoes({
       ) : null}
       {aba === 'aceites' ? <FilaAceite /> : null}
       {aba === 'simulador' && ehGestor ? <Simulador /> : null}
-      {aba === 'reclassificacao' && ehGestor ? <Reclassificacao /> : null}
-      {aba === 'anterior' ? <ComissoesAntigas /> : null}
+      {aba === 'reclassificacao' && ehAdmin ? <Reclassificacao /> : null}
 
       {aba === 'mes' || aba === 'extrato' ? (
         <Card>

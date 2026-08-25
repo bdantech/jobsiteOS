@@ -217,8 +217,15 @@ evento → apurado → aprovado → pago
 
 **Substituído pelo motor v2 (04k)**, descrito na seção seguinte. Fica aqui porque
 `comissao_regras` e `comissao_lancamentos` continuam de pé como histórico read-only: as
-competências apuradas por este modelo **não foram recalculadas**, e aparecem na aba
-Comissões → *Modelo anterior*. Reprocessá-las mudaria o número de uma folha já paga.
+competências apuradas por este modelo **não foram recalculadas**. Reprocessá-las mudaria
+o número de uma folha já paga.
+
+**Não há aba para elas na tela.** Havia, e saiu: como o 04g nunca chegou a gerar
+lançamento nenhum em produção (a comissão do originador dependia de uma tabela que
+nenhuma tela escrevia — ver *Uma carteira de originação, não duas*), a aba abria vazia. Uma
+aba chamada "modelo anterior" que não mostra nada levanta exatamente a dúvida que ela
+deveria resolver. Os dados seguem no banco; se um dia houver competência antiga que
+alguém precise consultar, a tela volta.
 
 O que ele fazia: `comercial/apurar-comissoes` no dia 1, fechando a competência anterior,
 com três origens (`reuniao_agendada` para o SDR, `nf_convertida` por milhão para o
@@ -401,6 +408,27 @@ ano que vem e ter de reconstituir a tabela de taxas daquele dia a partir do hist
 A régua da tela é uma só: **quem discorda de um valor tem de conseguir refazer a conta sem
 pedir nada a ninguém**. Por isso cada linha expande com o cálculo por extenso e o
 snapshot, e por isso existe o CSV — uma planilha é onde a pessoa confere de fato.
+
+### Quem vê o quê
+
+A aba Comissões usa **duas** réguas, e a distinção não é burocracia:
+
+| régua | quem | o que libera |
+|---|---|---|
+| própria comissão | todo vendedor | mês corrente, histórico e extrato dele |
+| `vendedor_acessos` | quem recebeu acesso cruzado | o extrato de quem concedeu |
+| `ehGestor` = Admin **ou** Comercial | quem decide sobre a FOLHA | seletor de vendedor, consolidado, simulador, aprovar/pagar competência |
+| `ehAdmin` = módulo `admin` | quem decide sobre a POLÍTICA | painel de reclassificação |
+
+Reclassificar é a única ação da tela que **reprecifica o trabalho de outra pessoa**: muda
+a taxa de todas as cessões futuras daquela conta. Por isso ela é mais restrita que aprovar
+uma competência — aprovar confirma um número que o motor já calculou; reclassificar muda
+como ele será calculado daqui para a frente.
+
+A régua do BANCO continua sendo `app_gestor_comercial()` (Admin ou Comercial), e ela vale
+para o RPC de classificação venha ele de onde vier — inclusive da ficha da empresa, na
+Company 360. O recorte por admin é da TELA de comissão. Se a intenção for travar a
+reclassificação em Admin nos dois caminhos, é uma linha em `app_definir_gestao_operacao`.
 
 ### Casos de borda (§8), todos com teste
 
