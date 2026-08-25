@@ -341,9 +341,9 @@ export function ConfigComercial() {
 
       {/*
         Regras de comissão = os PARÂMETROS do motor v2 (04k §7.5). As `comissao_regras`
-        do 04g continuam no banco como histórico read-only e aparecem em
-        Comissões → Modelo anterior; editá-las não teria efeito nenhum sobre a folha,
-        e deixar o formulário antigo aqui só ensinaria alguém a mexer no lugar errado.
+        do 04g continuam no banco como histórico read-only e NÃO têm tela: editá-las não
+        teria efeito nenhum sobre a folha, e deixar o formulário antigo aqui só ensinaria
+        alguém a mexer no lugar errado.
       */}
       <Parametros vendedores={vendedores.data ?? []} />
 
