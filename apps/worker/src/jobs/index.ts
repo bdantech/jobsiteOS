@@ -31,6 +31,12 @@ import {
   titularidadesJob,
 } from './comercial/comissoes-v2.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
+import {
+  atualizarFunilFornecedores,
+  descobertaAutomaticaJob,
+  descobertaSobDemanda,
+  validarContatosJob,
+} from './fornecedores/index.js'
 import { sugerirPassivosJob } from './comercial/passivos.js'
 import {
   detectarPrimeiraOperacaoJob,
@@ -105,6 +111,10 @@ export type TipoJob =
   | 'comercial-sdr-aceites'
   | 'comercial-reclassificacao'
   | 'comercial-rotear'
+  | 'fornecedores-funil'
+  | 'fornecedores-descoberta'
+  | 'fornecedores-clique'
+  | 'fornecedores-validar'
   | 'protestos-empresa'
   | 'contatos-empresa'
   | 'certificados'
@@ -562,7 +572,32 @@ export async function dispararSyncNfs(): Promise<string> {
       // A outbox por último: mensagens para notas que acabaram de converter são
       // exatamente o disparo que faz o comercial perder credibilidade.
       const outbox = await gerarOutbox()
-      await anotarMeta(id, { sync, lookup, reclassificacao: reclass, antecipacoes, outbox })
+
+      /*
+       * O funil de fornecedores (04l §3) atrás do sync, e não num cron próprio.
+       *
+       * A munição dele — volume 90d, prazo, sacados — é derivada exatamente das notas
+       * que acabaram de chegar. Num relógio separado, o card mostraria o volume de
+       * até quatro horas atrás, e a saída automática de quem virou cliente demoraria
+       * o mesmo tanto: um fornecedor cadastrado hoje continuaria no kanban de alguém
+       * como lead a prospectar.
+       *
+       * Best-effort: uma falha aqui não pode marcar como falha um sync de NF que deu
+       * certo. O funil se recompõe inteiro na próxima corrida — ele é recalculado,
+       * não incremental.
+       */
+      let funilFornecedores: unknown
+      try {
+        funilFornecedores = await atualizarFunilFornecedores()
+      } catch (erro) {
+        logger.error({ erro: String(erro) }, 'Funil de fornecedores falhou; o sync de NF segue.')
+        funilFornecedores = { erro: String(erro) }
+      }
+
+      await anotarMeta(id, {
+        sync, lookup, reclassificacao: reclass, antecipacoes, outbox,
+        funil_fornecedores: funilFornecedores,
+      })
       return {
         linhas_processadas: sync.notas,
         linhas_novas: sync.novas,
@@ -1112,6 +1147,49 @@ export function dispararAceitesSdr(): string {
 /** Semanal: aponta contas passivas cujo volume desabou. SINALIZA — nunca reclassifica. */
 export function dispararAlertaReclassificacao(): string {
   return dispararAvulso('comercial-reclassificacao', async () => alertaReclassificacaoJob())
+}
+
+/*
+ * Funil de cadastro de fornecedores (04l §7).
+ *
+ * QUATRO jobs, e a separação é a separação do dinheiro:
+ *
+ *   funil       recalcula munição e titularidade. Custo zero, roda atrás do sync de NF.
+ *   descoberta  camadas 0+1 em lote. Quase tudo grátis; o Google Places sai do
+ *               orçamento AUTOMÁTICO da casa.
+ *   clique      camadas 2+4 para UM fornecedor, debitando o teto do originador. É o
+ *               único disparo deste módulo que nasce de uma pessoa apertando um botão.
+ *   validar     diário, sobre qualquer fonte. Nunca toca canal.
+ */
+export function dispararFunilFornecedores(): string {
+  return dispararAvulso('fornecedores-funil', async () => atualizarFunilFornecedores())
+}
+
+export function dispararDescobertaFornecedores(limite?: number): string {
+  return dispararAvulso('fornecedores-descoberta', async () => descobertaAutomaticaJob(limite))
+}
+
+/*
+ * O clique NÃO usa `dispararAvulso`: ele precisa devolver o RESULTADO, não um id.
+ *
+ * A tela mostrou um custo estimado e perguntou "confirma?". Responder 202 e mandar a
+ * pessoa consultar depois transformaria uma decisão de gastar dinheiro em algo que
+ * ela não vê acontecer — e o padrão de single-flight por tipo faria o segundo
+ * originador do dia receber "já existe um job em execução" para um clique que é dele.
+ */
+export async function executarCliqueDescoberta(input: {
+  cnpj: string
+  solicitadoPor?: string | null
+  forcar?: boolean
+}): Promise<Awaited<ReturnType<typeof descobertaSobDemanda>>> {
+  return descobertaSobDemanda(input.cnpj, {
+    solicitadoPor: input.solicitadoPor ?? null,
+    forcar: input.forcar ?? false,
+  })
+}
+
+export function dispararValidarContatos(): string {
+  return dispararAvulso('fornecedores-validar', async () => validarContatosJob())
 }
 
 /**

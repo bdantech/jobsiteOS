@@ -72,7 +72,15 @@ export interface DispararJobInput {
 }
 
 export type DispararJobResultado =
-  | { ok: true; ingestaoId: string | null }
+  /*
+   * `corpo` é o JSON que o worker devolveu, cru.
+   *
+   * Quase todas as rotas respondem 202 com um id e nada mais a dizer — para elas ele
+   * é ruído. Existe para a exceção do 04l: o clique de "Buscar contatos" roda SÍNCRONO
+   * e devolve quanto custou e o que achou, e a tela precisa desse número porque ela
+   * acabou de perguntar "posso gastar R$ 1,65?".
+   */
+  | { ok: true; ingestaoId: string | null; corpo?: unknown }
   | { ok: false; message: string; code: 'config' | 'rede' | 'worker' }
 
 /**
@@ -108,6 +116,13 @@ async function postar(
   rota: string,
   corpoJson: unknown,
   rotulo: string,
+  /*
+   * O teto padrão vale para enfileirar. O clique de descoberta é a exceção: ele
+   * espera a cascata inteira (Nova Vida + Apollo + uma busca web do Claude), que
+   * passa fácil de um minuto. Quinze segundos ali devolveriam "não foi possível
+   * falar com o worker" para uma consulta que rodou e foi cobrada.
+   */
+  timeoutMs: number = TIMEOUT_MS,
 ): Promise<DispararJobResultado> {
   const baseUrl = process.env.WORKER_URL
   const secret = process.env.WORKER_SECRET
@@ -139,7 +154,7 @@ async function postar(
       },
       body: JSON.stringify(corpoJson),
       cache: 'no-store',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch (error) {
     // Do not surface `error` verbatim: on a bad WORKER_URL it contains the host.
@@ -168,7 +183,7 @@ async function postar(
   }
 
   const corpo: unknown = await resposta.json().catch(() => null)
-  return { ok: true, ingestaoId: ingestaoIdDe(corpo) }
+  return { ok: true, ingestaoId: ingestaoIdDe(corpo), corpo }
 }
 
 /** Fire an ingestion job (Receita / CNO). */
@@ -278,6 +293,44 @@ export async function dispararLiberarDormentes(): Promise<DispararJobResultado> 
 /** Semanal: sinaliza contas passivas cujo volume desabou. */
 export async function dispararAlertaReclassificacao(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/alerta-reclassificacao', {}, 'comercial-reclassificacao')
+}
+
+/*
+ * Funil de cadastro de fornecedores (04l).
+ *
+ * `dispararBuscarContatos` é a única daqui que ESPERA o worker responder: a tela
+ * mostrou o custo estimado e perguntou se pode gastar, e devolver "ok, mandei" para
+ * uma decisão de dinheiro é pedir que a pessoa confie sem ver. As outras três são
+ * jobs de lote e seguem o padrão 202.
+ */
+export async function dispararFunilFornecedores(): Promise<DispararJobResultado> {
+  return postar('/jobs/fornecedores/atualizar-funil', {}, 'fornecedores-funil')
+}
+
+export async function dispararDescobertaFornecedores(limite?: number): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/fornecedores/descoberta-automatica',
+    limite ? { limite } : {},
+    'fornecedores-descoberta',
+  )
+}
+
+export async function dispararValidarContatos(): Promise<DispararJobResultado> {
+  return postar('/jobs/fornecedores/validar-contatos', {}, 'fornecedores-validar')
+}
+
+/** O clique pago. Síncrono, e por isso com teto de dois minutos. */
+export async function dispararBuscarContatos(input: {
+  cnpj: string
+  solicitadoPor?: string | null
+  forcar?: boolean
+}): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/fornecedores/buscar-contatos',
+    { cnpj: input.cnpj, solicitado_por: input.solicitadoPor ?? undefined, forcar: input.forcar ?? false },
+    'fornecedores-clique',
+    120_000,
+  )
 }
 
 /** Reroteia as NFs vivas. Também roda encadeado no diário da Antecipação. */

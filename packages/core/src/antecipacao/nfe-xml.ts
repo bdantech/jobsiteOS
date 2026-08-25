@@ -82,16 +82,24 @@ function desescapar(texto: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
 }
 
-/** Conteúdo da PRIMEIRA ocorrência da tag dentro de `xml`, ou null. */
-function texto(xml: string, nome: string): string | null {
+/**
+ * Conteúdo da PRIMEIRA ocorrência da tag dentro de `xml`, ou null.
+ *
+ * Exportado (junto com `blocos`) porque o extrator de contatos do 04l lê OUTRAS tags
+ * do mesmo XML — `emit/enderEmit/fone`, `emit/email`, `infCpl`. Reescrever "achar tag
+ * ignorando namespace" lá seria a segunda implementação do mesmo parse, e a NFe traz
+ * prefixo de namespace em uma parcela pequena e imprevisível das notas: a cópia
+ * funcionaria em todos os testes e falharia calada justamente nessas.
+ */
+export function texto(xml: string, nome: string): string | null {
   const m = tagRe(nome, '').exec(xml)
   if (!m?.[1]) return null
   const v = desescapar(m[1]).trim()
   return v === '' ? null : v
 }
 
-/** Conteúdo de TODAS as ocorrências (blocos: det, dup). */
-function blocos(xml: string, nome: string): string[] {
+/** Conteúdo de TODAS as ocorrências (blocos: det, dup, obsCont). */
+export function blocos(xml: string, nome: string): string[] {
   const re = tagRe(nome, 'g')
   const out: string[] = []
   let m: RegExpExecArray | null

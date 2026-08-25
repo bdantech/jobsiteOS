@@ -1,0 +1,108 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import {
+  CUSTOS_PADRAO,
+  avaliarOrcamento,
+  deveParar,
+  planejarDescobertaSobDemanda,
+  type EstadoFornecedor,
+} from './cascata.ts'
+
+const BASE: EstadoFornecedor = {
+  dominio: null,
+  funcionarios: null,
+  faturamento_estimado: null,
+  municipio: 'Sorocaba',
+  uf: 'SP',
+  razao_social: 'SERRALHERIA X LTDA',
+  melhor_confianca: null,
+}
+
+test('PME sem domínio: Nova Vida e Claude rodam, Apollo não', () => {
+  const p = planejarDescobertaSobDemanda(BASE)
+  const rodam = p.etapas.filter((e) => e.rodara).map((e) => e.provedor)
+  assert.deepEqual(rodam, ['novavida', 'claude_busca'])
+  // Arredondado a centavos: 0.35 + 0.1 dá 0.44999999999999996 em float, e um custo
+  // exibido como "R$ 0,45" precisa ser o mesmo número que o orçamento debita.
+  assert.equal(p.custo_estimado, 0.45)
+  const apollo = p.etapas.find((e) => e.provedor === 'apollo')
+  assert.match(apollo?.motivo ?? '', /domínio/)
+})
+
+test('com domínio mas 4 funcionários, o Apollo continua fora — é o gasto sem retorno do §4.2b', () => {
+  const p = planejarDescobertaSobDemanda({ ...BASE, dominio: 'serralheriax.com.br', funcionarios: 4 })
+  const apollo = p.etapas.find((e) => e.provedor === 'apollo')
+  assert.equal(apollo?.rodara, false)
+  assert.match(apollo?.motivo ?? '', /Porte abaixo do mínimo \(10 funcionários\)/)
+})
+
+test('domínio + porte: os três rodam e o custo é a soma dos três', () => {
+  const p = planejarDescobertaSobDemanda({ ...BASE, dominio: 'construtoray.com.br', funcionarios: 40 })
+  assert.deepEqual(
+    p.etapas.filter((e) => e.rodara).map((e) => e.provedor),
+    ['novavida', 'apollo', 'claude_busca'],
+  )
+  assert.equal(
+    p.custo_estimado,
+    Math.round((CUSTOS_PADRAO.novavida + CUSTOS_PADRAO.apollo + CUSTOS_PADRAO.claude_busca) * 100) / 100,
+  )
+})
+
+test('faturamento estimado substitui o headcount quando o headcount falta', () => {
+  const p = planejarDescobertaSobDemanda(
+    { ...BASE, dominio: 'x.com.br', funcionarios: null, faturamento_estimado: 20_000_000 },
+    { apolloMinimoFaturamento: 5_000_000 },
+  )
+  assert.equal(p.etapas.find((e) => e.provedor === 'apollo')?.rodara, true)
+})
+
+test('já tendo contato de confiança alta, o clique inteiro não roda e custa zero', () => {
+  const p = planejarDescobertaSobDemanda({ ...BASE, dominio: 'x.com.br', funcionarios: 50, melhor_confianca: 'alta' })
+  assert.equal(p.custo_estimado, 0)
+  assert.equal(p.etapas.every((e) => !e.rodara), true)
+  assert.match(p.etapas[0]?.motivo ?? '', /confiança alta/)
+})
+
+test('confiança média não bloqueia — média é justamente o que se está tentando melhorar', () => {
+  const p = planejarDescobertaSobDemanda({ ...BASE, melhor_confianca: 'media' })
+  assert.ok(p.custo_estimado > 0)
+})
+
+test('desligar parar_ao_encontrar_alta faz tudo rodar mesmo com alta', () => {
+  const p = planejarDescobertaSobDemanda(
+    { ...BASE, dominio: 'x.com.br', funcionarios: 50, melhor_confianca: 'alta' },
+    { pararAoEncontrarAlta: false },
+  )
+  assert.equal(p.etapas.filter((e) => e.rodara).length, 3)
+  assert.equal(p.pode_custar_menos, false)
+})
+
+test('o custo estimado é TETO: com parada ligada, o clique pode custar menos', () => {
+  const p = planejarDescobertaSobDemanda(BASE)
+  assert.equal(p.pode_custar_menos, true)
+})
+
+test('deveParar só para em alta', () => {
+  assert.equal(deveParar('alta'), true)
+  assert.equal(deveParar('media'), false)
+  assert.equal(deveParar(null), false)
+  assert.equal(deveParar('alta', false), false)
+})
+
+test('o orçamento é do originador e o clique que estoura não cabe', () => {
+  const o = avaliarOrcamento(49, 50, 1.65)
+  assert.equal(o.cabe, false) // 49 + 1,65 = 50,65
+  assert.equal(o.saldo, 1)
+  assert.equal(o.alerta, true)
+  // Um centavo abaixo do teto ainda cabe: o corte é no que ESTOURA, não no que chega perto.
+  assert.equal(avaliarOrcamento(48, 50, 1.65).cabe, true)
+  assert.equal(avaliarOrcamento(10, 50, 1.65).cabe, true)
+  assert.equal(avaliarOrcamento(10, 50, 1.65).alerta, false)
+})
+
+test('teto zero não vira alerta permanente nem divisão por zero', () => {
+  const o = avaliarOrcamento(0, 0, 1)
+  assert.equal(o.cabe, false)
+  assert.equal(o.alerta, false)
+  assert.equal(o.saldo, 0)
+})

@@ -18,6 +18,7 @@ import { salvarConfigAction, salvarMotivoAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 import { VendedorForm } from './vendedor-form'
 import { Parametros } from './comissao/parametros'
+import { ConfigFornecedores } from './fornecedores/config'
 
 /**
  * Configurações do Comercial: quem vende, com qual território, por quanto.
@@ -384,6 +385,15 @@ export function ConfigComercial() {
         Motivo inativo continua nas estatísticas antigas — desativar tira da lista de escolha,
         não do histórico.
       </p>
+
+      {/*
+        Funil de cadastro de fornecedores (04l §7). As CREDENCIAIS não estão lá: usuário,
+        senha e cliente da Nova Vida e a chave do Google Places vivem só em variável de
+        ambiente do worker. `fornecedores_config` é lida por `authenticated` para que o
+        card mostre o custo do clique — pôr uma credencial nela seria distribuí-la a todo
+        mundo que tem o módulo.
+      */}
+      <ConfigFornecedores />
 
       <VendedorForm
         aberto={abrindoForm}

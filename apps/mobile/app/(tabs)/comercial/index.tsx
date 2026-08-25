@@ -5,7 +5,7 @@ import {
   type TipoVendedorId,
 } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { CalendarDays, Clock, Coins, Inbox, Target, Users } from 'lucide-react-native'
+import { CalendarDays, Clock, Coins, Inbox, PackageSearch, Target, Users } from 'lucide-react-native'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { useResumoComercial } from '@/features/comercial'
+import { usePainelFornecedores } from '@/features/comercial/fornecedores'
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -25,6 +26,7 @@ export default function ComercialScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const { data, isPending, isError, refetch, isRefetching } = useResumoComercial()
+  const fornecedores = usePainelFornecedores()
 
   if (isPending) {
     return (
@@ -144,6 +146,24 @@ export default function ComercialScreen() {
           <Text variant="muted">{data.nfs_vivas}</Text>
         </Card>
       )}
+
+      {/*
+        O funil de cadastro de fornecedores (04l) é atalho para TODOS, e não só para o
+        originador. A lista já é recortada pela RLS: quem não tem fornecedor atribuído
+        abre a tela e encontra o estado vazio explicando por quê — o que é uma resposta.
+        Esconder o item faria a mesma pessoa concluir que perdeu acesso.
+      */}
+      <Pressable onPress={() => router.push('/comercial/fornecedores')}>
+        <Card className="flex-row items-center justify-between p-4">
+          <View className="flex-row items-center gap-2">
+            <PackageSearch size={16} color={colors.mutedForeground} />
+            <Text className="font-medium">Fornecedores a cadastrar</Text>
+          </View>
+          <Text variant="muted">
+            {fornecedores.data?.tem_acesso ? brl(fornecedores.data.potencial_total) : '—'}
+          </Text>
+        </Card>
+      </Pressable>
 
       <Card className="gap-2 p-4">
         <View className="flex-row items-center gap-2">

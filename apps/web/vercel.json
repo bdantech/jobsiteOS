@@ -88,6 +88,14 @@
     {
       "path": "/api/cron/comercial-reclassificacao",
       "schedule": "0 12 * * 1"
+    },
+    {
+      "path": "/api/cron/fornecedores-descoberta",
+      "schedule": "20 4 * * *"
+    },
+    {
+      "path": "/api/cron/fornecedores-validar",
+      "schedule": "40 5 * * *"
     }
   ]
 }

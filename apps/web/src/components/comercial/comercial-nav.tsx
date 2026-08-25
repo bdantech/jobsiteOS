@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Settings, ShieldCheck, Sparkles,
-  Target, TrendingDown, Users,
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, PackageSearch, Settings,
+  ShieldCheck, Sparkles, Target, TrendingDown, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +50,11 @@ const ITENS: readonly ItemNav[] = [
   // quem termina de mexer no funil é quem pergunta onde ele trava.
   { href: '/comercial/analise', label: 'Análise do Funil', icon: TrendingDown, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
+  // O funil de cadastro (04l) vem ANTES da comissão: é trabalho do dia, e comissão é
+  // consulta. Visível para todos os tipos porque a lista já é recortada por originador
+  // pela RLS — quem não tem fornecedor atribuído vê a tela vazia, que é uma resposta,
+  // e não um item de menu que some sem explicação.
+  { href: '/comercial/fornecedores', label: 'Cadastro de Fornecedores', icon: PackageSearch },
   { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
   {
     href: '/comercial/carteira',

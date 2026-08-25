@@ -88,7 +88,10 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'De 4 em 4 horas: puxa as NFs novas da Onepay, resolve cadastro dos CNPJs desconhecidos e reclassifica o funil.',
     destino: 'POST /jobs/antecipacao/sync-nfs',
-    encadeia: ['Sync de antecipações (conversão de nota em operação)'],
+    encadeia: [
+      'Sync de antecipações (conversão de nota em operação)',
+      'Funil de cadastro de fornecedores (04l) — a munição dele vem exatamente das notas que acabaram de chegar; num relógio próprio, o card mostraria o volume de até quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban como lead',
+    ],
   },
   {
     path: '/api/cron/antecipacao-diario',
@@ -177,6 +180,22 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'De hora em hora: abre a fila para as reuniões realizadas, expira COMO ACEITA o que passou do SLA e lança a comissão do SDR. A tela já acorda o worker ao decidir — este cron é a rede que faz um lançamento perdido aparecer na hora seguinte em vez de nunca. De hora em hora porque o SLA é contado em horas, e um relógio mais grosso que a unidade que mede erra sempre para o mesmo lado.',
     destino: 'POST /jobs/comercial/aceites-sdr',
+  },
+  {
+    path: '/api/cron/fornecedores-descoberta',
+    nome: 'Descoberta de contatos de fornecedores',
+    moduloId: 'comercial',
+    descricao:
+      'Camadas 0+1 da cascata (04l §4.1) para os fornecedores do funil de cadastro, na ordem do potencial: varre o XML das NF-e (a melhor fonte para PME — 77% dos 688 fornecedores têm telefone no bloco do emitente, contra 11% no cadastro da Receita), lê o cadastral, cruza com os contatos que já temos, abre a página de contato do site e consulta o Google Places. Às 4h20 porque abre conexão com sites de terceiros e não deve competir com o horário de uso. O único item pago é o Places, e ele sai do orçamento automático da casa — nunca do teto de um originador, que ninguém autorizou para uma varredura noturna. Estourado o orçamento, as quatro etapas grátis continuam rodando: são elas que trazem os 77%.',
+    destino: 'POST /jobs/fornecedores/descoberta-automatica',
+  },
+  {
+    path: '/api/cron/fornecedores-validar',
+    nome: 'Validação dos contatos descobertos',
+    moduloId: 'comercial',
+    descricao:
+      'Diário (04l §4.4): normaliza o telefone em E.164 e confere o registro MX do domínio de cada e-mail. Não envia nada e não disca — verificação por envio é toque, e toque passa pela supressão e por uma pessoa. Contato inválido é REBAIXADO para confiança baixa e marcado, nunca apagado: a linha ruim é a evidência de que a fonte entrega lixo, e apagá-la faria um provedor com 5% de validade sumir do painel de eficácia parecendo limpo.',
+    destino: 'POST /jobs/fornecedores/validar-contatos',
   },
   {
     path: '/api/cron/comercial-reclassificacao',

@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md.
 prompts/         The build specs.
 ```
 
@@ -395,6 +395,79 @@ One list (Radar's), now with `expira_em`. **Soft** (default 90 days) is "not now
 lets it lapse; **eterna** (`null`) is LGPD and never expires. `estaSuprimido()` and the `notas_funil`
 view apply the **same** validity predicate — if they disagreed, a supplier would vanish from the Kanban
 and keep receiving messages, or the reverse.
+
+## Cadastro de Fornecedores
+
+Quem emite NF contra nossos sacados e **não está na plataforma** é demanda latente de antecipação.
+Detalhes em [`docs/fornecedores.md`](docs/fornecedores.md); aqui o que decide dinheiro.
+
+### A ordem da cascata é a ordem do custo, e ela foi medida
+
+Dos 688 fornecedores que passam do corte de volume (25/08/2026): **528 (77%) têm telefone no bloco
+`<emit>` do XML da NF-e**; o cadastro da Receita tem telefone para **75 (11%)**. O XML ganha por sete
+vezes e custa zero — ele está no nosso banco desde o Prompt 04. Rodar qualquer provedor pago antes de
+esgotá-lo é pagar por 77% de informação que já temos.
+
+```
+CAMADA 0+1 — automática, roda para TODOS, sem clique
+  1. xml_nfe        zero      alta     emit/fone, emit/email, varredura de infCpl
+  2. receita        zero      média    email_rfb, telefone1_rfb, telefone2_rfb
+  3. contatos_base  zero      média    o que já temos, da ficha ou do mesmo domínio
+  4. site_empresa   zero      média    /contato, /fale-conosco, rodapé
+  5. google_places  R$ 0,18   alta*    *se o endereço bater com o cadastral
+
+CAMADA 2+4 — UM CLIQUE do originador, pago, com o custo na tela antes de perguntar
+  6. novavida       R$ 0,35   média    sócios (em PME, o sócio É quem decide)
+  7. apollo         R$ 1,20   média    só com domínio E porte ≥ mínimo
+  8. claude_busca   R$ 0,10   média    site, Instagram/Facebook, Maps, sindicatos
+
+CAMADA 3 — botão SEPARADO: pedir apresentação ao sacado (texto copiável, envio é 05)
+```
+
+### Automático vs. pago: dois orçamentos que nunca se somam
+
+- **`orcamento_automatico_mensal`** paga o que roda sem clique — hoje, só o Google Places na varredura
+  noturna. Ninguém autorizou individualmente essas consultas, então elas **não podem** sair do teto de
+  ninguém.
+- **`teto_mensal_por_originador`** paga o clique. Ele é a **autorização**: dentro dele o originador
+  aciona sozinho. Estourou, precisa de liberação do gestor.
+
+Somar os dois faria a varredura noturna comer o saldo de quem não pediu nada — e essa pessoa
+descobriria no dia em que precisasse clicar.
+
+**Estourar o orçamento automático não para o job**: só o item pago é pulado. As quatro etapas grátis
+continuam rodando, porque são elas que trazem os 77%.
+
+O custo mostrado no botão é o **teto**. Com `parar_ao_encontrar_alta` (default ligado) a cascata para na
+primeira fonte de confiança alta e a fatura sai menor. Prometer o teto e cobrar menos é a única direção
+aceitável do erro.
+
+### Confiança é procedência, não qualidade
+
+- **alta** — campo estruturado declarado pela própria empresa, **com data**: o `<fone>` de uma NF-e
+  emitida na semana passada, um `wa.me` publicado no próprio site, uma ficha do Places cujo endereço
+  bate com o cadastral.
+- **média** — é da empresa, mas sem data ou sem estrutura: o telefone que o contador cadastrou na
+  abertura, um e-mail no texto livre da nota, o celular de um sócio.
+- **baixa** — procedência fraca, ou reprovado na validação.
+
+"Alta" declarada por um modelo vira **média** na gravação: leitura de página web não alcança campo
+estruturado. E **contato do Claude sem URL de origem é descartado** — um telefone sem procedência é
+indistinguível de um inventado, e a evidência não é auditoria, é a prova de que a busca aconteceu.
+
+**Evidência aparece em toda linha.** "Achado no `emit` da NF 12345 de agosto" e "achado numa página do
+Google" pedem primeiras frases diferentes, e é a primeira frase que decide se a ligação continua.
+
+**Contato inválido é rebaixado, nunca apagado.** A linha ruim é a evidência de que a fonte entrega lixo,
+e é ela que justifica desligar um provedor no painel de eficácia (§6). Apagar faria um provedor com 5%
+de validade sumir do relatório parecendo limpo.
+
+### Credenciais
+
+`NOVAVIDA_USUARIO`, `NOVAVIDA_SENHA`, `NOVAVIDA_CLIENTE` e `GOOGLE_PLACES_API_KEY` vivem **só em env do
+worker**. Nunca em `fornecedores_config` — ela é lida por `authenticated` para o card mostrar o custo do
+clique, e uma credencial ali seria distribuída a todo mundo com o módulo. O token da Nova Vida fica em
+`integracao_tokens`, com RLS sem policy **e** `ALL` revogado de `anon`/`authenticated`.
 
 ## Conventions
 

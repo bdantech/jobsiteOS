@@ -136,6 +136,21 @@ export const EVENTO_TIPOS = {
   CONTA_REVISAO_SUGERIDA: 'conta.revisao_sugerida',
   SDR_ACEITE_PENDENTE: 'sdr.aceite_pendente',
 
+  /*
+   * Funil de cadastro de fornecedores (04l).
+   *
+   * `fornecedor.sem_interesse` NÃO está aqui: ele já existe desde a Antecipação, e é
+   * o mesmo fato — alguém disse não e a supressão passou a valer. Um segundo tipo
+   * para o mesmo evento partiria a timeline da empresa em duas metades que ninguém
+   * cruzaria.
+   */
+  FORNECEDOR_ENTROU_FUNIL: 'fornecedor.entrou_funil',
+  FORNECEDOR_CONTATOS_ENCONTRADOS: 'fornecedor.contatos_encontrados',
+  FORNECEDOR_SEM_CONTATO: 'fornecedor.sem_contato',
+  FORNECEDOR_CADASTRADO: 'fornecedor.cadastrado',
+  APRESENTACAO_SOLICITADA: 'apresentacao.solicitada',
+  ORCAMENTO_DESCOBERTA_ALERTA: 'orcamento_descoberta.alerta',
+
   // Ex-clientes pelas análises da plataforma (04h)
   CLIENTE_TORNOU_EX: 'cliente.tornou_ex',
   EXCLIENTE_CONFLITO_DADOS: 'excliente.conflito_dados',
@@ -249,6 +264,12 @@ export const EVENTO_LABELS: Record<string, string> = {
   'titularidade.liberada': 'Titularidade liberada',
   'conta.revisao_sugerida': 'Revisão de classificação sugerida',
   'sdr.aceite_pendente': 'Reunião aguardando aceite',
+  'fornecedor.entrou_funil': 'Fornecedor entrou no funil de cadastro',
+  'fornecedor.contatos_encontrados': 'Contatos do fornecedor encontrados',
+  'fornecedor.sem_contato': 'Fornecedor sem contato encontrado',
+  'fornecedor.cadastrado': 'Fornecedor cadastrado na plataforma',
+  'apresentacao.solicitada': 'Apresentação pedida ao sacado',
+  'orcamento_descoberta.alerta': 'Orçamento de descoberta em alerta',
   'cliente.tornou_ex': 'Virou ex-cliente',
   'excliente.conflito_dados': 'Ex-cliente com dado conflitante',
   'excliente.motivo_definido': 'Motivo de saída definido',

@@ -20,6 +20,7 @@ import {
 } from '../../comercial/index.js'
 import { moverLeadSdr, moverVenda } from '../../comercial/mutations.js'
 import type { AppModule, ToolContext } from '../types.js'
+import { fornecedoresTools } from './fornecedores-tools.js'
 
 /**
  * Módulo Comercial (04g): quem vende o quê, para quem, e quanto isso paga.
@@ -238,6 +239,9 @@ export const comercialModule: AppModule = {
       execute: (input, ctx) => moverEstagioVenda(input as MoverVendaInput, ctx),
       mutates: true,
     },
+    // Funil de cadastro de fornecedores (04l). Em arquivo próprio: é um domínio
+    // inteiro que só divide o módulo com a comissão por conveniência de menu.
+    ...fornecedoresTools,
   ],
 }
 

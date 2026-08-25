@@ -62,6 +62,10 @@ import {
   dispararFuncionariosLote,
   dispararLookupCadastral,
   dispararProtestoFornecedor,
+  dispararFunilFornecedores,
+  dispararDescobertaFornecedores,
+  dispararValidarContatos,
+  executarCliqueDescoberta,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -239,6 +243,19 @@ const apurarSchema = z.object({
   competencia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
+const descobertaSchema = z.object({
+  // Quantos fornecedores a rodada olha. O default do job (200) cobre a lista inteira
+  // em pouco mais de três noites, na ordem do potencial.
+  limite: z.coerce.number().int().min(1).max(1000).optional(),
+})
+
+const cliqueSchema = z.object({
+  cnpj: z.string().regex(/^[0-9]{14}$/),
+  solicitado_por: z.string().uuid().optional(),
+  // Liberação do gestor para um clique que estourou o teto do originador.
+  forcar: z.boolean().optional(),
+})
+
 app.post('/jobs/comercial/apurar-comissoes', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { competencia } = apurarSchema.parse(req.body ?? {})
@@ -290,6 +307,55 @@ app.post('/jobs/comercial/aceites-sdr', (_req: Request, res: Response, next: Nex
 app.post('/jobs/comercial/alerta-reclassificacao', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararAlertaReclassificacao(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * Funil de cadastro de fornecedores (04l §7).
+ *
+ * O CLIQUE é a única rota deste arquivo que responde 200 com o resultado em vez de
+ * 202 com um id — e a exceção é deliberada. A tela mostrou "este clique custa R$
+ * 1,65" e perguntou se pode; devolver um id e mandar consultar depois transformaria
+ * uma decisão de gastar dinheiro em algo que a pessoa não vê acontecer.
+ */
+app.post('/jobs/fornecedores/atualizar-funil', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararFunilFornecedores(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/fornecedores/descoberta-automatica', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = descobertaSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararDescobertaFornecedores(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/fornecedores/buscar-contatos', (req: Request, res: Response, next: NextFunction) => {
+  void (async () => {
+    try {
+      const dados = cliqueSchema.parse(req.body ?? {})
+      const r = await executarCliqueDescoberta({
+        cnpj: dados.cnpj,
+        solicitadoPor: dados.solicitado_por ?? null,
+        forcar: dados.forcar ?? false,
+      })
+      res.status(200).json(r)
+    } catch (erro) {
+      next(erro)
+    }
+  })()
+})
+
+app.post('/jobs/fornecedores/validar-contatos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararValidarContatos(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

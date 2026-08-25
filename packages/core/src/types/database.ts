@@ -1709,6 +1709,71 @@ export type Database = {
           },
         ]
       }
+      contatos_descobertos: {
+        Row: {
+          atualizado_em: string
+          cargo: string | null
+          confianca: string
+          descoberto_em: string
+          evidencia: string | null
+          fonte: string
+          fornecedor_cnpj: string
+          frequencia: number
+          id: string
+          nome_pessoa: string | null
+          promovido_contato_id: string | null
+          tipo: string
+          ultima_vez_visto: string | null
+          validado: Json
+          valor: string
+          valor_original: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          cargo?: string | null
+          confianca: string
+          descoberto_em?: string
+          evidencia?: string | null
+          fonte: string
+          fornecedor_cnpj: string
+          frequencia?: number
+          id?: string
+          nome_pessoa?: string | null
+          promovido_contato_id?: string | null
+          tipo: string
+          ultima_vez_visto?: string | null
+          validado?: Json
+          valor: string
+          valor_original?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          cargo?: string | null
+          confianca?: string
+          descoberto_em?: string
+          evidencia?: string | null
+          fonte?: string
+          fornecedor_cnpj?: string
+          frequencia?: number
+          id?: string
+          nome_pessoa?: string | null
+          promovido_contato_id?: string | null
+          tipo?: string
+          ultima_vez_visto?: string | null
+          validado?: Json
+          valor?: string
+          valor_original?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contatos_descobertos_promovido_contato_id_fkey"
+            columns: ["promovido_contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credito_config: {
         Row: {
           atualizado_em: string
@@ -1815,6 +1880,63 @@ export type Database = {
           versao?: number
         }
         Relationships: []
+      }
+      descoberta_execucoes: {
+        Row: {
+          camada: string
+          contatos_novos: number
+          custo: number
+          executado_em: string
+          fornecedor_cnpj: string
+          id: string
+          motivo: string | null
+          originador_id: string | null
+          provedor: string
+          solicitado_por: string | null
+          status: string
+        }
+        Insert: {
+          camada: string
+          contatos_novos?: number
+          custo?: number
+          executado_em?: string
+          fornecedor_cnpj: string
+          id?: string
+          motivo?: string | null
+          originador_id?: string | null
+          provedor: string
+          solicitado_por?: string | null
+          status: string
+        }
+        Update: {
+          camada?: string
+          contatos_novos?: number
+          custo?: number
+          executado_em?: string
+          fornecedor_cnpj?: string
+          id?: string
+          motivo?: string | null
+          originador_id?: string | null
+          provedor?: string
+          solicitado_por?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "descoberta_execucoes_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "descoberta_execucoes_solicitado_por_fkey"
+            columns: ["solicitado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       empresa_eventos: {
         Row: {
@@ -2817,6 +2939,163 @@ export type Database = {
           },
         ]
       }
+      fornecedores_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedores_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fornecedores_funil: {
+        Row: {
+          atualizado_em: string
+          contatos_encontrados: number
+          descoberta_automatica_em: string | null
+          empresa_id: string | null
+          entrou_em: string
+          estagio: string
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          fornecedor_cnpj: string
+          id: string
+          melhor_confianca: string | null
+          originador_id: string | null
+          originador_origem: string
+          potencial_mensal: number | null
+          prazo_medio_dias: number | null
+          qtd_nfs_90d: number | null
+          sacados_principais: Json
+          sem_interesse_ate: string | null
+          sem_interesse_motivo: string | null
+          sem_interesse_observacao: string | null
+          ultima_busca_em: string | null
+          ultima_nf_em: string | null
+          volume_90d: number | null
+        }
+        Insert: {
+          atualizado_em?: string
+          contatos_encontrados?: number
+          descoberta_automatica_em?: string | null
+          empresa_id?: string | null
+          entrou_em?: string
+          estagio?: string
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          fornecedor_cnpj: string
+          id?: string
+          melhor_confianca?: string | null
+          originador_id?: string | null
+          originador_origem?: string
+          potencial_mensal?: number | null
+          prazo_medio_dias?: number | null
+          qtd_nfs_90d?: number | null
+          sacados_principais?: Json
+          sem_interesse_ate?: string | null
+          sem_interesse_motivo?: string | null
+          sem_interesse_observacao?: string | null
+          ultima_busca_em?: string | null
+          ultima_nf_em?: string | null
+          volume_90d?: number | null
+        }
+        Update: {
+          atualizado_em?: string
+          contatos_encontrados?: number
+          descoberta_automatica_em?: string | null
+          empresa_id?: string | null
+          entrou_em?: string
+          estagio?: string
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          fornecedor_cnpj?: string
+          id?: string
+          melhor_confianca?: string | null
+          originador_id?: string | null
+          originador_origem?: string
+          potencial_mensal?: number | null
+          prazo_medio_dias?: number | null
+          qtd_nfs_90d?: number | null
+          sacados_principais?: Json
+          sem_interesse_ate?: string | null
+          sem_interesse_motivo?: string | null
+          sem_interesse_observacao?: string | null
+          ultima_busca_em?: string | null
+          ultima_nf_em?: string | null
+          volume_90d?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_estagio_alterado_por_fkey"
+            columns: ["estagio_alterado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funil_transicoes: {
         Row: {
           de: string | null
@@ -3024,6 +3303,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      integracao_tokens: {
+        Row: {
+          atualizado_em: string
+          expira_em: string
+          provedor: string
+          token: string
+        }
+        Insert: {
+          atualizado_em?: string
+          expira_em: string
+          provedor: string
+          token: string
+        }
+        Update: {
+          atualizado_em?: string
+          expira_em?: string
+          provedor?: string
+          token?: string
+        }
+        Relationships: []
       }
       lote_itens: {
         Row: {
@@ -4084,6 +4384,57 @@ export type Database = {
           {
             foreignKeyName: "notificacoes_usuario_id_fkey"
             columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pedidos_apresentacao: {
+        Row: {
+          contato_sacado_id: string | null
+          criado_em: string
+          fornecedor_cnpj: string
+          id: string
+          mensagem: string | null
+          respondido_em: string | null
+          sacado_cnpj: string
+          solicitado_por: string | null
+          status: string
+        }
+        Insert: {
+          contato_sacado_id?: string | null
+          criado_em?: string
+          fornecedor_cnpj: string
+          id?: string
+          mensagem?: string | null
+          respondido_em?: string | null
+          sacado_cnpj: string
+          solicitado_por?: string | null
+          status?: string
+        }
+        Update: {
+          contato_sacado_id?: string | null
+          criado_em?: string
+          fornecedor_cnpj?: string
+          id?: string
+          mensagem?: string | null
+          respondido_em?: string | null
+          sacado_cnpj?: string
+          solicitado_por?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_apresentacao_contato_sacado_id_fkey"
+            columns: ["contato_sacado_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_apresentacao_solicitado_por_fkey"
+            columns: ["solicitado_por"]
             isOneToOne: false
             referencedRelation: "usuarios"
             referencedColumns: ["id"]
@@ -5695,6 +6046,87 @@ export type Database = {
           },
         ]
       }
+      fornecedores_funil_view: {
+        Row: {
+          cnae_principal: string | null
+          contatos_encontrados: number | null
+          data_inicio_atividade: string | null
+          descoberta_automatica_em: string | null
+          dominio: string | null
+          dominio_confianca: string | null
+          empresa_id: string | null
+          entrou_em: string | null
+          estagio: string | null
+          estagio_alterado_em: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_nome: string | null
+          id: string | null
+          melhor_confianca: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          originador_id: string | null
+          originador_nome: string | null
+          originador_origem: string | null
+          porte_rfb: string | null
+          potencial_mensal: number | null
+          prazo_medio_dias: number | null
+          qtd_nfs_90d: number | null
+          sacados_principais: Json | null
+          sem_interesse_ate: string | null
+          sem_interesse_motivo: string | null
+          sem_interesse_observacao: string | null
+          situacao_cadastral: string | null
+          suprimido: boolean | null
+          uf: string | null
+          ultima_busca_em: string | null
+          ultima_nf_em: string | null
+          volume_90d: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "fornecedores_funil_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mercado_explorador: {
         Row: {
           analise_estagio: string | null
@@ -6037,6 +6469,115 @@ export type Database = {
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
       antecipacao_status_conversoes: { Args: { p?: Json }; Returns: Json }
+      app__promover_fornecedor_para_empresa: {
+        Args: { p_ator: string; p_cnpj: string; p_origem: string }
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app__registrar_toque: {
+        Args: {
+          p_ator: string
+          p_canal: string
+          p_cnpj: string
+          p_contato: string
+          p_extra: Json
+        }
+        Returns: undefined
+      }
+      app__suprimir_fornecedor: {
+        Args: {
+          p_ator: string
+          p_cnpj: string
+          p_contexto: string
+          p_dias: number
+          p_motivo: string
+        }
+        Returns: {
+          contexto: string
+          criado_em: string
+          criado_por: string | null
+          escopo: string
+          expira_em: string | null
+          id: string
+          motivo: string
+          observacao: string | null
+          valor: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "supressao"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_ajuste_manual_comissao: {
         Args: { p: Json }
         Returns: {
@@ -6799,6 +7340,110 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_fornecedor_mover: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          contatos_encontrados: number
+          descoberta_automatica_em: string | null
+          empresa_id: string | null
+          entrou_em: string
+          estagio: string
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          fornecedor_cnpj: string
+          id: string
+          melhor_confianca: string | null
+          originador_id: string | null
+          originador_origem: string
+          potencial_mensal: number | null
+          prazo_medio_dias: number | null
+          qtd_nfs_90d: number | null
+          sacados_principais: Json
+          sem_interesse_ate: string | null
+          sem_interesse_motivo: string | null
+          sem_interesse_observacao: string | null
+          ultima_busca_em: string | null
+          ultima_nf_em: string | null
+          volume_90d: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fornecedores_funil"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_fornecedor_reatribuir: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          contatos_encontrados: number
+          descoberta_automatica_em: string | null
+          empresa_id: string | null
+          entrou_em: string
+          estagio: string
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          fornecedor_cnpj: string
+          id: string
+          melhor_confianca: string | null
+          originador_id: string | null
+          originador_origem: string
+          potencial_mensal: number | null
+          prazo_medio_dias: number | null
+          qtd_nfs_90d: number | null
+          sacados_principais: Json
+          sem_interesse_ate: string | null
+          sem_interesse_motivo: string | null
+          sem_interesse_observacao: string | null
+          ultima_busca_em: string | null
+          ultima_nf_em: string | null
+          volume_90d: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fornecedores_funil"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_fornecedor_sem_interesse: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          contatos_encontrados: number
+          descoberta_automatica_em: string | null
+          empresa_id: string | null
+          entrou_em: string
+          estagio: string
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          fornecedor_cnpj: string
+          id: string
+          melhor_confianca: string | null
+          originador_id: string | null
+          originador_origem: string
+          potencial_mensal: number | null
+          prazo_medio_dias: number | null
+          qtd_nfs_90d: number | null
+          sacados_principais: Json
+          sem_interesse_ate: string | null
+          sem_interesse_motivo: string | null
+          sem_interesse_observacao: string | null
+          ultima_busca_em: string | null
+          ultima_nf_em: string | null
+          volume_90d: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fornecedores_funil"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_fornecedor_toque: { Args: { p: Json }; Returns: undefined }
+      app_fornecedor_visivel: { Args: { p_cnpj: string }; Returns: boolean }
       app_funil_analise: { Args: { p: Json }; Returns: Json }
       app_gerar_token_ics: { Args: { p: Json }; Returns: string }
       app_gestor_comercial: { Args: never; Returns: boolean }
@@ -6997,11 +7642,79 @@ export type Database = {
       app_mudar_status_competencia: { Args: { p: Json }; Returns: number }
       app_ocultar_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
       app_ocultar_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
+      app_pedido_apresentacao_status: {
+        Args: { p: Json }
+        Returns: {
+          contato_sacado_id: string | null
+          criado_em: string
+          fornecedor_cnpj: string
+          id: string
+          mensagem: string | null
+          respondido_em: string | null
+          sacado_cnpj: string
+          solicitado_por: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pedidos_apresentacao"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_pedir_apresentacao: {
+        Args: { p: Json }
+        Returns: {
+          contato_sacado_id: string | null
+          criado_em: string
+          fornecedor_cnpj: string
+          id: string
+          mensagem: string | null
+          respondido_em: string | null
+          sacado_cnpj: string
+          solicitado_por: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pedidos_apresentacao"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_pode_ver_vendedor: {
         Args: { p_vendedor_id: string }
         Returns: boolean
       }
       app_processar_submissao: { Args: { p: Json }; Returns: Json }
+      app_promover_contato_descoberto: {
+        Args: { p: Json }
+        Returns: {
+          apollo_person_id: string | null
+          cargo: string | null
+          criado_em: string
+          departamento: string | null
+          email: string | null
+          email_status: string | null
+          empresa_id: string
+          enriquecido_em: string | null
+          id: string
+          linkedin_url: string | null
+          nome: string | null
+          origem: string | null
+          ponto_focal: boolean
+          senioridade: string | null
+          telefone: string | null
+          telefone_status: string | null
+          whatsapp: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contatos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_promover_empresa: {
         Args: { p: Json }
         Returns: {
@@ -7512,6 +8225,21 @@ export type Database = {
         }
       }
       app_salvar_formulario: { Args: { p: Json }; Returns: Json }
+      app_salvar_fornecedores_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fornecedores_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_salvar_motivo_perda: {
         Args: { p: Json }
         Returns: {
@@ -7819,6 +8547,8 @@ export type Database = {
       ex_clientes_por_motivo: { Args: { p_meses?: number }; Returns: Json }
       formulario_publico: { Args: { p_slug: string }; Returns: Json }
       formularios_lista: { Args: never; Returns: Json }
+      fornecedores_eficacia_fontes: { Args: never; Returns: Json }
+      fornecedores_painel: { Args: { p_originador_id?: string }; Returns: Json }
       mercado_amostra_camada: {
         Args: {
           p_camada: string
@@ -8022,7 +8752,6 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
 
 // Compat: helper Views<> (o gerador novo dobra views em Tables<>, mas o repo importa Views<'x'>).
 export type Views<

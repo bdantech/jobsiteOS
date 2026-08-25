@@ -2,6 +2,11 @@
 
 Quem vende o quê, para quem, e quanto isso paga.
 
+O **Cadastro de Fornecedores** (04l) mora neste módulo mas tem doc própria:
+[`fornecedores.md`](fornecedores.md). Ele divide o menu com a comissão por conveniência,
+não por parentesco — o que ele compartilha de verdade é a carteira de originação, que
+decide de quem é cada fornecedor.
+
 O **motor de comissões** deste módulo é o do 04k, descrito em
 [Motor de comissões v2](#motor-de-comissões-v2-04k). O 04g continua valendo para todo o
 resto — funis, carteira, roteamento, distribuição — e as competências que ele apurou

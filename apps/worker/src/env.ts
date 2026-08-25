@@ -113,6 +113,21 @@ const envSchema = z.object({
   /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // ─── Fornecedores (Prompt 04l): descoberta de contato ─────────────────────
+  // Opcionais pelo mesmo desenho do Radar: sem a credencial o provedor é PULADO com
+  // o motivo registrado, e a cascata segue nos outros. É a diferença entre "não
+  // configurado" e "quebrado", e ela aparece no painel de eficácia por fonte.
+  //
+  // As três da Nova Vida são credencial de acesso a dado de terceiro. Nunca em
+  // código, nunca em `fornecedores_config` (que é lida por `authenticated`), e nunca
+  // logadas — nem o token que elas geram, que vive em `integracao_tokens`, tabela
+  // sem grant nenhum.
+  NOVAVIDA_USUARIO: z.string().optional(),
+  NOVAVIDA_SENHA: z.string().optional(),
+  NOVAVIDA_CLIENTE: z.string().optional(),
+  /** Places API v1 (searchText). Cobrada por consulta e por faixa de fieldMask. */
+  GOOGLE_PLACES_API_KEY: z.string().optional(),
+
   // ─── Crédito (Prompt 04d): seguradora ─────────────────────────────────────
   // Todas opcionais: sem elas a esteira funciona inteira até "enviada à seguradora",
   // e o envio explica que falta credencial em vez de falhar com erro de rede. É a
