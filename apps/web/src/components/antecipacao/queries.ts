@@ -321,6 +321,15 @@ export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspec
   const linhas: FornecedorProspectar[] = []
 
   let inicio = 0
+  /**
+   * O tamanho de uma página CHEIA, medido em vez de suposto.
+   *
+   * O teto real é do servidor, não nosso: o PostgREST pode devolver menos do que
+   * `PAGINA_PROSPECTAR` sem avisar. Guardando a maior página já vista, "veio menos
+   * do que cabe" passa a significar fim da lista — e só isso.
+   */
+  let paginaCheia = 0
+
   while (inicio < LIMITE_PROSPECTAR_FORNECEDORES) {
     const fim = Math.min(inicio + PAGINA_PROSPECTAR, LIMITE_PROSPECTAR_FORNECEDORES) - 1
     const { data, error } = await supabase
@@ -337,11 +346,32 @@ export async function buscarFornecedoresAProspectar(): Promise<FornecedorProspec
 
     const pagina = (data ?? []) as FornecedorProspectar[]
     if (pagina.length === 0) break
+
+    /**
+     * Página curta = ÚLTIMA página. Sai do laço AQUI, em vez de dar mais uma volta
+     * só para ver um zero.
+     *
+     * Não é economia de rede: aquela volta extra reexecuta a agregação INTEIRA da
+     * view no banco, e um 500 nela derrubava a tela com as 2.091 linhas já na mão.
+     * Foi exatamente o que os logs de 24/08 registraram — `offset=0`, `1000` e
+     * `2000` responderam 200, e o `offset=2091&limit=909` (que só podia vir vazio)
+     * estourou o `statement_timeout` e virou o estado de erro da tela.
+     *
+     * A comparação é contra `paginaCheia`, não contra o que foi PEDIDO: pedir 1.000
+     * e receber 1.000 é página cheia mesmo que o teto do servidor seja 1.000 — era
+     * essa a armadilha que o `inicio += pagina.length` original evitava, e ela
+     * continua evitada.
+     */
+    const ultima = paginaCheia > 0 && pagina.length < paginaCheia
+
     linhas.push(...pagina)
 
     // Avança pelo que VEIO, não pelo que foi pedido: se o teto do servidor for menor
     // que a página, tratar a resposta curta como "acabou" pararia no meio da lista.
     inicio += pagina.length
+    paginaCheia = Math.max(paginaCheia, pagina.length)
+
+    if (ultima) break
   }
 
   return linhas
