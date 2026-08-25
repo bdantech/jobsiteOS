@@ -8,6 +8,6 @@ export const metadata: Metadata = { title: 'Comissões' }
 export const dynamic = 'force-dynamic'
 
 export default async function Pagina() {
-  const { ehGestor } = await contextoComercial()
-  return <Comissoes ehGestor={ehGestor} />
+  const { ehGestor, vendedor } = await contextoComercial()
+  return <Comissoes ehGestor={ehGestor} vendedorId={vendedor?.id ?? null} />
 }

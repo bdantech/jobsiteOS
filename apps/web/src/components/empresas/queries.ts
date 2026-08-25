@@ -585,7 +585,7 @@ export async function buscarExClientesLista(
   const supabase = createClient()
   const { data, error } = await supabase.rpc('ex_clientes_lista', {
     p_recorte: recorte,
-    p_motivos: motivos.length > 0 ? [...motivos] : null,
+    p_motivos: motivos.length > 0 ? [...motivos] : undefined,
   })
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as ExClienteDaLista[]

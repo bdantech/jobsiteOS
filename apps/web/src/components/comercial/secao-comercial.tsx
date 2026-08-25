@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { definirGestaoAction } from '@/actions/comercial'
@@ -111,6 +112,7 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
       vendedor_gestao_id: escolha === 'passivo' ? String(fd.get('gestor') ?? '') || null : null,
       vendedor_originacao_id:
         escolha === 'prospeccao_ativa' ? String(fd.get('originador') ?? '') || null : null,
+      motivo: String(fd.get('motivo') ?? '') || undefined,
     })
     setSalvando(false)
     if (!r.ok) return toast.error(r.message)
@@ -307,6 +309,33 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
                     {closers.length === 0
                       ? 'Nenhum closer ativo cadastrado — sem ele o banco recusa marcar a conta como passiva.'
                       : 'Passiva sem gestor é conta órfã com rótulo — o banco recusa. O volume dela vira a comissão dele.'}
+                  </p>
+                </div>
+              )}
+
+              {/*
+                MOTIVO obrigatório quando a classificação muda (04k §3).
+                A classificação decide qual taxa cada cessão paga a partir de amanhã, e
+                "por que esta conta virou passiva" é a primeira pergunta que a folha do mês
+                seguinte faz. Ninguém lembra a resposta três meses depois.
+
+                Só aparece quando há mudança: pedir motivo para reabrir o diálogo e salvar
+                o mesmo valor transformaria o histórico em log de navegação.
+              */}
+              {escolha !== (gestao ?? '') && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="motivo-gestao">Motivo da mudança</Label>
+                  <Input
+                    id="motivo-gestao"
+                    name="motivo"
+                    required
+                    minLength={3}
+                    placeholder="Ex.: a conta passou a antecipar sozinha depois do onboarding."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Vale a partir do dia seguinte. Cessões já convertidas mantêm a
+                    classificação da data em que converteram, e o relógio da conta não
+                    reinicia.
                   </p>
                 </div>
               )}

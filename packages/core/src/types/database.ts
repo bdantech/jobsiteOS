@@ -10,10 +10,576 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
+      analise_docs: {
+        Row: {
+          analise_id: string
+          arquivo_url: string
+          enviado_em: string
+          enviado_por: string | null
+          extraido_em: string | null
+          id: string
+          nome_arquivo: string | null
+          paginas: number | null
+          tipo: string
+        }
+        Insert: {
+          analise_id: string
+          arquivo_url: string
+          enviado_em?: string
+          enviado_por?: string | null
+          extraido_em?: string | null
+          id?: string
+          nome_arquivo?: string | null
+          paginas?: number | null
+          tipo: string
+        }
+        Update: {
+          analise_id?: string
+          arquivo_url?: string
+          enviado_em?: string
+          enviado_por?: string | null
+          extraido_em?: string | null
+          id?: string
+          nome_arquivo?: string | null
+          paginas?: number | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_docs_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analise_vigente"
+            referencedColumns: ["analise_id"]
+          },
+          {
+            foreignKeyName: "analise_docs_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_docs_enviado_por_fkey"
+            columns: ["enviado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analise_parametros: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          nome: string | null
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          nome?: string | null
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          nome?: string | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_parametros_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analises_credito: {
+        Row: {
+          analise_propria_id: string | null
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          criada_em: string
+          decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
+          empresa_id: string | null
+          estagio: string
+          expira_em: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_operacional: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          rating_classe_seguradora: string | null
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+        }
+        Insert: {
+          analise_propria_id?: string | null
+          atradius_buyer_id?: string | null
+          atradius_case_id?: string | null
+          atualizada_em?: string
+          cnpj: string
+          codigo_decisao?: string | null
+          codigo_historico?: string | null
+          criada_em?: string
+          decidida_em?: string | null
+          decisao_interna?: string | null
+          decisao_interna_em?: string | null
+          empresa_id?: string | null
+          estagio?: string
+          expira_em?: string | null
+          id?: string
+          limite_aprovado?: number | null
+          limite_operacional?: number | null
+          limite_solicitado?: number | null
+          moeda?: string
+          motivo?: string | null
+          observacoes?: string | null
+          origem?: string
+          rating_classe_seguradora?: string | null
+          rating_seguradora?: string | null
+          seguradora?: string
+          solicitada_por?: string | null
+        }
+        Update: {
+          analise_propria_id?: string | null
+          atradius_buyer_id?: string | null
+          atradius_case_id?: string | null
+          atualizada_em?: string
+          cnpj?: string
+          codigo_decisao?: string | null
+          codigo_historico?: string | null
+          criada_em?: string
+          decidida_em?: string | null
+          decisao_interna?: string | null
+          decisao_interna_em?: string | null
+          empresa_id?: string | null
+          estagio?: string
+          expira_em?: string | null
+          id?: string
+          limite_aprovado?: number | null
+          limite_operacional?: number | null
+          limite_solicitado?: number | null
+          moeda?: string
+          motivo?: string | null
+          observacoes?: string | null
+          origem?: string
+          rating_classe_seguradora?: string | null
+          rating_seguradora?: string | null
+          seguradora?: string
+          solicitada_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analises_credito_analise_propria_id_fkey"
+            columns: ["analise_propria_id"]
+            isOneToOne: false
+            referencedRelation: "analises_proprietarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_credito_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_credito_solicitada_por_fkey"
+            columns: ["solicitada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analises_plataforma: {
+        Row: {
+          available_limit: number | null
+          bill_fine: number | null
+          cnpj: string
+          commission_percent: number | null
+          company_name: string | null
+          company_type: string | null
+          consumed_limit: number | null
+          credit_limit: number | null
+          empresa_cadastrada: boolean
+          ever_approved: boolean | null
+          expiration_date: string | null
+          fee_d0: number | null
+          fee_d1: number | null
+          fidc_ready: boolean | null
+          has_insurance: boolean | null
+          has_referral: boolean | null
+          id_externo: number
+          invest_back: Json | null
+          max_anticipation_value: number | null
+          max_invoice_deadline_days: number | null
+          min_fee_d0: number | null
+          min_fee_d1: number | null
+          monthly_rate_d0: number | null
+          monthly_rate_d1: number | null
+          onepay_company_id: number | null
+          raw: Json | null
+          role: string
+          sincronizada_em: string
+          status: string
+        }
+        Insert: {
+          available_limit?: number | null
+          bill_fine?: number | null
+          cnpj: string
+          commission_percent?: number | null
+          company_name?: string | null
+          company_type?: string | null
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          empresa_cadastrada: boolean
+          ever_approved?: boolean | null
+          expiration_date?: string | null
+          fee_d0?: number | null
+          fee_d1?: number | null
+          fidc_ready?: boolean | null
+          has_insurance?: boolean | null
+          has_referral?: boolean | null
+          id_externo: number
+          invest_back?: Json | null
+          max_anticipation_value?: number | null
+          max_invoice_deadline_days?: number | null
+          min_fee_d0?: number | null
+          min_fee_d1?: number | null
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          onepay_company_id?: number | null
+          raw?: Json | null
+          role?: string
+          sincronizada_em?: string
+          status: string
+        }
+        Update: {
+          available_limit?: number | null
+          bill_fine?: number | null
+          cnpj?: string
+          commission_percent?: number | null
+          company_name?: string | null
+          company_type?: string | null
+          consumed_limit?: number | null
+          credit_limit?: number | null
+          empresa_cadastrada?: boolean
+          ever_approved?: boolean | null
+          expiration_date?: string | null
+          fee_d0?: number | null
+          fee_d1?: number | null
+          fidc_ready?: boolean | null
+          has_insurance?: boolean | null
+          has_referral?: boolean | null
+          id_externo?: number
+          invest_back?: Json | null
+          max_anticipation_value?: number | null
+          max_invoice_deadline_days?: number | null
+          min_fee_d0?: number | null
+          min_fee_d1?: number | null
+          monthly_rate_d0?: number | null
+          monthly_rate_d1?: number | null
+          onepay_company_id?: number | null
+          raw?: Json | null
+          role?: string
+          sincronizada_em?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      analises_proprietarias: {
+        Row: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
+        Insert: {
+          analise_credito_id?: string | null
+          atradius_limite?: number | null
+          atradius_status?: string | null
+          cenarios?: Json | null
+          cnpj: string
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          dados_extraidos?: Json | null
+          decidida_em?: string | null
+          decidida_por?: string | null
+          decisao_final?: string | null
+          decisao_limite?: number | null
+          decisao_motivo?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          etapa?: string | null
+          extracao_revisada_em?: string | null
+          extracao_revisada_por?: string | null
+          gatilho?: string
+          id?: string
+          indicadores?: Json | null
+          lacunas_calculo?: Json
+          limite_recomendado?: number | null
+          motivos_nao_operar?: Json
+          parametros_versao: number
+          parecer_editado?: string | null
+          parecer_editado_em?: string | null
+          parecer_editado_por?: string | null
+          parecer_markdown?: string | null
+          parecer_modelo?: string | null
+          parecer_tokens?: number | null
+          protestos_opcoes?: Json | null
+          protestos_resultado?: Json | null
+          quadrante?: string | null
+          recomendacao?: string | null
+          status?: string
+          tetos?: Json | null
+          tipo?: string
+        }
+        Update: {
+          analise_credito_id?: string | null
+          atradius_limite?: number | null
+          atradius_status?: string | null
+          cenarios?: Json | null
+          cnpj?: string
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          dados_extraidos?: Json | null
+          decidida_em?: string | null
+          decidida_por?: string | null
+          decisao_final?: string | null
+          decisao_limite?: number | null
+          decisao_motivo?: string | null
+          empresa_id?: string | null
+          erro?: string | null
+          etapa?: string | null
+          extracao_revisada_em?: string | null
+          extracao_revisada_por?: string | null
+          gatilho?: string
+          id?: string
+          indicadores?: Json | null
+          lacunas_calculo?: Json
+          limite_recomendado?: number | null
+          motivos_nao_operar?: Json
+          parametros_versao?: number
+          parecer_editado?: string | null
+          parecer_editado_em?: string | null
+          parecer_editado_por?: string | null
+          parecer_markdown?: string | null
+          parecer_modelo?: string | null
+          parecer_tokens?: number | null
+          protestos_opcoes?: Json | null
+          protestos_resultado?: Json | null
+          quadrante?: string | null
+          recomendacao?: string | null
+          status?: string
+          tetos?: Json | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analises_proprietarias_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analise_vigente"
+            referencedColumns: ["analise_id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_decidida_por_fkey"
+            columns: ["decidida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_extracao_revisada_por_fkey"
+            columns: ["extracao_revisada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_parametros_versao_fkey"
+            columns: ["parametros_versao"]
+            isOneToOne: false
+            referencedRelation: "analise_parametros"
+            referencedColumns: ["versao"]
+          },
+          {
+            foreignKeyName: "analises_proprietarias_parecer_editado_por_fkey"
+            columns: ["parecer_editado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      antecipacao_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antecipacao_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       antecipacao_fornecedor_sem_interesse: {
         Row: {
           cnpj: string
@@ -43,131 +609,6 @@ export type Database = {
           {
             foreignKeyName: "antecipacao_fornecedor_sem_interesse_marcado_por_fkey"
             columns: ["marcado_por"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      analises_plataforma: {
-        Row: {
-          available_limit: number | null
-          bill_fine: number | null
-          cnpj: string
-          commission_percent: number | null
-          company_name: string | null
-          consumed_limit: number | null
-          credit_limit: number | null
-          empresa_cadastrada: boolean
-          expiration_date: string | null
-          fee_d0: number | null
-          fee_d1: number | null
-          fidc_ready: boolean | null
-          has_insurance: boolean | null
-          has_referral: boolean | null
-          id_externo: number
-          invest_back: Json | null
-          max_anticipation_value: number | null
-          max_invoice_deadline_days: number | null
-          min_fee_d0: number | null
-          min_fee_d1: number | null
-          monthly_rate_d0: number | null
-          monthly_rate_d1: number | null
-          onepay_company_id: number | null
-          raw: Json | null
-          sincronizada_em: string
-          status: string
-          role: string
-          ever_approved: boolean | null
-          company_type: string | null
-        }
-        Insert: {
-          available_limit?: number | null
-          bill_fine?: number | null
-          cnpj: string
-          commission_percent?: number | null
-          company_name?: string | null
-          consumed_limit?: number | null
-          credit_limit?: number | null
-          empresa_cadastrada: boolean
-          expiration_date?: string | null
-          fee_d0?: number | null
-          fee_d1?: number | null
-          fidc_ready?: boolean | null
-          has_insurance?: boolean | null
-          has_referral?: boolean | null
-          id_externo: number
-          invest_back?: Json | null
-          max_anticipation_value?: number | null
-          max_invoice_deadline_days?: number | null
-          min_fee_d0?: number | null
-          min_fee_d1?: number | null
-          monthly_rate_d0?: number | null
-          monthly_rate_d1?: number | null
-          onepay_company_id?: number | null
-          raw?: Json | null
-          sincronizada_em?: string
-          status: string
-          role?: string
-          ever_approved?: boolean | null
-          company_type?: string | null
-        }
-        Update: {
-          available_limit?: number | null
-          bill_fine?: number | null
-          cnpj?: string
-          commission_percent?: number | null
-          company_name?: string | null
-          consumed_limit?: number | null
-          credit_limit?: number | null
-          empresa_cadastrada?: boolean
-          expiration_date?: string | null
-          fee_d0?: number | null
-          fee_d1?: number | null
-          fidc_ready?: boolean | null
-          has_insurance?: boolean | null
-          has_referral?: boolean | null
-          id_externo?: number
-          invest_back?: Json | null
-          max_anticipation_value?: number | null
-          max_invoice_deadline_days?: number | null
-          min_fee_d0?: number | null
-          min_fee_d1?: number | null
-          monthly_rate_d0?: number | null
-          monthly_rate_d1?: number | null
-          onepay_company_id?: number | null
-          raw?: Json | null
-          sincronizada_em?: string
-          status?: string
-          role?: string
-          ever_approved?: boolean | null
-          company_type?: string | null
-        }
-        Relationships: []
-      }
-      antecipacao_config: {
-        Row: {
-          atualizado_em: string
-          atualizado_por: string | null
-          chave: string
-          valor: Json
-        }
-        Insert: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          chave: string
-          valor: Json
-        }
-        Update: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          chave?: string
-          valor?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "antecipacao_config_atualizado_por_fkey"
-            columns: ["atualizado_por"]
             isOneToOne: false
             referencedRelation: "usuarios"
             referencedColumns: ["id"]
@@ -301,6 +742,13 @@ export type Database = {
             referencedColumns: ["access_key"]
           },
           {
+            foreignKeyName: "antecipacoes_access_key_casada_fkey"
+            columns: ["access_key_casada"]
+            isOneToOne: false
+            referencedRelation: "notas_funil"
+            referencedColumns: ["access_key"]
+          },
+          {
             foreignKeyName: "antecipacoes_match_por_fkey"
             columns: ["match_por"]
             isOneToOne: false
@@ -409,253 +857,231 @@ export type Database = {
           },
         ]
       }
-      formularios: {
+      certificado_card_eventos: {
         Row: {
-          id: string
-          slug: string
-          nome: string
-          descricao: string | null
-          titulo: string | null
-          subtitulo: string | null
-          texto_botao: string
-          mensagem_sucesso: string | null
-          ajuda_cnpj: string | null
-          campos: Json
-          pergunta_intencao: Json | null
-          consentimento_texto: string | null
-          consentimento_obrigatorio: boolean
-          vendedor_destino_id: string | null
-          auto_resposta_habilitada: boolean
-          auto_resposta_assunto: string | null
-          auto_resposta_corpo: string | null
-          enriquecimento_pago: boolean
-          ativo: boolean
-          criado_por: string | null
+          automatico: boolean
+          card_id: string
           criado_em: string
-          atualizado_em: string
-        }
-        Insert: {
-          id?: string
-          slug: string
-          nome: string
-          descricao?: string | null
-          titulo?: string | null
-          subtitulo?: string | null
-          texto_botao?: string
-          mensagem_sucesso?: string | null
-          ajuda_cnpj?: string | null
-          campos: Json
-          pergunta_intencao?: Json | null
-          consentimento_texto?: string | null
-          consentimento_obrigatorio?: boolean
-          vendedor_destino_id?: string | null
-          auto_resposta_habilitada?: boolean
-          auto_resposta_assunto?: string | null
-          auto_resposta_corpo?: string | null
-          enriquecimento_pago?: boolean
-          ativo?: boolean
-          criado_por?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['formularios']['Insert']>
-        Relationships: []
-      }
-      formulario_submissoes: {
-        Row: {
-          id: string
-          formulario_id: string | null
-          dados: Json
-          campos_snapshot: Json
-          intencao: string | null
-          utm_source: string | null
-          utm_medium: string | null
-          utm_campaign: string | null
-          utm_term: string | null
-          utm_content: string | null
-          referrer: string | null
-          pagina_url: string | null
-          user_agent: string | null
-          ip_hash: string | null
-          cnpj: string | null
-          empresa_id: string | null
-          contato_id: string | null
-          sdr_lead_id: string | null
-          status: string
-          motivo_revisao: string | null
-          divergencia_papel: boolean
-          consentimento_aceito: boolean | null
-          consentimento_em: string | null
-          enriquecimento_resultado: Json | null
-          erro: string | null
-          criada_em: string
-          processada_em: string | null
-        }
-        Insert: {
-          id?: string
-          formulario_id?: string | null
-          dados: Json
-          campos_snapshot: Json
-          intencao?: string | null
-          utm_source?: string | null
-          utm_medium?: string | null
-          utm_campaign?: string | null
-          utm_term?: string | null
-          utm_content?: string | null
-          referrer?: string | null
-          pagina_url?: string | null
-          user_agent?: string | null
-          ip_hash?: string | null
-          cnpj?: string | null
-          empresa_id?: string | null
-          contato_id?: string | null
-          sdr_lead_id?: string | null
-          status?: string
-          motivo_revisao?: string | null
-          divergencia_papel?: boolean
-          consentimento_aceito?: boolean | null
-          consentimento_em?: string | null
-          enriquecimento_resultado?: Json | null
-          erro?: string | null
-          processada_em?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['formulario_submissoes']['Insert']>
-        Relationships: []
-      }
-      formulario_visualizacoes: {
-        Row: {
+          de: string | null
+          detalhe: string | null
           id: number
-          formulario_id: string | null
-          utm_source: string | null
-          utm_campaign: string | null
-          pagina_url: string | null
-          visto_em: string
+          motivo: string | null
+          para: string
+          usuario_id: string | null
         }
         Insert: {
-          formulario_id?: string | null
-          utm_source?: string | null
-          utm_campaign?: string | null
-          pagina_url?: string | null
-          visto_em?: string
+          automatico?: boolean
+          card_id: string
+          criado_em?: string
+          de?: string | null
+          detalhe?: string | null
+          id?: number
+          motivo?: string | null
+          para: string
+          usuario_id?: string | null
         }
-        Update: never
-        Relationships: []
+        Update: {
+          automatico?: boolean
+          card_id?: string
+          criado_em?: string
+          de?: string | null
+          detalhe?: string | null
+          id?: number
+          motivo?: string | null
+          para?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificado_card_eventos_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "certificado_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificado_card_eventos_motivo_fkey"
+            columns: ["motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "certificado_card_eventos_motivo_fkey"
+            columns: ["motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificado_card_eventos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       certificado_cards: {
         Row: {
-          id: string
-          empresa_id: string
-          estagio: string
-          estagio_anterior: string | null
-          perdido_motivo: string | null
-          perdido_em: string | null
-          ganho_em: string | null
-          fechado_matriz_coberta: boolean | null
-          fechado_cobertos: number | null
-          observacao: string | null
           aberto_em: string
           atualizado_em: string
           atualizado_por: string | null
+          empresa_id: string
+          estagio: string
+          estagio_anterior: string | null
+          fechado_cobertos: number | null
+          fechado_matriz_coberta: boolean | null
+          ganho_em: string | null
+          id: string
+          observacao: string | null
+          perdido_em: string | null
+          perdido_motivo: string | null
         }
         Insert: {
-          id?: string
-          empresa_id: string
-          estagio?: string
-          estagio_anterior?: string | null
-          perdido_motivo?: string | null
-          perdido_em?: string | null
-          ganho_em?: string | null
-          fechado_matriz_coberta?: boolean | null
-          fechado_cobertos?: number | null
-          observacao?: string | null
           aberto_em?: string
           atualizado_em?: string
           atualizado_por?: string | null
-        }
-        Update: {
+          empresa_id: string
           estagio?: string
           estagio_anterior?: string | null
-          perdido_motivo?: string | null
-          perdido_em?: string | null
-          ganho_em?: string | null
-          fechado_matriz_coberta?: boolean | null
           fechado_cobertos?: number | null
+          fechado_matriz_coberta?: boolean | null
+          ganho_em?: string | null
+          id?: string
           observacao?: string | null
+          perdido_em?: string | null
+          perdido_motivo?: string | null
+        }
+        Update: {
+          aberto_em?: string
           atualizado_em?: string
           atualizado_por?: string | null
+          empresa_id?: string
+          estagio?: string
+          estagio_anterior?: string | null
+          fechado_cobertos?: number | null
+          fechado_matriz_coberta?: boolean | null
+          ganho_em?: string | null
+          id?: string
+          observacao?: string | null
+          perdido_em?: string | null
+          perdido_motivo?: string | null
         }
-        Relationships: []
-      }
-      certificado_card_eventos: {
-        Row: {
-          id: number
-          card_id: string
-          de: string | null
-          para: string
-          motivo: string | null
-          automatico: boolean
-          detalhe: string | null
-          usuario_id: string | null
-          criado_em: string
-        }
-        Insert: {
-          card_id: string
-          de?: string | null
-          para: string
-          motivo?: string | null
-          automatico?: boolean
-          detalhe?: string | null
-          usuario_id?: string | null
-          criado_em?: string
-        }
-        Update: never
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "certificado_cards_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "certificado_cards_perdido_motivo_fkey"
+            columns: ["perdido_motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "certificado_cards_perdido_motivo_fkey"
+            columns: ["perdido_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       certificados: {
         Row: {
           cnpj: string
           company_name: string | null
           expires_at: string | null
-          status: string | null
           expires_at_anterior: string | null
-          ultimo_alerta: string | null
           sincronizado_em: string
+          status: string | null
+          ultimo_alerta: string | null
         }
         Insert: {
           cnpj: string
           company_name?: string | null
           expires_at?: string | null
-          status?: string | null
           expires_at_anterior?: string | null
-          ultimo_alerta?: string | null
           sincronizado_em?: string
+          status?: string | null
+          ultimo_alerta?: string | null
         }
         Update: {
           cnpj?: string
           company_name?: string | null
           expires_at?: string | null
-          status?: string | null
           expires_at_anterior?: string | null
-          ultimo_alerta?: string | null
           sincronizado_em?: string
+          status?: string | null
+          ultimo_alerta?: string | null
         }
         Relationships: []
       }
-      certificados_spe_ocultas: {
+      certificados_ocultos: {
         Row: {
           cnpj: string
-          oculto_por: string | null
           oculto_em: string
+          oculto_por: string | null
         }
         Insert: {
           cnpj: string
-          oculto_por?: string | null
           oculto_em?: string
+          oculto_por?: string | null
         }
         Update: {
           cnpj?: string
-          oculto_por?: string | null
           oculto_em?: string
+          oculto_por?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "certificados_spe_ocultas_oculto_por_fkey"
+            columns: ["oculto_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clientes_onepay: {
         Row: {
@@ -720,8 +1146,36 @@ export type Database = {
             foreignKeyName: "clientes_onepay_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -778,6 +1232,386 @@ export type Database = {
           ultimo_provedor?: string | null
         }
         Relationships: []
+      }
+      comercial_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comercial_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comissao_competencias: {
+        Row: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          competencia: string
+          fechada_em: string
+          lancamentos: number
+          paga_em: string | null
+          paga_por: string | null
+          status: string
+          total: number
+        }
+        Insert: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          competencia: string
+          fechada_em?: string
+          lancamentos?: number
+          paga_em?: string | null
+          paga_por?: string | null
+          status?: string
+          total?: number
+        }
+        Update: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          competencia?: string
+          fechada_em?: string
+          lancamentos?: number
+          paga_em?: string | null
+          paga_por?: string | null
+          status?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comissao_competencias_aprovada_por_fkey"
+            columns: ["aprovada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_competencias_paga_por_fkey"
+            columns: ["paga_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comissao_lancamentos: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          competencia: string
+          criado_em: string
+          descricao: string | null
+          id: string
+          origem_id: string
+          origem_tipo: string
+          regra_id: string | null
+          status: string
+          valor: number
+          vendedor_id: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          competencia: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          origem_id: string
+          origem_tipo: string
+          regra_id?: string | null
+          status?: string
+          valor: number
+          vendedor_id: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          competencia?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          origem_id?: string
+          origem_tipo?: string
+          regra_id?: string | null
+          status?: string
+          valor?: number
+          vendedor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comissao_lancamentos_aprovado_por_fkey"
+            columns: ["aprovado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_regra_id_fkey"
+            columns: ["regra_id"]
+            isOneToOne: false
+            referencedRelation: "comissao_regras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comissao_lancamentos_v2: {
+        Row: {
+          anticipation_days: number | null
+          aprovado_em: string | null
+          aprovado_por: string | null
+          cedente_cnpj: string | null
+          cedente_nome: string | null
+          competencia: string
+          criado_em: string
+          descricao: string | null
+          empresa_id: string | null
+          evento_em: string
+          fase: string | null
+          gestao_operacao: string | null
+          id: string
+          nf_numero: string | null
+          origem_id: string
+          origem_tipo: string
+          papel: string
+          params_snapshot: Json
+          share_pct: number
+          status: string
+          taxa_brl_por_mm: number | null
+          valor: number
+          valor_cedido: number | null
+          vendedor_id: string
+          vop: number | null
+        }
+        Insert: {
+          anticipation_days?: number | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cedente_cnpj?: string | null
+          cedente_nome?: string | null
+          competencia: string
+          criado_em?: string
+          descricao?: string | null
+          empresa_id?: string | null
+          evento_em?: string
+          fase?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          nf_numero?: string | null
+          origem_id: string
+          origem_tipo: string
+          papel: string
+          params_snapshot?: Json
+          share_pct?: number
+          status?: string
+          taxa_brl_por_mm?: number | null
+          valor: number
+          valor_cedido?: number | null
+          vendedor_id: string
+          vop?: number | null
+        }
+        Update: {
+          anticipation_days?: number | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cedente_cnpj?: string | null
+          cedente_nome?: string | null
+          competencia?: string
+          criado_em?: string
+          descricao?: string | null
+          empresa_id?: string | null
+          evento_em?: string
+          fase?: string | null
+          gestao_operacao?: string | null
+          id?: string
+          nf_numero?: string | null
+          origem_id?: string
+          origem_tipo?: string
+          papel?: string
+          params_snapshot?: Json
+          share_pct?: number
+          status?: string
+          taxa_brl_por_mm?: number | null
+          valor?: number
+          valor_cedido?: number | null
+          vendedor_id?: string
+          vop?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comissao_lancamentos_v2_aprovado_por_fkey"
+            columns: ["aprovado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comissao_lancamentos_v2_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comissao_regras: {
+        Row: {
+          criada_em: string
+          criada_por: string | null
+          id: string
+          parametros: Json
+          tipo_vendedor: string
+          vendedor_id: string | null
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        Insert: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          parametros: Json
+          tipo_vendedor: string
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de: string
+        }
+        Update: {
+          criada_em?: string
+          criada_por?: string | null
+          id?: string
+          parametros?: Json
+          tipo_vendedor?: string
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comissao_regras_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comissao_regras_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commission_params: {
+        Row: {
+          chave: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          unidade: string
+          valor: number
+          vendedor_id: string | null
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        Insert: {
+          chave: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          unidade: string
+          valor: number
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de: string
+        }
+        Update: {
+          chave?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          unidade?: string
+          valor?: number
+          vendedor_id?: string | null
+          vigente_ate?: string | null
+          vigente_de?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_params_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_params_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contatos: {
         Row: {
@@ -842,315 +1676,36 @@ export type Database = {
             foreignKeyName: "contatos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
           },
-        ]
-      }
-      analises_credito: {
-        Row: {
-          analise_propria_id: string | null
-          atradius_buyer_id: string | null
-          codigo_decisao: string | null
-          codigo_historico: string | null
-          rating_classe_seguradora: string | null
-          atradius_case_id: string | null
-          atualizada_em: string
-          cnpj: string
-          criada_em: string
-          decidida_em: string | null
-          decisao_interna: string | null
-          decisao_interna_em: string | null
-          empresa_id: string | null
-          estagio: string
-          expira_em: string | null
-          id: string
-          limite_aprovado: number | null
-          limite_operacional: number | null
-          limite_solicitado: number | null
-          moeda: string
-          motivo: string | null
-          observacoes: string | null
-          origem: string
-          rating_seguradora: string | null
-          seguradora: string
-          solicitada_por: string | null
-        }
-        Insert: {
-          analise_propria_id?: string | null
-          atradius_buyer_id?: string | null
-          codigo_decisao?: string | null
-          codigo_historico?: string | null
-          rating_classe_seguradora?: string | null
-          atradius_case_id?: string | null
-          atualizada_em?: string
-          cnpj: string
-          criada_em?: string
-          decidida_em?: string | null
-          decisao_interna?: string | null
-          decisao_interna_em?: string | null
-          empresa_id?: string | null
-          estagio?: string
-          expira_em?: string | null
-          id?: string
-          limite_aprovado?: number | null
-          limite_operacional?: number | null
-          limite_solicitado?: number | null
-          moeda?: string
-          motivo?: string | null
-          observacoes?: string | null
-          origem?: string
-          rating_seguradora?: string | null
-          seguradora?: string
-          solicitada_por?: string | null
-        }
-        Update: {
-          analise_propria_id?: string | null
-          atradius_buyer_id?: string | null
-          codigo_decisao?: string | null
-          codigo_historico?: string | null
-          rating_classe_seguradora?: string | null
-          atradius_case_id?: string | null
-          atualizada_em?: string
-          cnpj?: string
-          criada_em?: string
-          decidida_em?: string | null
-          decisao_interna?: string | null
-          decisao_interna_em?: string | null
-          empresa_id?: string | null
-          estagio?: string
-          expira_em?: string | null
-          id?: string
-          limite_aprovado?: number | null
-          limite_operacional?: number | null
-          limite_solicitado?: number | null
-          moeda?: string
-          motivo?: string | null
-          observacoes?: string | null
-          origem?: string
-          rating_seguradora?: string | null
-          seguradora?: string
-          solicitada_por?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "analises_credito_empresa_id_fkey"
+            foreignKeyName: "contatos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "contatos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "contatos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      analise_docs: {
-        Row: {
-          analise_id: string
-          arquivo_url: string
-          enviado_em: string
-          enviado_por: string | null
-          extraido_em: string | null
-          id: string
-          nome_arquivo: string | null
-          paginas: number | null
-          tipo: string
-        }
-        Insert: {
-          analise_id: string
-          arquivo_url: string
-          enviado_em?: string
-          enviado_por?: string | null
-          extraido_em?: string | null
-          id?: string
-          nome_arquivo?: string | null
-          paginas?: number | null
-          tipo: string
-        }
-        Update: {
-          analise_id?: string
-          arquivo_url?: string
-          enviado_em?: string
-          enviado_por?: string | null
-          extraido_em?: string | null
-          id?: string
-          nome_arquivo?: string | null
-          paginas?: number | null
-          tipo?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "analise_docs_analise_id_fkey"
-            columns: ["analise_id"]
-            isOneToOne: false
-            referencedRelation: "analises_credito"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      analise_parametros: {
-        Row: {
-          ativa: boolean
-          criada_em: string
-          criada_por: string | null
-          definicao: Json
-          nome: string | null
-          versao: number
-        }
-        Insert: {
-          ativa?: boolean
-          criada_em?: string
-          criada_por?: string | null
-          definicao: Json
-          nome?: string | null
-          versao: number
-        }
-        Update: {
-          ativa?: boolean
-          criada_em?: string
-          criada_por?: string | null
-          definicao?: Json
-          nome?: string | null
-          versao?: number
-        }
-        Relationships: []
-      }
-      analises_proprietarias: {
-        Row: {
-          analise_credito_id: string | null
-          atradius_limite: number | null
-          atradius_status: string | null
-          cenarios: Json | null
-          cnpj: string
-          concluida_em: string | null
-          criada_em: string
-          criada_por: string | null
-          dados_extraidos: Json | null
-          decidida_em: string | null
-          decidida_por: string | null
-          decisao_final: string | null
-          decisao_limite: number | null
-          decisao_motivo: string | null
-          empresa_id: string | null
-          erro: string | null
-          etapa: string | null
-          extracao_revisada_em: string | null
-          extracao_revisada_por: string | null
-          gatilho: string
-          id: string
-          indicadores: Json | null
-          lacunas_calculo: Json
-          limite_recomendado: number | null
-          motivos_nao_operar: Json
-          parametros_versao: number
-          parecer_editado: string | null
-          parecer_editado_em: string | null
-          parecer_editado_por: string | null
-          parecer_markdown: string | null
-          parecer_modelo: string | null
-          parecer_tokens: number | null
-          protestos_opcoes: Json | null
-          protestos_resultado: Json | null
-          quadrante: string | null
-          recomendacao: string | null
-          status: string
-          tetos: Json | null
-          tipo: string
-        }
-        Insert: {
-          analise_credito_id?: string | null
-          atradius_limite?: number | null
-          atradius_status?: string | null
-          cenarios?: Json | null
-          cnpj: string
-          concluida_em?: string | null
-          criada_em?: string
-          criada_por?: string | null
-          dados_extraidos?: Json | null
-          decidida_em?: string | null
-          decidida_por?: string | null
-          decisao_final?: string | null
-          decisao_limite?: number | null
-          decisao_motivo?: string | null
-          empresa_id?: string | null
-          erro?: string | null
-          etapa?: string | null
-          extracao_revisada_em?: string | null
-          extracao_revisada_por?: string | null
-          gatilho?: string
-          id?: string
-          indicadores?: Json | null
-          lacunas_calculo?: Json
-          limite_recomendado?: number | null
-          motivos_nao_operar?: Json
-          parametros_versao: number
-          parecer_editado?: string | null
-          parecer_editado_em?: string | null
-          parecer_editado_por?: string | null
-          parecer_markdown?: string | null
-          parecer_modelo?: string | null
-          parecer_tokens?: number | null
-          protestos_opcoes?: Json | null
-          protestos_resultado?: Json | null
-          quadrante?: string | null
-          recomendacao?: string | null
-          status?: string
-          tetos?: Json | null
-          tipo?: string
-        }
-        Update: {
-          analise_credito_id?: string | null
-          atradius_limite?: number | null
-          atradius_status?: string | null
-          cenarios?: Json | null
-          cnpj?: string
-          concluida_em?: string | null
-          criada_em?: string
-          criada_por?: string | null
-          dados_extraidos?: Json | null
-          decidida_em?: string | null
-          decidida_por?: string | null
-          decisao_final?: string | null
-          decisao_limite?: number | null
-          decisao_motivo?: string | null
-          empresa_id?: string | null
-          erro?: string | null
-          etapa?: string | null
-          extracao_revisada_em?: string | null
-          extracao_revisada_por?: string | null
-          gatilho?: string
-          id?: string
-          indicadores?: Json | null
-          lacunas_calculo?: Json
-          limite_recomendado?: number | null
-          motivos_nao_operar?: Json
-          parametros_versao?: number
-          parecer_editado?: string | null
-          parecer_editado_em?: string | null
-          parecer_editado_por?: string | null
-          parecer_markdown?: string | null
-          parecer_modelo?: string | null
-          parecer_tokens?: number | null
-          protestos_opcoes?: Json | null
-          protestos_resultado?: Json | null
-          quadrante?: string | null
-          recomendacao?: string | null
-          status?: string
-          tetos?: Json | null
-          tipo?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "analises_proprietarias_analise_credito_id_fkey"
-            columns: ["analise_credito_id"]
-            isOneToOne: false
-            referencedRelation: "analises_credito"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "analises_proprietarias_empresa_id_fkey"
+            foreignKeyName: "contatos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -1173,108 +1728,12 @@ export type Database = {
           chave?: string
           valor?: Json
         }
-        Relationships: []
-      }
-      credito_versoes: {
-        Row: {
-          ativa: boolean
-          calibrado_em: string
-          coeficientes: Json
-          id: string
-          n_amostras_por_tipo: Json
-          versao: number
-        }
-        Insert: {
-          ativa?: boolean
-          calibrado_em?: string
-          coeficientes: Json
-          id?: string
-          n_amostras_por_tipo?: Json
-          versao: number
-        }
-        Update: {
-          ativa?: boolean
-          calibrado_em?: string
-          coeficientes?: Json
-          id?: string
-          n_amostras_por_tipo?: Json
-          versao?: number
-        }
-        Relationships: []
-      }
-      scorecard_versoes: {
-        Row: {
-          ativa: boolean
-          criada_em: string
-          criada_por: string | null
-          definicao: Json
-          id: string
-          nome: string | null
-          versao: number
-        }
-        Insert: {
-          ativa?: boolean
-          criada_em?: string
-          criada_por?: string | null
-          definicao: Json
-          id?: string
-          nome?: string | null
-          versao: number
-        }
-        Update: {
-          ativa?: boolean
-          criada_em?: string
-          criada_por?: string | null
-          definicao?: Json
-          id?: string
-          nome?: string | null
-          versao?: number
-        }
-        Relationships: []
-      }
-      empresa_scores: {
-        Row: {
-          breakdown: Json
-          calculado_em: string
-          cnpj: string
-          completude: number
-          empresa_id: string | null
-          faixa: string
-          id: string
-          knockout: string | null
-          score: number | null
-          scorecard_versao: number | null
-        }
-        Insert: {
-          breakdown?: Json
-          calculado_em?: string
-          cnpj: string
-          completude: number
-          empresa_id?: string | null
-          faixa: string
-          id?: string
-          knockout?: string | null
-          score?: number | null
-          scorecard_versao?: number | null
-        }
-        Update: {
-          breakdown?: Json
-          calculado_em?: string
-          cnpj?: string
-          completude?: number
-          empresa_id?: string | null
-          faixa?: string
-          id?: string
-          knockout?: string | null
-          score?: number | null
-          scorecard_versao?: number | null
-        }
         Relationships: [
           {
-            foreignKeyName: "empresa_scores_empresa_id_fkey"
-            columns: ["empresa_id"]
+            foreignKeyName: "credito_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
             isOneToOne: false
-            referencedRelation: "empresas"
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -1330,6 +1789,96 @@ export type Database = {
         }
         Relationships: []
       }
+      credito_versoes: {
+        Row: {
+          ativa: boolean
+          calibrado_em: string
+          coeficientes: Json
+          id: string
+          n_amostras_por_tipo: Json
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao?: number
+        }
+        Relationships: []
+      }
+      empresa_eventos: {
+        Row: {
+          ator_usuario_id: string | null
+          criado_em: string
+          empresa_id: string | null
+          id: string
+          payload: Json
+          tipo: string
+        }
+        Insert: {
+          ator_usuario_id?: string | null
+          criado_em?: string
+          empresa_id?: string | null
+          id?: string
+          payload?: Json
+          tipo: string
+        }
+        Update: {
+          ator_usuario_id?: string | null
+          criado_em?: string
+          empresa_id?: string | null
+          id?: string
+          payload?: Json
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
       empresa_metricas: {
         Row: {
           capturado_em: string
@@ -1369,73 +1918,36 @@ export type Database = {
             foreignKeyName: "empresa_metricas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
           },
-        ]
-      }
-      estimador_versoes: {
-        Row: {
-          ativa: boolean
-          calibrado_em: string
-          coeficientes: Json
-          erro_mediano_por_modelo: Json
-          id: string
-          n_amostras_por_tipo: Json
-          versao: number
-        }
-        Insert: {
-          ativa?: boolean
-          calibrado_em?: string
-          coeficientes: Json
-          erro_mediano_por_modelo?: Json
-          id?: string
-          n_amostras_por_tipo?: Json
-          versao: number
-        }
-        Update: {
-          ativa?: boolean
-          calibrado_em?: string
-          coeficientes?: Json
-          erro_mediano_por_modelo?: Json
-          id?: string
-          n_amostras_por_tipo?: Json
-          versao?: number
-        }
-        Relationships: []
-      }
-      empresa_eventos: {
-        Row: {
-          ator_usuario_id: string | null
-          criado_em: string
-          empresa_id: string | null
-          id: string
-          payload: Json
-          tipo: string
-        }
-        Insert: {
-          ator_usuario_id?: string | null
-          criado_em?: string
-          empresa_id?: string | null
-          id?: string
-          payload?: Json
-          tipo: string
-        }
-        Update: {
-          ator_usuario_id?: string | null
-          criado_em?: string
-          empresa_id?: string | null
-          id?: string
-          payload?: Json
-          tipo?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "empresa_eventos_empresa_id_fkey"
+            foreignKeyName: "empresa_metricas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_metricas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_metricas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_metricas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -1466,8 +1978,111 @@ export type Database = {
             foreignKeyName: "empresa_notas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      empresa_scores: {
+        Row: {
+          breakdown: Json
+          calculado_em: string
+          cnpj: string
+          completude: number
+          empresa_id: string | null
+          faixa: string
+          id: string
+          knockout: string | null
+          score: number | null
+          scorecard_versao: number | null
+        }
+        Insert: {
+          breakdown?: Json
+          calculado_em?: string
+          cnpj: string
+          completude: number
+          empresa_id?: string | null
+          faixa: string
+          id?: string
+          knockout?: string | null
+          score?: number | null
+          scorecard_versao?: number | null
+        }
+        Update: {
+          breakdown?: Json
+          calculado_em?: string
+          cnpj?: string
+          completude?: number
+          empresa_id?: string | null
+          faixa?: string
+          id?: string
+          knockout?: string | null
+          score?: number | null
+          scorecard_versao?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_scores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -1475,22 +2090,13 @@ export type Database = {
         Row: {
           atualizado_em: string
           camada: string | null
+          chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
-          criado_em: string
           credito_calculado_em: string | null
           credito_versao: number | null
-          chance_concessao: number | null
-          limite_confianca: string | null
-          limite_potencial: number | null
-          receita_mensal_prevista: number | null
-          receita_taxa_am: number | null
-          score_calculado_em: string | null
-          score_completude: number | null
-          score_credito: number | null
-          score_faixa: string | null
-          valor_esperado_mensal: number | null
+          criado_em: string
           dados_apollo: Json | null
           dominio: string | null
           dominio_confianca: string | null
@@ -1502,58 +2108,59 @@ export type Database = {
           erp_detalhes: Json
           erp_mrr: number | null
           estagio: string
-          gestao_definida_em: string | null
-          gestao_definida_por: string | null
-          gestao_operacao: string | null
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
           faturamento_anual: number | null
           faturamento_atualizado_em: string | null
-          patrimonio_atualizado_em: string | null
-          patrimonio_liquido: number | null
-          patrimonio_origem: string | null
           faturamento_confianca: string | null
           faturamento_origem: string | null
           funcionarios: number | null
           funcionarios_atualizado_em: string | null
           funcionarios_crescimento_12m: number | null
           funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
           grafo_sefaz: boolean
           grupo_id: string | null
           id: string
           is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
           origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
           porte: string | null
           razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
           regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
-          ex_cliente_desde: string | null
-          ex_cliente_motivo: string | null
-          ex_cliente_motivo_obs: string | null
-          teve_analise_sem_cadastro: boolean
+          valor_esperado_mensal: number | null
         }
         Insert: {
           atualizado_em?: string
           camada?: string | null
+          chance_concessao?: number | null
           churn_erp_concorrente?: boolean
           cnae_principal?: string | null
           cnpj: string
-          criado_em?: string
           credito_calculado_em?: string | null
           credito_versao?: number | null
-          chance_concessao?: number | null
-          limite_confianca?: string | null
-          limite_potencial?: number | null
-          receita_mensal_prevista?: number | null
-          receita_taxa_am?: number | null
-          score_calculado_em?: string | null
-          score_completude?: number | null
-          score_credito?: number | null
-          score_faixa?: string | null
-          valor_esperado_mensal?: number | null
+          criado_em?: string
           dados_apollo?: Json | null
           dominio?: string | null
           dominio_confianca?: string | null
@@ -1565,58 +2172,59 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
+          ex_cliente_desde?: string | null
+          ex_cliente_motivo?: string | null
+          ex_cliente_motivo_obs?: string | null
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
-          patrimonio_atualizado_em?: string | null
-          patrimonio_liquido?: number | null
-          patrimonio_origem?: string | null
           faturamento_confianca?: string | null
           faturamento_origem?: string | null
           funcionarios?: number | null
           funcionarios_atualizado_em?: string | null
           funcionarios_crescimento_12m?: number | null
           funcionarios_origem?: string | null
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
           grafo_sefaz?: boolean
           grupo_id?: string | null
           id?: string
           is_spe?: boolean
+          limite_confianca?: string | null
+          limite_potencial?: number | null
+          marco_ativacao?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
           origem?: string | null
+          patrimonio_atualizado_em?: string | null
+          patrimonio_liquido?: number | null
+          patrimonio_origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          receita_mensal_prevista?: number | null
+          receita_taxa_am?: number | null
           regime_tributario?: string | null
+          score_calculado_em?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          score_faixa?: string | null
+          teve_analise_sem_cadastro?: boolean
           tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
-          ex_cliente_desde?: string | null
-          ex_cliente_motivo?: string | null
-          ex_cliente_motivo_obs?: string | null
-          teve_analise_sem_cadastro?: boolean
+          valor_esperado_mensal?: number | null
         }
         Update: {
           atualizado_em?: string
           camada?: string | null
+          chance_concessao?: number | null
           churn_erp_concorrente?: boolean
           cnae_principal?: string | null
           cnpj?: string
-          criado_em?: string
           credito_calculado_em?: string | null
           credito_versao?: number | null
-          chance_concessao?: number | null
-          limite_confianca?: string | null
-          limite_potencial?: number | null
-          receita_mensal_prevista?: number | null
-          receita_taxa_am?: number | null
-          score_calculado_em?: string | null
-          score_completude?: number | null
-          score_credito?: number | null
-          score_faixa?: string | null
-          valor_esperado_mensal?: number | null
+          criado_em?: string
           dados_apollo?: Json | null
           dominio?: string | null
           dominio_confianca?: string | null
@@ -1628,40 +2236,71 @@ export type Database = {
           erp_detalhes?: Json
           erp_mrr?: number | null
           estagio?: string
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
+          ex_cliente_desde?: string | null
+          ex_cliente_motivo?: string | null
+          ex_cliente_motivo_obs?: string | null
           faturamento_anual?: number | null
           faturamento_atualizado_em?: string | null
-          patrimonio_atualizado_em?: string | null
-          patrimonio_liquido?: number | null
-          patrimonio_origem?: string | null
           faturamento_confianca?: string | null
           faturamento_origem?: string | null
           funcionarios?: number | null
           funcionarios_atualizado_em?: string | null
           funcionarios_crescimento_12m?: number | null
           funcionarios_origem?: string | null
+          gestao_definida_em?: string | null
+          gestao_definida_por?: string | null
+          gestao_operacao?: string | null
           grafo_sefaz?: boolean
           grupo_id?: string | null
           id?: string
           is_spe?: boolean
+          limite_confianca?: string | null
+          limite_potencial?: number | null
+          marco_ativacao?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
           origem?: string | null
+          patrimonio_atualizado_em?: string | null
+          patrimonio_liquido?: number | null
+          patrimonio_origem?: string | null
           porte?: string | null
           razao_social?: string | null
+          receita_mensal_prevista?: number | null
+          receita_taxa_am?: number | null
           regime_tributario?: string | null
+          score_calculado_em?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          score_faixa?: string | null
+          teve_analise_sem_cadastro?: boolean
           tipagem_antecipacao?: string | null
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
-          ex_cliente_desde?: string | null
-          ex_cliente_motivo?: string | null
-          ex_cliente_motivo_obs?: string | null
-          teve_analise_sem_cadastro?: boolean
+          valor_esperado_mensal?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "empresas_ex_cliente_motivo_fkey"
+            columns: ["ex_cliente_motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "empresas_ex_cliente_motivo_fkey"
+            columns: ["ex_cliente_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresas_gestao_definida_por_fkey"
+            columns: ["gestao_definida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "empresas_grupo_id_fkey"
             columns: ["grupo_id"]
@@ -1725,14 +2364,98 @@ export type Database = {
             foreignKeyName: "enriquecimentos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "enriquecimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "enriquecimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "enriquecimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enriquecimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "enriquecimentos_lote_id_fkey"
             columns: ["lote_id"]
             isOneToOne: false
             referencedRelation: "lotes_enriquecimento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimador_versoes: {
+        Row: {
+          ativa: boolean
+          calibrado_em: string
+          coeficientes: Json
+          erro_mediano_por_modelo: Json
+          id: string
+          n_amostras_por_tipo: Json
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes: Json
+          erro_mediano_por_modelo?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          calibrado_em?: string
+          coeficientes?: Json
+          erro_mediano_por_modelo?: Json
+          id?: string
+          n_amostras_por_tipo?: Json
+          versao?: number
+        }
+        Relationships: []
+      }
+      ex_clientes_ocultos: {
+        Row: {
+          cnpj: string
+          oculto_em: string
+          oculto_por: string | null
+        }
+        Insert: {
+          cnpj: string
+          oculto_em?: string
+          oculto_por?: string | null
+        }
+        Update: {
+          cnpj?: string
+          oculto_em?: string
+          oculto_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ex_clientes_ocultos_oculto_por_fkey"
+            columns: ["oculto_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -1819,6 +2542,389 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "usuarios"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      formulario_submissoes: {
+        Row: {
+          campos_snapshot: Json
+          cnpj: string | null
+          consentimento_aceito: boolean | null
+          consentimento_em: string | null
+          contato_id: string | null
+          criada_em: string
+          dados: Json
+          divergencia_papel: boolean
+          empresa_id: string | null
+          enriquecimento_resultado: Json | null
+          erro: string | null
+          formulario_id: string | null
+          id: string
+          intencao: string | null
+          ip_hash: string | null
+          motivo_revisao: string | null
+          pagina_url: string | null
+          processada_em: string | null
+          referrer: string | null
+          sdr_lead_id: string | null
+          status: string
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          campos_snapshot: Json
+          cnpj?: string | null
+          consentimento_aceito?: boolean | null
+          consentimento_em?: string | null
+          contato_id?: string | null
+          criada_em?: string
+          dados: Json
+          divergencia_papel?: boolean
+          empresa_id?: string | null
+          enriquecimento_resultado?: Json | null
+          erro?: string | null
+          formulario_id?: string | null
+          id?: string
+          intencao?: string | null
+          ip_hash?: string | null
+          motivo_revisao?: string | null
+          pagina_url?: string | null
+          processada_em?: string | null
+          referrer?: string | null
+          sdr_lead_id?: string | null
+          status?: string
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          campos_snapshot?: Json
+          cnpj?: string | null
+          consentimento_aceito?: boolean | null
+          consentimento_em?: string | null
+          contato_id?: string | null
+          criada_em?: string
+          dados?: Json
+          divergencia_papel?: boolean
+          empresa_id?: string | null
+          enriquecimento_resultado?: Json | null
+          erro?: string | null
+          formulario_id?: string | null
+          id?: string
+          intencao?: string | null
+          ip_hash?: string | null
+          motivo_revisao?: string | null
+          pagina_url?: string | null
+          processada_em?: string | null
+          referrer?: string | null
+          sdr_lead_id?: string | null
+          status?: string
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulario_submissoes_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_formulario_id_fkey"
+            columns: ["formulario_id"]
+            isOneToOne: false
+            referencedRelation: "formularios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_submissoes_sdr_lead_id_fkey"
+            columns: ["sdr_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sdr_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formulario_visualizacoes: {
+        Row: {
+          formulario_id: string | null
+          id: number
+          pagina_url: string | null
+          utm_campaign: string | null
+          utm_source: string | null
+          visto_em: string
+        }
+        Insert: {
+          formulario_id?: string | null
+          id?: number
+          pagina_url?: string | null
+          utm_campaign?: string | null
+          utm_source?: string | null
+          visto_em?: string
+        }
+        Update: {
+          formulario_id?: string | null
+          id?: number
+          pagina_url?: string | null
+          utm_campaign?: string | null
+          utm_source?: string | null
+          visto_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulario_visualizacoes_formulario_id_fkey"
+            columns: ["formulario_id"]
+            isOneToOne: false
+            referencedRelation: "formularios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formularios: {
+        Row: {
+          ajuda_cnpj: string | null
+          ativo: boolean
+          atualizado_em: string
+          auto_resposta_assunto: string | null
+          auto_resposta_corpo: string | null
+          auto_resposta_habilitada: boolean
+          campos: Json
+          consentimento_obrigatorio: boolean
+          consentimento_texto: string | null
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          enriquecimento_pago: boolean
+          id: string
+          mensagem_sucesso: string | null
+          nome: string
+          pergunta_intencao: Json | null
+          slug: string
+          subtitulo: string | null
+          texto_botao: string
+          titulo: string | null
+          vendedor_destino_id: string | null
+        }
+        Insert: {
+          ajuda_cnpj?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          auto_resposta_assunto?: string | null
+          auto_resposta_corpo?: string | null
+          auto_resposta_habilitada?: boolean
+          campos: Json
+          consentimento_obrigatorio?: boolean
+          consentimento_texto?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          enriquecimento_pago?: boolean
+          id?: string
+          mensagem_sucesso?: string | null
+          nome: string
+          pergunta_intencao?: Json | null
+          slug: string
+          subtitulo?: string | null
+          texto_botao?: string
+          titulo?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Update: {
+          ajuda_cnpj?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          auto_resposta_assunto?: string | null
+          auto_resposta_corpo?: string | null
+          auto_resposta_habilitada?: boolean
+          campos?: Json
+          consentimento_obrigatorio?: boolean
+          consentimento_texto?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          enriquecimento_pago?: boolean
+          id?: string
+          mensagem_sucesso?: string | null
+          nome?: string
+          pergunta_intencao?: Json | null
+          slug?: string
+          subtitulo?: string | null
+          texto_botao?: string
+          titulo?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formularios_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formularios_vendedor_destino_id_fkey"
+            columns: ["vendedor_destino_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funil_transicoes: {
+        Row: {
+          de: string | null
+          em: string
+          funil: string
+          id: string
+          item_id: string
+          para: string
+          vendedor_id: string
+        }
+        Insert: {
+          de?: string | null
+          em?: string
+          funil: string
+          id?: string
+          item_id: string
+          para: string
+          vendedor_id: string
+        }
+        Update: {
+          de?: string | null
+          em?: string
+          funil?: string
+          id?: string
+          item_id?: string
+          para?: string
+          vendedor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funil_transicoes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gestao_operacao_historico: {
+        Row: {
+          alterado_em: string
+          alterado_por: string
+          empresa_id: string
+          id: string
+          motivo: string
+          valor_anterior: string | null
+          valor_novo: string
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por: string
+          empresa_id: string
+          id?: string
+          motivo: string
+          valor_anterior?: string | null
+          valor_novo: string
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por?: string
+          empresa_id?: string
+          id?: string
+          motivo?: string
+          valor_anterior?: string | null
+          valor_novo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gestao_operacao_historico_alterado_por_fkey"
+            columns: ["alterado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gestao_operacao_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "gestao_operacao_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "gestao_operacao_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "gestao_operacao_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gestao_operacao_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -1961,8 +3067,36 @@ export type Database = {
             foreignKeyName: "lote_itens_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "lote_itens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "lote_itens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "lote_itens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_itens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "lote_itens_lote_id_fkey"
@@ -2128,8 +3262,36 @@ export type Database = {
             foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
             columns: ["fornecedor_empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "mensagens_outbox_whatsapp_conta_id_fkey"
@@ -2470,8 +3632,36 @@ export type Database = {
             foreignKeyName: "mercado_universo_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "mercado_universo_grupo_fk"
@@ -2481,6 +3671,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      motivos_perda: {
+        Row: {
+          ativo: boolean
+          contexto: string
+          id: string
+          motivo: string
+          ordem: number
+          retorno_possivel: boolean | null
+        }
+        Insert: {
+          ativo?: boolean
+          contexto: string
+          id?: string
+          motivo: string
+          ordem?: number
+          retorno_possivel?: boolean | null
+        }
+        Update: {
+          ativo?: boolean
+          contexto?: string
+          id?: string
+          motivo?: string
+          ordem?: number
+          retorno_possivel?: boolean | null
+        }
+        Relationships: []
       }
       nota_itens: {
         Row: {
@@ -2545,6 +3762,8 @@ export type Database = {
           atualizada_em: string
           contato_fornecedor: Json | null
           contato_sacado: Json | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean
           credit_disponivel: number | null
           credit_limite: number | null
           credit_role: string | null
@@ -2564,8 +3783,12 @@ export type Database = {
           fornecedor_cnpj: string
           fornecedor_empresa_id: string | null
           fornecedor_nome: string | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
           nf_id_externo: string | null
           numero: string | null
+          operavel: boolean
+          operavel_manual: boolean | null
           parcelas: Json | null
           perda_motivo: string | null
           raw_xml: string | null
@@ -2580,24 +3803,20 @@ export type Database = {
           taxa_usada: number | null
           tipo: string
           valor: number
+          vencimento: string | null
+          vencimento_origem: string | null
           vendedor_definido_em: string | null
           vendedor_id: string | null
           vendedor_origem: string | null
-          vencimento: string | null
-          vencimento_origem: string | null
-          natureza_operacao: string | null
-          operavel: boolean
-          operavel_manual: boolean | null
-          nao_operavel_motivo: string | null
           xml_parse_erro: string | null
-          conversao_antecipacao_id: number | null
-          conversao_em_disputa: boolean
         }
         Insert: {
           access_key: string
           atualizada_em?: string
           contato_fornecedor?: Json | null
           contato_sacado?: Json | null
+          conversao_antecipacao_id?: number | null
+          conversao_em_disputa?: boolean
           credit_disponivel?: number | null
           credit_limite?: number | null
           credit_role?: string | null
@@ -2617,8 +3836,12 @@ export type Database = {
           fornecedor_cnpj: string
           fornecedor_empresa_id?: string | null
           fornecedor_nome?: string | null
+          nao_operavel_motivo?: string | null
+          natureza_operacao?: string | null
           nf_id_externo?: string | null
           numero?: string | null
+          operavel?: boolean
+          operavel_manual?: boolean | null
           parcelas?: Json | null
           perda_motivo?: string | null
           raw_xml?: string | null
@@ -2635,19 +3858,18 @@ export type Database = {
           valor: number
           vencimento?: string | null
           vencimento_origem?: string | null
-          natureza_operacao?: string | null
-          operavel?: boolean
-          operavel_manual?: boolean | null
-          nao_operavel_motivo?: string | null
+          vendedor_definido_em?: string | null
+          vendedor_id?: string | null
+          vendedor_origem?: string | null
           xml_parse_erro?: string | null
-          conversao_antecipacao_id?: number | null
-          conversao_em_disputa?: boolean
         }
         Update: {
           access_key?: string
           atualizada_em?: string
           contato_fornecedor?: Json | null
           contato_sacado?: Json | null
+          conversao_antecipacao_id?: number | null
+          conversao_em_disputa?: boolean
           credit_disponivel?: number | null
           credit_limite?: number | null
           credit_role?: string | null
@@ -2667,8 +3889,12 @@ export type Database = {
           fornecedor_cnpj?: string
           fornecedor_empresa_id?: string | null
           fornecedor_nome?: string | null
+          nao_operavel_motivo?: string | null
+          natureza_operacao?: string | null
           nf_id_externo?: string | null
           numero?: string | null
+          operavel?: boolean
+          operavel_manual?: boolean | null
           parcelas?: Json | null
           perda_motivo?: string | null
           raw_xml?: string | null
@@ -2683,20 +3909,21 @@ export type Database = {
           taxa_usada?: number | null
           tipo?: string
           valor?: number
+          vencimento?: string | null
+          vencimento_origem?: string | null
           vendedor_definido_em?: string | null
           vendedor_id?: string | null
           vendedor_origem?: string | null
-          vencimento?: string | null
-          vencimento_origem?: string | null
-          natureza_operacao?: string | null
-          operavel?: boolean
-          operavel_manual?: boolean | null
-          nao_operavel_motivo?: string | null
           xml_parse_erro?: string | null
-          conversao_antecipacao_id?: number | null
-          conversao_em_disputa?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_conversao_antecipacao_id_fkey"
+            columns: ["conversao_antecipacao_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
           {
             foreignKeyName: "notas_fiscais_estagio_alterado_por_fkey"
             columns: ["estagio_alterado_por"]
@@ -2708,6 +3935,62 @@ export type Database = {
             foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
             columns: ["fornecedor_empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
@@ -2715,7 +3998,94 @@ export type Database = {
             foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
             columns: ["sacado_empresa_id"]
             isOneToOne: false
-            referencedRelation: "empresas"
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacao_regras: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          id: string
+          perfil_id: string | null
+          tipo_evento: string
+          usuario_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          id?: string
+          perfil_id?: string | null
+          tipo_evento: string
+          usuario_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          id?: string
+          perfil_id?: string | null
+          tipo_evento?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacao_regras_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacao_regras_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacoes: {
+        Row: {
+          corpo: string | null
+          criado_em: string
+          id: string
+          lida: boolean
+          titulo: string
+          url: string | null
+          usuario_id: string
+        }
+        Insert: {
+          corpo?: string | null
+          criado_em?: string
+          id?: string
+          lida?: boolean
+          titulo: string
+          url?: string | null
+          usuario_id: string
+        }
+        Update: {
+          corpo?: string | null
+          criado_em?: string
+          id?: string
+          lida?: boolean
+          titulo?: string
+          url?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -2739,7 +4109,38 @@ export type Database = {
           chave?: string
           valor?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "perfil_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      perfil_modulos: {
+        Row: {
+          modulo_id: string
+          perfil_id: string
+        }
+        Insert: {
+          modulo_id: string
+          perfil_id: string
+        }
+        Update: {
+          modulo_id?: string
+          perfil_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfil_modulos_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       perfil_snapshots: {
         Row: {
@@ -2837,109 +4238,6 @@ export type Database = {
           },
         ]
       }
-      notificacao_regras: {
-        Row: {
-          ativo: boolean
-          criado_em: string
-          id: string
-          perfil_id: string | null
-          tipo_evento: string
-          usuario_id: string | null
-        }
-        Insert: {
-          ativo?: boolean
-          criado_em?: string
-          id?: string
-          perfil_id?: string | null
-          tipo_evento: string
-          usuario_id?: string | null
-        }
-        Update: {
-          ativo?: boolean
-          criado_em?: string
-          id?: string
-          perfil_id?: string | null
-          tipo_evento?: string
-          usuario_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notificacao_regras_perfil_id_fkey"
-            columns: ["perfil_id"]
-            isOneToOne: false
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notificacao_regras_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notificacoes: {
-        Row: {
-          corpo: string | null
-          criado_em: string
-          id: string
-          lida: boolean
-          titulo: string
-          url: string | null
-          usuario_id: string
-        }
-        Insert: {
-          corpo?: string | null
-          criado_em?: string
-          id?: string
-          lida?: boolean
-          titulo: string
-          url?: string | null
-          usuario_id: string
-        }
-        Update: {
-          corpo?: string | null
-          criado_em?: string
-          id?: string
-          lida?: boolean
-          titulo?: string
-          url?: string | null
-          usuario_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notificacoes_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      perfil_modulos: {
-        Row: {
-          modulo_id: string
-          perfil_id: string
-        }
-        Insert: {
-          modulo_id: string
-          perfil_id: string
-        }
-        Update: {
-          modulo_id?: string
-          perfil_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "perfil_modulos_perfil_id_fkey"
-            columns: ["perfil_id"]
-            isOneToOne: false
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       perfis: {
         Row: {
           criado_em: string
@@ -2988,8 +4286,36 @@ export type Database = {
             foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protesto_monitoramento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -3038,8 +4364,36 @@ export type Database = {
             foreignKeyName: "protestos_consultas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -3068,6 +4422,277 @@ export type Database = {
             columns: ["atualizado_por"]
             isOneToOne: false
             referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scorecard_versoes: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          id: string
+          nome: string | null
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          id?: string
+          nome?: string | null
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          id?: string
+          nome?: string | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scorecard_versoes_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sdr_aceites: {
+        Row: {
+          aceite_automatico: boolean
+          criado_em: string
+          decidido_em: string | null
+          decidido_por: string | null
+          empresa_id: string
+          id: string
+          lancado_em: string | null
+          motivo_recusa: string | null
+          prazo_em: string
+          reuniao_em: string | null
+          sdr_id: string
+          sdr_lead_id: string
+          status: string
+          vendedor_destino_id: string
+        }
+        Insert: {
+          aceite_automatico?: boolean
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          empresa_id: string
+          id?: string
+          lancado_em?: string | null
+          motivo_recusa?: string | null
+          prazo_em: string
+          reuniao_em?: string | null
+          sdr_id: string
+          sdr_lead_id: string
+          status?: string
+          vendedor_destino_id: string
+        }
+        Update: {
+          aceite_automatico?: boolean
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          empresa_id?: string
+          id?: string
+          lancado_em?: string | null
+          motivo_recusa?: string | null
+          prazo_em?: string
+          reuniao_em?: string | null
+          sdr_id?: string
+          sdr_lead_id?: string
+          status?: string
+          vendedor_destino_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sdr_aceites_decidido_por_fkey"
+            columns: ["decidido_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_sdr_lead_id_fkey"
+            columns: ["sdr_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sdr_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_aceites_vendedor_destino_id_fkey"
+            columns: ["vendedor_destino_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sdr_leads: {
+        Row: {
+          atualizado_em: string
+          distribuido_em: string
+          empresa_id: string
+          encerrado_em: string | null
+          encerrado_motivo: string | null
+          estagio: string
+          fit: boolean | null
+          fit_definido_em: string | null
+          id: string
+          origem: string
+          reuniao_em: string | null
+          sdr_id: string
+          sem_fit_motivo: string | null
+          ultimo_toque_em: string | null
+          vendedor_destino_id: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          distribuido_em?: string
+          empresa_id: string
+          encerrado_em?: string | null
+          encerrado_motivo?: string | null
+          estagio?: string
+          fit?: boolean | null
+          fit_definido_em?: string | null
+          id?: string
+          origem: string
+          reuniao_em?: string | null
+          sdr_id: string
+          sem_fit_motivo?: string | null
+          ultimo_toque_em?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          distribuido_em?: string
+          empresa_id?: string
+          encerrado_em?: string | null
+          encerrado_motivo?: string | null
+          estagio?: string
+          fit?: boolean | null
+          fit_definido_em?: string | null
+          id?: string
+          origem?: string
+          reuniao_em?: string | null
+          sdr_id?: string
+          sem_fit_motivo?: string | null
+          ultimo_toque_em?: string | null
+          vendedor_destino_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_sem_fit_motivo_fkey"
+            columns: ["sem_fit_motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "sdr_leads_sem_fit_motivo_fkey"
+            columns: ["sem_fit_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_leads_vendedor_destino_id_fkey"
+            columns: ["vendedor_destino_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -3204,266 +4829,6 @@ export type Database = {
           },
         ]
       }
-      whatsapp_contas: {
-        Row: {
-          apelido: string
-          ativo: boolean
-          atualizada_em: string
-          criada_em: string
-          id: string
-          numero: string
-          provedor: string
-          token_definido_em: string | null
-          token_secret_id: string | null
-          usuario_responsavel: string | null
-        }
-        Insert: {
-          apelido: string
-          ativo?: boolean
-          atualizada_em?: string
-          criada_em?: string
-          id?: string
-          numero: string
-          provedor?: string
-          token_definido_em?: string | null
-          token_secret_id?: string | null
-          usuario_responsavel?: string | null
-        }
-        Update: {
-          apelido?: string
-          ativo?: boolean
-          atualizada_em?: string
-          criada_em?: string
-          id?: string
-          numero?: string
-          provedor?: string
-          token_definido_em?: string | null
-          token_secret_id?: string | null
-          usuario_responsavel?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_contas_usuario_responsavel_fkey"
-            columns: ["usuario_responsavel"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      comercial_config: {
-        Row: {
-          atualizado_em: string
-          atualizado_por: string | null
-          chave: string
-          valor: Json
-        }
-        Insert: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          chave: string
-          valor: Json
-        }
-        Update: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          chave?: string
-          valor?: Json
-        }
-        Relationships: []
-      }
-      comissao_lancamentos: {
-        Row: {
-          aprovado_em: string | null
-          aprovado_por: string | null
-          competencia: string
-          criado_em: string
-          descricao: string | null
-          id: string
-          origem_id: string
-          origem_tipo: string
-          regra_id: string | null
-          status: string
-          valor: number
-          vendedor_id: string
-        }
-        Insert: {
-          aprovado_em?: string | null
-          aprovado_por?: string | null
-          competencia: string
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          origem_id: string
-          origem_tipo: string
-          regra_id?: string | null
-          status?: string
-          valor: number
-          vendedor_id: string
-        }
-        Update: {
-          aprovado_em?: string | null
-          aprovado_por?: string | null
-          competencia?: string
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          origem_id?: string
-          origem_tipo?: string
-          regra_id?: string | null
-          status?: string
-          valor?: number
-          vendedor_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "comissao_lancamentos_vendedor_id_fkey"
-            columns: ["vendedor_id"]
-            isOneToOne: false
-            referencedRelation: "vendedores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      comissao_regras: {
-        Row: {
-          criada_em: string
-          criada_por: string | null
-          id: string
-          parametros: Json
-          tipo_vendedor: string
-          vendedor_id: string | null
-          vigente_ate: string | null
-          vigente_de: string
-        }
-        Insert: {
-          criada_em?: string
-          criada_por?: string | null
-          id?: string
-          parametros: Json
-          tipo_vendedor: string
-          vendedor_id?: string | null
-          vigente_ate?: string | null
-          vigente_de: string
-        }
-        Update: {
-          criada_em?: string
-          criada_por?: string | null
-          id?: string
-          parametros?: Json
-          tipo_vendedor?: string
-          vendedor_id?: string | null
-          vigente_ate?: string | null
-          vigente_de?: string
-        }
-        Relationships: []
-      }
-      motivos_perda: {
-        Row: {
-          ativo: boolean
-          contexto: string
-          id: string
-          motivo: string
-          ordem: number
-        }
-        Insert: {
-          ativo?: boolean
-          contexto: string
-          id?: string
-          motivo: string
-          ordem?: number
-        }
-        Update: {
-          ativo?: boolean
-          contexto?: string
-          id?: string
-          motivo?: string
-          ordem?: number
-        }
-        Relationships: []
-      }
-      sdr_leads: {
-        Row: {
-          atualizado_em: string
-          distribuido_em: string
-          empresa_id: string
-          estagio: string
-          encerrado_em: string | null
-          encerrado_motivo: string | null
-          fit: boolean | null
-          fit_definido_em: string | null
-          id: string
-          origem: string
-          reuniao_em: string | null
-          sdr_id: string
-          sem_fit_motivo: string | null
-          ultimo_toque_em: string | null
-          vendedor_destino_id: string | null
-        }
-        Insert: {
-          atualizado_em?: string
-          distribuido_em?: string
-          empresa_id: string
-          estagio?: string
-          encerrado_em?: string | null
-          encerrado_motivo?: string | null
-          fit?: boolean | null
-          fit_definido_em?: string | null
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
-          id?: string
-          origem: string
-          reuniao_em?: string | null
-          sdr_id: string
-          sem_fit_motivo?: string | null
-          ultimo_toque_em?: string | null
-          vendedor_destino_id?: string | null
-        }
-        Update: {
-          atualizado_em?: string
-          distribuido_em?: string
-          empresa_id?: string
-          estagio?: string
-          encerrado_em?: string | null
-          encerrado_motivo?: string | null
-          fit?: boolean | null
-          fit_definido_em?: string | null
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
-          id?: string
-          origem?: string
-          reuniao_em?: string | null
-          sdr_id?: string
-          sem_fit_motivo?: string | null
-          ultimo_toque_em?: string | null
-          vendedor_destino_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sdr_leads_sdr_id_fkey"
-            columns: ["sdr_id"]
-            isOneToOne: false
-            referencedRelation: "vendedores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sdr_leads_vendedor_destino_id_fkey"
-            columns: ["vendedor_destino_id"]
-            isOneToOne: false
-            referencedRelation: "vendedores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sdr_leads_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       vendas: {
         Row: {
           analise_credito_id: string | null
@@ -3472,13 +4837,13 @@ export type Database = {
           empresa_id: string
           estagio: string
           ganho_em: string | null
-          primeira_operacao_em: string | null
-          primeira_operacao_id: number | null
-          situacao: string
           id: string
           perdido_em: string | null
           perdido_motivo: string | null
+          primeira_operacao_em: string | null
+          primeira_operacao_id: number | null
           sdr_lead_id: string | null
+          situacao: string
           vendedor_id: string
         }
         Insert: {
@@ -3488,16 +4853,13 @@ export type Database = {
           empresa_id: string
           estagio?: string
           ganho_em?: string | null
-          primeira_operacao_em?: string | null
-          primeira_operacao_id?: number | null
-          situacao?: string
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
           id?: string
           perdido_em?: string | null
           perdido_motivo?: string | null
+          primeira_operacao_em?: string | null
+          primeira_operacao_id?: number | null
           sdr_lead_id?: string | null
+          situacao?: string
           vendedor_id: string
         }
         Update: {
@@ -3507,31 +4869,91 @@ export type Database = {
           empresa_id?: string
           estagio?: string
           ganho_em?: string | null
-          primeira_operacao_em?: string | null
-          primeira_operacao_id?: number | null
-          situacao?: string
-          gestao_definida_em?: string | null
-          gestao_definida_por?: string | null
-          gestao_operacao?: string | null
           id?: string
           perdido_em?: string | null
           perdido_motivo?: string | null
+          primeira_operacao_em?: string | null
+          primeira_operacao_id?: number | null
           sdr_lead_id?: string | null
+          situacao?: string
           vendedor_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "vendas_vendedor_id_fkey"
-            columns: ["vendedor_id"]
+            foreignKeyName: "vendas_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
             isOneToOne: false
-            referencedRelation: "vendedores"
+            referencedRelation: "analise_vigente"
+            referencedColumns: ["analise_id"]
+          },
+          {
+            foreignKeyName: "vendas_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "vendas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "vendas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendas_perdido_motivo_fkey"
+            columns: ["perdido_motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "vendas_perdido_motivo_fkey"
+            columns: ["perdido_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_sdr_lead_id_fkey"
+            columns: ["sdr_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sdr_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -3549,7 +4971,22 @@ export type Database = {
           pode_ver_vendedor_id?: string
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedor_acessos_pode_ver_vendedor_id_fkey"
+            columns: ["pode_ver_vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_acessos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedor_carteira: {
         Row: {
@@ -3557,7 +4994,9 @@ export type Database = {
           desde: string
           empresa_id: string
           id: string
+          origem: string
           papel: string
+          share_pct: number
           vendedor_id: string
         }
         Insert: {
@@ -3565,7 +5004,9 @@ export type Database = {
           desde?: string
           empresa_id: string
           id?: string
+          origem?: string
           papel: string
+          share_pct?: number
           vendedor_id: string
         }
         Update: {
@@ -3573,22 +5014,52 @@ export type Database = {
           desde?: string
           empresa_id?: string
           id?: string
+          origem?: string
           papel?: string
+          share_pct?: number
           vendedor_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "vendedor_carteira_vendedor_id_fkey"
-            columns: ["vendedor_id"]
+            foreignKeyName: "vendedor_carteira_empresa_id_fkey"
+            columns: ["empresa_id"]
             isOneToOne: false
-            referencedRelation: "vendedores"
-            referencedColumns: ["id"]
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_carteira_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_carteira_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "vendedor_carteira_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_carteira_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_carteira_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -3638,17 +5109,66 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "vendedor_eventos_vendedor_id_fkey"
-            columns: ["vendedor_id"]
+            foreignKeyName: "vendedor_eventos_criado_por_fkey"
+            columns: ["criado_por"]
             isOneToOne: false
-            referencedRelation: "vendedores"
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "vendedor_eventos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_sdr_lead_id_fkey"
+            columns: ["sdr_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sdr_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_venda_id_fkey"
+            columns: ["venda_id"]
+            isOneToOne: false
+            referencedRelation: "vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedor_eventos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -3672,7 +5192,15 @@ export type Database = {
           token?: string
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedor_ics_tokens_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedor_territorios: {
         Row: {
@@ -3693,7 +5221,15 @@ export type Database = {
           ufs?: string[]
           vendedor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedor_territorios_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: true
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedores: {
         Row: {
@@ -3732,29 +5268,81 @@ export type Database = {
           usuario_id?: string | null
           whatsapp_conta_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedores_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendedores_whatsapp_conta_id_fkey"
+            columns: ["whatsapp_conta_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_contas: {
+        Row: {
+          apelido: string
+          ativo: boolean
+          atualizada_em: string
+          criada_em: string
+          id: string
+          numero: string
+          provedor: string
+          token_definido_em: string | null
+          token_secret_id: string | null
+          usuario_responsavel: string | null
+        }
+        Insert: {
+          apelido: string
+          ativo?: boolean
+          atualizada_em?: string
+          criada_em?: string
+          id?: string
+          numero: string
+          provedor?: string
+          token_definido_em?: string | null
+          token_secret_id?: string | null
+          usuario_responsavel?: string | null
+        }
+        Update: {
+          apelido?: string
+          ativo?: boolean
+          atualizada_em?: string
+          criada_em?: string
+          id?: string
+          numero?: string
+          provedor?: string
+          token_definido_em?: string | null
+          token_secret_id?: string | null
+          usuario_responsavel?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_contas_usuario_responsavel_fkey"
+            columns: ["usuario_responsavel"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
-
     Views: {
-      credito_carteira: {
+      analise_vigente: {
         Row: {
+          analise_estagio: string | null
+          analise_id: string | null
           cnpj: string | null
-          company_name: string | null
-          empresa_id: string | null
-          razao_social: string | null
-          limite_concedido: number | null
-          consumed_limit: number | null
-          available_limit: number | null
-          limite_expira_em: string | null
-          plataforma_diz_ter_seguro: boolean | null
-          limite_segurado: number | null
-          segurado_em: string | null
-          rating: string | null
-          rating_classe: string | null
-          coberturas: number | null
-          descoberto: number | null
-          situacao: string | null
+          decidida_em: string | null
+          expira_em: string | null
+          limite_aprovado: number | null
+          tem_analise_vigente: boolean | null
         }
         Relationships: []
       }
@@ -3763,9 +5351,11 @@ export type Database = {
           available_limit: number | null
           cnpj: string | null
           company_name: string | null
+          company_type: string | null
           consumed_limit: number | null
           credit_limit: number | null
           empresa_cadastrada: boolean | null
+          ever_approved: boolean | null
           expiration_date: string | null
           fee_d0: number | null
           fee_d1: number | null
@@ -3778,8 +5368,6 @@ export type Database = {
           onepay_company_id: number | null
           sincronizada_em: string | null
           status: string | null
-          ever_approved: boolean | null
-          company_type: string | null
         }
         Relationships: []
       }
@@ -3799,48 +5387,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ex_clientes: {
-        Row: {
-          cnpj: string | null
-          consumo_historico: number | null
-          empresa_id: string | null
-          ex_cliente_desde: string | null
-          ex_cliente_motivo: string | null
-          ex_cliente_motivo_label: string | null
-          ex_cliente_motivo_obs: string | null
-          gestao_operacao: string | null
-          meses_desde: number | null
-          motivo_sugerido: string | null
-          motivo_sugerido_label: string | null
-          motivo_sugerido_evidencia: string | null
-          e_filial: boolean | null
-          e_spe: boolean | null
-          e_principal: boolean | null
-          origem_spe: string | null
-          oculto: boolean | null
-          na_lista: boolean | null
-          municipio: string | null
-          nome: string | null
-          uf: string | null
-          ultima_analise_expirou_em: string | null
-          ultima_analise_status: string | null
-          ultima_taxa_d0: number | null
-          ultimo_limite: number | null
-        }
-        Relationships: []
-      }
-      analise_vigente: {
-        Row: {
-          analise_estagio: string | null
-          analise_id: string | null
-          cnpj: string | null
-          decidida_em: string | null
-          expira_em: string | null
-          limite_aprovado: number | null
-          tem_analise_vigente: boolean | null
-        }
-        Relationships: []
-      }
       antecipacao_fornecedores: {
         Row: {
           dias_para_vencimento_min: number | null
@@ -3853,25 +5399,6 @@ export type Database = {
           notas_vivas: number | null
           receita_esperada_total: number | null
           valor_total: number | null
-        }
-        Relationships: []
-      }
-      antecipacao_fornecedores_sem_interesse: {
-        Row: {
-          fornecedor_cnae_principal: string | null
-          fornecedor_cnpj: string | null
-          fornecedor_empresa_id: string | null
-          fornecedor_municipio: string | null
-          fornecedor_nome: string | null
-          fornecedor_uf: string | null
-          marcado_em: string | null
-          marcado_por: string | null
-          marcado_por_nome: string | null
-          motivo: string | null
-          notas: number | null
-          observacao: string | null
-          ultima_nota_em: string | null
-          valor_agregado: number | null
         }
         Relationships: []
       }
@@ -3892,6 +5419,33 @@ export type Database = {
           valor_agregado: number | null
         }
         Relationships: []
+      }
+      antecipacao_fornecedores_sem_interesse: {
+        Row: {
+          fornecedor_cnae_principal: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_municipio: string | null
+          fornecedor_nome: string | null
+          fornecedor_uf: string | null
+          marcado_em: string | null
+          marcado_por: string | null
+          marcado_por_nome: string | null
+          motivo: string | null
+          notas: number | null
+          observacao: string | null
+          ultima_nota_em: string | null
+          valor_agregado: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "antecipacao_fornecedor_sem_interesse_marcado_por_fkey"
+            columns: ["marcado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       antecipacao_sacados: {
         Row: {
@@ -3914,12 +5468,12 @@ export type Database = {
           notas: number | null
           notas_de_quem_ja_antecipou: number | null
           primeira_nota_em: string | null
+          sacado_camada: string | null
           sacado_cnae_principal: string | null
           sacado_cnpj: string | null
           sacado_empresa_id: string | null
           sacado_municipio: string | null
           sacado_nome: string | null
-          sacado_camada: string | null
           sacado_uf: string | null
           ultima_nota_em: string | null
           valor_agregado: number | null
@@ -3930,6 +5484,110 @@ export type Database = {
         Row: {
           aprovacao_propria: boolean | null
           cnpj: string | null
+        }
+        Relationships: []
+      }
+      certificado_universo: {
+        Row: {
+          certificado_status: string | null
+          cnpj: string | null
+          coberto: boolean | null
+          e_matriz: boolean | null
+          empresa_id: string | null
+          expires_at: string | null
+          razao_social: string | null
+        }
+        Relationships: []
+      }
+      clientes_onepay_lista: {
+        Row: {
+          anticipations_last_2m: number | null
+          atualizado_em: string | null
+          available_limit: number | null
+          cnpj: string | null
+          consumed_limit: number | null
+          consumed_pct: number | null
+          consumed_pct_2m: number | null
+          credit_limit: number | null
+          days_without_anticipation: number | null
+          empresa_id: string | null
+          faturamento_anual: number | null
+          faturamento_confianca: string | null
+          gestao_operacao: string | null
+          gross_value_last_2m: number | null
+          grupo_id: string | null
+          last_anticipation: string | null
+          nome: string | null
+          onepay_company_id: number | null
+          operation_status: string | null
+          primeira_vez_visto: string | null
+          protesto_grupo_cnpjs: number | null
+          protesto_grupo_valor: number | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresas_grupo_id_fkey"
+            columns: ["grupo_id"]
+            isOneToOne: false
+            referencedRelation: "grupos_economicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credito_carteira: {
+        Row: {
+          available_limit: number | null
+          cnpj: string | null
+          coberturas: number | null
+          company_name: string | null
+          consumed_limit: number | null
+          descoberto: number | null
+          empresa_id: string | null
+          limite_concedido: number | null
+          limite_expira_em: string | null
+          limite_segurado: number | null
+          plataforma_diz_ter_seguro: boolean | null
+          rating: string | null
+          rating_classe: string | null
+          razao_social: string | null
+          segurado_em: string | null
+          situacao: string | null
         }
         Relationships: []
       }
@@ -3954,41 +5612,96 @@ export type Database = {
           score_faixa: string | null
           tipo: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_onepay_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
       }
-      clientes_onepay_lista: {
+      ex_clientes: {
         Row: {
-          anticipations_last_2m: number | null
-          atualizado_em: string | null
-          available_limit: number | null
           cnpj: string | null
-          consumed_limit: number | null
-          consumed_pct: number | null
-          consumed_pct_2m: number | null
-          credit_limit: number | null
-          days_without_anticipation: number | null
+          consumo_historico: number | null
+          e_filial: boolean | null
+          e_principal: boolean | null
+          e_spe: boolean | null
           empresa_id: string | null
-          faturamento_anual: number | null
-          faturamento_confianca: string | null
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_label: string | null
+          ex_cliente_motivo_obs: string | null
           gestao_operacao: string | null
-          grupo_id: string | null
-          gross_value_last_2m: number | null
-          last_anticipation: string | null
+          meses_desde: number | null
+          motivo_sugerido: string | null
+          motivo_sugerido_evidencia: string | null
+          motivo_sugerido_label: string | null
+          municipio: string | null
+          na_lista: boolean | null
           nome: string | null
-          onepay_company_id: number | null
-          operation_status: string | null
-          primeira_vez_visto: string | null
-          protesto_grupo_cnpjs: number | null
-          protesto_grupo_valor: number | null
-          status: string | null
+          oculto: boolean | null
+          origem_spe: string | null
+          uf: string | null
+          ultima_analise_expirou_em: string | null
+          ultima_analise_status: string | null
+          ultima_taxa_d0: number | null
+          ultimo_limite: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresas_ex_cliente_motivo_fkey"
+            columns: ["ex_cliente_motivo"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["motivo_sugerido"]
+          },
+          {
+            foreignKeyName: "empresas_ex_cliente_motivo_fkey"
+            columns: ["ex_cliente_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_perda"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mercado_explorador: {
         Row: {
+          analise_estagio: string | null
           camada: string | null
           camada_regra_versao: number | null
           capital_social: number | null
+          chance_concessao: number | null
           churn_erp_concorrente: boolean | null
           cnae_grupos: string[] | null
           cnae_principal: string | null
@@ -4003,19 +5716,16 @@ export type Database = {
           dominio_confianca: string | null
           dominio_consultado_em: string | null
           e_cliente_onepay: boolean | null
+          e_ex_cliente: boolean | null
           empresa_id: string | null
           erp_atual: string | null
           erp_detalhes: Json | null
           erp_mrr: number | null
           estagio: string | null
-          analise_estagio: string | null
-          chance_concessao: number | null
+          ex_cliente_desde: string | null
+          ex_cliente_meses: number | null
+          ex_cliente_motivo: string | null
           faixa_score: string | null
-          limite_potencial: number | null
-          receita_mensal_prevista: number | null
-          score_credito: number | null
-          tem_analise_vigente: boolean | null
-          valor_esperado_mensal: number | null
           faturamento_confianca: string | null
           faturamento_estimado: number | null
           faturamento_origem: string | null
@@ -4029,6 +5739,7 @@ export type Database = {
           grupo_spes_total: number | null
           grupo_ufs: string[] | null
           is_spe: boolean | null
+          limite_potencial: number | null
           m2_em_execucao: number | null
           municipio: string | null
           natureza_juridica: string | null
@@ -4043,28 +5754,56 @@ export type Database = {
           qtd_filiais: number | null
           qtd_usuarios_erp: number | null
           ratio_usuarios_ativos: number | null
-          regime_tributario: string | null
           razao_social: string | null
+          receita_mensal_prevista: number | null
+          regime_tributario: string | null
+          score_credito: number | null
           situacao_cadastral: string | null
+          tem_analise_vigente: boolean | null
           tem_contato: boolean | null
           tem_protesto: boolean | null
+          teve_analise_sem_cadastro: boolean | null
           tipo: string | null
           uf: string | null
-          e_ex_cliente: boolean | null
-          ex_cliente_desde: string | null
-          ex_cliente_meses: number | null
-          ex_cliente_motivo: string | null
-          teve_analise_sem_cadastro: boolean | null
-          ultima_analise_limite: number | null
           ultima_analise_expirou_em: string | null
+          ultima_analise_limite: number | null
+          valor_esperado_mensal: number | null
         }
         Relationships: [
           {
             foreignKeyName: "mercado_universo_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_universo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "mercado_universo_grupo_fk"
@@ -4080,6 +5819,11 @@ export type Database = {
           access_key: string | null
           contato_fornecedor: Json | null
           contato_sacado: Json | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean | null
+          conversao_status: string | null
+          conversao_taxa: number | null
+          conversao_valor: number | null
           dias_para_vencimento: number | null
           direction: string | null
           emitida_em: string | null
@@ -4095,20 +5839,27 @@ export type Database = {
           fornecedor_e_cliente_onepay: boolean | null
           fornecedor_empresa_id: string | null
           fornecedor_ja_antecipou: boolean | null
+          fornecedor_natureza_juridica: string | null
           fornecedor_nome: string | null
+          fornecedor_protesto_em: string | null
           fornecedor_protesto_valor: number | null
+          fornecedor_sem_interesse: boolean | null
           fornecedor_situacao_cadastral: string | null
           fornecedor_suprimido: boolean | null
           fornecedor_tem_protesto: boolean | null
           fornecedor_tipagem: string | null
           fornecedor_uf: string | null
           fornecedor_ultimo_numero_nf: number | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
           nf_id_externo: string | null
           numero: string | null
+          operavel: boolean | null
           parcelas: Json | null
           perda_motivo: string | null
           receita_esperada: number | null
           sacado_cadastrado: boolean | null
+          sacado_camada: string | null
           sacado_cnae_grupos: string[] | null
           sacado_cnae_principal: string | null
           sacado_cnpj: string | null
@@ -4116,6 +5867,7 @@ export type Database = {
           sacado_credito_role: string | null
           sacado_credito_status: string | null
           sacado_empresa_id: string | null
+          sacado_gestao_operacao: string | null
           sacado_limite: number | null
           sacado_limite_cobre_nota: boolean | null
           sacado_limite_disponivel: number | null
@@ -4131,23 +5883,38 @@ export type Database = {
           valor: number | null
           vencimento: string | null
           vencimento_origem: string | null
-          natureza_operacao: string | null
-          operavel: boolean
-          nao_operavel_motivo: string | null
-          sacado_camada: string | null
-          fornecedor_protesto_em: string | null
-          conversao_antecipacao_id: number | null
-          conversao_em_disputa: boolean | null
-          conversao_valor: number | null
-          conversao_taxa: number | null
-          conversao_status: string | null
           vendedor_id: string | null
           vendedor_origem: string | null
-          sacado_gestao_operacao: string | null
-          fornecedor_sem_interesse: boolean
-          fornecedor_natureza_juridica: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_conversao_antecipacao_id_fkey"
+            columns: ["conversao_antecipacao_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
           {
             foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
             columns: ["fornecedor_empresa_id"]
@@ -4156,10 +5923,52 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
             foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
             columns: ["sacado_empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -4183,102 +5992,94 @@ export type Database = {
             foreignKeyName: "protestos_consultas_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protestos_consultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
     }
     Functions: {
-      perfil_snapshot_atual: { Args: { p: Json }; Returns: Json }
-      app_salvar_perfil_config: {
-        Args: { p: Json }
-        Returns: {
-          atualizado_em: string
-          atualizado_por: string | null
-          chave: string
-          valor: Json
-        }
+      analise_propria_painel: {
+        Args: { p_analise_credito_id: string }
+        Returns: Json
       }
-      app_registrar_sugestao_perfil: {
-        Args: { p: Json }
-        Returns: {
-          acao: string
-          em: string
-          id: string
-          motivo: string | null
-          regra_chave: string | null
-          regra_tipo: string | null
-          regra_versao_criada: number | null
-          snapshot_id: string | null
-          sugestao: Json
-          sugestao_id: string
-          usuario_id: string | null
-        }
-      }
-      app_vincular_versao_sugestao: {
-        Args: { p: Json }
-        Returns: {
-          acao: string
-          em: string
-          id: string
-          motivo: string | null
-          regra_chave: string | null
-          regra_tipo: string | null
-          regra_versao_criada: number | null
-          snapshot_id: string | null
-          sugestao: Json
-          sugestao_id: string
-          usuario_id: string | null
-        }
-      }
-      antecipacao_calibracao_carteira: { Args: { p: Json }; Returns: Json }
+      antecipacao_calibracao_carteira: { Args: { p?: Json }; Returns: Json }
       antecipacao_candidatas: { Args: { p: Json }; Returns: Json }
       antecipacao_custo_protesto: { Args: never; Returns: Json }
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
-      antecipacao_status_conversoes: { Args: { p: Json }; Returns: Json }
-      app_casar_antecipacao: {
+      antecipacao_status_conversoes: { Args: { p?: Json }; Returns: Json }
+      app_ajuste_manual_comissao: {
         Args: { p: Json }
         Returns: {
-          access_key_casada: string | null
           anticipation_days: number | null
-          anticipation_type: string | null
-          approval_with_automation: boolean | null
-          atualizada_em: string
-          completion_date: string | null
-          convertida_em: string | null
-          created_at_plataforma: string | null
-          discounted_amount: number | null
-          document_number: string | null
-          fornecedor_cnpj: string
-          fornecedor_nome: string | null
-          gross_value: number | null
-          id_externo: number
-          invoice_cancelled_at: string | null
-          match_candidatas: Json
-          match_confianca: string | null
-          match_em: string | null
-          match_motivo: string | null
-          match_observacao: string | null
-          match_por: string | null
-          match_status: string
-          monthly_interest_rate: number | null
-          net_value: number | null
-          numero_normalizado: string | null
-          original_due_date: string | null
-          raw: Json | null
-          regrediu_em: string | null
-          request_date: string | null
-          sacado_cnpj: string
-          sacado_nome: string | null
-          sem_nf_definitivo_em: string | null
-          sincronizada_em: string
+          aprovado_em: string | null
+          aprovado_por: string | null
+          cedente_cnpj: string | null
+          cedente_nome: string | null
+          competencia: string
+          criado_em: string
+          descricao: string | null
+          empresa_id: string | null
+          evento_em: string
+          fase: string | null
+          gestao_operacao: string | null
+          id: string
+          nf_numero: string | null
+          origem_id: string
+          origem_tipo: string
+          papel: string
+          params_snapshot: Json
+          share_pct: number
           status: string
-          status_anterior: string | null
-          total_spread: number | null
-          withhold_tax: number | null
+          taxa_brl_por_mm: number | null
+          valor: number
+          valor_cedido: number | null
+          vendedor_id: string
+          vop: number | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "comissao_lancamentos_v2"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_ano_referencia_metrica: {
+        Args: { p_capturado: string; p_detalhes: Json; p_origem: string }
+        Returns: number
+      }
+      app_apagar_estimativas_do_ano: {
+        Args: { p_ano: number; p_cnpj: string; p_metrica: string }
+        Returns: number
       }
       app_aprovar_lote: {
         Args: { p: Json }
@@ -4343,15 +6144,110 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_ativar_scorecard_versao: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          id: string
+          nome: string | null
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scorecard_versoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_atribuir_lead_sdr: { Args: { p: Json }; Returns: Json }
+      app_atribuir_nf: { Args: { p: Json }; Returns: undefined }
+      app_atribuir_venda: { Args: { p: Json }; Returns: Json }
       app_atualizar_empresa: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresas"]["Row"]
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
         SetofOptions: {
           from: "*"
           to: "empresas"
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      app_buscar_candidatos_universo: {
+        Args: { p: Json }
+        Returns: {
+          cnpj: string
+          municipio: string
+          nome_fantasia: string
+          razao_social: string
+          situacao_cadastral: string
+          uf: string
+        }[]
       }
       app_cancelar_lote: {
         Args: { p: Json }
@@ -4380,9 +6276,121 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_casar_antecipacao: {
+        Args: { p: Json }
+        Returns: {
+          access_key_casada: string | null
+          anticipation_days: number | null
+          anticipation_type: string | null
+          approval_with_automation: boolean | null
+          atualizada_em: string
+          completion_date: string | null
+          convertida_em: string | null
+          created_at_plataforma: string | null
+          discounted_amount: number | null
+          document_number: string | null
+          fornecedor_cnpj: string
+          fornecedor_nome: string | null
+          gross_value: number | null
+          id_externo: number
+          invoice_cancelled_at: string | null
+          match_candidatas: Json
+          match_confianca: string | null
+          match_em: string | null
+          match_motivo: string | null
+          match_observacao: string | null
+          match_por: string | null
+          match_status: string
+          monthly_interest_rate: number | null
+          net_value: number | null
+          numero_normalizado: string | null
+          original_due_date: string | null
+          raw: Json | null
+          regrediu_em: string | null
+          request_date: string | null
+          sacado_cnpj: string
+          sacado_nome: string | null
+          sem_nf_definitivo_em: string | null
+          sincronizada_em: string
+          status: string
+          status_anterior: string | null
+          total_spread: number | null
+          withhold_tax: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "antecipacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_competencia_fechada: { Args: { p_data: string }; Returns: boolean }
       app_criar_empresa: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresas"]["Row"]
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
         SetofOptions: {
           from: "*"
           to: "empresas"
@@ -4452,6 +6460,71 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_decidir_aceite_sdr: {
+        Args: { p: Json }
+        Returns: {
+          aceite_automatico: boolean
+          criado_em: string
+          decidido_em: string | null
+          decidido_por: string | null
+          empresa_id: string
+          id: string
+          lancado_em: string | null
+          motivo_recusa: string | null
+          prazo_em: string
+          reuniao_em: string | null
+          sdr_id: string
+          sdr_lead_id: string
+          status: string
+          vendedor_destino_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sdr_aceites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_declarar_metrica: {
+        Args: { p: Json }
+        Returns: {
+          capturado_em: string
+          cnpj: string
+          confianca: string | null
+          detalhes: Json
+          empresa_id: string | null
+          id: string
+          metrica: string
+          origem: string
+          valor: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_metricas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_definir_carteira: {
+        Args: { p: Json }
+        Returns: {
+          ate: string | null
+          desde: string
+          empresa_id: string
+          id: string
+          origem: string
+          papel: string
+          share_pct: number
+          vendedor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vendedor_carteira"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_definir_carteira_passiva: { Args: { p: Json }; Returns: Json }
       app_definir_config: {
         Args: { p: Json }
         Returns: {
@@ -4464,6 +6537,152 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "app_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_definir_ex_cliente_motivo: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_definir_gestao_operacao: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresas"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4530,7 +6749,78 @@ export type Database = {
         Args: { p_cnpj: string }
         Returns: undefined
       }
+      app_editar_parecer: {
+        Args: { p: Json }
+        Returns: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_funil_analise: { Args: { p: Json }; Returns: Json }
+      app_gerar_token_ics: { Args: { p: Json }; Returns: string }
+      app_gestor_comercial: { Args: never; Returns: boolean }
+      app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
       app_is_admin: { Args: never; Returns: boolean }
+      app_marcar_fornecedor_sem_interesse: {
+        Args: { p: Json }
+        Returns: {
+          cnpj: string
+          fornecedor_nome: string | null
+          marcado_em: string
+          marcado_por: string | null
+          motivo: string
+          observacao: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "antecipacao_fornecedor_sem_interesse"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_marcar_sem_interesse: {
         Args: { p: Json }
         Returns: {
@@ -4552,6 +6842,44 @@ export type Database = {
         }
       }
       app_monitorar_protesto: { Args: { p_cnpj: string }; Returns: undefined }
+      app_mover_analise: {
+        Args: { p: Json }
+        Returns: {
+          analise_propria_id: string | null
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          criada_em: string
+          decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
+          empresa_id: string | null
+          estagio: string
+          expira_em: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_operacional: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          rating_classe_seguradora: string | null
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_mover_certificado_card: { Args: { p: Json }; Returns: Json }
       app_mover_estagio_nf: {
         Args: { p: Json }
         Returns: {
@@ -4559,6 +6887,8 @@ export type Database = {
           atualizada_em: string
           contato_fornecedor: Json | null
           contato_sacado: Json | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean
           credit_disponivel: number | null
           credit_limite: number | null
           credit_role: string | null
@@ -4578,8 +6908,12 @@ export type Database = {
           fornecedor_cnpj: string
           fornecedor_empresa_id: string | null
           fornecedor_nome: string | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
           nf_id_externo: string | null
           numero: string | null
+          operavel: boolean
+          operavel_manual: boolean | null
           parcelas: Json | null
           perda_motivo: string | null
           raw_xml: string | null
@@ -4599,13 +6933,7 @@ export type Database = {
           vendedor_definido_em: string | null
           vendedor_id: string | null
           vendedor_origem: string | null
-          natureza_operacao: string | null
-          operavel: boolean
-          operavel_manual: boolean | null
-          nao_operavel_motivo: string | null
           xml_parse_erro: string | null
-          conversao_antecipacao_id: number | null
-          conversao_em_disputa: boolean
         }
         SetofOptions: {
           from: "*"
@@ -4614,9 +6942,132 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_mover_lead_sdr: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          distribuido_em: string
+          empresa_id: string
+          encerrado_em: string | null
+          encerrado_motivo: string | null
+          estagio: string
+          fit: boolean | null
+          fit_definido_em: string | null
+          id: string
+          origem: string
+          reuniao_em: string | null
+          sdr_id: string
+          sem_fit_motivo: string | null
+          ultimo_toque_em: string | null
+          vendedor_destino_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sdr_leads"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_mover_venda: {
+        Args: { p: Json }
+        Returns: {
+          analise_credito_id: string | null
+          atualizada_em: string
+          criada_em: string
+          empresa_id: string
+          estagio: string
+          ganho_em: string | null
+          id: string
+          perdido_em: string | null
+          perdido_motivo: string | null
+          primeira_operacao_em: string | null
+          primeira_operacao_id: number | null
+          sdr_lead_id: string | null
+          situacao: string
+          vendedor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vendas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_mudar_status_comissao: { Args: { p: Json }; Returns: number }
+      app_mudar_status_competencia: { Args: { p: Json }; Returns: number }
+      app_ocultar_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
+      app_ocultar_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
+      app_pode_ver_vendedor: {
+        Args: { p_vendedor_id: string }
+        Returns: boolean
+      }
+      app_processar_submissao: { Args: { p: Json }; Returns: Json }
       app_promover_empresa: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresas"]["Row"]
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
         SetofOptions: {
           from: "*"
           to: "empresas"
@@ -4624,29 +7075,145 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      app_ativar_scorecard_versao: {
+      app_promover_fornecedor: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["scorecard_versoes"]["Row"]
+        Returns: {
+          atualizado_em: string
+          camada: string | null
+          chance_concessao: number | null
+          churn_erp_concorrente: boolean
+          cnae_principal: string | null
+          cnpj: string
+          credito_calculado_em: string | null
+          credito_versao: number | null
+          criado_em: string
+          dados_apollo: Json | null
+          dominio: string | null
+          dominio_confianca: string | null
+          dominio_evidencia: string | null
+          dominio_origem: string | null
+          dominio_validado_em: string | null
+          erp_atual: string | null
+          erp_canal_venda: string | null
+          erp_detalhes: Json
+          erp_mrr: number | null
+          estagio: string
+          ex_cliente_desde: string | null
+          ex_cliente_motivo: string | null
+          ex_cliente_motivo_obs: string | null
+          faturamento_anual: number | null
+          faturamento_atualizado_em: string | null
+          faturamento_confianca: string | null
+          faturamento_origem: string | null
+          funcionarios: number | null
+          funcionarios_atualizado_em: string | null
+          funcionarios_crescimento_12m: number | null
+          funcionarios_origem: string | null
+          gestao_definida_em: string | null
+          gestao_definida_por: string | null
+          gestao_operacao: string | null
+          grafo_sefaz: boolean
+          grupo_id: string | null
+          id: string
+          is_spe: boolean
+          limite_confianca: string | null
+          limite_potencial: number | null
+          marco_ativacao: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          origem: string | null
+          patrimonio_atualizado_em: string | null
+          patrimonio_liquido: number | null
+          patrimonio_origem: string | null
+          porte: string | null
+          razao_social: string | null
+          receita_mensal_prevista: number | null
+          receita_taxa_am: number | null
+          regime_tributario: string | null
+          score_calculado_em: string | null
+          score_completude: number | null
+          score_credito: number | null
+          score_faixa: string | null
+          teve_analise_sem_cadastro: boolean
+          tipagem_antecipacao: string | null
+          tipo: string
+          uf: string | null
+          ultima_antecipacao: string | null
+          valor_esperado_mensal: number | null
+        }
         SetofOptions: {
           from: "*"
-          to: "scorecard_versoes"
+          to: "empresas"
           isOneToOne: true
           isSetofReturn: false
         }
       }
-      app_mover_analise: {
+      app_rank_origem_metrica: { Args: { p_origem: string }; Returns: number }
+      app_reexibir_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
+      app_reexibir_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
+      app_registrar_decisao_credito: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+        Returns: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
         SetofOptions: {
           from: "*"
-          to: "analises_credito"
+          to: "analises_proprietarias"
           isOneToOne: true
           isSetofReturn: false
         }
       }
       app_registrar_doc_analise: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analise_docs"]["Row"]
+        Returns: {
+          analise_id: string
+          arquivo_url: string
+          enviado_em: string
+          enviado_por: string | null
+          extraido_em: string | null
+          id: string
+          nome_arquivo: string | null
+          paginas: number | null
+          tipo: string
+        }
         SetofOptions: {
           from: "*"
           to: "analise_docs"
@@ -4654,68 +7221,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      app_salvar_credito_config: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["credito_config"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "credito_config"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_salvar_scorecard_versao: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["scorecard_versoes"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "scorecard_versoes"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_funil_analise: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      app_solicitar_analise_da_venda: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
-      }
-      app_solicitar_analise: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "analises_credito"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_declarar_metrica: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "empresa_metricas"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_buscar_candidatos_universo: {
-        Args: { p: Json }
-        Returns: {
-          cnpj: string
-          razao_social: string | null
-          nome_fantasia: string | null
-          uf: string | null
-          municipio: string | null
-          situacao_cadastral: string | null
-        }[]
-      }
       app_registrar_metrica_importada: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresa_metricas"]["Row"]
+        Returns: {
+          capturado_em: string
+          cnpj: string
+          confianca: string | null
+          detalhes: Json
+          empresa_id: string | null
+          id: string
+          metrica: string
+          origem: string
+          valor: number
+        }
         SetofOptions: {
           from: "*"
           to: "empresa_metricas"
@@ -4723,141 +7241,135 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      app_definir_ex_cliente_motivo: {
+      app_registrar_sugestao_perfil: {
         Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresas"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "empresas"
-          isOneToOne: true
-          isSetofReturn: false
+        Returns: {
+          acao: string
+          em: string
+          id: string
+          motivo: string | null
+          regra_chave: string | null
+          regra_tipo: string | null
+          regra_versao_criada: number | null
+          snapshot_id: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id: string | null
         }
-      }
-      ex_clientes_analise: {
-        Args: never
-        Returns: Json
-      }
-      app_rodar_analise_propria: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
         SetofOptions: {
           from: "*"
-          to: "analises_proprietarias"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_revisar_extracao: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "analises_proprietarias"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_editar_parecer: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "analises_proprietarias"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_registrar_decisao_credito: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analises_proprietarias"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "analises_proprietarias"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_salvar_parametros_analise: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["analise_parametros"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "analise_parametros"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      analise_propria_painel: {
-        Args: { p_analise_credito_id: string }
-        Returns: Json
-      }
-      certificado_funil: {
-        Args: { p_vendedor_id?: string | null }
-        Returns: Json
-      }
-      certificado_funil_sincronizar: {
-        Args: never
-        Returns: Json
-      }
-      app_mover_certificado_card: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      ex_clientes_por_motivo: {
-        Args: { p_meses?: number }
-        Returns: Json
-      }
-      ex_clientes_lista: {
-        Args: { p_recorte: string; p_motivos?: string[] | null }
-        Returns: Json
-      }
-      formulario_publico: {
-        Args: { p_slug: string }
-        Returns: Json
-      }
-      formularios_lista: {
-        Args: never
-        Returns: Json
-      }
-      app_salvar_formulario: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      app_atribuir_lead_sdr: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      app_atribuir_venda: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      app_processar_submissao: {
-        Args: { p: Json }
-        Returns: Json
-      }
-      app_marcar_fornecedor_sem_interesse: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["antecipacao_fornecedor_sem_interesse"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "antecipacao_fornecedor_sem_interesse"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      app_reverter_fornecedor_sem_interesse: { Args: { p: Json }; Returns: boolean }
-      app_promover_fornecedor: {
-        Args: { p: Json }
-        Returns: Database["public"]["Tables"]["empresas"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "empresas"
+          to: "perfil_sugestoes_log"
           isOneToOne: true
           isSetofReturn: false
         }
       }
       app_registrar_toque_manual: { Args: { p: Json }; Returns: undefined }
       app_remover_supressao: { Args: { p: Json }; Returns: undefined }
+      app_reverter_fornecedor_sem_interesse: {
+        Args: { p: Json }
+        Returns: boolean
+      }
+      app_revisar_extracao: {
+        Args: { p: Json }
+        Returns: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_rodar_analise_propria: {
+        Args: { p: Json }
+        Returns: {
+          analise_credito_id: string | null
+          atradius_limite: number | null
+          atradius_status: string | null
+          cenarios: Json | null
+          cnpj: string
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          dados_extraidos: Json | null
+          decidida_em: string | null
+          decidida_por: string | null
+          decisao_final: string | null
+          decisao_limite: number | null
+          decisao_motivo: string | null
+          empresa_id: string | null
+          erro: string | null
+          etapa: string | null
+          extracao_revisada_em: string | null
+          extracao_revisada_por: string | null
+          gatilho: string
+          id: string
+          indicadores: Json | null
+          lacunas_calculo: Json
+          limite_recomendado: number | null
+          motivos_nao_operar: Json
+          parametros_versao: number
+          parecer_editado: string | null
+          parecer_editado_em: string | null
+          parecer_editado_por: string | null
+          parecer_markdown: string | null
+          parecer_modelo: string | null
+          parecer_tokens: number | null
+          protestos_opcoes: Json | null
+          protestos_resultado: Json | null
+          quadrante: string | null
+          recomendacao: string | null
+          status: string
+          tetos: Json | null
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_proprietarias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_acesso_vendedor: { Args: { p: Json }; Returns: undefined }
       app_salvar_antecipacao_config: {
         Args: { p: Json }
         Returns: {
@@ -4887,6 +7399,75 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "camada_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_comercial_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "comercial_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_comissao_regra: {
+        Args: { p: Json }
+        Returns: {
+          criada_em: string
+          criada_por: string | null
+          id: string
+          parametros: Json
+          tipo_vendedor: string
+          vendedor_id: string | null
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "comissao_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_commission_param: {
+        Args: { p: Json }
+        Returns: {
+          chave: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          unidade: string
+          valor: number
+          vendedor_id: string | null
+          vigente_ate: string | null
+          vigente_de: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "commission_params"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_credito_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "credito_config"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4930,6 +7511,56 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_salvar_formulario: { Args: { p: Json }; Returns: Json }
+      app_salvar_motivo_perda: {
+        Args: { p: Json }
+        Returns: {
+          ativo: boolean
+          contexto: string
+          id: string
+          motivo: string
+          ordem: number
+          retorno_possivel: boolean | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "motivos_perda"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_parametros_analise: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          nome: string | null
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analise_parametros"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_perfil_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "perfil_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_salvar_radar_config: {
         Args: { p: Json }
         Returns: {
@@ -4941,6 +7572,60 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "radar_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_scorecard_versao: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          id: string
+          nome: string | null
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scorecard_versoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_territorio: {
+        Args: { p: Json }
+        Returns: {
+          faturamento_max: number | null
+          faturamento_min: number | null
+          ufs: string[]
+          vendedor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vendedor_territorios"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_vendedor: {
+        Args: { p: Json }
+        Returns: {
+          ativo: boolean
+          criado_em: string
+          email_remetente: string | null
+          id: string
+          is_ia: boolean
+          nome: string
+          settings: Json
+          tipo: string
+          usuario_id: string | null
+          whatsapp_conta_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vendedores"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4962,6 +7647,84 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "whatsapp_contas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sincronizar_carteira_originacao: {
+        Args: { p_ids: string[]; p_vendedor: string }
+        Returns: undefined
+      }
+      app_solicitar_analise: {
+        Args: { p: Json }
+        Returns: {
+          analise_propria_id: string | null
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          criada_em: string
+          decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
+          empresa_id: string | null
+          estagio: string
+          expira_em: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_operacional: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          rating_classe_seguradora: string | null
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_solicitar_analise_da_venda: {
+        Args: { p: Json }
+        Returns: {
+          analise_propria_id: string | null
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          criada_em: string
+          decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
+          empresa_id: string | null
+          estagio: string
+          expira_em: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_operacional: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          rating_classe_seguradora: string | null
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4988,19 +7751,74 @@ export type Database = {
       }
       app_tem_modulo: { Args: { p_modulo_id: string }; Returns: boolean }
       app_usuario_ativo: { Args: never; Returns: boolean }
+      app_ve_analise_pela_venda: {
+        Args: { p_analise_id: string }
+        Returns: boolean
+      }
+      app_vendedor_atual: { Args: never; Returns: string }
+      app_vincular_versao_sugestao: {
+        Args: { p: Json }
+        Returns: {
+          acao: string
+          em: string
+          id: string
+          motivo: string | null
+          regra_chave: string | null
+          regra_tipo: string | null
+          regra_versao_criada: number | null
+          snapshot_id: string | null
+          sugestao: Json
+          sugestao_id: string
+          usuario_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "perfil_sugestoes_log"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      certificado_funil: { Args: { p_vendedor_id?: string }; Returns: Json }
+      certificado_funil_sincronizar: { Args: never; Returns: Json }
+      certificados_grid: { Args: never; Returns: Json }
       cnae_grupos_de: {
         Args: { p_principal: string; p_secundarios: string[] }
         Returns: string[]
       }
-      natureza_juridica_codigo: {
-        Args: { bruto: string }
-        Returns: string
+      comercial_alcance_da_carteira: {
+        Args: { p_vendedor_id: string }
+        Returns: Json
+      }
+      comercial_carteira_vendedor: {
+        Args: { p_vendedor_id?: string }
+        Returns: Json
+      }
+      comercial_resumo_vendedor: {
+        Args: { p_vendedor_id?: string }
+        Returns: Json
+      }
+      comercial_vendedores_visiveis: { Args: never; Returns: Json }
+      comissao_painel_v2: {
+        Args: { p_meses?: number; p_vendedor_id?: string }
+        Returns: Json
+      }
+      comissao_reclassificacao: {
+        Args: { p_janela_dias?: number }
+        Returns: Json
       }
       empresa_analise_financeira: {
         Args: { p_empresa_id: string }
         Returns: Json
       }
       empresa_grupo_protestos: { Args: { p_empresa_id: string }; Returns: Json }
+      ex_clientes_analise: { Args: never; Returns: Json }
+      ex_clientes_lista: {
+        Args: { p_motivos?: string[]; p_recorte: string }
+        Returns: Json
+      }
+      ex_clientes_por_motivo: { Args: { p_meses?: number }; Returns: Json }
+      formulario_publico: { Args: { p_slug: string }; Returns: Json }
+      formularios_lista: { Args: never; Returns: Json }
       mercado_amostra_camada: {
         Args: {
           p_camada: string
@@ -5011,22 +7829,22 @@ export type Database = {
         Returns: Json
       }
       mercado_contar_exato: {
-        Args: { p_arvore?: Json | null; p_termo?: string | null }
+        Args: { p_arvore?: Json; p_termo?: string }
         Returns: number
       }
       mercado_explorar: {
         Args: {
-          p_arvore?: Json | null
+          p_arvore?: Json
           p_asc?: boolean
           p_limite?: number
           p_offset?: number
           p_ordem?: string
-          p_termo?: string | null
+          p_termo?: string
         }
         Returns: Json
       }
       mercado_mapa: {
-        Args: { p_limite?: number; p_tipo?: string | null; p_uf?: string | null }
+        Args: { p_limite?: number; p_tipo?: string; p_uf?: string }
         Returns: Json
       }
       mercado_piramide: { Args: never; Returns: Json }
@@ -5035,47 +7853,41 @@ export type Database = {
         Args: { p_arvore: Json; p_termo: string }
         Returns: string
       }
+      natureza_juridica_codigo: { Args: { bruto: string }; Returns: string }
+      perfil_snapshot_atual: { Args: { p: Json }; Returns: Json }
       radar_cobertura: { Args: never; Returns: Json }
+      radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_grupo_spes_monitoramento: {
         Args: { p_grupo_id: string }
         Returns: Json
       }
-      app_salvar_vendedor: { Args: { p: Json }; Returns: Json }
-      app_salvar_territorio: { Args: { p: Json }; Returns: Json }
-      app_salvar_comissao_regra: { Args: { p: Json }; Returns: Json }
-      app_salvar_acesso_vendedor: { Args: { p: Json }; Returns: undefined }
-      app_salvar_comercial_config: { Args: { p: Json }; Returns: Json }
-      app_salvar_motivo_perda: { Args: { p: Json }; Returns: Json }
-      app_definir_carteira: { Args: { p: Json }; Returns: Json }
-      app_definir_carteira_passiva: { Args: { p: Json }; Returns: Json }
-      app_definir_gestao_operacao: { Args: { p: Json }; Returns: Json }
-      app_mover_lead_sdr: { Args: { p: Json }; Returns: Json }
-      app_mover_venda: { Args: { p: Json }; Returns: Json }
-      app_atribuir_nf: { Args: { p: Json }; Returns: undefined }
-      app_mudar_status_comissao: { Args: { p: Json }; Returns: number }
-      app_gerar_token_ics: { Args: { p: Json }; Returns: string }
-      app_vendedor_atual: { Args: never; Returns: string }
-      app_gestor_comercial: { Args: never; Returns: boolean }
-      app_pode_ver_vendedor: { Args: { p_vendedor_id: string }; Returns: boolean }
-      comercial_resumo_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
-      comercial_carteira_vendedor: { Args: { p_vendedor_id?: string }; Returns: Json }
-      comercial_alcance_da_carteira: { Args: { p_vendedor_id: string }; Returns: Json }
-      comercial_vendedores_visiveis: { Args: never; Returns: Json }
-      app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
-      radar_custo_protestos_mensal: { Args: never; Returns: Json }
       radar_onepay_analytics: { Args: never; Returns: Json }
       radar_onepay_clientes: {
         Args: { p_dimensao: string; p_valor: string }
         Returns: Json
+      }
+      radar_onepay_protestos_cliente: {
+        Args: { p_cnpj: string }
+        Returns: Json
+      }
+      radar_onepay_titulos: {
+        Args: { p_cnpjs: string[] }
+        Returns: {
+          cnpj: string
+          data: string
+          valor: number
+        }[]
       }
       radar_protestos_empresa_previa: {
         Args: {
           p_ano_min: number
           p_empresa_id: string
           p_incluir_spes: boolean
+          p_somente_afiancadas?: boolean
         }
         Returns: Json
       }
+      raiz_e_spe: { Args: { p_cnpj: string }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

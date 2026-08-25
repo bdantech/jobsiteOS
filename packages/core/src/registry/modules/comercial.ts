@@ -2,17 +2,20 @@ import { z } from 'zod'
 import {
   ESTAGIO_SDR_LABELS,
   ESTAGIO_VENDA_LABELS,
-  ORIGEM_LANCAMENTO_LABELS,
-  STATUS_LANCAMENTO_LABELS,
+  ORIGEM_LANCAMENTO_V2_LABELS,
+  PAPEL_COMISSAO_LABELS,
+  STATUS_LANCAMENTO_V2_LABELS,
   TIPO_VENDEDOR_LABELS,
+  explicarCalculo,
   moverLeadSchema,
   moverVendaSchema,
   type EstagioSdr,
   type EstagioVenda,
   type MoverLeadInput,
   type MoverVendaInput,
-  type OrigemLancamento,
-  type StatusLancamento,
+  type OrigemLancamentoV2,
+  type PapelComissao,
+  type StatusLancamentoV2,
   type TipoVendedorId,
 } from '../../comercial/index.js'
 import { moverLeadSdr, moverVenda } from '../../comercial/mutations.js'
@@ -50,7 +53,14 @@ interface ResumoRpc {
   nfs_vivas?: number
   passivas_geridas?: number
   proximas_reunioes?: { id: string; titulo: string; inicio_em: string }[]
-  comissao_mes?: { competencia: string; total: number; por_status: Record<string, number> }
+  comissao_mes?: {
+    competencia: string
+    total: number
+    cessoes?: number
+    por_status: Record<string, number>
+    por_papel?: Record<string, number>
+  }
+  aceites_pendentes?: number
 }
 
 async function meuResumo(_input: unknown, ctx: ToolContext) {
@@ -89,9 +99,16 @@ async function meuResumo(_input: unknown, ctx: ToolContext) {
     comissao_do_mes: {
       competencia: r.comissao_mes?.competencia,
       total: brl(r.comissao_mes?.total),
-      por_status: rotularContagem(r.comissao_mes?.por_status, STATUS_LANCAMENTO_LABELS),
-      ressalva: 'Apurado ainda não é aprovado, e aprovado ainda não é pago.',
+      cessoes_convertidas: r.comissao_mes?.cessoes,
+      por_status: rotularContagem(r.comissao_mes?.por_status, STATUS_LANCAMENTO_V2_LABELS),
+      por_papel: rotularContagem(r.comissao_mes?.por_papel, PAPEL_COMISSAO_LABELS),
+      ressalva:
+        'Provisionado ainda não é fechado, fechado ainda não é aprovado, e aprovado ainda '
+        + 'não é pago. O lançamento nasce na conversão da NF, não na liquidação.',
     },
+    // A única pendência do módulo com PRAZO, e ela decide a comissão de OUTRA pessoa:
+    // passado o SLA, a reunião conta como aceita sozinha.
+    reunioes_aguardando_seu_aceite: r.aceites_pendentes,
     route: '/comercial',
   }
 }
@@ -108,11 +125,14 @@ async function comissaoVendedor(input: z.infer<typeof comissaoSchema>, ctx: Tool
   const mes = input.competencia ?? new Date().toISOString().slice(0, 7)
   const competencia = `${mes}-01`
 
-  // Sem filtro por vendedor: a RLS de `comissao_lancamentos` já restringe ao próprio e
+  // Sem filtro por vendedor: a RLS de `comissao_lancamentos_v2` já restringe ao próprio e
   // aos acessos concedidos. Filtrar aqui também seria uma segunda regra para divergir.
   const { data, error } = await ctx.supabase
-    .from('comissao_lancamentos')
-    .select('vendedor_id, origem_tipo, descricao, valor, status, criado_em')
+    .from('comissao_lancamentos_v2')
+    // Literal, não concatenação: o supabase-js infere o tipo da linha a partir do TEXTO
+    // do select, e uma soma de strings volta como `GenericStringError` — o erro aparece
+    // vinte linhas abaixo, no acesso a `l.valor`.
+    .select('vendedor_id, papel, origem_tipo, descricao, valor, status, evento_em, valor_cedido, anticipation_days, vop, taxa_brl_por_mm, share_pct, params_snapshot')
     .eq('competencia', competencia)
     .order('valor', { ascending: false })
   if (error) throw new Error(error.message)
@@ -126,10 +146,24 @@ async function comissaoVendedor(input: z.infer<typeof comissaoSchema>, ctx: Tool
     competencia: mes,
     total: brl(linhas.reduce((s, l) => s + Number(l.valor), 0)),
     linhas: linhas.map((l) => ({
-      origem: ORIGEM_LANCAMENTO_LABELS[l.origem_tipo as OrigemLancamento] ?? l.origem_tipo,
+      papel: PAPEL_COMISSAO_LABELS[l.papel as PapelComissao] ?? l.papel,
+      origem: ORIGEM_LANCAMENTO_V2_LABELS[l.origem_tipo as OrigemLancamentoV2] ?? l.origem_tipo,
       descricao: l.descricao,
       valor: brl(Number(l.valor)),
-      status: STATUS_LANCAMENTO_LABELS[l.status as StatusLancamento] ?? l.status,
+      status: STATUS_LANCAMENTO_V2_LABELS[l.status as StatusLancamentoV2] ?? l.status,
+      // A conta por extenso vai JUNTO com a linha, e não sob demanda: "por que 450?" é a
+      // pergunta seguinte em toda conversa sobre comissão, e obrigar uma segunda chamada
+      // para respondê-la é como o modelo acaba inventando a explicação.
+      como_foi_calculado: explicarCalculo({
+        valor_cedido: l.valor_cedido === null ? null : Number(l.valor_cedido),
+        anticipation_days: l.anticipation_days,
+        vop: l.vop === null ? null : Number(l.vop),
+        taxa_brl_por_mm: l.taxa_brl_por_mm === null ? null : Number(l.taxa_brl_por_mm),
+        share_pct: Number(l.share_pct ?? 100),
+        valor: Number(l.valor),
+        params_snapshot: (l.params_snapshot ?? {}) as Record<string, unknown>,
+        origem_tipo: l.origem_tipo,
+      }),
     })),
     route: '/comercial/comissoes',
   }
@@ -177,7 +211,8 @@ export const comercialModule: AppModule = {
       id: 'comercial.comissao_vendedor',
       name: 'Comissão do mês',
       description:
-        'Lançamentos de comissão de uma competência, com origem e status (apurado/aprovado/pago). ' +
+        'Lançamentos de comissão de uma competência (motor v2: VOP), com papel, origem, status ' +
+        '(provisionado/fechado/aprovado/pago/estornado) e o CÁLCULO POR EXTENSO de cada linha. ' +
         'Restrita pela RLS ao próprio vendedor e a quem ele tem acesso — gestores veem todos.',
       inputSchema: comissaoSchema,
       execute: (input, ctx) => comissaoVendedor(input as z.infer<typeof comissaoSchema>, ctx),

@@ -248,6 +248,38 @@ export async function dispararApurarComissoes(competencia?: string): Promise<Dis
   return postar('/jobs/comercial/apurar-comissoes', { competencia }, 'comercial-comissoes')
 }
 
+// ─── Motor de comissões v2 (04k) ────────────────────────────────────────────
+
+/** Diário: titularidades, backfill das cessões e — só no último dia útil — o fecho. */
+export async function dispararComissoesDiario(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/comissoes-diario', {}, 'comercial-comissoes-v2')
+}
+
+/** Fecho manual, para quando o último dia útil passou batido. */
+export async function dispararFecharCompetencia(competencia?: string): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/fechar-competencia', { competencia }, 'comercial-comissoes-v2')
+}
+
+/**
+ * Horário — e também chamado na hora, logo depois de alguém decidir um aceite.
+ *
+ * O cron é a rede: se a chamada imediata se perder, o lançamento aparece na hora
+ * seguinte em vez de nunca. É o mesmo desenho de `dispararRotearNotas`.
+ */
+export async function dispararAceitesSdr(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/aceites-sdr', {}, 'comercial-sdr-aceites')
+}
+
+/** Só a etapa de titularidade do diário — para rodar depois de mexer em carteira. */
+export async function dispararLiberarDormentes(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/liberar-dormentes', {}, 'comercial-comissoes-v2')
+}
+
+/** Semanal: sinaliza contas passivas cujo volume desabou. */
+export async function dispararAlertaReclassificacao(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/alerta-reclassificacao', {}, 'comercial-reclassificacao')
+}
+
 /** Reroteia as NFs vivas. Também roda encadeado no diário da Antecipação. */
 export async function dispararDerivadas(): Promise<DispararJobResultado> {
   return postar(ROTA_DERIVADAS, {}, 'derivadas')

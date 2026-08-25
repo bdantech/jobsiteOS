@@ -5,22 +5,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import {
-  FONTES_DISTRIBUICAO, FONTE_DISTRIBUICAO_LABELS, PARAMETRO_DA_REGRA, TIPOS_VENDEDOR,
+  FONTES_DISTRIBUICAO, FONTE_DISTRIBUICAO_LABELS,
   TIPO_VENDEDOR_LABELS, type FonteDistribuicao, type TipoVendedorId, type Tables,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
-import { salvarConfigAction, salvarMotivoAction, salvarRegraAction } from '@/actions/comercial'
+import { salvarConfigAction, salvarMotivoAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 import { VendedorForm } from './vendedor-form'
+import { Parametros } from './comissao/parametros'
 
 /**
  * Configurações do Comercial: quem vende, com qual território, por quanto.
@@ -39,15 +36,13 @@ const brl = (n: unknown) =>
 
 async function buscarConfig() {
   const supabase = createClient()
-  const [config, regras, territorios, motivos] = await Promise.all([
+  const [config, territorios, motivos] = await Promise.all([
     supabase.from('comercial_config').select('chave, valor'),
-    supabase.from('comissao_regras').select('*').order('tipo_vendedor').order('vigente_de', { ascending: false }),
     supabase.from('vendedor_territorios').select('*'),
     supabase.from('motivos_perda').select('*').order('contexto').order('ordem'),
   ])
   return {
     config: Object.fromEntries((config.data ?? []).map((c) => [c.chave, c.valor as Record<string, unknown>])),
-    regras: regras.data ?? [],
     territorios: territorios.data ?? [],
     motivos: motivos.data ?? [],
   }
@@ -122,113 +117,12 @@ function CampoBool({
   )
 }
 
-/**
- * Nova regra de comissão.
- *
- * O campo de valor muda de rótulo com o tipo, e isso não é polimento: gravar
- * `valor_por_reuniao` numa regra de originador faz o cálculo não achar o parâmetro,
- * devolver null, e a pessoa simplesmente não receber — sem erro nenhum, sem linha na
- * folha, sem ninguém saber por quê. O schema no core monta o parâmetro certo pelo tipo.
- */
-function NovaRegraDialog({
-  aberto, onOpenChange, vendedores, onSalvo,
-}: {
-  aberto: boolean
-  onOpenChange: (v: boolean) => void
-  vendedores: readonly Tables<'vendedores'>[]
-  onSalvo: () => void
-}) {
-  const [tipo, setTipo] = React.useState<TipoVendedorId>('sdr')
-  const [salvando, setSalvando] = React.useState(false)
-  const [erro, setErro] = React.useState<string | null>(null)
-
-  return (
-    <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            const fd = new FormData(e.currentTarget)
-            setSalvando(true)
-            setErro(null)
-            const r = await salvarRegraAction({
-              tipo_vendedor: tipo,
-              vendedor_id: String(fd.get('vendedor_id') ?? '') || null,
-              valor: Number(fd.get('valor')),
-              vigente_de: String(fd.get('vigente_de') ?? '') || undefined,
-            })
-            setSalvando(false)
-            if (!r.ok) return setErro(r.message)
-            toast.success('Regra criada. A anterior foi encerrada na véspera.')
-            onOpenChange(false)
-            onSalvo()
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Nova regra de comissão</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 py-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="tipo_regra">Tipo de vendedor</Label>
-              <select
-                id="tipo_regra"
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value as TipoVendedorId)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {TIPOS_VENDEDOR.map((t) => (
-                  <option key={t} value={t}>{TIPO_VENDEDOR_LABELS[t]}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="vendedor_id_regra">Aplicar a</Label>
-              <select
-                id="vendedor_id_regra"
-                name="vendedor_id"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Todos deste tipo (regra padrão)</option>
-                {vendedores.filter((v) => v.tipo === tipo && v.ativo).map((v) => (
-                  <option key={v.id} value={v.id}>{v.nome} (override pessoal)</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="valor">{PARAMETRO_DA_REGRA[tipo].rotulo} (R$)</Label>
-              <Input id="valor" name="valor" type="number" min={1} step="0.01" required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="vigente_de">Vigente a partir de</Label>
-              <Input
-                id="vigente_de"
-                name="vigente_de"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Competências já apuradas continuam com a regra que valia nelas.
-              </p>
-            </div>
-          </div>
-          {erro ? <p className="pb-2 text-sm text-destructive">{erro}</p> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Criar regra'}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export function ConfigComercial() {
   const qc = useQueryClient()
   const dados = useQuery({ queryKey: comercialKeys.config(), queryFn: buscarConfig })
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
   const [editando, setEditando] = React.useState<Tables<'vendedores'> | null>(null)
   const [abrindoForm, setAbrindoForm] = React.useState(false)
-  const [novaRegra, setNovaRegra] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
 
   function recarregar() {
@@ -445,59 +339,13 @@ export function ConfigComercial() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">Regras de comissão</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setNovaRegra(true)}>
-              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden /> Nova regra
-            </Button>
-          </div>
-          <CardDescription>
-            Regra tem VIGÊNCIA: mudar o valor hoje não reprecifica o que já foi apurado. A
-            regra nova encerra a anterior na véspera — cada período tem exatamente uma.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th scope="col" className="px-3 py-2 font-normal">Tipo</th>
-                  <th scope="col" className="px-3 py-2 font-normal">Valor</th>
-                  <th scope="col" className="px-3 py-2 font-normal">Vigência</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {(dados.data?.regras ?? []).map((r) => {
-                  const p = (r.parametros ?? {}) as Record<string, unknown>
-                  const valor =
-                    p.valor_por_reuniao !== undefined
-                      ? `${brl(p.valor_por_reuniao)} por reunião agendada`
-                      : `${brl(p.valor_por_milhao)} por milhão`
-                  return (
-                    <tr key={r.id}>
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          {TIPO_VENDEDOR_LABELS[r.tipo_vendedor as TipoVendedorId] ?? r.tipo_vendedor}
-                        </Badge>
-                        {r.vendedor_id ? <Badge className="ml-1 text-[10px]">override pessoal</Badge> : null}
-                      </td>
-                      <td className="px-3 py-2">{valor}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                        de {new Date(`${r.vigente_de}T12:00:00`).toLocaleDateString('pt-BR')}
-                        {r.vigente_ate
-                          ? ` até ${new Date(`${r.vigente_ate}T12:00:00`).toLocaleDateString('pt-BR')}`
-                          : ' — vigente'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {/*
+        Regras de comissão = os PARÂMETROS do motor v2 (04k §7.5). As `comissao_regras`
+        do 04g continuam no banco como histórico read-only e aparecem em
+        Comissões → Modelo anterior; editá-las não teria efeito nenhum sobre a folha,
+        e deixar o formulário antigo aqui só ensinaria alguém a mexer no lugar errado.
+      */}
+      <Parametros vendedores={vendedores.data ?? []} />
 
       <Card>
         <CardHeader className="pb-3">
@@ -545,12 +393,6 @@ export function ConfigComercial() {
         vendedores={vendedores.data ?? []}
       />
 
-      <NovaRegraDialog
-        aberto={novaRegra}
-        onOpenChange={setNovaRegra}
-        vendedores={vendedores.data ?? []}
-        onSalvo={recarregar}
-      />
     </div>
   )
 }

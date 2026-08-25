@@ -324,7 +324,7 @@ export async function buscarCustos(): Promise<CustosConfig> {
 export async function estimarItens(arvore: Grupo): Promise<number> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('mercado_contar_exato', {
-    p_termo: null,
+    p_termo: undefined,
     p_arvore: resolverParaJson(arvore) as unknown as Json,
   })
   if (error) throw new Error(error.message)

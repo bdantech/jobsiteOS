@@ -1,17 +1,23 @@
-# Comercial (Prompt 04g)
+# Comercial (Prompts 04g e 04k)
 
 Quem vende o quê, para quem, e quanto isso paga.
 
+O **motor de comissões** deste módulo é o do 04k, descrito em
+[Motor de comissões v2](#motor-de-comissões-v2-04k). O 04g continua valendo para todo o
+resto — funis, carteira, roteamento, distribuição — e as competências que ele apurou
+continuam legíveis como histórico.
+
 ## A ideia que organiza tudo
 
-**Um lançamento de comissão é uma afirmação sobre o passado.** Quem era dono da empresa
-no dia do evento recebe, mesmo que a carteira tenha mudado ontem; a regra que valia no
-dia do evento é a que precifica, mesmo que a tabela tenha subido hoje.
+**Um lançamento de comissão é uma afirmação sobre o passado.** Quem era titular da conta
+no dia do evento recebe, mesmo que a carteira tenha mudado ontem; o parâmetro que valia no
+dia do evento é o que precifica, mesmo que a tabela tenha subido hoje; e a classificação
+que valia naquele dia é a que decide a taxa, mesmo que alguém a tenha mudado depois.
 
 Isso decidiu o esquema. `vendedor_carteira` é **temporal** (`desde`/`ate`) em vez de uma
 coluna `vendedor_id` em `empresas`, porque uma coluna só sabe o presente — e o presente é
-justamente o que não interessa quando alguém contesta a folha de março. `comissao_regras`
-tem vigência pelo mesmo motivo.
+justamente o que não interessa quando alguém contesta a folha de março. `commission_params`
+tem vigência pelo mesmo motivo, e `gestao_operacao_historico` existe pelo mesmo motivo.
 
 A segunda ideia: **passivo é passivo de verdade.** Não é filtro visual.
 
@@ -203,34 +209,251 @@ NFs vivas a carteira alcança — com a fatia que vem por SPE. O alcance é calc
 porque responde "meu link pegou?", que é a pergunta real; "quantas mudaram de dono" só se
 saberia depois do job, e trocaria uma dúvida curta por uma espera longa.
 
-## Ciclo da comissão
+## Ciclo da comissão — modelo anterior (04g)
 
 ```
 evento → apurado → aprovado → pago
 ```
 
-`comercial/apurar-comissoes` roda no dia 1 e fecha a competência anterior. Três origens
-e um estorno:
+**Substituído pelo motor v2 (04k)**, descrito na seção seguinte. Fica aqui porque
+`comissao_regras` e `comissao_lancamentos` continuam de pé como histórico read-only: as
+competências apuradas por este modelo **não foram recalculadas**, e aparecem na aba
+Comissões → *Modelo anterior*. Reprocessá-las mudaria o número de uma folha já paga.
 
-| origem | quem | conta |
+O que ele fazia: `comercial/apurar-comissoes` no dia 1, fechando a competência anterior,
+com três origens (`reuniao_agendada` para o SDR, `nf_convertida` por milhão para o
+originador, `volume_passivo` por milhão para o vendedor) e um estorno espelhado.
+
+---
+
+## Motor de comissões v2 (04k)
+
+Três frases sustentam o desenho inteiro. Nenhuma é óbvia até alguém contestar a folha.
+
+**O fato gerador é a CESSÃO, e a unidade é o VOP.** Não o valor cedido — o valor cedido
+ponderado pelo prazo:
+
+```
+VOP      = valor_cedido × anticipation_days ÷ dias_referencia_vop
+comissão = VOP ÷ 1.000.000 × taxa_brl_por_mm × share
+```
+
+Uma antecipação de 45 dias imobiliza uma vez e meia o que uma de 30 imobiliza. Pagar as
+duas igual premiava, na mesma medida, a operação barata e a cara para nós.
+
+`anticipation_days` vem do payload da plataforma e **não é recalculado por datas** (§1 do
+prompt). Vencimento prorrogado, feriado e antecipação parcial fazem a conta por datas
+divergir da que a plataforma usou para precificar — e a comissão tem de falar do mesmo
+número que a receita.
+
+Exemplo, que é o que a tela mostra ao expandir a linha:
+
+```
+R$ 500.000 × 45/30 = 750.000 VOP → 0,75 × R$ 600 = R$ 450
+```
+
+**Vendedor e originador não correm risco de crédito.** A comissão nasce na CONVERSÃO, não
+na liquidação. Recompra e inadimplência **não** geram clawback. Só estornam os dois casos
+em que a cessão deixa de existir: o status regride para não-conversor, ou a NF é cancelada
+(`invoiceCancelledAt`). O estorno é 100% dos lançamentos daquela cessão, em todos os
+papéis — ou proporcional, quando a reversão foi parcial.
+
+**Sempre para frente.** Reclassificar uma conta hoje não reprecifica o que ela já
+converteu; fechar uma competência a torna imutável.
+
+### O vocabulário, e o que não inverter
+
+`empresas.gestao_operacao` tem dois valores, e o mapeamento é canônico:
+
+| valor | significado | chave do parâmetro |
 |---|---|---|
-| `reuniao_agendada` | SDR | valor fixo por reunião **agendada** |
-| `nf_convertida` | originador | `gross_value ÷ 1.000.000 × valor_por_milhao` |
-| `volume_passivo` | vendedor | volume do mês das passivas que ele gere, por milhão |
-| `estorno` | espelho negativo | antecipação que regrediu, ou no-show quando ligado |
+| `prospeccao_ativa` | só opera com trabalho ativo do originador | `..._prospeccao_ativa` |
+| `passivo` | o sacado traz as operações espontaneamente | `..._passivo` |
 
-**Idempotente** pelo `unique (origem_tipo, origem_id, vendedor_id)`: rodar duas vezes não
-paga duas vezes. É `upsert ... ignoreDuplicates`, não "apaga e reinsere" — reinserir
-apagaria a aprovação já dada.
+Os termos "conta ATIVA/PASSIVA" não existem no código nem na UI: são os dois valores
+acima, sempre.
 
-**O estorno entra na competência em que foi DESCOBERTO**, não na do original: reabrir uma
-competência já paga reescreveria uma folha fechada.
+### Parâmetros versionados
 
-**Aprovar é por vendedor e por mês**, não linha a linha — aprovar 40 linhas uma a uma é o
-tipo de tarefa que leva alguém a aprovar sem ler. `pago` não volta para `aprovado`.
+`commission_params`: uma linha por (chave, escopo, vigência). O 04g tinha um número dentro
+de um `jsonb` por tipo de vendedor; o v2 tem 24 números que mudam em datas diferentes, e
+um objeto inteiro não tem vigência — só a linha tem.
 
-Sem regra vigente na data do evento, **não se lança nada**. Um default inventaria dinheiro
-que ninguém aprovou.
+**Resolução:** para um evento na data D, vale o override do vendedor vigente em D; na
+falta dele, o parâmetro geral vigente em D. `resolverParametro()` no core, com testes.
+
+**Taxas aceitam override por vendedor. Prazos são sempre gerais** — um sunset diferente
+por pessoa faria a mesma conta ter duas idades.
+
+`vigente_ate` é **exclusivo** (o `daterange` é `[)`), ao contrário de `comissao_regras`,
+onde é inclusivo. É o preço de a não-sobreposição ser garantida pelo banco: `[)` é o único
+intervalo que encaixa sem buraco nem sobra quando um parâmetro sucede o outro no mesmo
+dia. A tela mostra a véspera, que é o que uma pessoa lê como "até".
+
+Uma `exclusion constraint` com `gist` garante que **nunca** existam dois parâmetros da
+mesma chave vigentes no mesmo dia. Sem ela, o valor da comissão dependeria de qual linha o
+`order by` devolvesse primeiro.
+
+**Ausência é um valor.** `sunset_originador_meses` não é publicado por padrão, e ausência
+ali significa *sem sunset*. Um número que significasse "nunca" (0? 9999?) seria uma
+convenção a mais para alguém interpretar errado.
+
+### Ciclo de vida da conta
+
+**Marco de ativação** = data da **primeira NF convertida** do sacado (`empresas.marco_ativacao`).
+Contrato assinado não inicia o relógio: medir do contrato pagaria fase de crescimento por
+meses em que nada aconteceu. Preenchido uma vez e nunca recuado.
+
+**Fase**, pela idade em meses desde o marco, com os parâmetros da `gestao_operacao`
+vigente:
+
+| idade | fase | efeito |
+|---|---|---|
+| ≤ crescimento | `CRESCIMENTO` | taxa mais alta |
+| > crescimento e ≤ sunset | `MANUTENCAO` | taxa de manutenção |
+| > sunset | `RESIDUAL` | **vendedor 0**; o originador segue |
+
+O originador tem um sunset próprio, opcional e desligado por padrão. Ele é aplicado à
+parte justamente para que a palavra "fase" signifique a mesma coisa para todo mundo.
+
+**A classificação tem histórico imutável** (`gestao_operacao_historico`), com **motivo
+obrigatório**. A regra do §8 vive aí: uma mudança feita no dia D só vale a partir de D+1 —
+uma conta reclassificada de manhã não pode reprecificar as cessões que converteram à
+tarde do mesmo dia. `gestaoNaData()` no core resolve isso, com teste.
+
+**Alerta de revisão** (semanal, `comercial/alerta-reclassificacao`): sacado `passivo` cujo
+volume dos últimos `alerta_revisao_dias` ficou abaixo de `alerta_revisao_percentual`% da
+média dos três meses anteriores → evento `conta.revisao_sugerida`. **Sinaliza, nunca
+reclassifica**: o número não sabe se a obra parou, se o sacado trocou de banco ou se
+ninguém registrou nada.
+
+### Titularidade automática
+
+`vendedor_carteira` ganha dois papéis novos, com **entidade diferente** dos três do 04g:
+
+| papel | entidade | gatilho automático | liberação |
+|---|---|---|---|
+| `sdr` | sacado | reunião **aceita** | fim da janela de 180d sem fechamento |
+| `vendedor` | sacado | `vendas.situacao` → `ganho` | desligamento (encerra; **não transfere**) |
+| `originador` | **cedente** | primeira NF convertida do cedente cujo sacado está na carteira de originação dele | dormência: sem conversão por `dormencia_cedente_dias` |
+
+São papéis novos em vez de reaproveitar `originacao` porque um vínculo que responde a duas
+perguntas diferentes é um vínculo que, no dia em que elas divergirem, não tem resposta.
+
+`share_pct` permite split somando 100, garantido por trigger. O índice de unicidade só
+vale para `share_pct = 100`, que é o caso normal — sem esse recorte, um split de 60/40
+seria recusado como duplicata.
+
+**Sacado ou cedente sem titular → a parcela não é paga nem redistribuída.** Redistribuir
+seria pagar alguém pelo trabalho de ninguém. **Vendedor de IA nunca gera lançamento** —
+nem para a casa.
+
+### SDR: a fila de aceite
+
+Reunião marcada como realizada entra na fila do vendedor destino (`sdr_aceites`). Ele
+aceita, recusa com motivo, ou **o silêncio aceita**: passado `sdr_sla_recusa_horas`, o job
+horário marca como aceita. O silêncio de quem sentou na reunião não é evidência de que ela
+não aconteceu, e transferir esse risco ao SDR o faria pagar pela agenda do outro.
+
+- reunião aceita → `sdr_valor_reuniao` + vínculo de SDR no sacado;
+- conta fechada → `sdr_valor_conta_fechada` na **primeira NF convertida** do sacado, se a
+  reunião aceita couber em `janela_atribuicao_sdr_dias` antes. Sem janela, qualquer
+  conversa antiga viraria bilhete premiado.
+
+Um aceite por lead (índice único): reagendar não duplica o evento. No-show não gera
+comissão porque nunca chega a `reuniao_realizada`.
+
+### Lançamento LIVE e fechamento
+
+```
+provisionado → fechado → aprovado → pago
+```
+
+O handler de `nf.convertida` (dentro do sync do 04e) insere o lançamento **na hora**, com
+status `provisionado`. Não é capricho: é a diferença entre o vendedor ver o número subir
+enquanto trabalha e descobrir no dia 1º quanto ganhou. A tela do mês corrente assina
+Realtime em `comissao_lancamentos_v2` e atualiza sozinha.
+
+O que torna isso seguro é o `unique (papel, origem_tipo, origem_id, vendedor_id)`:
+reprocessar não paga duas vezes. E a falha é **isolada** — comissão que não lançou não
+derruba a conversão da nota; o backfill do job diário recolhe.
+
+**Fechamento**: `comercial-comissoes-v2` roda todo dia às 23h50 de São Paulo e só fecha
+quando hoje É o último dia útil do mês. "Último dia útil" não é uma expressão que o cron
+saiba dizer, e um cron marcado no dia 30 nunca dispararia em fevereiro. Fechado significa
+**imutável**: um estorno descoberto depois entra como linha negativa na competência
+corrente.
+
+**Aprovar e pagar são por competência inteira**, não linha a linha — aprovar quarenta
+linhas uma a uma é a tarefa que leva alguém a aprovar sem ler. Só avança.
+
+**Trava de parâmetro**: o RPC recusa publicar com `vigente_de` dentro de competência
+fechada, e recusa retroagir para dentro de uma vigência já iniciada. Publicar é sempre
+daqui para a frente.
+
+### Cada linha guarda o próprio cálculo
+
+`comissao_lancamentos_v2` grava o **snapshot** do fato gerador: classificação, fase, valor
+cedido, dias, VOP, taxa, share e `params_snapshot`. Não é redundância com
+`commission_params` — é a diferença entre poder responder "por que R$ 450?" em janeiro do
+ano que vem e ter de reconstituir a tabela de taxas daquele dia a partir do histórico.
+
+A régua da tela é uma só: **quem discorda de um valor tem de conseguir refazer a conta sem
+pedir nada a ninguém**. Por isso cada linha expande com o cálculo por extenso e o
+snapshot, e por isso existe o CSV — uma planilha é onde a pessoa confere de fato.
+
+### Casos de borda (§8), todos com teste
+
+| situação | tratamento |
+|---|---|
+| conversão na data da mudança de classificação | vale a classificação **anterior** |
+| conversão após o sunset do vendedor | taxa do vendedor = 0; originador segue |
+| cedente com mais de um sacado | por cessão, com a classificação/fase **do sacado daquela cessão** |
+| sacado ou cedente sem titular | parcela não paga **nem redistribuída** |
+| conversão/estorno parcial | proporcional ao valor efetivamente convertido |
+| colaborador desligado | lançamentos já criados são devidos; titularidade encerra na data |
+| vendedor de IA titular | nenhum lançamento |
+
+### O que o motor NÃO faz
+
+Conta **sem classificação não gera lançamento nenhum** — nem para o vendedor, nem para o
+originador. É deliberado: inventar a taxa mais barata seria decidir por quem não decidiu.
+Na base de 25/08/2026 isso valia para 191 das 195 contas, e é por isso que o painel de
+reclassificação lista **também** as não classificadas, no topo, quando estão operando.
+
+Fora de escopo neste ciclo (§11), com os valores registrados e as flags DESLIGADAS: prêmio
+de transição, carência de migração e reativação de dormente. Um parâmetro que só aparece
+quando alguém o liga é um parâmetro que ninguém revisa.
+
+### Onde cada coisa mora
+
+| peça | arquivo |
+|---|---|
+| cálculo puro (VOP, fase, parâmetro, motor, estorno, simulador) | `packages/core/src/comercial/comissao-v2.ts` |
+| testes de todos os casos de borda | `packages/core/src/comercial/comissao-v2.test.ts` |
+| handlers e jobs | `apps/worker/src/jobs/comercial/comissoes-v2.ts` |
+| gatilho live | `converterNota()` / `registrarRegressao()` em `sync-antecipacoes.ts` |
+| esquema, RLS e RPCs | `supabase/migrations/0132_motor_de_comissoes_v2.sql` |
+| telas | `apps/web/src/components/comercial/comissao/` |
+| celular | `apps/mobile/app/(tabs)/comercial/comissoes.tsx` |
+
+### Crons
+
+| cron | quando | o que faz |
+|---|---|---|
+| `comercial-comissoes-v2` | 23h50 SP, diário | titularidades, dormência, backfill, e o fecho no último dia útil |
+| `comercial-aceites-sdr` | de hora em hora | abre a fila, expira como aceita, lança |
+| `comercial-reclassificacao` | segunda de manhã | sinaliza contas passivas cujo volume desabou |
+
+### Eventos
+
+`comissao.lancada`, `comissao.estornada`, `competencia.fechada`, `competencia.aprovada`,
+`titularidade.atribuida`, `titularidade.liberada`, `conta.revisao_sugerida`,
+`sdr.aceite_pendente`.
+
+`comissao.lancada` **não** notifica: seriam dezenas de sinos por dia, e o extrato live já
+mostra o número mudando. `comissao.estornada` notifica — é dinheiro saindo de alguém, e a
+única coisa pior que isso acontecer é acontecer em silêncio.
 
 ## Os dois funis
 
@@ -420,21 +643,39 @@ card: o próximo passo. As saídas que exigem motivo (sem fit, perdido) não est
 celular de propósito: escolher um motivo numa lista de seis com o polegar é como o motivo
 vira sempre "Outro", e o motivo é o dado mais valioso destes funis.
 
-Comissões, calendário, fila sem dono e configurações são web — leitura longa ou decisão
-de gestor, e nenhuma das duas acontece entre uma reunião e outra.
+**Comissão ENTROU no celular** com o motor v2, e por um motivo específico: o lançamento
+passou a ser live, então o número muda enquanto a pessoa trabalha — e é justamente esse
+número que ela quer conferir entre uma reunião e outra. A tela tem mês corrente, série de
+doze meses e extrato com o cálculo por extenso ao tocar na linha. Junto vêm as duas
+decisões com PRAZO: aceitar a reunião (senão o SLA aceita sozinho) e aprovar a competência.
+
+Continuam na web: calendário, fila sem dono, configurações, **simulador e painel de
+reclassificação**. As duas últimas exigem comparar tabela de taxas ou decidir sobre a
+comissão de outra pessoa, e nenhuma dessas coisas se faz com uma mão, em pé.
 
 ## O que ficou de fora
 
 - **Toggle "ocultar NFs de sacados passivos" no funil de NFs.** O efeito real do passivo
   (sem outbox, sem roteamento) está implementado. A coluna que faltava
   (`sacado_gestao_operacao`) já entrou na view em 0095; falta só o controle na tela.
+- **Do 04k (§11):** prêmio de transição, carência de migração e reativação de dormente —
+  parâmetros publicados com a flag DESLIGADA, visíveis em Configurações para serem
+  revisados. Também fora: pagamento/integração com folha, comissão de gestor e override
+  hierárquico, e split **automático** entre vendedores (o `share_pct` existe e o banco o
+  garante; quem decide o rateio ainda é um gestor).
 - Envio real de mensagens, automação do vendedor de IA, OAuth do Google Calendar, metas e
-  forecast, comissão de gestor — todos Prompt 05+, como o próprio 04g define.
+  forecast — todos Prompt 05+, como o próprio 04g define.
 
 ## Cadastro (Configurações)
 
-Vendedor, território, regra de comissão e motivos são editáveis na tela, por RPC com
+Vendedor, território, parâmetros de comissão e motivos são editáveis na tela, por RPC com
 `audit_log` — mesma disciplina do resto do sistema.
+
+A aba **Regras de comissão** passou a editar `commission_params` (motor v2). Ela lista o
+CATÁLOGO inteiro, inclusive o que ninguém publicou: uma tela que só mostra o publicado
+esconde justamente o parâmetro esquecido, e o esquecido é o que faz alguém não receber,
+sem erro nenhum aparecer em lugar nenhum. Não existe EDITAR — publicar abre uma vigência
+nova e encerra a anterior.
 
 Não há **excluir** em lugar nenhum: vendedor se desativa, regra se substitui, motivo se
 inativa. Apagar qualquer um dos três levaria junto a explicação de uma comissão já paga.

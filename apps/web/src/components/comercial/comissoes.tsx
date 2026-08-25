@@ -1,78 +1,70 @@
 'use client'
 
 import * as React from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import {
-  ORIGEM_LANCAMENTO_LABELS, STATUS_LANCAMENTO_LABELS, TIPO_VENDEDOR_LABELS,
-  type OrigemLancamento, type StatusLancamento, type TipoVendedorId,
-} from '@jobsiteos/core'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useQuery } from '@tanstack/react-query'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
-import { mudarStatusComissaoAction } from '@/actions/comercial'
-import { buscarComissoes, comercialKeys, type LancamentoComVendedor } from './queries'
+import { buscarVendedoresVisiveis, comercialKeys } from './queries'
+import { Extrato } from './comissao/extrato'
+import { FilaAceite } from './comissao/fila-aceite'
+import { Historico } from './comissao/historico'
+import { MesCorrente } from './comissao/mes-corrente'
+import { Reclassificacao } from './comissao/reclassificacao'
+import { Simulador } from './comissao/simulador'
+import { competenciaCorrente, useExtratoLive } from './comissao/use-extrato-live'
+import { ComissoesAntigas } from './comissao/modelo-anterior'
 
 /**
- * Comissão por competência, agrupada por vendedor, com drill até a origem de cada linha.
+ * A aba Comissões (04k §7).
  *
- * O ciclo apurado → aprovado → pago é uma via de mão única na tela: `pago` não volta
- * para `aprovado` por um clique distraído (o RPC recusa). Aprovar é por VENDEDOR e por
- * MÊS, não linha a linha — aprovar 40 linhas uma a uma é o tipo de tarefa que leva
- * alguém a aprovar sem ler.
+ * O motor v2 substitui as regras do 04g — mas NÃO recalcula o que o 04g já apurou. As
+ * competências antigas continuam sendo lidas da tabela antiga, marcadas como "modelo
+ * anterior": mudar o número de uma folha já paga é pior que mostrar dois modelos.
+ *
+ * A ordem das abas é a ordem das perguntas: quanto tenho este mês → como foi ao longo do
+ * ano → por que este valor. O extrato é a tela central, mas ela não é a primeira porque
+ * a pergunta que traz a pessoa aqui é o número, e o extrato é a resposta ao "por quê"
+ * que vem depois.
  */
 
-const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+type Aba = 'mes' | 'historico' | 'extrato' | 'simulador' | 'reclassificacao' | 'aceites' | 'anterior'
 
-const CORES: Record<StatusLancamento, string> = {
-  apurado: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
-  aprovado: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-200',
-  pago: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
-}
+export function Comissoes({
+  ehGestor,
+  vendedorId,
+}: {
+  ehGestor: boolean
+  vendedorId: string | null
+}) {
+  const [aba, setAba] = React.useState<Aba>('mes')
+  /*
+   * O seletor de vendedor só existe para gestor, e o default é CONSOLIDADO. Abrir num
+   * vendedor arbitrário faria o gestor achar que o total da empresa é o daquela pessoa —
+   * e o consolidado é justamente a pergunta que só ele pode fazer.
+   */
+  const [verVendedor, setVerVendedor] = React.useState<string>(ehGestor ? '' : (vendedorId ?? ''))
+  const [competencia, setCompetencia] = React.useState<string>(competenciaCorrente())
 
-function mesCorrente(): string {
-  return new Date().toISOString().slice(0, 7)
-}
-
-export function Comissoes({ ehGestor }: { ehGestor: boolean }) {
-  const qc = useQueryClient()
-  const [mes, setMes] = React.useState(mesCorrente)
-  const [agindo, setAgindo] = React.useState(false)
-  const competencia = `${mes}-01`
-
-  const { data, isPending } = useQuery({
-    queryKey: comercialKeys.comissoes(competencia),
-    queryFn: () => buscarComissoes(competencia),
+  const visiveis = useQuery({
+    queryKey: comercialKeys.visiveis(),
+    queryFn: buscarVendedoresVisiveis,
+    enabled: ehGestor,
   })
 
-  async function mudar(vendedorId: string, status: 'aprovado' | 'pago') {
-    setAgindo(true)
-    const r = await mudarStatusComissaoAction({ vendedor_id: vendedorId, competencia, status })
-    setAgindo(false)
-    if (!r.ok) return toast.error(r.message)
-    if (r.data.linhas === 0) {
-      // Zero linhas não é erro: é "não havia nada nesse estado". Dizer "aprovado" seria
-      // mentir sobre uma transição que não aconteceu.
-      toast.warning('Nada mudou — nenhuma linha estava no estado anterior.')
-    } else {
-      toast.success(`${r.data.linhas} lançamento(s) → ${STATUS_LANCAMENTO_LABELS[status]}.`)
-    }
-    void qc.invalidateQueries({ queryKey: comercialKeys.comissoes(competencia) })
-  }
+  const alvo = verVendedor || null
+  const ehCorrente = competencia === competenciaCorrente()
+  const aoVivo = useExtratoLive(competencia, ehCorrente)
 
-  const porVendedor = new Map<string, { nome: string; tipo: string; linhas: LancamentoComVendedor[] }>()
-  for (const l of data ?? []) {
-    const id = l.vendedor_id
-    const atual = porVendedor.get(id) ?? {
-      nome: l.vendedores?.nome ?? '—',
-      tipo: l.vendedores?.tipo ?? '',
-      linhas: [],
-    }
-    atual.linhas.push(l)
-    porVendedor.set(id, atual)
-  }
+  const abas: { id: Aba; rotulo: string; visivel: boolean }[] = [
+    { id: 'mes', rotulo: 'Mês corrente', visivel: true },
+    { id: 'historico', rotulo: 'Histórico', visivel: true },
+    { id: 'extrato', rotulo: 'Extrato', visivel: true },
+    { id: 'aceites', rotulo: 'Fila de aceite', visivel: true },
+    { id: 'simulador', rotulo: 'Simulador', visivel: ehGestor },
+    { id: 'reclassificacao', rotulo: 'Reclassificação', visivel: ehGestor },
+    { id: 'anterior', rotulo: 'Modelo anterior', visivel: true },
+  ]
 
   return (
     <div className="space-y-4">
@@ -80,81 +72,84 @@ export function Comissoes({ ehGestor }: { ehGestor: boolean }) {
         <div>
           <h1 className="text-2xl font-semibold">Comissões</h1>
           <p className="text-sm text-muted-foreground">
-            Apurado ainda não é aprovado, e aprovado ainda não é pago.
+            O lançamento nasce na conversão da NF, em VOP. Provisionado ainda não é fechado,
+            fechado ainda não é aprovado, e aprovado ainda não é pago.
           </p>
         </div>
-        <div className="space-y-1">
-          <label htmlFor="mes" className="text-xs text-muted-foreground">Competência</label>
-          <Input id="mes" type="month" value={mes} onChange={(e) => setMes(e.target.value)} className="w-44" />
+        <div className="flex flex-wrap items-end gap-3">
+          {ehGestor ? (
+            <div className="space-y-1">
+              <label htmlFor="ver-vendedor" className="text-xs text-muted-foreground">Ver</label>
+              <select
+                id="ver-vendedor"
+                value={verVendedor}
+                onChange={(e) => setVerVendedor(e.target.value)}
+                className="h-9 w-56 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                <option value="">Consolidado (todos)</option>
+                {(visiveis.data ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>{v.nome}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {aba === 'extrato' ? (
+            <div className="space-y-1">
+              <label htmlFor="competencia" className="text-xs text-muted-foreground">Competência</label>
+              <Input
+                id="competencia"
+                type="month"
+                value={competencia.slice(0, 7)}
+                onChange={(e) => setCompetencia(`${e.target.value}-01`)}
+                className="w-44"
+              />
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {isPending ? (
-        <Skeleton className="h-64 w-full" />
-      ) : porVendedor.size === 0 ? (
+      <Tabs value={aba} onValueChange={(v) => setAba(v as Aba)}>
+        <TabsList className="flex-wrap">
+          {abas.filter((a) => a.visivel).map((a) => (
+            <TabsTrigger key={a.id} value={a.id}>{a.rotulo}</TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {aba === 'mes' ? <MesCorrente vendedorId={alvo} aoVivo={aoVivo && ehCorrente} /> : null}
+      {aba === 'historico' ? (
+        <Historico
+          vendedorId={alvo}
+          ehGestor={ehGestor}
+          onAbrirCompetencia={(c) => {
+            setCompetencia(c)
+            setAba('extrato')
+          }}
+        />
+      ) : null}
+      {aba === 'extrato' ? (
+        <Extrato
+          competencia={competencia}
+          vendedorId={alvo}
+          aoVivo={aoVivo}
+          mostrarVendedor={alvo === null}
+        />
+      ) : null}
+      {aba === 'aceites' ? <FilaAceite /> : null}
+      {aba === 'simulador' && ehGestor ? <Simulador /> : null}
+      {aba === 'reclassificacao' && ehGestor ? <Reclassificacao /> : null}
+      {aba === 'anterior' ? <ComissoesAntigas /> : null}
+
+      {aba === 'mes' || aba === 'extrato' ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum lançamento nesta competência. A apuração roda no dia 1 e fecha o mês anterior.
+          <CardContent className="py-3 text-xs text-muted-foreground">
+            <strong>VOP</strong> = valor cedido × dias de antecipação ÷ dias de referência.
+            Uma antecipação de 45 dias imobiliza uma vez e meia o que uma de 30 imobiliza —
+            pagar as duas igual premiaria a operação mais barata para nós na mesma medida
+            que a mais cara.
           </CardContent>
         </Card>
-      ) : (
-        [...porVendedor.entries()].map(([id, v]) => {
-          const total = v.linhas.reduce((s, l) => s + Number(l.valor), 0)
-          const temApurado = v.linhas.some((l) => l.status === 'apurado')
-          const temAprovado = v.linhas.some((l) => l.status === 'aprovado')
-          return (
-            <Card key={id}>
-              <CardHeader className="pb-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle className="text-base">
-                    {v.nome}
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
-                    </span>
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-semibold tabular-nums">{brl(total)}</span>
-                    {ehGestor && temApurado && (
-                      <Button size="sm" disabled={agindo} onClick={() => void mudar(id, 'aprovado')}>
-                        Aprovar
-                      </Button>
-                    )}
-                    {ehGestor && temAprovado && (
-                      <Button size="sm" variant="outline" disabled={agindo} onClick={() => void mudar(id, 'pago')}>
-                        Marcar pago
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="divide-y text-sm">
-                  {v.linhas.map((l) => (
-                    <li key={l.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                      <span className="flex items-baseline gap-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          {ORIGEM_LANCAMENTO_LABELS[l.origem_tipo as OrigemLancamento] ?? l.origem_tipo}
-                        </Badge>
-                        <span className="text-muted-foreground">{l.descricao}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <Badge className={`text-[10px] ${CORES[l.status as StatusLancamento] ?? ''}`}>
-                          {STATUS_LANCAMENTO_LABELS[l.status as StatusLancamento] ?? l.status}
-                        </Badge>
-                        <span
-                          className={`tabular-nums ${Number(l.valor) < 0 ? 'font-medium text-destructive' : ''}`}
-                        >
-                          {brl(Number(l.valor))}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )
-        })
-      )}
+      ) : null}
     </div>
   )
 }

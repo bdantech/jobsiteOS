@@ -120,6 +120,22 @@ export const EVENTO_TIPOS = {
   COMISSAO_APROVADA: 'comissao.aprovada',
   VENDEDOR_SEM_ATIVIDADE: 'vendedor.sem_atividade',
 
+  // Motor de comissões v2 (04k)
+  COMISSAO_LANCADA: 'comissao.lancada',
+  /**
+   * A cessão deixou de existir (status regrediu ou NF cancelada) e os lançamentos dela
+   * foram espelhados em negativo. Evento próprio, e não um caso de "lançada": é dinheiro
+   * saindo de alguém, e a única coisa pior que isso acontecer é acontecer em silêncio.
+   */
+  COMISSAO_ESTORNADA: 'comissao.estornada',
+  COMPETENCIA_FECHADA: 'competencia.fechada',
+  COMPETENCIA_APROVADA: 'competencia.aprovada',
+  TITULARIDADE_ATRIBUIDA: 'titularidade.atribuida',
+  TITULARIDADE_LIBERADA: 'titularidade.liberada',
+  /** Sinalizador, nunca automação: a conta passiva desabou e merece ser OLHADA. */
+  CONTA_REVISAO_SUGERIDA: 'conta.revisao_sugerida',
+  SDR_ACEITE_PENDENTE: 'sdr.aceite_pendente',
+
   // Ex-clientes pelas análises da plataforma (04h)
   CLIENTE_TORNOU_EX: 'cliente.tornou_ex',
   EXCLIENTE_CONFLITO_DADOS: 'excliente.conflito_dados',
@@ -225,6 +241,14 @@ export const EVENTO_LABELS: Record<string, string> = {
   'comissao.apurada': 'Comissão apurada',
   'comissao.aprovada': 'Comissão aprovada',
   'vendedor.sem_atividade': 'Vendedor sem atividade',
+  'comissao.lancada': 'Comissão lançada',
+  'comissao.estornada': 'Comissão estornada',
+  'competencia.fechada': 'Competência fechada',
+  'competencia.aprovada': 'Competência aprovada',
+  'titularidade.atribuida': 'Titularidade atribuída',
+  'titularidade.liberada': 'Titularidade liberada',
+  'conta.revisao_sugerida': 'Revisão de classificação sugerida',
+  'sdr.aceite_pendente': 'Reunião aguardando aceite',
   'cliente.tornou_ex': 'Virou ex-cliente',
   'excliente.conflito_dados': 'Ex-cliente com dado conflitante',
   'excliente.motivo_definido': 'Motivo de saída definido',

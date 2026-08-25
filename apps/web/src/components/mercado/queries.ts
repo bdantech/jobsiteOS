@@ -323,8 +323,8 @@ export async function buscarMapa(filtros: FiltrosMapa): Promise<Mapa> {
   // devolvendo os 4 totais + amostras em ~1s. Era o "RPC app_mercado_mapa" prometido na
   // nota de LIMITE_AMOSTRA.
   const { data, error } = await supabase.rpc('mercado_mapa', {
-    p_uf: filtros.uf,
-    p_tipo: filtros.tipo,
+    p_uf: filtros.uf ?? undefined,
+    p_tipo: filtros.tipo ?? undefined,
     p_limite: LIMITE_AMOSTRA,
   })
   if (error) throw new Error(error.message)

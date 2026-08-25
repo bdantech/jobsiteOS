@@ -16,6 +16,10 @@ import {
   moverLeadSchema,
   moverVendaSchema,
   mudarStatusComissaoSchema,
+  salvarParametroSchema,
+  decidirAceiteSdrSchema,
+  mudarStatusCompetenciaSchema,
+  ajusteManualComissaoSchema,
 } from './schemas.js'
 
 /**
@@ -145,6 +149,42 @@ export async function salvarComercialConfig(supabase: Supabase, input: unknown) 
 export async function salvarMotivoPerda(supabase: Supabase, input: unknown) {
   const dados = salvarMotivoSchema.parse(input)
   const { data, error } = await supabase.rpc('app_salvar_motivo_perda', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// ─── Motor de comissões v2 (04k) ────────────────────────────────────────────
+
+export async function salvarParametroComissao(supabase: Supabase, input: unknown) {
+  const dados = salvarParametroSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_commission_param', {
+    p: dados as unknown as Json,
+  })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function decidirAceiteSdr(supabase: Supabase, input: unknown) {
+  const dados = decidirAceiteSdrSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_decidir_aceite_sdr', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function mudarStatusCompetencia(supabase: Supabase, input: unknown) {
+  const dados = mudarStatusCompetenciaSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_mudar_status_competencia', {
+    p: dados as unknown as Json,
+  })
+  if (error) throw new Error(error.message)
+  return data as unknown as number
+}
+
+export async function ajusteManualComissao(supabase: Supabase, input: unknown) {
+  const dados = ajusteManualComissaoSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_ajuste_manual_comissao', {
+    p: dados as unknown as Json,
+  })
   if (error) throw new Error(error.message)
   return data
 }

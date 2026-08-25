@@ -76,6 +76,18 @@
     {
       "path": "/api/cron/comercial-comissoes",
       "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/cron/comercial-comissoes-v2",
+      "schedule": "50 2 * * *"
+    },
+    {
+      "path": "/api/cron/comercial-aceites-sdr",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/comercial-reclassificacao",
+      "schedule": "0 12 * * 1"
     }
   ]
 }

@@ -20,6 +20,7 @@ import {
 } from '../../../../../packages/core/src/antecipacao/schemas.js'
 import type { TablesInsert } from '../../../../../packages/core/src/types/database.js'
 import { lerConfigConversao } from '../../antecipacao/config.js'
+import { estornarCessao, lancarCessaoConvertida } from '../comercial/comissoes-v2.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
@@ -433,6 +434,27 @@ async function converterNota(
   })
 
   await atualizarFornecedor(nf.fornecedor_empresa_id, a)
+
+  /*
+   * O fato gerador da comissão (04k §1) é ESTE instante, e o lançamento nasce agora.
+   *
+   * Não é o mês que fecha a folha: é a cessão que converte. Provisionar aqui é o que faz
+   * o extrato do vendedor mexer enquanto ele trabalha, em vez de aparecer pronto no dia
+   * 1º — e o motor é idempotente, então um reprocesso do sync não paga duas vezes.
+   *
+   * A falha é ISOLADA de propósito: comissão que não lançou é um problema, mas derrubar a
+   * conversão da nota por causa dele seria trocar um problema por um pior. O job diário
+   * de backfill recolhe o que ficou para trás.
+   */
+  try {
+    await lancarCessaoConvertida(a.id_externo)
+  } catch (e) {
+    logger.error(
+      { id: a.id_externo, erro: String(e) },
+      'Nota convertida, mas o motor de comissão falhou. O backfill diário recolhe.',
+    )
+  }
+
   return 1
 }
 
@@ -523,6 +545,23 @@ async function registrarRegressao(
     corpo: resumo,
     url: `/antecipacao/antecipacoes?id=${a.id_externo}`,
   })
+
+  /*
+   * §1 — este é um dos DOIS únicos casos que estornam comissão: a cessão deixou de
+   * existir. Recompra e inadimplência não entram, porque vendedor e originador não
+   * correm risco de crédito.
+   */
+  try {
+    await estornarCessao(
+      a.id_externo,
+      cancelada ? 'NF cancelada na plataforma' : `status ${anterior.status} → ${a.status}, que não converte`,
+    )
+  } catch (e) {
+    logger.error(
+      { id: a.id_externo, erro: String(e) },
+      'Regressão registrada, mas o estorno de comissão falhou.',
+    )
+  }
 
   void cfg
   return 1

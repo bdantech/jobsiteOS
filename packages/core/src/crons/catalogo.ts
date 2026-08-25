@@ -163,6 +163,30 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/comercial/apurar-comissoes',
   },
   {
+    path: '/api/cron/comercial-comissoes-v2',
+    nome: 'Diário do motor de comissões',
+    moduloId: 'comercial',
+    descricao:
+      'Às 23h50 de São Paulo: cria as titularidades que o funil gerou (venda ganha → sacado, primeira NF do cedente → originador), devolve ao pool o cedente dormente, recolhe as cessões que o handler live não pegou e — SÓ quando hoje é o último dia útil — fecha a competência. Roda todo dia porque duas das três etapas são diárias por natureza, e porque "último dia útil" não é uma expressão que o cron saiba dizer: um cron marcado no dia 30 nunca dispararia em fevereiro.',
+    destino: 'POST /jobs/comercial/comissoes-diario',
+  },
+  {
+    path: '/api/cron/comercial-aceites-sdr',
+    nome: 'Fila de aceite do SDR',
+    moduloId: 'comercial',
+    descricao:
+      'De hora em hora: abre a fila para as reuniões realizadas, expira COMO ACEITA o que passou do SLA e lança a comissão do SDR. A tela já acorda o worker ao decidir — este cron é a rede que faz um lançamento perdido aparecer na hora seguinte em vez de nunca. De hora em hora porque o SLA é contado em horas, e um relógio mais grosso que a unidade que mede erra sempre para o mesmo lado.',
+    destino: 'POST /jobs/comercial/aceites-sdr',
+  },
+  {
+    path: '/api/cron/comercial-reclassificacao',
+    nome: 'Alerta de reclassificação',
+    moduloId: 'comercial',
+    descricao:
+      'Segunda de manhã: aponta contas passivas cujo volume dos últimos 45 dias ficou abaixo de 50% da média dos três meses anteriores. SINALIZA e para — o número não sabe se a obra parou ou se ninguém registrou nada, e reclassificar sozinho mudaria a comissão de alguém a partir de uma hipótese.',
+    destino: 'POST /jobs/comercial/alerta-reclassificacao',
+  },
+  {
     path: '/api/cron/comercial-passivos',
     nome: 'Candidatas a conta passiva',
     moduloId: 'comercial',

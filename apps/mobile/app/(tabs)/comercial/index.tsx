@@ -1,6 +1,11 @@
-import { TIPO_VENDEDOR_LABELS, STATUS_LANCAMENTO_LABELS, type StatusLancamento, type TipoVendedorId } from '@jobsiteos/core'
+import {
+  TIPO_VENDEDOR_LABELS,
+  STATUS_LANCAMENTO_V2_LABELS,
+  type StatusLancamentoV2,
+  type TipoVendedorId,
+} from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { CalendarDays, Coins, Inbox, Target, Users } from 'lucide-react-native'
+import { CalendarDays, Clock, Coins, Inbox, Target, Users } from 'lucide-react-native'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
@@ -54,27 +59,52 @@ export default function ComercialScreen() {
         </Text>
       </View>
 
-      <Card className="gap-1 p-4">
-        <View className="flex-row items-center gap-2">
-          <Coins size={14} color={colors.mutedForeground} />
-          <Text variant="muted" className="text-xs uppercase tracking-wide">
-            Comissão do mês
+      {/*
+        O card de comissão agora ABRE a tela — o motor v2 tornou o número live, e o
+        primeiro reflexo de quem vê o valor mudar é querer saber qual cessão o mudou.
+      */}
+      <Pressable onPress={() => router.push('/comercial/comissoes')}>
+        <Card className="gap-1 p-4">
+          <View className="flex-row items-center gap-2">
+            <Coins size={14} color={colors.mutedForeground} />
+            <Text variant="muted" className="text-xs uppercase tracking-wide">
+              Comissão do mês
+            </Text>
+          </View>
+          <Text className="text-2xl font-semibold">{brl(data.comissao_mes.total)}</Text>
+          <View className="flex-row flex-wrap gap-1.5 pt-1">
+            {Object.entries(data.comissao_mes.por_status).map(([s, v]) => (
+              <Badge key={s} variant="outline">
+                <Text className="text-[10px]">
+                  {STATUS_LANCAMENTO_V2_LABELS[s as StatusLancamentoV2] ?? s}: {brl(Number(v))}
+                </Text>
+              </Badge>
+            ))}
+          </View>
+          <Text variant="muted" className="pt-1 text-[11px]">
+            Provisionado ainda não é fechado, fechado ainda não é aprovado, e aprovado ainda
+            não é pago. Toque para ver o extrato.
           </Text>
-        </View>
-        <Text className="text-2xl font-semibold">{brl(data.comissao_mes.total)}</Text>
-        <View className="flex-row flex-wrap gap-1.5 pt-1">
-          {Object.entries(data.comissao_mes.por_status).map(([s, v]) => (
-            <Badge key={s} variant="outline">
-              <Text className="text-[10px]">
-                {STATUS_LANCAMENTO_LABELS[s as StatusLancamento] ?? s}: {brl(Number(v))}
-              </Text>
+        </Card>
+      </Pressable>
+
+      {/*
+        A fila de aceite fica ACIMA dos funis quando tem gente esperando: passado o SLA a
+        reunião conta como aceita sozinha, e o que decide é a comissão de outra pessoa.
+      */}
+      {data.aceites_pendentes > 0 ? (
+        <Pressable onPress={() => router.push('/comercial/comissoes')}>
+          <Card className="flex-row items-center justify-between p-4">
+            <View className="flex-row items-center gap-2">
+              <Clock size={16} color={colors.mutedForeground} />
+              <Text className="font-medium">Reuniões aguardando seu aceite</Text>
+            </View>
+            <Badge>
+              <Text className="text-[10px]">{data.aceites_pendentes}</Text>
             </Badge>
-          ))}
-        </View>
-        <Text variant="muted" className="pt-1 text-[11px]">
-          Apurado ainda não é aprovado, e aprovado ainda não é pago.
-        </Text>
-      </Card>
+          </Card>
+        </Pressable>
+      ) : null}
 
       {/* Atalhos pelo TIPO: um SDR não tem funil de vendas, e o contrário também. */}
       {tipo === 'sdr' && (

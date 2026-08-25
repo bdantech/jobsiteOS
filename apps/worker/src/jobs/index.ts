@@ -23,6 +23,13 @@ import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/comissoes.js'
+import {
+  alertaReclassificacaoJob,
+  comissoesDiarioJob,
+  fecharCompetenciaJob,
+  processarAceitesSdrJob,
+  titularidadesJob,
+} from './comercial/comissoes-v2.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
 import { sugerirPassivosJob } from './comercial/passivos.js'
 import {
@@ -94,6 +101,9 @@ export type TipoJob =
   | 'comercial-sla'
   | 'comercial-passivos'
   | 'comercial-comissoes'
+  | 'comercial-comissoes-v2'
+  | 'comercial-sdr-aceites'
+  | 'comercial-reclassificacao'
   | 'comercial-rotear'
   | 'protestos-empresa'
   | 'contatos-empresa'
@@ -1072,6 +1082,48 @@ export function dispararSugerirPassivos(): string {
 /** Mensal: fecha a competência anterior. O gestor aprova antes de pagar. */
 export function dispararApurarComissoes(competencia?: string): string {
   return dispararAvulso('comercial-comissoes', async () => apurarComissoesJob(competencia))
+}
+
+// ─── Motor de comissões v2 (04k) ─────────────────────────────────────────────
+
+/**
+ * O diário do motor: titularidades, backfill das cessões e — só no último dia útil —
+ * o fechamento da competência.
+ *
+ * Um cron por dia em vez de um no dia 1º porque duas das três etapas são diárias por
+ * natureza (um cedente dorme num dia qualquer; uma venda é ganha numa terça) e a
+ * terceira precisa de um job que saiba consultar o calendário. Quem decide se hoje é o
+ * dia de fechar é o job, não a agenda.
+ */
+export function dispararComissoesDiario(): string {
+  return dispararAvulso('comercial-comissoes-v2', async () => comissoesDiarioJob())
+}
+
+/** Fecha uma competência à mão. Só para o caso em que o último dia útil passou batido. */
+export function dispararFecharCompetencia(competencia?: string): string {
+  return dispararAvulso('comercial-comissoes-v2', async () => fecharCompetenciaJob(competencia))
+}
+
+/** Horário: abre a fila de aceite, expira o que venceu e lança o que foi aceito. */
+export function dispararAceitesSdr(): string {
+  return dispararAvulso('comercial-sdr-aceites', async () => processarAceitesSdrJob())
+}
+
+/** Semanal: aponta contas passivas cujo volume desabou. SINALIZA — nunca reclassifica. */
+export function dispararAlertaReclassificacao(): string {
+  return dispararAvulso('comercial-reclassificacao', async () => alertaReclassificacaoJob())
+}
+
+/**
+ * Só a etapa de titularidade do diário: vincular quem ganhou, liberar cedente dormente,
+ * devolver o SDR ao pool no fim da janela e encerrar quem foi desligado.
+ *
+ * Existe separada porque é a etapa que alguém quer rodar sozinha depois de mexer em
+ * carteira — e porque um diário que só pode rodar inteiro leva a rodar o fechamento sem
+ * querer.
+ */
+export function dispararLiberarDormentes(): string {
+  return dispararAvulso('comercial-comissoes-v2', async () => titularidadesJob())
 }
 
 /** Roteia as NFs vivas para os originadores. Encadeado no diário da Antecipação. */

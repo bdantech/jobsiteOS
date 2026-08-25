@@ -24,6 +24,11 @@ import {
   dispararSlaComercial,
   dispararSugerirPassivos,
   dispararApurarComissoes,
+  dispararComissoesDiario,
+  dispararFecharCompetencia,
+  dispararAceitesSdr,
+  dispararLiberarDormentes,
+  dispararAlertaReclassificacao,
   dispararRotearNotas,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
@@ -238,6 +243,53 @@ app.post('/jobs/comercial/apurar-comissoes', (req: Request, res: Response, next:
   try {
     const { competencia } = apurarSchema.parse(req.body ?? {})
     res.status(202).json({ job_id: dispararApurarComissoes(competencia), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * Motor de comissões v2 (04k §10). Três rotas, três relógios diferentes:
+ * o diário (titularidade + backfill + fecho no último dia útil), o horário da fila de
+ * aceite e o semanal do alerta de reclassificação.
+ */
+
+app.post('/jobs/comercial/comissoes-diario', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararComissoesDiario(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/fechar-competencia', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { competencia } = apurarSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararFecharCompetencia(competencia), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/liberar-dormentes', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararLiberarDormentes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/aceites-sdr', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAceitesSdr(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/alerta-reclassificacao', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAlertaReclassificacao(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

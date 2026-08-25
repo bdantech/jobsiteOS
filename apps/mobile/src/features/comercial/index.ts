@@ -34,7 +34,15 @@ export interface ResumoMobile {
   nfs_vivas: number
   passivas_geridas: number
   proximas_reunioes: { id: string; titulo: string; inicio_em: string }[]
-  comissao_mes: { competencia: string; total: number; por_status: Record<string, number> }
+  comissao_mes: {
+    competencia: string
+    total: number
+    cessoes?: number
+    por_status: Record<string, number>
+    por_papel?: Record<string, number>
+  }
+  /** Reuniões esperando o aceite DESTA pessoa. A única pendência do módulo com prazo. */
+  aceites_pendentes: number
 }
 
 export function useResumoComercial() {
@@ -56,6 +64,7 @@ export function useResumoComercial() {
         passivas_geridas: r.passivas_geridas ?? 0,
         proximas_reunioes: r.proximas_reunioes ?? [],
         comissao_mes: r.comissao_mes ?? { competencia: '', total: 0, por_status: {} },
+        aceites_pendentes: r.aceites_pendentes ?? 0,
       }
     },
   })

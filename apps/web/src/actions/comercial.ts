@@ -12,6 +12,10 @@ import {
   moverLeadSdr,
   moverVenda,
   mudarStatusComissao,
+  ajusteManualComissao,
+  decidirAceiteSdr,
+  mudarStatusCompetencia,
+  salvarParametroComissao,
   salvarAcessoVendedor,
   salvarComercialConfig,
   salvarComissaoRegra,
@@ -21,7 +25,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararRotearNotas } from '@/lib/mercado/worker'
+import { dispararAceitesSdr, dispararRotearNotas } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -93,7 +97,19 @@ export async function moverLeadAction(input: unknown): Promise<ActionResult<{ id
   const { erro, supabase } = await autorizar()
   if (erro || !supabase) return erro as ActionResult<never>
   try {
-    const l = (await moverLeadSdr(supabase, input)) as { id?: string } | null
+    const l = (await moverLeadSdr(supabase, input)) as { id?: string; estagio?: string } | null
+
+    /*
+     * Reunião marcada como realizada abre a fila de aceite (04k §5) — e ela é acordada
+     * AGORA, não na virada da hora. O SLA é contado em horas e o vendedor destino costuma
+     * decidir logo depois da reunião; uma fila que só aparece uma hora depois faria a
+     * pessoa procurar o item, não achar, e concluir que a tela está quebrada.
+     *
+     * Sem await no resultado do erro: a fila é criada pelo job, e o cron horário é a rede
+     * embaixo. Falhar aqui não pode desfazer o movimento do card, que já está gravado.
+     */
+    if (l?.estagio === 'reuniao_realizada') void dispararAceitesSdr()
+
     return { ok: true, data: { id: l?.id ?? null } }
   } catch (error) {
     return falha(error)
@@ -283,6 +299,82 @@ export async function salvarMotivoAction(input: unknown): Promise<ActionResult<{
   try {
     await salvarMotivoPerda(supabase, input)
     revalidatePath('/comercial/admin')
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+
+// ─── Motor de comissões v2 (04k) ────────────────────────────────────────────
+
+/**
+ * Publica um parâmetro com vigência.
+ *
+ * Não existe "editar": publicar é abrir uma vigência nova e encerrar a anterior. Toda a
+ * recusa em português — competência fechada, sobreposição, retroação — vem do RPC, que é
+ * onde a regra pode ser garantida; repeti-la aqui criaria uma segunda régua para divergir.
+ */
+export async function salvarParametroAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await salvarParametroComissao(supabase, input)
+    revalidatePath('/comercial/admin')
+    revalidatePath('/comercial/comissoes')
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Aceita ou recusa a reunião — e acorda o worker para lançar na hora.
+ *
+ * A decisão é gravada pelo RPC; o LANÇAMENTO é do motor, no worker, que sabe resolver
+ * parâmetro na data e gravar o snapshot. Se a chamada ao worker falhar, o aceite JÁ está
+ * salvo e o cron horário recolhe — por isso o `enfileirado: false` não é erro: transformar
+ * "o lançamento não saiu ainda" em falha faria a pessoa aceitar duas vezes.
+ */
+export async function decidirAceiteSdrAction(
+  input: unknown,
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await decidirAceiteSdr(supabase, input)
+  } catch (error) {
+    return falha(error)
+  }
+  const r = await dispararAceitesSdr()
+  revalidatePath('/comercial/comissoes')
+  return r.ok
+    ? { ok: true, data: { enfileirado: true } }
+    : { ok: true, data: { enfileirado: false, aviso: r.message } }
+}
+
+/** Aprova ou marca como paga uma competência inteira. Só avança; nunca reabre. */
+export async function mudarStatusCompetenciaAction(
+  input: unknown,
+): Promise<ActionResult<{ linhas: number }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const n = await mudarStatusCompetencia(supabase, input)
+    revalidatePath('/comercial/comissoes')
+    return { ok: true, data: { linhas: n } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/** A linha que o motor não sabe fazer. Só em competência aberta, e com descrição. */
+export async function ajusteManualComissaoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await ajusteManualComissao(supabase, input)
+    revalidatePath('/comercial/comissoes')
     return { ok: true, data: { ok: true } }
   } catch (error) {
     return falha(error)

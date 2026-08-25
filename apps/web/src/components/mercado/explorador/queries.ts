@@ -84,8 +84,8 @@ export async function buscarPagina(estado: EstadoExplorador): Promise<PaginaExpl
   const termo = sanitizarTermo(estado.termo)
 
   const { data, error } = await supabase.rpc('mercado_explorar', {
-    p_termo: termo || null,
-    p_arvore: estado.arvore ? (resolverParaJson(estado.arvore) as unknown as Json) : null,
+    p_termo: termo || undefined,
+    p_arvore: estado.arvore ? (resolverParaJson(estado.arvore) as unknown as Json) : undefined,
     p_ordem: ordenarPor,
     p_asc: ascendente,
     p_offset: estado.pagina * estado.tamanho,
@@ -108,8 +108,8 @@ export async function buscarPagina(estado: EstadoExplorador): Promise<PaginaExpl
 export async function contarExato(termo: string, arvore: Grupo | null): Promise<number> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('mercado_contar_exato', {
-    p_termo: sanitizarTermo(termo) || null,
-    p_arvore: arvore ? (resolverParaJson(arvore) as unknown as Json) : null,
+    p_termo: sanitizarTermo(termo) || undefined,
+    p_arvore: arvore ? (resolverParaJson(arvore) as unknown as Json) : undefined,
   })
   if (error) throw new Error(error.message)
   return (data as number | null) ?? 0

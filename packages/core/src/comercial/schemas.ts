@@ -48,13 +48,37 @@ export const TIPO_VENDEDOR_LABELS: Record<TipoVendedorId, string> = {
   originador: 'Originador',
 }
 
-export const PAPEIS_CARTEIRA = ['originacao', 'gestao_passiva', 'sdr'] as const
+/*
+ * Os três primeiros papéis são do 04g e continuam significando o que sempre
+ * significaram. Os dois últimos são do motor de comissões v2 (04k §4) e têm ENTIDADE
+ * diferente: `vendedor` titulariza o SACADO, `originador` titulariza o CEDENTE. São
+ * papéis novos em vez de reaproveitar `originacao` porque um vínculo que responde a duas
+ * perguntas diferentes é um vínculo que, no dia em que elas divergirem, não tem resposta.
+ */
+export const PAPEIS_CARTEIRA = [
+  'originacao',
+  'gestao_passiva',
+  'sdr',
+  'vendedor',
+  'originador',
+] as const
 export type PapelCarteira = (typeof PAPEIS_CARTEIRA)[number]
 
 export const PAPEL_CARTEIRA_LABELS: Record<PapelCarteira, string> = {
-  originacao: 'Originação',
+  originacao: 'Originação (roteamento de NF)',
   gestao_passiva: 'Gestão da conta passiva',
   sdr: 'Prospecção (SDR)',
+  vendedor: 'Titular do sacado',
+  originador: 'Titular do cedente',
+}
+
+/** Como o vínculo nasceu. O funil cria sozinho; o gestor sobrepõe à mão. */
+export const ORIGENS_CARTEIRA = ['manual', 'automatica'] as const
+export type OrigemCarteira = (typeof ORIGENS_CARTEIRA)[number]
+
+export const ORIGEM_CARTEIRA_LABELS: Record<OrigemCarteira, string> = {
+  manual: 'Definido por um gestor',
+  automatica: 'Criado pelo funil',
 }
 
 // ─── Funil de SDR ───────────────────────────────────────────────────────────
@@ -213,6 +237,12 @@ export const definirGestaoSchema = z
     gestao_operacao: z.enum(GESTOES_OPERACAO).nullable(),
     vendedor_gestao_id: uuid.nullable().optional(),
     vendedor_originacao_id: uuid.nullable().optional(),
+    /**
+     * Obrigatório quando a classificação MUDA (04k §3), e é o RPC quem sabe se mudou —
+     * a tela não tem como afirmar isso sem uma corrida com quem editou antes dela.
+     * Aqui o campo é opcional; a recusa em português vem do banco.
+     */
+    motivo: z.string().trim().min(3, 'Explique em uma frase por que a conta muda de classificação.').optional(),
   })
   .refine((v) => v.gestao_operacao !== 'passivo' || !!v.vendedor_gestao_id, {
     message: 'Conta passiva precisa de um closer que a gere.',
@@ -431,3 +461,67 @@ export const salvarMotivoSchema = z.object({
   ativo: z.boolean().optional(),
 })
 export type SalvarMotivoInput = z.infer<typeof salvarMotivoSchema>
+
+
+// ─── Contratos do motor de comissões v2 (04k) ───────────────────────────────
+
+/**
+ * Publicar um parâmetro.
+ *
+ * `vigente_de` é obrigatório na tela e opcional aqui só porque o RPC assume hoje quando
+ * ele falta — o que é o caso mais comum e não vale um erro de formulário. `encerrar`
+ * publica a AUSÊNCIA de um parâmetro, que é um valor legítimo (sunset ausente = sem
+ * sunset) e não a mesma coisa que zero.
+ */
+export const salvarParametroSchema = z
+  .object({
+    chave: z.string().trim().min(3),
+    vendedor_id: uuid.nullable().optional(),
+    valor: z.number().finite().optional(),
+    unidade: z.enum([
+      'BRL_PER_MM',
+      'BRL',
+      'MONTHS',
+      'DAYS',
+      'HOURS',
+      'PERCENT',
+      'BOOL',
+      'MULTIPLIER',
+    ] as const).optional(),
+    vigente_de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    encerrar: z.boolean().optional(),
+  })
+  .refine((v) => v.encerrar === true || (v.valor !== undefined && v.unidade !== undefined), {
+    message: 'Informe valor e unidade — ou marque para encerrar a vigência.',
+    path: ['valor'],
+  })
+export type SalvarParametroInput = z.infer<typeof salvarParametroSchema>
+
+/** Aceitar ou recusar a reunião. Recusar exige motivo; aceitar, não. */
+export const decidirAceiteSdrSchema = z
+  .object({
+    aceite_id: uuid,
+    decisao: z.enum(['aceita', 'recusada']),
+    motivo_recusa: z.string().trim().min(3).optional(),
+  })
+  .refine((v) => v.decisao !== 'recusada' || !!v.motivo_recusa, {
+    message: 'Recusar exige motivo.',
+    path: ['motivo_recusa'],
+  })
+export type DecidirAceiteSdrInput = z.infer<typeof decidirAceiteSdrSchema>
+
+export const mudarStatusCompetenciaSchema = z.object({
+  competencia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  status: z.enum(['aprovada', 'paga']),
+})
+export type MudarStatusCompetenciaInput = z.infer<typeof mudarStatusCompetenciaSchema>
+
+/** O ajuste manual aceita valor NEGATIVO de propósito: descontar é metade do uso. */
+export const ajusteManualComissaoSchema = z.object({
+  vendedor_id: uuid,
+  papel: z.enum(['VENDEDOR', 'ORIGINADOR', 'SDR']),
+  competencia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  valor: z.number().finite().refine((v) => v !== 0, 'Um ajuste de zero não ajusta nada.'),
+  descricao: z.string().trim().min(5, 'Descreva o ajuste — é ele que explica a linha depois.'),
+})
+export type AjusteManualComissaoInput = z.infer<typeof ajusteManualComissaoSchema>
