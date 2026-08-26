@@ -186,6 +186,37 @@ export function mapearSociosNovaVida(
   return out
 }
 
+/**
+ * A FORMA de uma resposta, sem o conteúdo dela.
+ *
+ * Existe porque `sem_dados` é ambíguo e caro: a consulta à Nova Vida custou R$ 0,35 e
+ * devolveu zero contatos, e não havia como saber se o CNPJ não tem sócio com telefone
+ * ou se o mapeamento errou a chave. As duas hipóteses pedem ações opostas — esperar,
+ * ou corrigir código —, e escolher entre elas exigia repetir a chamada paga.
+ *
+ * Devolve só nomes de chave e tipos. NUNCA valores: a resposta traz nome, CPF e
+ * telefone de pessoa física, e um log de diagnóstico não é lugar para isso.
+ */
+// Três níveis, e não dois: a resposta da Nova Vida vem com duplo embrulho ASMX
+// (`{d: {Socios: [...]}}`), e a dois níveis a lista de sócios já saía como `…` —
+// justamente a parte que se quer diagnosticar.
+export function formaDaResposta(valor: unknown, profundidade = 3): string {
+  if (valor === null) return 'null'
+  if (Array.isArray(valor)) {
+    return valor.length === 0
+      ? '[]'
+      : `[${valor.length}× ${profundidade > 0 ? formaDaResposta(valor[0], profundidade - 1) : '…'}]`
+  }
+  if (typeof valor !== 'object') return typeof valor
+  const chaves = Object.keys(valor as Record<string, unknown>)
+  if (chaves.length === 0) return '{}'
+  if (profundidade <= 0) return `{${chaves.length} chaves}`
+  const dentro = chaves
+    .slice(0, 12)
+    .map((k) => `${k}: ${formaDaResposta((valor as Record<string, unknown>)[k], profundidade - 1)}`)
+  return `{${dentro.join(', ')}${chaves.length > 12 ? ', …' : ''}}`
+}
+
 function desembrulharObjeto(resposta: unknown): unknown {
   if (typeof resposta !== 'object' || resposta === null) return resposta
   const r = resposta as Record<string, unknown>

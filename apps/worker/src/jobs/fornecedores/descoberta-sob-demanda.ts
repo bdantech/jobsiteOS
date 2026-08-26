@@ -23,6 +23,7 @@ import {
   cadastralDoFornecedor,
   dentroDoTtl,
   gravarContatos,
+  gravarDominioDescoberto,
   registrarExecucao,
 } from './descoberta.js'
 import { tetoDoOriginador } from './orcamento.js'
@@ -81,6 +82,7 @@ export async function planejarClique(cnpj: string): Promise<{
     dominio: cadastral.dominio,
     funcionarios: cadastral.funcionarios,
     faturamento_estimado: cadastral.faturamento_estimado,
+    porte_rfb: cadastral.porte_rfb,
     municipio: cadastral.municipio,
     uf: cadastral.uf,
     razao_social: cadastral.razao_social,
@@ -145,6 +147,16 @@ export async function descobertaSobDemanda(
     .eq('fornecedor_cnpj', cnpj)
     .maybeSingle()
 
+  /*
+   * O domínio é ESTADO DA CORRIDA, não constante.
+   *
+   * A busca do Claude é quem o descobre, e o Apollo é quem precisa dele. Lendo o
+   * cadastral uma vez no início, o Apollo enxergaria sempre o valor de antes da busca
+   * — que foi exatamente o que aconteceu com a I3M: pulou por "sem domínio" treze
+   * segundos antes de `i3m.com.br` aparecer.
+   */
+  let dominioAtual = cadastral.dominio
+
   let melhor = (funil?.melhor_confianca as Confianca | null) ?? null
   let novos = 0
   let custo = 0
@@ -200,12 +212,22 @@ export async function descobertaSobDemanda(
       novos += g.novos
       melhor = melhorDe(melhor, r.contatos.map((c) => c.confianca))
       await registrar('novavida', r.contatos.length ? 'sucesso' : r.erro ? 'erro' : 'sem_dados', {
-        motivo: r.erro, custo: custos.novavida, contatosNovos: g.novos,
+        // A forma da resposta entra no `motivo` do registro: é o que permite
+        // diagnosticar um `sem_dados` de R$ 0,35 sem repetir a consulta.
+        motivo: r.erro ?? r.forma ?? null,
+        custo: custos.novavida,
+        contatosNovos: g.novos,
       })
       continue
     }
 
     if (etapa.provedor === 'apollo') {
+      if (!dominioAtual) {
+        await registrar('apollo', 'pulado', {
+          motivo: 'Nem o cadastro nem a busca acharam um domínio — o Apollo consulta por domínio.',
+        })
+        continue
+      }
       /*
        * O Apollo é o do RADAR, reusado inteiro (§7: "provedores atrás da mesma
        * interface plugável"). Ele grava direto em `contatos` da empresa e alimenta
@@ -261,6 +283,20 @@ export async function descobertaSobDemanda(
     const g = r.contatos.length ? await gravarContatos(cnpj, r.contatos, 'claude_busca') : { novos: 0 }
     novos += g.novos
     melhor = melhorDe(melhor, r.contatos.map((c) => c.confianca))
+
+    /*
+     * O site achado vira DOMÍNIO, e não só mais uma linha de contato.
+     *
+     * É o que destrava o Apollo — que roda logo depois nesta ordem — e o que faz a
+     * próxima cascata do Radar não precisar descobri-lo de novo. Um domínio guardado
+     * como "contato do tipo site" serve para clicar e para mais nada.
+     */
+    if (!dominioAtual) {
+      const site = r.contatos.find((c) => c.tipo === 'site')
+      if (site && (await gravarDominioDescoberto(cnpj, site.valor, site.evidencia))) {
+        dominioAtual = site.valor
+      }
+    }
     await registrar('claude_busca', r.contatos.length ? 'sucesso' : r.erro ? 'erro' : 'sem_dados', {
       motivo: r.erro, custo: custos.claude_busca, contatosNovos: g.novos,
     })

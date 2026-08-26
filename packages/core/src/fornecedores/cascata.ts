@@ -95,6 +95,18 @@ export interface EstadoFornecedor {
   dominio: string | null
   funcionarios: number | null
   faturamento_estimado: number | null
+  /**
+   * Porte declarado à Receita: `ME` | `EPP` | `DEMAIS`.
+   *
+   * É o sinal de porte que EXISTE para quem nunca foi enriquecido — e essa é a regra,
+   * não a exceção: dos 530 fornecedores do funil, ZERO têm `funcionarios` (nenhum tem
+   * ficha em `empresas`, porque não estar na plataforma é a definição deles).
+   *
+   * Sem ele, "porte desconhecido" era tratado como "porte pequeno" e o Apollo nunca
+   * rodava para ninguém. Desconhecido não é pequeno; `ME`/`EPP` é a própria empresa
+   * declarando que é pequena, e `DEMAIS` é o contrário.
+   */
+  porte_rfb: string | null
   municipio: string | null
   uf: string | null
   razao_social: string | null
@@ -129,6 +141,11 @@ export interface PlanoDescoberta {
    * menor. Prometer o teto e cobrar menos é a única direção aceitável do erro.
    */
   pode_custar_menos: boolean
+  /**
+   * O Apollo está no plano mas depende de a busca do Claude achar um domínio primeiro.
+   * A tela diz isso em vez de prometer um custo que pode não ser cobrado.
+   */
+  apollo_depende_da_busca: boolean
 }
 
 /**
@@ -147,49 +164,93 @@ export function planejarDescobertaSobDemanda(
   const minFunc = opcoes.apolloMinimoFuncionarios ?? 10
   const minFat = opcoes.apolloMinimoFaturamento ?? null
 
-  const jaTemAlta = estado.melhor_confianca !== null && PESO_CONFIANCA[estado.melhor_confianca] >= PESO_CONFIANCA.alta
-
-  const etapas: EtapaPlano[] = []
-
-  const add = (provedor: ProvedorCascata, custo: number, motivo: string | null): void => {
-    etapas.push({ provedor, rodara: motivo === null, custo: motivo === null ? custo : 0, motivo })
-  }
+  const jaTemAlta =
+    estado.melhor_confianca !== null &&
+    PESO_CONFIANCA[estado.melhor_confianca] >= PESO_CONFIANCA.alta
 
   const bloqueioGlobal = parar && jaTemAlta ? 'Já existe contato de confiança alta.' : null
 
-  add('novavida', custos.novavida, bloqueioGlobal)
+  const etapa = (provedor: ProvedorCascata, custo: number, motivo: string | null): EtapaPlano => ({
+    provedor,
+    rodara: motivo === null,
+    custo: motivo === null ? custo : 0,
+    motivo,
+  })
 
   /*
-   * Apollo, e só quando o porte sugere que existe alguém com LinkedIn.
+   * O PORTE, com três fontes e nesta ordem.
    *
-   * Duas condições, ambas necessárias: domínio resolvido (o Apollo consulta por
-   * domínio, não por CNPJ — sem ele a chamada volta vazia e cobra o rate limit) e
-   * porte. Uma serralheria de 4 pessoas em Sorocaba não tem página de empresa no
-   * LinkedIn, e pagar R$ 1,20 para descobrir isso 688 vezes é a definição de gasto
-   * sem retorno que o §4.2b manda evitar.
+   * `funcionarios` é o melhor sinal e quase nunca existe aqui. `porte_rfb` é o que
+   * sempre existe (687 dos 688 estão no universo da Receita), e é a declaração da
+   * própria empresa: `ME` e `EPP` são tetos de faturamento, `DEMAIS` é tudo acima.
+   *
+   * Tratar porte desconhecido como pequeno foi o erro da primeira versão, e ele não
+   * era visível num caso — era total: com `funcionarios` nulo para os 530, o Apollo
+   * era pulado para todo mundo, sempre, e o registro dizia "porte abaixo do mínimo"
+   * sobre uma empresa cujo porte ninguém tinha medido.
    */
   const porteOk =
-    (estado.funcionarios !== null && estado.funcionarios >= minFunc) ||
-    (minFat !== null && estado.faturamento_estimado !== null && estado.faturamento_estimado >= minFat)
+    estado.funcionarios !== null
+      ? estado.funcionarios >= minFunc
+      : minFat !== null && estado.faturamento_estimado !== null
+        ? estado.faturamento_estimado >= minFat
+        : estado.porte_rfb !== null
+          ? estado.porte_rfb.toUpperCase() === 'DEMAIS'
+          : false
 
-  add(
-    'apollo',
-    custos.apollo,
-    bloqueioGlobal ??
-      (!estado.dominio
-        ? 'Sem domínio resolvido — o Apollo consulta por domínio.'
-        : !porteOk
-          ? `Porte abaixo do mínimo (${minFunc} funcionários): PME sem LinkedIn é gasto sem retorno.`
-          : null),
-  )
+  const motivoPorte =
+    estado.funcionarios !== null
+      ? `Porte abaixo do mínimo (${minFunc} funcionários): PME sem LinkedIn é gasto sem retorno.`
+      : estado.porte_rfb !== null
+        ? `Porte ${estado.porte_rfb} na Receita: empresa pequena raramente tem página no LinkedIn.`
+        : 'Porte desconhecido e sem cadastro na Receita.'
 
-  add('claude_busca', custos.claude_busca, bloqueioGlobal)
+  const motivoApollo =
+    bloqueioGlobal ?? (!porteOk ? motivoPorte : null)
+
+  const novavida = etapa('novavida', custos.novavida, bloqueioGlobal)
+  const claude = etapa('claude_busca', custos.claude_busca, bloqueioGlobal)
+
+  /*
+   * ─── A ORDEM MUDA QUANDO NÃO HÁ DOMÍNIO ────────────────────────────────────
+   *
+   * O Apollo consulta POR DOMÍNIO, e quem descobre domínio nesta cascata é a busca do
+   * Claude. Rodando o Apollo antes dela, ele é pulado por falta de domínio — e como o
+   * `site` que o Claude acha não era gravado, ele seria pulado no segundo clique
+   * também, e no terceiro.
+   *
+   * Foi o que aconteceu com a I3M Engenharia: o Apollo pulou por "sem domínio
+   * resolvido" às 14:20:17, e treze segundos depois a busca devolveu `i3m.com.br`.
+   *
+   * Com domínio, a ordem da spec vale como está (§4.2 a/b/c). Sem domínio, o Apollo
+   * desce para depois da busca e roda com o que ela encontrar — o worker grava o
+   * domínio achado antes de chamá-lo. De quebra é mais barato: a busca custa R$ 0,10 e
+   * o Apollo R$ 1,20, então a etapa que pode tornar a outra desnecessária vem primeiro.
+   */
+  const etapas: EtapaPlano[] = estado.dominio
+    ? [novavida, etapa('apollo', custos.apollo, motivoApollo), claude]
+    : [
+        novavida,
+        claude,
+        etapa(
+          'apollo',
+          custos.apollo,
+          motivoApollo ??
+            // Não é recusa: é condição. O worker reavalia depois da busca.
+            null,
+        ),
+      ]
 
   const vaiRodar = etapas.filter((e) => e.rodara)
   return {
     etapas,
     custo_estimado: Math.round(vaiRodar.reduce((s, e) => s + e.custo, 0) * 100) / 100,
     pode_custar_menos: parar && vaiRodar.length > 1,
+    /*
+     * Sem domínio hoje, o Apollo só roda se a busca achar um. A tela usa isto para
+     * dizer "até R$ X" em vez de prometer um número que pode não ser cobrado.
+     */
+    apollo_depende_da_busca: !estado.dominio && porteOk && bloqueioGlobal === null,
   }
 }
 

@@ -3,6 +3,10 @@ import { PESO_CONFIANCA, type Confianca } from '../../../../../packages/core/src
 import type { CamadaDescoberta, StatusDescoberta } from '../../../../../packages/core/src/fornecedores/schemas.js'
 import type { ProvedorCascata } from '../../../../../packages/core/src/fornecedores/cascata.js'
 import { DDD_POR_UF } from '../../../../../packages/core/src/fornecedores/telefone.js'
+import {
+  motivoDescarteDominio,
+  normalizarDominio,
+} from '../../../../../packages/core/src/radar/dominio.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento } from '../../radar/eventos.js'
@@ -205,6 +209,7 @@ export interface CadastralFornecedor {
   cnpj: string
   razao_social: string | null
   nome_fantasia: string | null
+  porte_rfb: string | null
   municipio: string | null
   uf: string | null
   logradouro: string | null
@@ -228,7 +233,7 @@ export interface CadastralFornecedor {
 export async function cadastralDoFornecedor(cnpj: string): Promise<CadastralFornecedor> {
   const { data: mu } = await supabaseAdmin
     .from('mercado_universo')
-    .select('razao_social, nome_fantasia, municipio, uf, logradouro, numero, email_rfb, telefone1_rfb, telefone2_rfb, dominio, empresa_id')
+    .select('razao_social, nome_fantasia, porte_rfb, municipio, uf, logradouro, numero, email_rfb, telefone1_rfb, telefone2_rfb, dominio, empresa_id')
     .eq('cnpj', cnpj)
     .maybeSingle()
 
@@ -257,6 +262,7 @@ export async function cadastralDoFornecedor(cnpj: string): Promise<CadastralForn
     cnpj,
     razao_social: mu?.razao_social ?? null,
     nome_fantasia: mu?.nome_fantasia ?? null,
+    porte_rfb: mu?.porte_rfb ?? null,
     municipio: mu?.municipio ?? null,
     uf: mu?.uf ?? null,
     logradouro: mu?.logradouro ?? null,
@@ -282,4 +288,75 @@ export async function dentroDoTtl(cnpj: string, provedor: ProvedorCascata, dias:
     .in('status', ['sucesso', 'sem_dados'])
     .gte('executado_em', desde)
   return (count ?? 0) > 0
+}
+
+/**
+ * Grava o domínio que a cascata descobriu.
+ *
+ * ─── POR QUE ISTO PRECISA EXISTIR ────────────────────────────────────────────
+ *
+ * A busca do Claude achou `i3m.com.br` e o resultado virou uma linha de tipo `site`
+ * em `contatos_descobertos` — útil para ligar, inútil para o Apollo, que consulta POR
+ * DOMÍNIO. Sem gravar, o Apollo era pulado por "sem domínio resolvido" no primeiro
+ * clique, no segundo e no décimo, para os 530 fornecedores do funil (nenhum tinha
+ * domínio: nem um).
+ *
+ * ─── A CASCATA NÃO SOBRESCREVE DECISÃO HUMANA ────────────────────────────────
+ *
+ * Mesma guarda de `radar/dominios.ts`: um `dominio_origem = 'manual'` fica onde está.
+ * Sem ela, alguém corrige o domínio à mão e a próxima descoberta devolve o valor
+ * antigo — a correção some sem rastro e a pessoa a refaz no mês seguinte.
+ *
+ * O universo é atualizado mesmo assim, porque lá não existe curadoria manual.
+ */
+export async function gravarDominioDescoberto(
+  cnpj: string,
+  dominio: string,
+  evidencia: string | null,
+): Promise<boolean> {
+  const limpo = normalizarDominio(dominio)
+  if (!limpo) return false
+  // O mesmo guarda das quatro origens da cascata do Radar: provedor genérico,
+  // placeholder e escritório contábil não são o domínio da empresa.
+  if (motivoDescarteDominio(limpo) !== null) return false
+
+  const { data: mu } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('dominio, empresa_id')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  if (!mu?.dominio) {
+    await supabaseAdmin
+      .from('mercado_universo')
+      .update({ dominio: limpo, dominio_origem: 'claude_busca', dominio_confianca: 'media' })
+      .eq('cnpj', cnpj)
+  }
+
+  if (mu?.empresa_id) {
+    const { data: emp } = await supabaseAdmin
+      .from('empresas')
+      .select('dominio, dominio_origem')
+      .eq('id', mu.empresa_id)
+      .maybeSingle()
+    if (emp?.dominio_origem === 'manual' && emp.dominio) {
+      logger.info({ cnpj, manual: emp.dominio, achado: limpo }, 'Domínio manual preservado.')
+      return false
+    }
+    if (!emp?.dominio) {
+      await supabaseAdmin
+        .from('empresas')
+        .update({
+          dominio: limpo,
+          dominio_origem: 'claude_busca',
+          dominio_confianca: 'media',
+          dominio_validado_em: new Date().toISOString(),
+          dominio_evidencia: evidencia,
+        })
+        .eq('id', mu.empresa_id)
+    }
+  }
+
+  logger.info({ cnpj, dominio: limpo }, 'Domínio gravado a partir da descoberta de contatos.')
+  return true
 }

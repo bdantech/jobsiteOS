@@ -124,9 +124,52 @@ erro.
 | `apollo` | R$ 1,20 | só com domínio resolvido **e** porte acima do mínimo |
 | `claude_busca` | R$ 0,10 | sempre (site, **Instagram e Facebook**, Maps, listas locais, sindicatos) |
 
-O Apollo é pulado, com o motivo registrado, quando falta domínio ou porte. Uma
-serralheria de quatro pessoas em Sorocaba não tem página de empresa no LinkedIn, e pagar
-R$ 1,20 para descobrir isso 688 vezes é a definição de gasto sem retorno.
+### O Apollo tinha as duas portas fechadas por construção
+
+Ele exige domínio resolvido **e** porte acima do mínimo, e as duas condições eram
+impossíveis de satisfazer para este funil:
+
+- **Domínio:** dos 530 fornecedores, **zero** tinham domínio resolvido. Quem descobre
+  domínio nesta cascata é a busca do Claude — que rodava *depois* do Apollo, e cujo
+  achado virava uma linha `site` em `contatos_descobertos` e nada mais. Foi o que
+  aconteceu com a I3M Engenharia: o Apollo pulou por "sem domínio resolvido" às
+  14:20:17, e treze segundos depois a busca devolveu `i3m.com.br`. No segundo clique
+  seria pulado de novo, e no terceiro.
+- **Porte:** `funcionarios` vem da ficha em `empresas`, e um fornecedor do funil **por
+  definição** não tem ficha — não estar na plataforma é o que o põe aqui. Porte
+  desconhecido era tratado como porte pequeno, e o registro dizia "porte abaixo do
+  mínimo" sobre uma empresa cujo porte ninguém tinha medido.
+
+As três correções:
+
+1. O `site` que a cascata acha é **gravado como domínio** (em `mercado_universo`, e em
+   `empresas` quando há ficha), com a mesma guarda da cascata do Radar: decisão manual
+   nunca é sobrescrita, e provedor genérico, placeholder e domínio de contabilidade são
+   descartados. Isso destrava o Apollo e poupa o Radar de redescobrir.
+2. **Sem domínio, o Apollo desce para depois da busca** e roda com o que ela achou na
+   mesma corrida. Com domínio, a ordem da spec (§4.2 a/b/c) vale como está. De quebra é
+   mais barato: a busca custa R$ 0,10 e o Apollo R$ 1,20, então a etapa que pode tornar
+   a outra desnecessária vem primeiro.
+3. **`porte_rfb` decide quando falta headcount.** `ME` e `EPP` são a própria empresa
+   declarando que é pequena; `DEMAIS` é o contrário. Dos 530 do funil, 196 são `DEMAIS`.
+   Sem porte nenhum, continua fora — aí realmente não se sabe nada.
+
+Uma serralheria de quatro pessoas em Sorocaba não tem página no LinkedIn, e pagar R$ 1,20
+para descobrir isso centenas de vezes é gasto sem retorno. Mas isso é diferente de nunca
+tentar.
+
+### `sem_dados` de um provedor pago é ambíguo, e a ambiguidade é cara
+
+A consulta à Nova Vida pela I3M custou R$ 0,35 e devolveu zero contatos. Não havia como
+saber se o CNPJ não tem sócio com telefone ou se o mapeamento errou a chave — duas
+hipóteses que pedem ações opostas (esperar, ou corrigir código), e escolher entre elas
+exigia repetir a chamada paga.
+
+Agora, quando um provedor responde e não rende contato nenhum, o registro guarda a
+**forma** da resposta: nomes de chave e tipos, nunca valores. `{d: {Socios: []}}` é
+ausência de dado; `{d: {QuadroSocios: [1× {2 chaves}]}}` é bug de mapeamento. A resposta
+traz nome, CPF e telefone de pessoa física, e um log de diagnóstico não é lugar para
+isso.
 
 O **teto mensal por originador** (`teto_mensal_por_originador`, default R$ 150) é a
 autorização, não o gestor: dentro dele o originador aciona sozinho. Estourou, precisa de

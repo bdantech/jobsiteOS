@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   desembrulharTokenNovaVida,
+  formaDaResposta,
   enderecoConfere,
   expiracaoTokenNovaVida,
   filtrarContatosDoClaude,
@@ -93,6 +94,31 @@ test('resposta vazia ou quebrada devolve lista vazia, não exceção', () => {
   assert.deepEqual(mapearSociosNovaVida(null), [])
   assert.deepEqual(mapearSociosNovaVida({ d: 'não é json' }), [])
   assert.deepEqual(mapearSociosNovaVida({ Socios: 'texto' }), [])
+})
+
+test('a forma da resposta diagnostica um "sem dados" pago sem repetir a consulta', () => {
+  // Resposta COM sócios que o mapeamento não pegou: a forma mostra a chave certa.
+  assert.equal(
+    formaDaResposta({ d: { Documento: '123', QuadroSocios: [{ Nome: 'x', Fones: ['1'] }] } }),
+    '{d: {Documento: string, QuadroSocios: [1× {2 chaves}]}}',
+  )
+  // Resposta genuinamente vazia: a forma mostra que não havia sócio nenhum.
+  assert.equal(formaDaResposta({ d: { Socios: [] } }), '{d: {Socios: []}}')
+})
+
+test('a forma NUNCA carrega valor — a resposta traz nome, CPF e telefone de pessoa física', () => {
+  const forma = formaDaResposta({
+    Socios: [{ Nome: 'JOAO DA SILVA', CPF: '12345678901', Telefones: ['11988887777'] }],
+  })
+  assert.doesNotMatch(forma, /JOAO|12345678901|11988887777/)
+  assert.match(forma, /Socios/)
+})
+
+test('a forma tem teto: uma resposta com 200 chaves não vira um log de 200 linhas', () => {
+  const gigante = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, i]))
+  const forma = formaDaResposta(gigante)
+  assert.match(forma, /…\}$/)
+  assert.ok(forma.length < 300, `forma longa demais: ${forma.length}`)
 })
 
 // ─── Google Places ──────────────────────────────────────────────────────────

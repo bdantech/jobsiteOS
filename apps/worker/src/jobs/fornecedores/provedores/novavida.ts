@@ -1,6 +1,7 @@
 import {
   desembrulharTokenNovaVida,
   expiracaoTokenNovaVida,
+  formaDaResposta,
   mapearSociosNovaVida,
   tokenNovaVidaEhErro,
   tokenNovaVidaExpirado,
@@ -90,6 +91,13 @@ export interface ResultadoNovaVida {
   contatos: ContatoDeProvedor[]
   disponivel: boolean
   erro?: string
+  /**
+   * A FORMA da resposta quando ela não rendeu contato nenhum. É o que separa "este
+   * CNPJ não tem sócio com telefone" de "o mapeamento errou a chave" — duas hipóteses
+   * que pedem ações opostas e que, sem isto, só se distinguiriam repetindo a consulta
+   * paga.
+   */
+  forma?: string
 }
 
 export async function buscarNaNovaVida(cadastral: CadastralFornecedor): Promise<ResultadoNovaVida> {
@@ -109,10 +117,15 @@ export async function buscarNaNovaVida(cadastral: CadastralFornecedor): Promise<
       tentativas: 2,
     })
 
-    return {
-      contatos: mapearSociosNovaVida(resp, { dddPadrao: cadastral.ddd }),
-      disponivel: true,
+    const contatos = mapearSociosNovaVida(resp, { dddPadrao: cadastral.ddd })
+    if (contatos.length === 0) {
+      // Só nomes de chave e tipos — a resposta traz nome, CPF e telefone de pessoa
+      // física, e um log de diagnóstico não é lugar para isso.
+      const forma = formaDaResposta(resp)
+      logger.info({ cnpj: cadastral.cnpj, forma }, 'Nova Vida respondeu sem sócio mapeável.')
+      return { contatos, disponivel: true, forma }
     }
+    return { contatos, disponivel: true }
   } catch (e) {
     logger.error({ cnpj: cadastral.cnpj, erro: String(e) }, 'Consulta à Nova Vida falhou.')
     return { contatos: [], disponivel: true, erro: String(e) }

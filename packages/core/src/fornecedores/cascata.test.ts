@@ -12,13 +12,14 @@ const BASE: EstadoFornecedor = {
   dominio: null,
   funcionarios: null,
   faturamento_estimado: null,
+  porte_rfb: 'ME',
   municipio: 'Sorocaba',
   uf: 'SP',
   razao_social: 'SERRALHERIA X LTDA',
   melhor_confianca: null,
 }
 
-test('PME sem domínio: Nova Vida e Claude rodam, Apollo não', () => {
+test('ME sem domínio: Nova Vida e Claude rodam, Apollo não', () => {
   const p = planejarDescobertaSobDemanda(BASE)
   const rodam = p.etapas.filter((e) => e.rodara).map((e) => e.provedor)
   assert.deepEqual(rodam, ['novavida', 'claude_busca'])
@@ -26,7 +27,7 @@ test('PME sem domínio: Nova Vida e Claude rodam, Apollo não', () => {
   // exibido como "R$ 0,45" precisa ser o mesmo número que o orçamento debita.
   assert.equal(p.custo_estimado, 0.45)
   const apollo = p.etapas.find((e) => e.provedor === 'apollo')
-  assert.match(apollo?.motivo ?? '', /domínio/)
+  assert.match(apollo?.motivo ?? '', /Porte ME/)
 })
 
 test('com domínio mas 4 funcionários, o Apollo continua fora — é o gasto sem retorno do §4.2b', () => {
@@ -34,6 +35,57 @@ test('com domínio mas 4 funcionários, o Apollo continua fora — é o gasto se
   const apollo = p.etapas.find((e) => e.provedor === 'apollo')
   assert.equal(apollo?.rodara, false)
   assert.match(apollo?.motivo ?? '', /Porte abaixo do mínimo \(10 funcionários\)/)
+})
+
+test('porte DESCONHECIDO não é porte pequeno: `porte_rfb` decide quando falta headcount', () => {
+  /*
+   * Este era o defeito total, não um caso: dos 530 fornecedores do funil, ZERO têm
+   * `funcionarios` (nenhum tem ficha em `empresas` — não estar na plataforma é a
+   * definição deles). Com "desconhecido = pequeno", o Apollo era pulado para todo
+   * mundo, sempre, e o registro dizia "porte abaixo do mínimo" sobre uma empresa cujo
+   * porte ninguém tinha medido.
+   */
+  const demais = planejarDescobertaSobDemanda({
+    ...BASE,
+    dominio: 'i3m.com.br',
+    porte_rfb: 'DEMAIS',
+  })
+  assert.equal(demais.etapas.find((e) => e.provedor === 'apollo')?.rodara, true)
+
+  const epp = planejarDescobertaSobDemanda({ ...BASE, dominio: 'x.com.br', porte_rfb: 'EPP' })
+  const pulado = epp.etapas.find((e) => e.provedor === 'apollo')
+  assert.equal(pulado?.rodara, false)
+  assert.match(pulado?.motivo ?? '', /Porte EPP/)
+
+  // Sem porte NENHUM continua fora: aí realmente não se sabe nada.
+  const nada = planejarDescobertaSobDemanda({ ...BASE, dominio: 'x.com.br', porte_rfb: null })
+  assert.equal(nada.etapas.find((e) => e.provedor === 'apollo')?.rodara, false)
+})
+
+test('sem domínio, o Apollo desce para DEPOIS da busca — é ela que acha o domínio', () => {
+  /*
+   * A I3M Engenharia: o Apollo pulou por "sem domínio resolvido" às 14:20:17, e treze
+   * segundos depois a busca do Claude devolveu `i3m.com.br`. Na ordem antiga ele
+   * seria pulado no segundo clique também, e no terceiro.
+   */
+  const semDominio = planejarDescobertaSobDemanda({ ...BASE, porte_rfb: 'DEMAIS' })
+  assert.deepEqual(
+    semDominio.etapas.map((e) => e.provedor),
+    ['novavida', 'claude_busca', 'apollo'],
+  )
+  assert.equal(semDominio.apollo_depende_da_busca, true)
+
+  // COM domínio, a ordem da spec (§4.2 a/b/c) vale como está.
+  const comDominio = planejarDescobertaSobDemanda({
+    ...BASE,
+    dominio: 'i3m.com.br',
+    porte_rfb: 'DEMAIS',
+  })
+  assert.deepEqual(
+    comDominio.etapas.map((e) => e.provedor),
+    ['novavida', 'apollo', 'claude_busca'],
+  )
+  assert.equal(comDominio.apollo_depende_da_busca, false)
 })
 
 test('domínio + porte: os três rodam e o custo é a soma dos três', () => {

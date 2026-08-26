@@ -27,6 +27,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AbaEmpresa } from '../aba-empresa'
 import { DonoDoCard } from '../dono-do-card'
@@ -285,8 +286,17 @@ export function FichaFornecedor({
             id: 'abordagem',
             label: 'Abordagem',
             conteudo: (
+              /*
+                O LAYOUT EM CARDS DO MODAL ANTERIOR, mantido porque funcionava: os
+                números soltos no topo, e cada bloco seguinte num cartão com título e
+                uma linha dizendo para que ele serve.
+                
+                A ordem é a ordem de quem vai ligar: o que eu vou DIZER (munição),
+                contra QUEM ele fatura (as portas de entrada), e POR ONDE falar (os
+                contatos, com o botão de buscar ali mesmo). Mandar procurar o botão
+                noutra aba separava a pergunta da resposta.
+              */
               <div className="space-y-4">
-                {/* A munição primeiro: é o que a pessoa vai DIZER na ligação. */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Numero rotulo="Volume 90 dias" valor={brl(card.volume_90d)} />
                   <Numero rotulo="Notas em 90 dias" valor={String(card.qtd_nfs_90d ?? '—')} />
@@ -298,164 +308,189 @@ export function FichaFornecedor({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Potencial mensal é o volume de 90 dias dividido por três — quanto ele fatura
-                  por mês contra nossos sacados, não quanto vai antecipar.
+                  por mês contra nossos sacados, não quanto vai antecipar. Última NF em{' '}
+                  {dia(card.ultima_nf_em)}.
                 </p>
 
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium">Contra quem ele fatura</p>
-                  <p className="text-xs text-muted-foreground">
-                    Cada um é uma porta de entrada. Quem tem ponto focal conhecido aparece
-                    marcado — é por ele que o pedido de apresentação funciona.
-                  </p>
-                  {listaSacados.length === 0 ? (
-                    <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                      Sem notas na janela de 90 dias.
-                    </p>
-                  ) : (
-                    listaSacados.map((s) => (
-                      <div key={s.cnpj} className="flex items-baseline justify-between gap-2 text-sm">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{s.nome ?? cnpjFormatado(s.cnpj)}</span>
-                          {s.tem_ponto_focal ? (
-                            <Badge variant="secondary" className="shrink-0 text-[10px]">
-                              ponto focal
-                            </Badge>
-                          ) : null}
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {brl(s.valor)}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {(pedidos.data ?? []).length > 0 ? (
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <p className="text-sm font-medium text-foreground">Pedidos de apresentação</p>
-                    {(pedidos.data ?? []).map((p) => (
-                      <p key={p.id}>
-                        {cnpjFormatado(p.sacado_cnpj)} · {p.status} · {dia(p.criado_em)}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Contra quem ele fatura</CardTitle>
+                    <CardDescription className="text-xs">
+                      Cada um é uma porta de entrada. Quem tem ponto focal conhecido aparece
+                      marcado — é por ele que o pedido de apresentação funciona.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-1.5">
+                    {listaSacados.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Sem notas na janela de 90 dias.
                       </p>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            id: 'contatos',
-            label: `Contatos${card.contatos_encontrados ? ` (${card.contatos_encontrados})` : ''}`,
-            conteudo: (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="max-w-md text-xs text-muted-foreground">
-                    Fonte e evidência ficam visíveis: um telefone do campo estruturado da NF-e e
-                    um achado numa página web pedem primeiras frases diferentes.
-                  </p>
-                  <div className="flex shrink-0 gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={buscar.isPending}
-                      onClick={() => setConfirmandoBusca(true)}
-                    >
-                      <Search className="mr-1 h-3.5 w-3.5" aria-hidden />
-                      {buscar.isPending ? 'Buscando…' : 'Buscar contatos'}
-                    </Button>
-                    {estourouOTeto && ehGestor ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={buscar.isPending}
-                        onClick={() => buscar.mutate(true)}
-                        title="Libera este clique acima do teto mensal do originador"
-                      >
-                        Liberar mesmo assim
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-
-                {contatos.isPending ? (
-                  <Skeleton className="h-24 w-full" />
-                ) : (contatos.data ?? []).length === 0 ? (
-                  <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                    Nada encontrado ainda. A varredura automática (XML das notas, Receita, site)
-                    roda de madrugada; o botão acima aciona as fontes pagas.
-                  </p>
-                ) : (
-                  (contatos.data ?? []).map((c) => {
-                    const link = linkDoContato(c.tipo, c.valor)
-                    const invalido =
-                      typeof c.validado === 'object' &&
-                      c.validado !== null &&
-                      (c.validado as Record<string, unknown>).valido === false
-                    const canal =
-                      c.tipo === 'email' ? 'email' : c.tipo === 'whatsapp' ? 'whatsapp' : 'ligacao'
-                    return (
-                      <div key={c.id} className="rounded-md border p-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <IconeTipo tipo={c.tipo} />
-                            {link ? (
-                              <a
-                                href={link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="truncate font-medium hover:underline"
-                                onClick={() => toque.mutate({ canal, id: c.id })}
-                              >
-                                {exibirValor(c.tipo, c.valor)}
-                              </a>
-                            ) : (
-                              <span className="truncate font-medium">
-                                {exibirValor(c.tipo, c.valor)}
-                              </span>
-                            )}
-                            {c.nome_pessoa ? (
-                              <span className="truncate text-sm text-muted-foreground">
-                                · {c.nome_pessoa}
-                                {c.cargo ? ` (${c.cargo})` : ''}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <Badge variant={varianteConfianca(c.confianca)} className="text-[10px]">
-                              {rotuloConfianca(c.confianca)}
-                            </Badge>
-                            {invalido ? (
-                              <Badge variant="destructive" className="text-[10px]">
-                                não valida
+                    ) : (
+                      listaSacados.map((s) => (
+                        <div
+                          key={s.cnpj}
+                          className="flex items-baseline justify-between gap-2 text-sm"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{s.nome ?? cnpjFormatado(s.cnpj)}</span>
+                            {s.tem_ponto_focal ? (
+                              <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                ponto focal
                               </Badge>
                             ) : null}
-                            {c.promovido_contato_id ? (
-                              <Badge variant="secondary" className="text-[10px]">na ficha</Badge>
-                            ) : ['telefone', 'email', 'whatsapp'].includes(c.tipo) ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2"
-                                disabled={promover.isPending}
-                                onClick={() => promover.mutate(c.id)}
-                                title="Promover a contato oficial e marcar como ponto focal"
-                              >
-                                <Star className="h-3.5 w-3.5" aria-hidden />
-                              </Button>
-                            ) : null}
-                          </div>
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {brl(s.valor)}
+                          </span>
                         </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {rotuloTipo(c.tipo)} · {rotuloFonte(c.fonte)}
-                          {c.frequencia > 1 ? ` · visto ${c.frequencia}×` : ''}
-                          {c.ultima_vez_visto ? ` · última vez ${dia(c.ultima_vez_visto)}` : ''}
-                          {c.evidencia ? ` · ${c.evidencia}` : ''}
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 pb-2">
+                    <div>
+                      <CardTitle className="text-sm">
+                        Contatos descobertos
+                        {card.contatos_encontrados ? ` (${card.contatos_encontrados})` : ''}
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Fonte e evidência ficam visíveis: um telefone do campo estruturado da
+                        NF-e e um achado numa página web pedem primeiras frases diferentes.
+                      </CardDescription>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={buscar.isPending}
+                        onClick={() => setConfirmandoBusca(true)}
+                      >
+                        <Search className="mr-1 h-3.5 w-3.5" aria-hidden />
+                        {buscar.isPending ? 'Buscando…' : 'Buscar contatos'}
+                      </Button>
+                      {estourouOTeto && ehGestor ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={buscar.isPending}
+                          onClick={() => buscar.mutate(true)}
+                          title="Libera este clique acima do teto mensal do originador"
+                        >
+                          Liberar mesmo assim
+                        </Button>
+                      ) : null}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {contatos.isPending ? (
+                      <Skeleton className="h-24 w-full" />
+                    ) : (contatos.data ?? []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nada encontrado ainda. A varredura automática (XML das notas, Receita,
+                        site) roda de madrugada; o botão acima aciona as fontes pagas.
+                      </p>
+                    ) : (
+                      (contatos.data ?? []).map((c) => {
+                        const link = linkDoContato(c.tipo, c.valor)
+                        const invalido =
+                          typeof c.validado === 'object' &&
+                          c.validado !== null &&
+                          (c.validado as Record<string, unknown>).valido === false
+                        const canal =
+                          c.tipo === 'email'
+                            ? 'email'
+                            : c.tipo === 'whatsapp'
+                              ? 'whatsapp'
+                              : 'ligacao'
+                        return (
+                          <div key={c.id} className="rounded-md border p-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <IconeTipo tipo={c.tipo} />
+                                {link ? (
+                                  <a
+                                    href={link}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate font-medium hover:underline"
+                                    onClick={() => toque.mutate({ canal, id: c.id })}
+                                  >
+                                    {exibirValor(c.tipo, c.valor)}
+                                  </a>
+                                ) : (
+                                  <span className="truncate font-medium">
+                                    {exibirValor(c.tipo, c.valor)}
+                                  </span>
+                                )}
+                                {c.nome_pessoa ? (
+                                  <span className="truncate text-sm text-muted-foreground">
+                                    · {c.nome_pessoa}
+                                    {c.cargo ? ` (${c.cargo})` : ''}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <Badge
+                                  variant={varianteConfianca(c.confianca)}
+                                  className="text-[10px]"
+                                >
+                                  {rotuloConfianca(c.confianca)}
+                                </Badge>
+                                {invalido ? (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    não valida
+                                  </Badge>
+                                ) : null}
+                                {c.promovido_contato_id ? (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    na ficha
+                                  </Badge>
+                                ) : ['telefone', 'email', 'whatsapp'].includes(c.tipo) ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2"
+                                    disabled={promover.isPending}
+                                    onClick={() => promover.mutate(c.id)}
+                                    title="Promover a contato oficial e marcar como ponto focal"
+                                  >
+                                    <Star className="h-3.5 w-3.5" aria-hidden />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {rotuloTipo(c.tipo)} · {rotuloFonte(c.fonte)}
+                              {c.frequencia > 1 ? ` · visto ${c.frequencia}×` : ''}
+                              {c.ultima_vez_visto
+                                ? ` · última vez ${dia(c.ultima_vez_visto)}`
+                                : ''}
+                              {c.evidencia ? ` · ${c.evidencia}` : ''}
+                            </p>
+                          </div>
+                        )
+                      })
+                    )}
+                  </CardContent>
+                </Card>
+
+                {(pedidos.data ?? []).length > 0 ? (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Pedidos de apresentação</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-xs text-muted-foreground">
+                      {(pedidos.data ?? []).map((p) => (
+                        <p key={p.id}>
+                          {cnpjFormatado(p.sacado_cnpj)} · {p.status} · {dia(p.criado_em)}
                         </p>
-                      </div>
-                    )
-                  })
-                )}
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
               </div>
             ),
           },
@@ -554,6 +589,11 @@ function DialogConfirmarBusca({
            */
           funcionarios: null,
           faturamento_estimado: null,
+          // O porte da Receita é o sinal que EXISTE aqui: nenhum fornecedor do funil
+          // tem ficha em `empresas`, então `funcionarios` é sempre nulo. Sem ele, a
+          // tela diria "Apollo pulado por porte" sobre uma empresa cujo porte ninguém
+          // mediu — e o worker, que lê o mesmo campo, discordaria da estimativa.
+          porte_rfb: card.porte_rfb,
           municipio: card.municipio,
           uf: card.uf,
           razao_social: card.fornecedor_nome,
@@ -605,6 +645,13 @@ function DialogConfirmarBusca({
             <p className="text-[11px] text-muted-foreground">
               É um teto: a cascata para na primeira fonte de confiança alta, e aí a busca
               custa menos.
+            </p>
+          ) : null}
+
+          {plano.apollo_depende_da_busca ? (
+            <p className="text-[11px] text-muted-foreground">
+              O Apollo só roda se a busca achar um domínio — ele consulta por domínio, e este
+              fornecedor ainda não tem um. Por isso ele vem depois dela, e não antes.
             </p>
           ) : null}
 
