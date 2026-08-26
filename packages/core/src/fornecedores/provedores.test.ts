@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   desembrulharTokenNovaVida,
+  erroDeConsultaNovaVida,
   formaDaResposta,
+  mapearNovaVida,
   enderecoConfere,
   expiracaoTokenNovaVida,
   filtrarContatosDoClaude,
@@ -53,72 +55,128 @@ test('o cache do token expira meia hora antes da validade real', () => {
   assert.equal(tokenNovaVidaExpirado('não é data', agora), true)
 })
 
-test('sócios viram contatos com nome, cargo e confiança média', () => {
-  const resp = {
-    d: {
-      Socios: [
+/*
+ * O fixture abaixo é o schema REAL da NVCHECK para pessoa jurídica, montado a partir
+ * do manual de integração da Nova Vida (2025, §3.2.d). A versão anterior destes testes
+ * usava a forma que o prompt descrevia (`{Socios: [...]}`) e por isso passava enquanto
+ * a produção devolvia zero — quatro consultas pagas registraram "sem dados" tendo
+ * trazido quatro telefones.
+ */
+const NVCHECK_PJ = {
+  d: {
+    CONSULTA: {
+      CADASTRAIS: {
+        CNPJ: '11222333000144',
+        RAZAO: 'SERRALHERIA X LTDA',
+        NOME_FANTASIA: 'SERRALHERIA X',
+        PORTE: 'MICRO',
+        FATURAMENTOPRESUMIDO: '12125000',
+        CAPITALSOCIAL: '5394485661',
+        QTDEFUNCIONARIOS: '236',
+      },
+      ENDERECOS: [{ LOGRADOURO: 'INACIO SANTOS', CIDADE: 'SAO PAULO', UF: 'SP' }],
+      TELEFONES: [
+        { POSICAO: '1', DDD: '11', TELEFONE: '937445393', TIPO_TELEFONE: 'C', PROCON: 'N', OPERADORA: 'VIVO', FLHOT: 'S', FLWHATS: 'S' },
+        { POSICAO: '2', DDD: '11', TELEFONE: '32052020', TIPO_TELEFONE: 'F', PROCON: 'S', OPERADORA: 'VIVO', FLHOT: 'N', FLWHATS: 'N' },
+      ],
+      EMAILS: [{ EMAIL: 'Contato@SerralheriaX.com.br', POSICAO: '1' }],
+      SITUACAOCADASTRAL: { DESCRICAO: 'ATIVA' },
+      CONTATOSRUINS: [{ DDD: '11', TELEFONE: '982221111', TIPO: 'C' }],
+      QSA: [
         {
-          Nome: 'JOAO DA SILVA',
-          Qualificacao: 'Sócio-Administrador',
-          Telefones: '(11) 98888-7777; 1133334444',
-          Emails: 'joao@serralheria.com.br',
+          QTD_SOCIOS: '2',
+          QSA: [
+            { NOME: 'MARIA DA SILVA', QUALIFICACAO: 'ADMINISTRADOR', DDD_SOCIO: '11', CEL_SOCIO: '988887777', FLWHATS: 'S' },
+            { NOME: 'EXEMPLO LTDA', QUALIFICACAO: '', DDD_SOCIO: '', CEL_SOCIO: '', CNPJ: '22232111000111' },
+          ],
         },
       ],
     },
+  },
+}
+
+test('o telefone e o e-mail DA EMPRESA entram — eram o que o parser antigo ignorava', () => {
+  const r = mapearNovaVida(NVCHECK_PJ)
+  const valores = r.contatos.map((c) => c.valor)
+  // Fixo da empresa e e-mail da empresa: nenhum dos dois era procurado antes.
+  assert.ok(valores.includes('+551132052020'), 'faltou o fixo da empresa')
+  assert.ok(valores.includes('contato@serralheriax.com.br'), 'faltou o e-mail da empresa')
+  const email = r.contatos.find((c) => c.tipo === 'email')
+  assert.equal(email?.valor, 'contato@serralheriax.com.br') // minúsculo, canônico
+  assert.equal(email?.confianca, 'media')
+})
+
+test('FLWHATS = S promove o registro a whatsapp — é afirmação do provedor, não palpite', () => {
+  const r = mapearNovaVida(NVCHECK_PJ)
+  const whats = r.contatos.find((c) => c.valor === '+5511937445393')
+  assert.equal(whats?.tipo, 'whatsapp')
+  assert.match(whats?.evidencia ?? '', /com WhatsApp/)
+  // O fixo sem WhatsApp continua telefone.
+  assert.equal(r.contatos.find((c) => c.valor === '+551132052020')?.tipo, 'telefone')
+})
+
+test('a QSA é ANINHADA, e é aí que a versão anterior parava', () => {
+  const r = mapearNovaVida(NVCHECK_PJ)
+  const socio = r.contatos.find((c) => c.nome_pessoa === 'MARIA DA SILVA')
+  assert.ok(socio, 'o sócio de QSA[0].QSA[] não foi lido')
+  assert.equal(socio.valor, '+5511988887777')
+  assert.equal(socio.cargo, 'ADMINISTRADOR')
+  assert.equal(socio.tipo, 'whatsapp')
+  // Sócio PJ vem sem celular e não vira contato nenhum.
+  assert.equal(r.contatos.filter((c) => c.nome_pessoa === 'EXEMPLO LTDA').length, 0)
+})
+
+test('CONTATOSRUINS são excluídos: a própria base já avisou que não atendem', () => {
+  const comRuim = {
+    d: {
+      CONSULTA: {
+        TELEFONES: [{ DDD: '11', TELEFONE: '982221111', TIPO_TELEFONE: 'C' }],
+        CONTATOSRUINS: [{ DDD: '11', TELEFONE: '982221111', TIPO: 'C' }],
+      },
+    },
   }
-  const contatos = mapearSociosNovaVida(resp)
-  assert.equal(contatos.length, 3)
-  assert.equal(contatos[0]?.valor, '+5511988887777')
-  assert.equal(contatos[0]?.nome_pessoa, 'JOAO DA SILVA')
-  assert.equal(contatos[0]?.cargo, 'Sócio-Administrador')
-  // Média sempre: é o celular do sócio como pessoa física, não o canal da empresa.
-  assert.equal(contatos.every((c) => c.confianca === 'media'), true)
+  const r = mapearNovaVida(comRuim)
+  // Gravá-lo seria pagar para pôr na tela um número que o fornecedor da informação
+  // já disse que não serve — e ele apareceria igual aos bons até alguém discar.
+  assert.deepEqual(r.contatos, [])
+  assert.equal(r.descartados, 1)
 })
 
-test('o mesmo telefone em dois sócios entra uma vez só', () => {
-  const contatos = mapearSociosNovaVida({
-    Socios: [
-      { Nome: 'A', Telefones: ['11988887777'] },
-      { Nome: 'B', Telefones: [{ Numero: '(11) 98888-7777' }] },
-    ],
-  })
-  assert.equal(contatos.length, 1)
+test('o Procon aparece na evidência, e o contato NÃO some por causa dele', () => {
+  const r = mapearNovaVida(NVCHECK_PJ)
+  const fixo = r.contatos.find((c) => c.valor === '+551132052020')
+  assert.match(fixo?.evidencia ?? '', /no Procon/)
+  assert.match(fixo?.evidencia ?? '', /fixo/)
 })
 
-test('resposta serializada dentro do embrulho ainda é lida', () => {
-  const contatos = mapearSociosNovaVida({ d: JSON.stringify({ socios: [{ nome: 'X', telefones: '11988887777' }] }) })
-  assert.equal(contatos[0]?.valor, '+5511988887777')
+test('o cadastral vem de graça na mesma consulta e é o que destrava o Apollo', () => {
+  /*
+   * `QTDEFUNCIONARIOS` é exatamente o número que o gate de porte procura e que NENHUM
+   * fornecedor deste funil tem em `empresas` — não estar na plataforma é a definição
+   * deles. Ignorá-lo era jogar fora o dado pago que resolve o problema seguinte.
+   */
+  const { cadastrais } = mapearNovaVida(NVCHECK_PJ)
+  assert.equal(cadastrais?.funcionarios, 236)
+  assert.equal(cadastrais?.porte, 'MICRO')
+  assert.equal(cadastrais?.faturamento_presumido, 12125000)
+  assert.equal(cadastrais?.situacao, 'ATIVA')
+})
+
+test('erro vem como TEXTO com HTTP 200 também na CONSULTA, não só no token', () => {
+  // A doc lista quatro (§2): credencial errada, consulta não liberada e as duas cotas.
+  assert.equal(erroDeConsultaNovaVida('SEM ACESSO AO SISTEMA'), 'SEM ACESSO AO SISTEMA')
+  assert.equal(
+    erroDeConsultaNovaVida({ d: 'QUANTIDADE CONFIGURADA ATINGIDA AO CLIENTE' }),
+    'QUANTIDADE CONFIGURADA ATINGIDA AO CLIENTE',
+  )
+  // Um objeto de verdade não é erro.
+  assert.equal(erroDeConsultaNovaVida(NVCHECK_PJ), null)
 })
 
 test('resposta vazia ou quebrada devolve lista vazia, não exceção', () => {
   assert.deepEqual(mapearSociosNovaVida(null), [])
   assert.deepEqual(mapearSociosNovaVida({ d: 'não é json' }), [])
-  assert.deepEqual(mapearSociosNovaVida({ Socios: 'texto' }), [])
-})
-
-test('a forma da resposta diagnostica um "sem dados" pago sem repetir a consulta', () => {
-  // Resposta COM sócios que o mapeamento não pegou: a forma mostra a chave certa.
-  assert.equal(
-    formaDaResposta({ d: { Documento: '123', QuadroSocios: [{ Nome: 'x', Fones: ['1'] }] } }),
-    '{d: {Documento: string, QuadroSocios: [1× {2 chaves}]}}',
-  )
-  // Resposta genuinamente vazia: a forma mostra que não havia sócio nenhum.
-  assert.equal(formaDaResposta({ d: { Socios: [] } }), '{d: {Socios: []}}')
-})
-
-test('a forma NUNCA carrega valor — a resposta traz nome, CPF e telefone de pessoa física', () => {
-  const forma = formaDaResposta({
-    Socios: [{ Nome: 'JOAO DA SILVA', CPF: '12345678901', Telefones: ['11988887777'] }],
-  })
-  assert.doesNotMatch(forma, /JOAO|12345678901|11988887777/)
-  assert.match(forma, /Socios/)
-})
-
-test('a forma tem teto: uma resposta com 200 chaves não vira um log de 200 linhas', () => {
-  const gigante = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, i]))
-  const forma = formaDaResposta(gigante)
-  assert.match(forma, /…\}$/)
-  assert.ok(forma.length < 300, `forma longa demais: ${forma.length}`)
+  assert.deepEqual(mapearSociosNovaVida({ d: { CONSULTA: {} } }), [])
 })
 
 // ─── Google Places ──────────────────────────────────────────────────────────

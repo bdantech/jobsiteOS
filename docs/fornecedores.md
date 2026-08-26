@@ -120,7 +120,7 @@ erro.
 
 | Fonte | Custo | Quando roda |
 | --- | --- | --- |
-| `novavida` | R$ 0,35 | sempre (sócios enriquecidos — em PME de construção o sócio quase sempre É quem decide) |
+| `novavida` | R$ 0,35 | sempre — telefones e e-mail **da empresa**, mais celular dos sócios |
 | `apollo` | R$ 1,20 | só com domínio resolvido **e** porte acima do mínimo |
 | `claude_busca` | R$ 0,10 | sempre (site, **Instagram e Facebook**, Maps, listas locais, sindicatos) |
 | `claude_aprofundado` | R$ 0,25 | botão próprio, **depois** da primeira passada e só quando há lacuna |
@@ -187,6 +187,45 @@ Uma serralheria de quatro pessoas em Sorocaba não tem página no LinkedIn, e pa
 para descobrir isso centenas de vezes é gasto sem retorno. Mas isso é diferente de nunca
 tentar.
 
+### O que a NVCHECK devolve, e o que o primeiro parser jogava fora
+
+O mapeamento foi escrito a partir da descrição do prompt ("mapear telefones/e-mails de
+sócios") e procurava uma chave `Socios` na raiz. O schema real é outro:
+
+```
+{ d: { CONSULTA: { CADASTRAIS:    {...QTDEFUNCIONARIOS, PORTE, FATURAMENTOPRESUMIDO}
+                   TELEFONES:     [{DDD, TELEFONE, TIPO_TELEFONE, PROCON, FLWHATS}]
+                   EMAILS:        [{EMAIL}]
+                   CONTATOSRUINS: [{DDD, TELEFONE}]
+                   QSA:           [{ QSA: [{NOME, QUALIFICACAO, DDD_SOCIO, CEL_SOCIO}] }] } } }
+```
+
+Três erros, e cada um sozinho zerava o resultado: o desembrulho parava em `d` sem descer
+em `CONSULTA`; a lista de sócios é `QSA` e está **aninhada duas vezes**; e `TELEFONES` e
+`EMAILS` **da própria empresa** — o dado mais valioso aqui — nem eram procurados.
+
+Custou R$ 1,40 em quatro consultas registradas como "sem dados" tendo trazido dados: uma
+delas com quatro telefones. As quatro foram reclassificadas como `erro` (o custo fica no
+livro-razão; o status volta a dizer a verdade, e o TTL para de bloquear a repetição).
+
+O que o parser faz agora:
+
+- **telefone e e-mail da empresa** entram como confiança média — é cadastro de terceiro,
+  sem a data que o `emit` de uma NF-e tem;
+- **`FLWHATS = S` promove o registro a `whatsapp`**. É afirmação do provedor, não palpite
+  nosso, e por isso vai para `validado.tem_whatsapp`;
+- **`CONTATOSRUINS` são excluídos.** A própria base marca os telefones que já se sabe que
+  não atendem; gravá-los seria pagar para pôr na tela um número que o fornecedor da
+  informação avisou que não serve — e ele apareceria igual aos bons até alguém discar;
+- **`PROCON = S` aparece na evidência** e não remove o contato: é sinal para quem liga,
+  não bloqueio (o bloqueio é a lista de supressão);
+- **o cadastral é gravado na ficha**. `QTDEFUNCIONARIOS` é exatamente o número que o gate
+  de porte do Apollo procura e que nenhum fornecedor deste funil tem — pagar pela consulta
+  e descartar essa metade era comprar a resposta e jogar fora a que resolve o problema
+  seguinte da mesma cascata. Só grava onde está vazio: o headcount do Apollo é medido, o
+  desta é presumido, e sobrescrever apurado por estimado faria a série contar uma queda
+  que não existiu.
+
 ### `sem_dados` de um provedor pago é ambíguo, e a ambiguidade é cara
 
 A consulta à Nova Vida pela I3M custou R$ 0,35 e devolveu zero contatos. Não havia como
@@ -195,10 +234,23 @@ hipóteses que pedem ações opostas (esperar, ou corrigir código), e escolher 
 exigia repetir a chamada paga.
 
 Agora, quando um provedor responde e não rende contato nenhum, o registro guarda a
-**forma** da resposta: nomes de chave e tipos, nunca valores. `{d: {Socios: []}}` é
-ausência de dado; `{d: {QuadroSocios: [1× {2 chaves}]}}` é bug de mapeamento. A resposta
-traz nome, CPF e telefone de pessoa física, e um log de diagnóstico não é lugar para
-isso.
+**forma** da resposta: nomes de chave e tipos, nunca valores. A resposta traz nome, CPF e
+telefone de pessoa física, e um log de diagnóstico não é lugar para isso.
+
+Ela se pagou no primeiro uso. Foi o registro
+
+```
+{d: {CONSULTA: {CADASTRAIS: {23 chaves}, ENDERECOS: [1× …], TELEFONES: [4× …], …}}}
+```
+
+que mostrou que a Nova Vida vinha respondendo com dados o tempo todo e que o parser é que
+os descartava. Sem ele, a hipótese "estes CNPJs não têm contato" e a hipótese "o parser
+errou a chave" só se separariam repetindo a chamada paga.
+
+A CONSULTA também devolve **erro como texto com HTTP 200** (doc §2: credencial errada,
+consulta não liberada, cota do cliente, cota do usuário) — não só a geração do token. Isso
+passou a ser verificado: antes, um "SEM ACESSO AO SISTEMA" virava zero contatos com R$ 0,35
+cobrados e nada dizendo por quê.
 
 O **teto mensal por originador** (`teto_mensal_por_originador`, default R$ 150) é a
 autorização, não o gestor: dentro dele o originador aciona sozinho. Estourou, precisa de

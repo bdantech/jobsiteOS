@@ -437,7 +437,7 @@ export function FichaFornecedor({
                           }
                         >
                           <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
-                          {aprofundar.isPending ? 'Aprofundando…' : 'Buscar mais fundo'}
+                          {aprofundar.isPending ? 'Buscando…' : 'Buscar Mais'}
                         </Button>
                       ) : null}
                       {estourouOTeto && ehGestor ? (

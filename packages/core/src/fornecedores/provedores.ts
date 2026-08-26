@@ -89,117 +89,20 @@ export function tokenNovaVidaExpirado(expiraEm: string | Date | null, agora: Dat
   return !Number.isFinite(t) || t <= agora.getTime()
 }
 
-interface SocioNovaVida {
-  Nome?: string
-  NOME?: string
-  nome?: string
-  Qualificacao?: string
-  QUALIFICACAO?: string
-  qualificacao?: string
-  Telefones?: unknown
-  TELEFONES?: unknown
-  telefones?: unknown
-  Emails?: unknown
-  EMAILS?: unknown
-  emails?: unknown
-}
-
-function primeiro<T>(obj: Record<string, unknown>, chaves: string[]): T | undefined {
-  for (const c of chaves) if (obj[c] !== undefined) return obj[c] as T
-  return undefined
-}
-
-/** A resposta traz telefone como string, objeto ou lista. Todas viram lista de string. */
-function comoLista(valor: unknown): string[] {
-  if (valor === null || valor === undefined) return []
-  if (typeof valor === 'string') return valor.split(/[;,\n]/).map((s) => s.trim()).filter(Boolean)
-  if (Array.isArray(valor)) return valor.flatMap((v) => comoLista(v))
-  if (typeof valor === 'object') {
-    const o = valor as Record<string, unknown>
-    return comoLista(
-      primeiro<unknown>(o, ['Telefone', 'TELEFONE', 'telefone', 'Numero', 'NUMERO', 'numero', 'Email', 'EMAIL', 'email', 'Valor', 'valor']),
-    )
-  }
-  return []
-}
-
-/**
- * Sócios da Nova Vida → contatos.
- *
- * Confiança MÉDIA, sempre, e não é modéstia. O telefone é do SÓCIO como pessoa
- * física, não da empresa: pode ser o celular pessoal de alguém que não trabalha na
- * operação, ou de um sócio que saiu e continua no cadastro. É um contato de verdade —
- * em PME de construção o sócio quase sempre É quem decide — mas não tem a certeza do
- * campo que o próprio emitente declarou à SEFAZ.
- */
-export function mapearSociosNovaVida(
-  resposta: unknown,
-  opcoes: { dddPadrao?: string | null } = {},
-): ContatoDeProvedor[] {
-  const raiz = (desembrulharObjeto(resposta) ?? {}) as Record<string, unknown>
-  const lista = primeiro<unknown>(raiz, ['Socios', 'SOCIOS', 'socios', 'QuadroSocietario', 'quadroSocietario'])
-  const socios: SocioNovaVida[] = Array.isArray(lista) ? (lista as SocioNovaVida[]) : []
-
-  const out: ContatoDeProvedor[] = []
-  const vistos = new Set<string>()
-
-  for (const s of socios) {
-    const o = s as unknown as Record<string, unknown>
-    const nome = (primeiro<string>(o, ['Nome', 'NOME', 'nome']) ?? '').trim() || null
-    const cargo = (primeiro<string>(o, ['Qualificacao', 'QUALIFICACAO', 'qualificacao']) ?? '').trim() || null
-
-    for (const bruto of comoLista(primeiro<unknown>(o, ['Telefones', 'TELEFONES', 'telefones']))) {
-      const tel = normalizarTelefoneBr(bruto, { dddPadrao: opcoes.dddPadrao })
-      if (!tel.e164) continue
-      const chave = `telefone|${tel.e164}`
-      if (vistos.has(chave)) continue
-      vistos.add(chave)
-      out.push({
-        tipo: 'telefone',
-        valor: tel.e164,
-        original: bruto,
-        nome_pessoa: nome,
-        cargo,
-        confianca: 'media',
-        evidencia: `Nova Vida TI · sócio ${nome ?? 'sem nome'}`,
-      })
-    }
-
-    for (const bruto of comoLista(primeiro<unknown>(o, ['Emails', 'EMAILS', 'emails']))) {
-      const e = bruto.trim().toLowerCase()
-      if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(e)) continue
-      const chave = `email|${e}`
-      if (vistos.has(chave)) continue
-      vistos.add(chave)
-      out.push({
-        tipo: 'email',
-        valor: e,
-        original: bruto,
-        nome_pessoa: nome,
-        cargo,
-        confianca: 'media',
-        evidencia: `Nova Vida TI · sócio ${nome ?? 'sem nome'}`,
-      })
-    }
-  }
-
-  return out
-}
-
 /**
  * A FORMA de uma resposta, sem o conteúdo dela.
  *
- * Existe porque `sem_dados` é ambíguo e caro: a consulta à Nova Vida custou R$ 0,35 e
- * devolveu zero contatos, e não havia como saber se o CNPJ não tem sócio com telefone
- * ou se o mapeamento errou a chave. As duas hipóteses pedem ações opostas — esperar,
- * ou corrigir código —, e escolher entre elas exigia repetir a chamada paga.
+ * Existe porque `sem_dados` é ambíguo e caro, e ela provou o valor no primeiro uso: a
+ * consulta à Nova Vida custou R$ 0,35 e devolveu zero contatos, e a forma registrada
+ * mostrou `{d: {CONSULTA: {... TELEFONES: [4× …] ...}}}` — quatro telefones que o
+ * mapeamento estava jogando fora. Sem ela, a hipótese "o CNPJ não tem contato" e a
+ * hipótese "o parser errou a chave" só se separariam repetindo a chamada paga.
  *
  * Devolve só nomes de chave e tipos. NUNCA valores: a resposta traz nome, CPF e
  * telefone de pessoa física, e um log de diagnóstico não é lugar para isso.
  */
-// Três níveis, e não dois: a resposta da Nova Vida vem com duplo embrulho ASMX
-// (`{d: {Socios: [...]}}`), e a dois níveis a lista de sócios já saía como `…` —
-// justamente a parte que se quer diagnosticar.
+// Três níveis, e não dois: a resposta vem com duplo embrulho (`{d: {CONSULTA: {...}}}`),
+// e a dois níveis as listas já saíam como `…` — justamente o que se quer diagnosticar.
 export function formaDaResposta(valor: unknown, profundidade = 3): string {
   if (valor === null) return 'null'
   if (Array.isArray(valor)) {
@@ -217,16 +120,19 @@ export function formaDaResposta(valor: unknown, profundidade = 3): string {
   return `{${dentro.join(', ')}${chaves.length > 12 ? ', …' : ''}}`
 }
 
+/** Tira o embrulho do ASMX até chegar no miolo (`CONSULTA`, quando houver). */
 function desembrulharObjeto(resposta: unknown): unknown {
   if (typeof resposta !== 'object' || resposta === null) return resposta
   const r = resposta as Record<string, unknown>
+  // `CONSULTA` é o miolo: parar nele impede o desembrulho de descer demais.
+  if (r.CONSULTA !== undefined) return r
   for (const chave of ['d', 'NVCHECKJsonResult', 'Resultado', 'resultado']) {
     if (r[chave] !== undefined) {
       const dentro = r[chave]
       // O ASMX às vezes devolve o objeto SERIALIZADO dentro do embrulho.
       if (typeof dentro === 'string') {
         try {
-          return JSON.parse(dentro)
+          return desembrulharObjeto(JSON.parse(dentro))
         } catch {
           return null
         }
@@ -235,6 +141,240 @@ function desembrulharObjeto(resposta: unknown): unknown {
     }
   }
   return r
+}
+
+/*
+ * ─── O SCHEMA REAL DA NVCHECK (PESSOA JURÍDICA) ──────────────────────────────
+ *
+ * A primeira versão deste mapeamento foi escrita a partir da descrição do prompt
+ * ("mapear telefones/e-mails de sócios") e procurava uma chave `Socios` na raiz. O
+ * schema é outro, e o erro custou R$ 1,40 em quatro consultas que voltaram marcadas
+ * como "sem dados" tendo trazido dados:
+ *
+ *   { d: { CONSULTA: { CADASTRAIS: {...}, ENDERECOS: [...], TELEFONES: [...],
+ *                      EMAILS: [...], CONTATOSRUINS: [...], QSA: [ { QSA: [...] } ] } } }
+ *
+ * Três coisas que a versão anterior não fazia, e cada uma sozinha zerava o resultado:
+ *
+ *   1. descer em `CONSULTA` (o desembrulho parava em `d`);
+ *   2. ler `QSA`, que ainda é ANINHADA: `QSA[0].QSA[]` é a lista de sócios;
+ *   3. ler `TELEFONES` e `EMAILS` da PRÓPRIA EMPRESA — que são o dado mais valioso
+ *      aqui e nem sequer eram procurados. Uma das consultas trouxe quatro telefones.
+ */
+
+interface TelefoneNvti {
+  DDD?: string
+  TELEFONE?: string
+  ASSINANTE?: string
+  /** `C` celular, `F` fixo. */
+  TIPO_TELEFONE?: string
+  PROCON?: string
+  OPERADORA?: string
+  FLHOT?: string
+  FLWHATS?: string
+}
+
+interface SocioNvti {
+  NOME?: string
+  QUALIFICACAO?: string
+  DDD_SOCIO?: string
+  CEL_SOCIO?: string
+  FLWHATS?: string
+}
+
+/** O que o cadastral da PJ traz de graça e alimenta o gate do Apollo. */
+export interface CadastraisNovaVida {
+  porte: string | null
+  funcionarios: number | null
+  faturamento_presumido: number | null
+  razao_social: string | null
+  nome_fantasia: string | null
+  situacao: string | null
+}
+
+export interface RetornoNovaVida {
+  contatos: ContatoDeProvedor[]
+  cadastrais: CadastraisNovaVida | null
+  /** Telefones que a própria base marca como ruins. Nunca viram contato. */
+  descartados: number
+}
+
+const ehSim = (v: unknown): boolean => String(v ?? '').trim().toUpperCase().startsWith('S')
+
+function lista<T>(valor: unknown): T[] {
+  if (Array.isArray(valor)) return valor as T[]
+  // Um único item às vezes vem como objeto, não como array de um.
+  if (valor && typeof valor === 'object') return [valor as T]
+  return []
+}
+
+function numeroOuNulo(v: unknown): number | null {
+  const n = Number(String(v ?? '').replace(/[^\d]/g, ''))
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * A NVCHECK devolve ERRO COMO TEXTO, com HTTP 200 e no lugar do objeto.
+ *
+ * A documentação lista quatro: credencial errada, consulta não liberada, cota do
+ * cliente e cota do usuário. A detecção existia só para o TOKEN — a consulta em si
+ * não era verificada, e um "SEM ACESSO AO SISTEMA" viraria zero contatos com R$ 0,35
+ * cobrados e nada dizendo por quê.
+ */
+export function erroDeConsultaNovaVida(resposta: unknown): string | null {
+  const texto =
+    typeof resposta === 'string'
+      ? resposta
+      : typeof (resposta as { d?: unknown })?.d === 'string'
+        ? ((resposta as { d: string }).d)
+        : null
+  if (texto === null) return null
+  const t = texto.trim()
+  return t.length > 0 && t.length < 200 ? t : null
+}
+
+/**
+ * A resposta da NVCHECK → contatos, cadastral e o que foi descartado.
+ *
+ * ─── CONFIANÇA ───────────────────────────────────────────────────────────────
+ *
+ * Telefone e e-mail DA EMPRESA entram como média: é cadastro de terceiro, sem a data
+ * que o `emit` de uma NF-e tem. Celular de SÓCIO também é média, e por outra razão —
+ * é pessoa física, pode ser de quem saiu da sociedade.
+ *
+ * `FLWHATS = S` promove o registro a `whatsapp`, que é o canal que o originador de
+ * fato usa. É afirmação do provedor, não palpite nosso, e por isso entra em
+ * `validado.tem_whatsapp` na gravação.
+ *
+ * ─── CONTATOSRUINS SÃO EXCLUÍDOS ─────────────────────────────────────────────
+ *
+ * A própria base marca telefones que já se sabe que não atendem. Gravá-los seria
+ * pagar para pôr na tela um número que o fornecedor da informação já avisou que não
+ * serve — e ele apareceria com a mesma cara dos bons até alguém discar.
+ */
+export function mapearNovaVida(
+  resposta: unknown,
+  opcoes: { dddPadrao?: string | null } = {},
+): RetornoNovaVida {
+  const raiz = desembrulharObjeto(resposta)
+  const consulta = (raiz && typeof raiz === 'object'
+    ? ((raiz as Record<string, unknown>).CONSULTA ?? raiz)
+    : null) as Record<string, unknown> | null
+
+  if (!consulta || typeof consulta !== 'object') {
+    return { contatos: [], cadastrais: null, descartados: 0 }
+  }
+
+  const out: ContatoDeProvedor[] = []
+  const vistos = new Set<string>()
+
+  // Os ruins primeiro: eles entram no conjunto de exclusão antes de qualquer leitura.
+  const ruins = new Set<string>()
+  for (const r of lista<TelefoneNvti>(consulta.CONTATOSRUINS)) {
+    const tel = normalizarTelefoneBr(`${r.DDD ?? ''}${r.TELEFONE ?? ''}`, {
+      dddPadrao: opcoes.dddPadrao,
+    })
+    if (tel.e164) ruins.add(tel.e164)
+  }
+
+  const push = (c: ContatoDeProvedor): void => {
+    const chave = `${c.tipo}|${c.valor}`
+    if (vistos.has(chave) || ruins.has(c.valor)) return
+    vistos.add(chave)
+    out.push(c)
+  }
+
+  // ── Telefones da EMPRESA ──────────────────────────────────────────────────
+  for (const t of lista<TelefoneNvti>(consulta.TELEFONES)) {
+    const tel = normalizarTelefoneBr(`${t.DDD ?? ''}${t.TELEFONE ?? ''}`, {
+      dddPadrao: opcoes.dddPadrao,
+    })
+    if (!tel.e164) continue
+    const whats = ehSim(t.FLWHATS)
+    const detalhes = [
+      t.TIPO_TELEFONE === 'C' ? 'celular' : t.TIPO_TELEFONE === 'F' ? 'fixo' : null,
+      t.OPERADORA || null,
+      ehSim(t.PROCON) ? 'no Procon' : null,
+      whats ? 'com WhatsApp' : null,
+    ].filter(Boolean)
+    push({
+      tipo: whats ? 'whatsapp' : 'telefone',
+      valor: tel.e164,
+      original: `${t.DDD ?? ''}${t.TELEFONE ?? ''}`,
+      nome_pessoa: null,
+      cargo: null,
+      confianca: 'media',
+      evidencia: `Nova Vida TI · telefone da empresa${detalhes.length ? ` (${detalhes.join(', ')})` : ''}`,
+    })
+  }
+
+  // ── E-mails da EMPRESA ────────────────────────────────────────────────────
+  for (const e of lista<{ EMAIL?: string }>(consulta.EMAILS)) {
+    const valor = (e.EMAIL ?? '').trim().toLowerCase()
+    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(valor)) continue
+    push({
+      tipo: 'email',
+      valor,
+      original: e.EMAIL as string,
+      nome_pessoa: null,
+      cargo: null,
+      confianca: 'media',
+      evidencia: 'Nova Vida TI · e-mail da empresa',
+    })
+  }
+
+  // ── Sócios (QSA, aninhada) ────────────────────────────────────────────────
+  for (const bloco of lista<{ QSA?: unknown }>(consulta.QSA)) {
+    for (const socio of lista<SocioNvti>(bloco.QSA)) {
+      const nome = (socio.NOME ?? '').trim() || null
+      const cargo = (socio.QUALIFICACAO ?? '').trim() || null
+      const tel = normalizarTelefoneBr(`${socio.DDD_SOCIO ?? ''}${socio.CEL_SOCIO ?? ''}`, {
+        dddPadrao: opcoes.dddPadrao,
+      })
+      if (!tel.e164) continue
+      const whats = ehSim(socio.FLWHATS)
+      push({
+        tipo: whats ? 'whatsapp' : 'telefone',
+        valor: tel.e164,
+        original: `${socio.DDD_SOCIO ?? ''}${socio.CEL_SOCIO ?? ''}`,
+        nome_pessoa: nome,
+        cargo,
+        confianca: 'media',
+        evidencia: `Nova Vida TI · sócio ${nome ?? 'sem nome'}${whats ? ' (com WhatsApp)' : ''}`,
+      })
+    }
+  }
+
+  const cad = (consulta.CADASTRAIS ?? {}) as Record<string, unknown>
+
+  return {
+    contatos: out,
+    /*
+     * O cadastral vem DE GRAÇA na mesma consulta, e é ele que destrava o Apollo:
+     * `QTDEFUNCIONARIOS` é exatamente o número que o gate de porte procura e que
+     * nenhum fornecedor deste funil tem em `empresas`.
+     */
+    cadastrais: {
+      porte: (cad.PORTE as string | undefined)?.trim() || null,
+      funcionarios: numeroOuNulo(cad.QTDEFUNCIONARIOS),
+      faturamento_presumido: numeroOuNulo(cad.FATURAMENTOPRESUMIDO),
+      razao_social: (cad.RAZAO as string | undefined)?.trim() || null,
+      nome_fantasia: (cad.NOME_FANTASIA as string | undefined)?.trim() || null,
+      situacao:
+        ((consulta.SITUACAOCADASTRAL as Record<string, unknown> | undefined)?.DESCRICAO as
+          | string
+          | undefined)?.trim() || null,
+    },
+    descartados: ruins.size,
+  }
+}
+
+/** Compatibilidade: só os contatos. */
+export function mapearSociosNovaVida(
+  resposta: unknown,
+  opcoes: { dddPadrao?: string | null } = {},
+): ContatoDeProvedor[] {
+  return mapearNovaVida(resposta, opcoes).contatos
 }
 
 // ─── Google Places ──────────────────────────────────────────────────────────

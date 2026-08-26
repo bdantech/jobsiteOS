@@ -1,10 +1,12 @@
 import {
   desembrulharTokenNovaVida,
+  erroDeConsultaNovaVida,
   expiracaoTokenNovaVida,
   formaDaResposta,
-  mapearSociosNovaVida,
+  mapearNovaVida,
   tokenNovaVidaEhErro,
   tokenNovaVidaExpirado,
+  type CadastraisNovaVida,
   type ContatoDeProvedor,
 } from '../../../../../../packages/core/src/fornecedores/provedores.js'
 import { supabaseAdmin } from '../../../db.js'
@@ -93,11 +95,17 @@ export interface ResultadoNovaVida {
   erro?: string
   /**
    * A FORMA da resposta quando ela não rendeu contato nenhum. É o que separa "este
-   * CNPJ não tem sócio com telefone" de "o mapeamento errou a chave" — duas hipóteses
-   * que pedem ações opostas e que, sem isto, só se distinguiriam repetindo a consulta
-   * paga.
+   * CNPJ não tem contato" de "o mapeamento errou a chave" — duas hipóteses que pedem
+   * ações opostas e que, sem isto, só se distinguiriam repetindo a consulta paga.
+   *
+   * Ela já se pagou uma vez: foi o registro `{d: {CONSULTA: {... TELEFONES: [4× …]}}}`
+   * que mostrou que o parser antigo estava jogando fora quatro telefones.
    */
   forma?: string
+  /** Porte, headcount e faturamento presumido, que vêm de graça na mesma consulta. */
+  cadastrais?: CadastraisNovaVida | null
+  /** Telefones que a própria base marca como ruins e que não viraram contato. */
+  descartados?: number
 }
 
 export async function buscarNaNovaVida(cadastral: CadastralFornecedor): Promise<ResultadoNovaVida> {
@@ -117,15 +125,32 @@ export async function buscarNaNovaVida(cadastral: CadastralFornecedor): Promise<
       tentativas: 2,
     })
 
-    const contatos = mapearSociosNovaVida(resp, { dddPadrao: cadastral.ddd })
-    if (contatos.length === 0) {
+    /*
+     * A CONSULTA também devolve erro como TEXTO com HTTP 200 (doc §2): credencial
+     * errada, consulta não liberada, cota do cliente e cota do usuário. Só o token
+     * era verificado — um "SEM ACESSO AO SISTEMA" virava zero contatos com R$ 0,35
+     * cobrados e nada dizendo por quê.
+     */
+    const erroTexto = erroDeConsultaNovaVida(resp)
+    if (erroTexto) {
+      logger.error({ cnpj: cadastral.cnpj, resposta: erroTexto }, 'Nova Vida recusou a consulta.')
+      return { contatos: [], disponivel: true, erro: erroTexto }
+    }
+
+    const r = mapearNovaVida(resp, { dddPadrao: cadastral.ddd })
+    if (r.contatos.length === 0) {
       // Só nomes de chave e tipos — a resposta traz nome, CPF e telefone de pessoa
       // física, e um log de diagnóstico não é lugar para isso.
       const forma = formaDaResposta(resp)
-      logger.info({ cnpj: cadastral.cnpj, forma }, 'Nova Vida respondeu sem sócio mapeável.')
-      return { contatos, disponivel: true, forma }
+      logger.info({ cnpj: cadastral.cnpj, forma }, 'Nova Vida respondeu sem contato mapeável.')
+      return { contatos: [], disponivel: true, forma, cadastrais: r.cadastrais, descartados: r.descartados }
     }
-    return { contatos, disponivel: true }
+    return {
+      contatos: r.contatos,
+      disponivel: true,
+      cadastrais: r.cadastrais,
+      descartados: r.descartados,
+    }
   } catch (e) {
     logger.error({ cnpj: cadastral.cnpj, erro: String(e) }, 'Consulta à Nova Vida falhou.')
     return { contatos: [], disponivel: true, erro: String(e) }

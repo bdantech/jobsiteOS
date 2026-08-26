@@ -360,3 +360,52 @@ export async function gravarDominioDescoberto(
   logger.info({ cnpj, dominio: limpo }, 'Domínio gravado a partir da descoberta de contatos.')
   return true
 }
+
+/**
+ * Grava o cadastral que a Nova Vida devolve de graça junto com os contatos.
+ *
+ * `QTDEFUNCIONARIOS` é EXATAMENTE o número que o gate de porte do Apollo procura e que
+ * nenhum fornecedor deste funil tem — não estar na plataforma é a definição deles.
+ * Jogá-lo fora era pagar por um dado e descartar a metade que resolve o problema
+ * seguinte da mesma cascata.
+ *
+ * Só grava onde está VAZIO. O headcount do Apollo (`organizations/enrich`) é medido e
+ * o desta é presumido: sobrescrever um número apurado por uma estimativa faria a série
+ * de `empresa_metricas` contar uma queda que não existiu.
+ */
+export async function gravarCadastralDescoberto(
+  cnpj: string,
+  cad: { funcionarios: number | null; faturamento_presumido: number | null },
+): Promise<void> {
+  if (cad.funcionarios === null && cad.faturamento_presumido === null) return
+
+  const { data: mu } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('empresa_id')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+  if (!mu?.empresa_id) return
+
+  const { data: emp } = await supabaseAdmin
+    .from('empresas')
+    .select('funcionarios, faturamento_anual')
+    .eq('id', mu.empresa_id)
+    .maybeSingle()
+
+  const campos: Record<string, unknown> = {}
+  if (cad.funcionarios !== null && emp?.funcionarios === null) {
+    campos.funcionarios = cad.funcionarios
+    campos.funcionarios_origem = 'novavida'
+    campos.funcionarios_atualizado_em = new Date().toISOString()
+  }
+  if (cad.faturamento_presumido !== null && emp?.faturamento_anual === null) {
+    campos.faturamento_anual = cad.faturamento_presumido
+    campos.faturamento_origem = 'novavida'
+    campos.faturamento_confianca = 'baixa'
+    campos.faturamento_atualizado_em = new Date().toISOString()
+  }
+  if (Object.keys(campos).length === 0) return
+
+  await supabaseAdmin.from('empresas').update(campos).eq('id', mu.empresa_id)
+  logger.info({ cnpj, campos: Object.keys(campos) }, 'Cadastral da Nova Vida gravado na ficha.')
+}

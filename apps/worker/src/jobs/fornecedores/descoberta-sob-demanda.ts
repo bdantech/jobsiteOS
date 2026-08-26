@@ -24,6 +24,7 @@ import {
   atualizarResumo,
   cadastralDoFornecedor,
   dentroDoTtl,
+  gravarCadastralDescoberto,
   gravarContatos,
   gravarDominioDescoberto,
   registrarExecucao,
@@ -213,6 +214,14 @@ export async function descobertaSobDemanda(
       const g = r.contatos.length ? await gravarContatos(cnpj, r.contatos, 'novavida') : { novos: 0 }
       novos += g.novos
       melhor = melhorDe(melhor, r.contatos.map((c) => c.confianca))
+
+      /*
+       * O cadastral que veio junto é gravado na ficha — e é ele que pode destravar o
+       * Apollo mais adiante NESTA MESMA corrida, porque o gate de porte lê exatamente
+       * `funcionarios`. Pagar pela consulta e descartar essa metade seria comprar a
+       * resposta e jogar fora a que resolve o problema seguinte.
+       */
+      if (r.cadastrais) await gravarCadastralDescoberto(cnpj, r.cadastrais)
       await registrar('novavida', r.contatos.length ? 'sucesso' : r.erro ? 'erro' : 'sem_dados', {
         // A forma da resposta entra no `motivo` do registro: é o que permite
         // diagnosticar um `sem_dados` de R$ 0,35 sem repetir a consulta.
