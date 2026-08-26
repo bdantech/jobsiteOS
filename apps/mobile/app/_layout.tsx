@@ -100,6 +100,15 @@ function RootNavigator() {
             name="configuracoes"
             options={{ headerShown: true, title: 'Configurações', presentation: 'card' }}
           />
+          {/*
+            O destino do deep link de report (04m §4). Fora de (tabs) de propósito:
+            um report não pertence a módulo nenhum — reportar é direito de qualquer
+            usuário ativo — e a rota precisa existir para o push abrir em algum lugar.
+          */}
+          <Stack.Screen
+            name="reports/[id]"
+            options={{ headerShown: true, title: 'Report', presentation: 'card' }}
+          />
         </Stack>
       </RootGate>
     </ThemeProvider>

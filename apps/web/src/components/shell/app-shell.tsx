@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { BannerBeta } from '@/components/reports/banner-beta'
 import { AppSidebar } from '@/components/shell/app-sidebar'
 import { RouteSync } from '@/components/shell/route-sync'
 import { TabsStoreProvider } from '@/components/shell/tabs-store-provider'
@@ -51,7 +52,15 @@ export async function AppShell({ usuario, grantedModuleIds, children }: AppShell
         <AppSidebar usuario={usuario} grantedModuleIds={grantedModuleIds} />
 
         <SidebarInset className="overflow-hidden">
-          <TopBar grantedModuleIds={grantedModuleIds} />
+          <TopBar grantedModuleIds={grantedModuleIds} usuarioId={usuario.id} />
+
+          {/*
+            A tarja de beta (04m §5) vem ABAIXO da barra superior e ACIMA do
+            <main>, dentro do frame que não rola. Ela é estado da plataforma: se
+            rolasse com a página, sumiria da vista no primeiro scroll e passaria a
+            avisar apenas quem está no topo de uma tela.
+          */}
+          <BannerBeta />
 
           {/*
             The only scroll container. Pages scroll; the shell never does.

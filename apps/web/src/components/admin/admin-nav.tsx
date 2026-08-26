@@ -2,13 +2,17 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Clock, Shield, Users } from 'lucide-react'
+import { Clock, MessageSquareWarning, Settings, Shield, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ABAS = [
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/perfis', label: 'Perfis', icon: Shield },
+  // Reports vem antes de Crons: é trabalho diário (alguém está esperando resposta),
+  // e Crons é consulta. A ordem das abas é a ordem em que se abre o dia.
+  { href: '/admin/reports', label: 'Reports', icon: MessageSquareWarning },
   { href: '/admin/crons', label: 'Crons', icon: Clock },
+  { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ] as const
 
 /**

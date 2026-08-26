@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
+import { BannerBeta } from '@/features/reports'
 import { useSession } from '@/lib/auth'
 
 /**
@@ -26,6 +27,10 @@ export default function MaisScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+      {/* Esta tela não passa por <ModuleStack>, que é quem injeta a tarja nas
+          demais. Sem esta linha, "Mais" seria a única tela sem o aviso de beta. */}
+      <BannerBeta />
+
       <ScreenHeader title="Mais" />
 
       <ScrollView contentContainerClassName="gap-6 p-4 pb-24">

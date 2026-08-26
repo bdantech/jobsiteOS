@@ -4780,6 +4780,156 @@ export type Database = {
           },
         ]
       }
+      report_comentarios: {
+        Row: {
+          autor_id: string
+          criado_em: string
+          id: string
+          interno: boolean
+          report_id: string
+          texto: string
+        }
+        Insert: {
+          autor_id: string
+          criado_em?: string
+          id?: string
+          interno?: boolean
+          report_id: string
+          texto: string
+        }
+        Update: {
+          autor_id?: string
+          criado_em?: string
+          id?: string
+          interno?: boolean
+          report_id?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_comentarios_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_comentarios_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_historico: {
+        Row: {
+          alterado_em: string
+          alterado_por: string
+          id: string
+          report_id: string
+          status_anterior: string | null
+          status_novo: string
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por: string
+          id?: string
+          report_id: string
+          status_anterior?: string | null
+          status_novo: string
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por?: string
+          id?: string
+          report_id?: string
+          status_anterior?: string | null
+          status_novo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_historico_alterado_por_fkey"
+            columns: ["alterado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_historico_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          anexo_url: string | null
+          atualizado_em: string
+          contexto: Json
+          criado_em: string
+          criado_por: string
+          descricao: string
+          duplicado_de: string | null
+          id: string
+          numero: number
+          prioridade: string | null
+          resolvido_em: string | null
+          status: string
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          anexo_url?: string | null
+          atualizado_em?: string
+          contexto?: Json
+          criado_em?: string
+          criado_por: string
+          descricao: string
+          duplicado_de?: string | null
+          id?: string
+          numero?: number
+          prioridade?: string | null
+          resolvido_em?: string | null
+          status?: string
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          anexo_url?: string | null
+          atualizado_em?: string
+          contexto?: Json
+          criado_em?: string
+          criado_por?: string
+          descricao?: string
+          duplicado_de?: string | null
+          id?: string
+          numero?: number
+          prioridade?: string | null
+          resolvido_em?: string | null
+          status?: string
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_duplicado_de_fkey"
+            columns: ["duplicado_de"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scorecard_versoes: {
         Row: {
           ativa: boolean
@@ -7050,6 +7200,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_definir_beta: { Args: { p: Json }; Returns: Json }
       app_definir_carteira: {
         Args: { p: Json }
         Returns: {
@@ -7985,6 +8136,33 @@ export type Database = {
       }
       app_registrar_toque_manual: { Args: { p: Json }; Returns: undefined }
       app_remover_supressao: { Args: { p: Json }; Returns: undefined }
+      app_report_atualizar: { Args: { p: Json }; Returns: Json }
+      app_report_comentar: { Args: { p: Json }; Returns: Json }
+      app_report_criar: {
+        Args: { p: Json }
+        Returns: {
+          anexo_url: string | null
+          atualizado_em: string
+          contexto: Json
+          criado_em: string
+          criado_por: string
+          descricao: string
+          duplicado_de: string | null
+          id: string
+          numero: number
+          prioridade: string | null
+          resolvido_em: string | null
+          status: string
+          tipo: string
+          titulo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_reverter_fornecedor_sem_interesse: {
         Args: { p: Json }
         Returns: boolean
@@ -8625,6 +8803,7 @@ export type Database = {
         Returns: Json
       }
       raiz_e_spe: { Args: { p_cnpj: string }; Returns: boolean }
+      reports_painel: { Args: never; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

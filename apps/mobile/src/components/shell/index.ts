@@ -1,6 +1,7 @@
 export { AiFab } from './ai-fab'
 export { BlockedDeepLinkNotice } from './blocked-deep-link-notice'
-export { HeaderBell } from './header-bell'
+export { HeaderActions } from './header-actions'
+export { ReportButton } from './report-button'
 export { ModuleGrid } from './module-grid'
 export { ModuleStack, type ModuleStackProps } from './module-stack'
 export { notGrantedNotice, webOnlyNotice, type ModuleNotice } from './notices'

@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AiBarTrigger } from '@/components/ai/ai-bar-trigger'
 import { NotificationsBell } from '@/components/notifications/bell'
+import { ReportTrigger } from '@/components/reports/report-trigger'
 import { TabBar } from '@/components/shell/tab-bar'
 import { useTabsStoreApi } from '@/components/shell/tabs-store-provider'
 import { Separator } from '@/components/ui/separator'
@@ -11,9 +12,11 @@ import { SidebarTrigger } from '@/components/ui/sidebar'
 
 interface TopBarProps {
   grantedModuleIds: string[]
+  /** Quem está logado. O botão de reportar carrega "Meus reports" com ele. */
+  usuarioId: string
 }
 
-export function TopBar({ grantedModuleIds }: TopBarProps) {
+export function TopBar({ grantedModuleIds, usuarioId }: TopBarProps) {
   const router = useRouter()
   const store = useTabsStoreApi()
 
@@ -52,8 +55,14 @@ export function TopBar({ grantedModuleIds }: TopBarProps) {
         badge. It used to move to the sidebar footer on desktop, which the icon rail ends:
         a badge you can only see by expanding a sidebar is not a badge.
       */}
+      {/*
+        Reportar fica ao LADO do sino, e não dentro de um menu: os dois são a mesma
+        classe de coisa — o canal entre a plataforma e quem a usa —, um de dentro
+        para fora e o outro de fora para dentro.
+      */}
       <div className="flex shrink-0 items-center gap-1">
         <AiBarTrigger onOpenRoute={abrirRota} />
+        <ReportTrigger usuarioId={usuarioId} />
         <NotificationsBell />
       </div>
     </header>

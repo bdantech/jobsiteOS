@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md.
 prompts/         The build specs.
 ```
 
@@ -472,6 +472,68 @@ de validade sumir do relatório parecendo limpo.
 worker**. Nunca em `fornecedores_config` — ela é lida por `authenticated` para o card mostrar o custo do
 clique, e uma credencial ali seria distribuída a todo mundo com o módulo. O token da Nova Vida fica em
 `integracao_tokens`, com RLS sem policy **e** `ALL` revogado de `anon`/`authenticated`.
+
+## Reportar Bugs & Melhorias
+
+Um botão ao lado do sino, em toda a aplicação. Detalhes em [`docs/reports.md`](docs/reports.md);
+aqui o que muda o comportamento.
+
+### Não é um módulo, e é por isso que funciona
+
+Reportar não está no registry e não tem guard de módulo: a permissão de escrita é
+`app_usuario_ativo()`. Um perfil sem módulo nenhum liberado é justamente o perfil com mais motivo
+para dizer que a tela está quebrada. **Ler** é o contrário — `reports_select` entrega ao autor apenas
+as linhas dele, e ao admin todas.
+
+### Fluxos de status, por tipo
+
+```
+bug        aberto → em_analise → em_correcao → resolvido | nao_procede | duplicado
+melhoria   aberto → em_analise → planejado → em_desenvolvimento → entregue | nao_planejado | duplicado
+```
+
+Um bug é **consertado**; uma melhoria é **planejada e entregue**. O CHECK `reports_status_do_tipo`
+é cruzado — o status tem de pertencer à esteira do tipo —, e o seletor do admin só oferece a esteira
+daquele report. `duplicado` exige apontar o original, nos dois sentidos: o CHECK amarra os dois lados.
+
+A mesma régua está em `packages/core/src/reports/schemas.ts`, e um teste compara as duas listas. Se
+divergirem, quem descobre é o usuário, no meio de um clique.
+
+### Quem é notificado quando
+
+| evento | quem | push? |
+| --- | --- | --- |
+| `report.criado` | perfis com o módulo `admin` (sino) | não |
+| `report.status_alterado` | o autor | **sim** |
+| `report.comentario` público | o autor (ou os admins, se o autor respondeu) | **sim** |
+| comentário **interno** | ninguém | — |
+| `beta.alterado` | perfis com o módulo `admin` | não |
+
+Um caminho por evento (regra da migração `0016`): `report.criado` e `beta.alterado` saem do trigger
+de `empresa_eventos` + `notificacao_regras`; os que precisam de **push** saem de `notificar()` na
+server action, porque o trigger só escreve o sino. Salvar prioridade **não** notifica — só mudança de
+status. Ninguém é notificado da própria ação.
+
+O evento `report.criado` **não carrega o título**: `empresa_eventos` é legível por quem tem o módulo
+`empresas`, e copiar o título ali publicaria para a empresa inteira o texto que a policy restringiu.
+
+### Como ligar o modo beta
+
+**Admin → Configurações → Modo beta**: interruptor, texto (até 200 caracteres), salvar. A tarja
+aparece no topo de todas as telas — web e celular — e reflete em **todas as sessões abertas, sem
+novo login**: `app_config` está na publicação `supabase_realtime` desde a `0141`.
+
+Sem botão de fechar, de propósito: é o estado da plataforma, não uma notificação. Ligar sem texto é
+recusado — uma tarja âmbar vazia é pior que tarja nenhuma.
+
+**`app_config` passa a ser lida pela empresa inteira e por Realtime.** Nada de credencial, chave ou
+segredo entra ali — mesma régua de `fornecedores_config`.
+
+### O anexo é um print de dentro do sistema
+
+Bucket **privado**, 5 MB, só imagem, com limite e mime-types no bucket (uma checagem em JavaScript é
+uma sugestão). Caminho `{usuario_id}/{arquivo}`, que é a âncora da policy — no upload o report ainda
+não existe para servir de chave. Leitura só por URL assinada de 5 minutos.
 
 ## Conventions
 

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Text } from '@/components/ui/text'
 import { AparenciaCard, ContaCard, NotificacoesCard } from '@/features/auth'
+import { BannerBeta } from '@/features/reports'
 import { useSession } from '@/lib/auth'
 
 /**
@@ -41,6 +42,9 @@ export default function ConfiguracoesScreen() {
 
   return (
     <>
+      {/* Tela raiz: o header é do RootNavigator, e não de um <ModuleStack>. */}
+      <BannerBeta />
+
       <ScrollView
         className="flex-1 bg-background"
         contentContainerClassName="gap-4 p-4 pb-12"
