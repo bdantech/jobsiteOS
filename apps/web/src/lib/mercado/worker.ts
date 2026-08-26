@@ -298,15 +298,15 @@ export async function dispararAlertaReclassificacao(): Promise<DispararJobResult
 /*
  * Funil de cadastro de fornecedores (04l).
  *
- * `dispararBuscarContatos` é a única daqui que ESPERA o worker responder: a tela
- * mostrou o custo estimado e perguntou se pode gastar, e devolver "ok, mandei" para
- * uma decisão de dinheiro é pedir que a pessoa confie sem ver. As outras três são
- * jobs de lote e seguem o padrão 202.
+ * As duas buscas ESPERAM o worker responder: a tela mostrou o custo estimado e
+ * perguntou se pode gastar, e devolver "ok, mandei" para uma decisão de dinheiro é
+ * pedir que a pessoa confie sem ver. As de lote seguem o padrão 202.
+ *
+ * A atualização do funil NÃO tem dispatcher aqui: ela roda atrás de cada sync de NF, e
+ * a tela deixou de oferecer um botão para forçá-la. A rota do worker continua de pé
+ * para quem opera — mas uma server action é um endpoint público para qualquer
+ * navegador autenticado, e não se deixa um de pé sem quem o chame.
  */
-export async function dispararFunilFornecedores(): Promise<DispararJobResultado> {
-  return postar('/jobs/fornecedores/atualizar-funil', {}, 'fornecedores-funil')
-}
-
 export async function dispararDescobertaFornecedores(limite?: number): Promise<DispararJobResultado> {
   return postar(
     '/jobs/fornecedores/descoberta-automatica',

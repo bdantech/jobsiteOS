@@ -424,7 +424,7 @@ para uma justificativa vazia.
 
 | Job | Quando | O que faz |
 | --- | --- | --- |
-| `fornecedores/atualizar-funil` | atrás de cada sync de NF | recalcula munição e titularidade, aplica entrada e saída |
+| `fornecedores/atualizar-funil` | atrás de cada sync de NF | recalcula munição e titularidade, aplica entrada e saída, reconcilia descartes |
 | `fornecedores/descoberta-automatica` | 04h20, diário | camadas 0+1 em lote, na ordem do potencial |
 | `fornecedores/buscar-contatos` | no clique | camadas 2+4 para um fornecedor, síncrono |
 | `fornecedores/validar-contatos` | 05h40, diário | E.164 e MX; rebaixa o que não valida |
@@ -433,6 +433,11 @@ O funil roda **atrás do sync**, e não num cron próprio: a munição é deriva
 das notas que acabaram de chegar. Num relógio separado, o card mostraria o volume de até
 quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban de alguém
 como lead a prospectar.
+
+A tela **não** tem botão para forçá-lo. Um botão que dispara varredura convida a
+apertá-lo quando a lista parece estranha — que é justamente quando ele não muda nada,
+porque a lista já reflete as notas que chegaram. Para rodar fora de hora existe
+`POST /jobs/fornecedores/atualizar-funil` no worker, que é trabalho de quem opera.
 
 ## Credenciais
 

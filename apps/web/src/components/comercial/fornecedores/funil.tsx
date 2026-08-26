@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { Ban, LayoutGrid, RefreshCw, Search, Table2 } from 'lucide-react'
+import { Ban, LayoutGrid, Search, Table2 } from 'lucide-react'
 import {
   ESTAGIOS_FORNECEDOR_ATIVOS,
   ESTAGIO_FORNECEDOR_LABELS,
@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { atualizarFunilAction, reatribuirFornecedorAction } from '@/actions/fornecedores'
+import { reatribuirFornecedorAction } from '@/actions/fornecedores'
 import { cn } from '@/lib/utils'
 import { DonoDoCard } from '../dono-do-card'
 import { buscarVendedoresVisiveis, comercialKeys } from '../queries'
@@ -115,16 +115,6 @@ export function FunilFornecedores({
     queryKey: comercialKeys.visiveis(),
     queryFn: buscarVendedoresVisiveis,
     enabled: ehGestor,
-  })
-
-  const recalcular = useMutation({
-    mutationFn: async () => {
-      const r = await atualizarFunilAction()
-      if (!r.ok) throw new Error(r.message)
-    },
-    onSuccess: () =>
-      toast.success('Releitura disparada. Volume, prazo e sacados se atualizam em alguns minutos.'),
-    onError: (e: Error) => toast.error(e.message),
   })
 
   const reatribuir = useMutation({
@@ -248,6 +238,12 @@ export function FunilFornecedores({
               encerrado como <label> com checkbox, o seletor de dono, os links para as
               telas vizinhas, e a troca de vista por último. Não é cosmético — quem
               troca de funil não deveria procurar o mesmo botão em lugar diferente.
+
+              NÃO há botão de recalcular. O job roda atrás de cada sync de NF, de 4 em
+              4 horas, e um botão que dispara varredura convida a apertá-lo quando a
+              lista parece estranha — que é justamente quando ele não vai mudar nada,
+              porque a lista já reflete as notas que chegaram. Para forçar fora de
+              hora existe a rota do worker, que é trabalho de quem opera, não da tela.
             */}
             <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               <div className="relative">
@@ -319,36 +315,6 @@ export function FunilFornecedores({
                 )}
               </Button>
 
-              {/*
-                O botão NÃO é o que mantém a lista viva — o job roda sozinho atrás de
-                cada sync de NF, de 4 em 4 horas. Ele existe para o caso de não querer
-                esperar: mudou o corte de volume nas configurações, ou mexeu na carteira
-                de originação, e quer ver o efeito agora.
-
-                O `title` diz o que ele faz porque a pergunta foi feita. Um botão que
-                dispara um job de varredura e se chama só "Recalcular" convida a
-                imaginar o que ele apaga.
-              */}
-              {ehGestor && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={recalcular.isPending}
-                  onClick={() => recalcular.mutate()}
-                  title={
-                    'Relê as notas e atualiza volume, prazo, sacados e o originador de cada card. ' +
-                    'Faz entrar quem passou a qualificar e marca como cadastrado quem virou cliente. ' +
-                    'NÃO mexe em estágio, contato descoberto nem em dono definido à mão. ' +
-                    'Roda sozinho a cada sync de NF (4/4h) — isto é só para não esperar.'
-                  }
-                >
-                  <RefreshCw
-                    className={cn('mr-1 h-3.5 w-3.5', recalcular.isPending && 'animate-spin')}
-                    aria-hidden
-                  />
-                  Atualizar da base
-                </Button>
-              )}
             </div>
           </div>
         </CardHeader>

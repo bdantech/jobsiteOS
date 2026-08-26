@@ -12,11 +12,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import {
-  dispararBuscaAprofundada,
-  dispararBuscarContatos,
-  dispararFunilFornecedores,
-} from '@/lib/mercado/worker'
+import { dispararBuscaAprofundada, dispararBuscarContatos } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -247,20 +243,6 @@ export async function buscaAprofundadaAction(input: {
       orcamento: corpo.orcamento ?? { gasto: 0, teto: 0, saldo: 0 },
     },
   }
-}
-
-/** Recalcula a munição sob demanda. Gestor só — é uma varredura, não uma consulta. */
-export async function atualizarFunilAction(): Promise<ActionResult<{ ok: true }>> {
-  const { erro, supabase } = await autorizar()
-  if (erro || !supabase) return erro as ActionResult<never>
-  const { data: gestor } = await supabase.rpc('app_gestor_comercial')
-  if (gestor !== true) {
-    return { ok: false, message: 'Só um gestor comercial recalcula o funil.', code: 'forbidden' }
-  }
-  const r = await dispararFunilFornecedores()
-  if (!r.ok) return { ok: false, message: r.message, code: 'unknown' }
-  revalidatePath(ROTA)
-  return { ok: true, data: { ok: true } }
 }
 
 /** Registra ligação/WhatsApp/e-mail. É o que o §6 usa para atribuir a fonte ao cadastro. */
