@@ -263,6 +263,16 @@ O motivo vem da **lista enumerada** do 04 (`MOTIVOS_SEM_INTERESSE`), e reusá-la
 "quantos perdemos porque já operam com outro?" só tem resposta se os dois funis
 responderem com o mesmo vocabulário.
 
+Os descartados têm **tela própria** (`/comercial/fornecedores/sem-interesse`), com o
+botão no topo do funil de onde eles saíram — que é o único lugar onde alguém se pergunta
+"e o fornecedor que sumiu daqui, para onde foi?". É a mesma decisão da tela de
+fornecedores a prospectar, e existe pela mesma razão: sem ela, "sumiu do kanban" e "nunca
+esteve no kanban" seriam indistinguíveis.
+
+Esta tela mostra uma coisa que a da Antecipação não tem: a **data de volta**. Aqui o
+descarte tem validade, e "sem interesse hoje" e "nunca mais" são decisões diferentes — sem
+a coluna, a supressão soft pareceria eterna e ninguém saberia quando voltar a ligar.
+
 Reabrir o card (movê-lo para fora de `sem_interesse`) desfaz as três. Um desfazer que
 desfaz metade — deixando o card no kanban e o CNPJ suprimido — é pior que nenhum. O
 delete da supressão filtra por `contexto = 'comercial'`: sem isso, reabrir um card aqui
@@ -292,6 +302,7 @@ como superusuário — que é o modo como quase toda verificação de banco acab
 | --- | --- | --- |
 | Funil e ficha | os fornecedores da carteira dele | tudo |
 | Fila sem dono | não | sim, a um clique no cabeçalho |
+| Lista de descartados | sim, os da carteira dele | sim, todos |
 | Buscar contatos (pago) | sim, dentro do teto | sim, e pode liberar quem estourou |
 | Pedir apresentação | sim | sim |
 | Tornar ponto focal | sim | sim |

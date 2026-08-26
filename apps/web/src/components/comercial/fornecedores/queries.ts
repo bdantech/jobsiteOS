@@ -32,8 +32,14 @@ export const fornecedoresKeys = {
 
 export interface FiltroFunil {
   originadorId: string | null
-  /** true mostra o filtro "concluídos" (cadastrado + sem interesse). */
-  concluidos: boolean
+  /*
+   * O que vem JUNTO dos estágios ativos.
+   *
+   * Era um booleano `concluidos` que agrupava cadastrado e sem-interesse, e ele deixou
+   * de servir quando os descartados ganharam página própria: passou a significar três
+   * coisas com nome de duas. Um enum diz qual das três.
+   */
+  incluir: 'nenhum' | 'cadastrados' | 'so_sem_interesse'
   termo: string
 }
 
@@ -58,9 +64,14 @@ export async function buscarFunil(filtro: FiltroFunil): Promise<FornecedorCard[]
     .order('volume_90d', { ascending: false, nullsFirst: false })
     .limit(500)
 
-  q = filtro.concluidos
-    ? q.in('estagio', ['cadastrado', 'sem_interesse'])
-    : q.not('estagio', 'in', '("cadastrado","sem_interesse")')
+  q =
+    filtro.incluir === 'so_sem_interesse'
+      ? q.eq('estagio', 'sem_interesse')
+      : filtro.incluir === 'cadastrados'
+        ? // Ativos + a coluna de vitória. `sem_interesse` fica de fora: ele tem tela
+          // própria, com motivo, observação e a data em que o card volta.
+          q.not('estagio', 'eq', 'sem_interesse')
+        : q.not('estagio', 'in', '("cadastrado","sem_interesse")')
 
   if (filtro.originadorId === 'sem_dono') q = q.is('originador_id', null)
   else if (filtro.originadorId) q = q.eq('originador_id', filtro.originadorId)

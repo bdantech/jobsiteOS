@@ -3,7 +3,8 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { LayoutGrid, RefreshCw, Search, Table2 } from 'lucide-react'
+import Link from 'next/link'
+import { Ban, LayoutGrid, RefreshCw, Search, Table2 } from 'lucide-react'
 import {
   ESTAGIOS_FORNECEDOR_ATIVOS,
   ESTAGIO_FORNECEDOR_LABELS,
@@ -69,7 +70,7 @@ export function FunilFornecedores({
 }) {
   const qc = useQueryClient()
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
-  const [concluidos, setConcluidos] = React.useState(false)
+  const [mostrarCadastrados, setMostrarCadastrados] = React.useState(false)
   const [termo, setTermo] = React.useState('')
   const [debounce, setDebounce] = React.useState('')
   /*
@@ -97,10 +98,10 @@ export function FunilFornecedores({
   const filtro = React.useMemo(
     () => ({
       originadorId: filtroDono === 'todos' ? null : filtroDono || null,
-      concluidos,
+      incluir: mostrarCadastrados ? ('cadastrados' as const) : ('nenhum' as const),
       termo: debounce,
     }),
-    [filtroDono, concluidos, debounce],
+    [filtroDono, mostrarCadastrados, debounce],
   )
 
   const funil = useQuery({
@@ -154,8 +155,16 @@ export function FunilFornecedores({
     return m
   }, [cards])
 
-  const colunas = concluidos
-    ? (['cadastrado', 'sem_interesse'] as EstagioFornecedor[])
+  /*
+   * `cadastrado` entra como COLUNA quando o toggle está ligado — é uma vitória, e ela
+   * pertence ao fim do funil, à direita, como em qualquer kanban.
+   *
+   * `sem_interesse` não: ele tem página própria, com motivo, observação e a data em que
+   * o card volta. Uma coluna aqui mostraria só o nome de quem morreu, e é justamente o
+   * porquê que se procura quando se abre essa lista.
+   */
+  const colunas = mostrarCadastrados
+    ? ([...ESTAGIOS_FORNECEDOR_ATIVOS, 'cadastrado'] as EstagioFornecedor[])
     : ESTAGIOS_FORNECEDOR_ATIVOS
 
   const volumeTotal = cards.reduce((s, c) => s + (Number(c.volume_90d) || 0), 0)
@@ -167,9 +176,15 @@ export function FunilFornecedores({
    * desligado com um vendedor selecionado — e o atalho para a fila sumiria no momento
    * em que ele é mais útil.
    */
+  const contagemCadastrados = useQuery({
+    queryKey: fornecedoresKeys.funil('contagem-cadastrados'),
+    queryFn: () => buscarFunil({ originadorId: null, incluir: 'cadastrados', termo: '' }),
+  })
+  const cadastrados = (contagemCadastrados.data ?? []).filter((c) => c.estagio === 'cadastrado').length
+
   const contagemSemDono = useQuery({
     queryKey: fornecedoresKeys.funil('contagem-sem-dono'),
-    queryFn: () => buscarFunil({ originadorId: 'sem_dono', concluidos: false, termo: '' }),
+    queryFn: () => buscarFunil({ originadorId: 'sem_dono', incluir: 'nenhum', termo: '' }),
     enabled: ehGestor,
   })
   const semDono = contagemSemDono.data?.length ?? 0
@@ -221,6 +236,12 @@ export function FunilFornecedores({
                 ) : null}
               </div>
             </div>
+            {/*
+              A ordem e as formas são as do funil de reuniões: o toggle do que está
+              encerrado como <label> com checkbox, o seletor de dono, os links para as
+              telas vizinhas, e a troca de vista por último. Não é cosmético — quem
+              troca de funil não deveria procurar o mesmo botão em lugar diferente.
+            */}
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <div className="relative">
                 <Search
@@ -231,9 +252,20 @@ export function FunilFornecedores({
                   placeholder="Nome ou CNPJ…"
                   value={termo}
                   onChange={(e) => setTermo(e.target.value)}
-                  className="h-9 w-48 pl-7"
+                  className="h-9 w-44 pl-7"
                 />
               </div>
+
+              {cadastrados > 0 && (
+                <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={mostrarCadastrados}
+                    onChange={(e) => setMostrarCadastrados(e.target.checked)}
+                  />
+                  Mostrar {cadastrados} cadastrado(s)
+                </label>
+              )}
 
               {ehGestor && (
                 <Select value={filtroDono} onValueChange={setFiltroDono}>
@@ -241,8 +273,8 @@ export function FunilFornecedores({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sem_dono">Fila sem dono</SelectItem>
                     <SelectItem value="todos">Todos os originadores</SelectItem>
+                    <SelectItem value="sem_dono">Fila sem dono</SelectItem>
                     {(alcance.data ?? []).map((v) => (
                       <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
                     ))}
@@ -250,14 +282,17 @@ export function FunilFornecedores({
                 </Select>
               )}
 
-              <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={concluidos}
-                  onChange={(e) => setConcluidos(e.target.checked)}
-                />
-                Concluídos
-              </label>
+              {/*
+                A porta para os descartados fica NO TOPO da lista de onde eles saíram: é
+                o único lugar onde alguém se pergunta "e o fornecedor que sumiu daqui,
+                para onde foi?". Mesma decisão da tela de fornecedores a prospectar.
+              */}
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/comercial/fornecedores/sem-interesse">
+                  <Ban className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Sem interesse
+                </Link>
+              </Button>
 
               <Button
                 variant="outline"
