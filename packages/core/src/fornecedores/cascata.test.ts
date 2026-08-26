@@ -4,6 +4,7 @@ import {
   CUSTOS_PADRAO,
   avaliarOrcamento,
   deveParar,
+  lacunasDeContato,
   planejarDescobertaSobDemanda,
   type EstadoFornecedor,
 } from './cascata.ts'
@@ -157,4 +158,67 @@ test('teto zero não vira alerta permanente nem divisão por zero', () => {
   assert.equal(o.cabe, false)
   assert.equal(o.alerta, false)
   assert.equal(o.saldo, 0)
+})
+
+// ─── Segunda passada ────────────────────────────────────────────────────────
+
+test('sem contato nenhum, a lacuna é "qualquer" e vale aprofundar', () => {
+  const l = lacunasDeContato([])
+  assert.deepEqual(l.faltam, ['qualquer'])
+  assert.equal(l.vale_aprofundar, true)
+  assert.deepEqual(l.temos, [])
+})
+
+test('só um contato@ genérico: falta pessoa e celular, e vale aprofundar', () => {
+  // É o caso real da I3M: a primeira busca trouxe site, fixo, e-mail e Instagram —
+  // nenhum com nome de gente.
+  const l = lacunasDeContato([
+    { tipo: 'email', valor: 'contato@i3m.com.br', confianca: 'media' },
+    { tipo: 'telefone', valor: '+559221264713', confianca: 'media' },
+  ])
+  assert.deepEqual(l.faltam, ['pessoa', 'celular'])
+  assert.equal(l.vale_aprofundar, true)
+  assert.equal(l.temos.length, 2)
+})
+
+test('o que a validação reprovou entra como FALHOU, não como temos', () => {
+  const l = lacunasDeContato([
+    { tipo: 'email', valor: 'vendas@dominiomorto.com.br', confianca: 'media', valido: false },
+    { tipo: 'telefone', valor: '+5511987654321', confianca: 'alta', nome_pessoa: 'Ana' },
+  ])
+  assert.deepEqual(l.falharam, ['email: vendas@dominiomorto.com.br'])
+  assert.equal(l.temos.length, 1)
+  // Dizer o que NÃO funcionou é o que impede a segunda busca de trazê-lo de volta.
+  assert.match(l.temos[0] as string, /Ana/)
+})
+
+test('pessoa com celular validado: NÃO vale aprofundar, mesmo faltando e-mail', () => {
+  /*
+   * O botão precisa recusar aqui. Gastar R$ 0,25 para achar um e-mail quando já se tem
+   * o celular de alguém com nome é pagar para confirmar o que está na tela — e é
+   * exatamente o tipo de clique que faz um recurso pago parecer caro sem ser útil.
+   */
+  const l = lacunasDeContato([
+    { tipo: 'telefone', valor: '+5511987654321', confianca: 'alta', nome_pessoa: 'João Silva' },
+  ])
+  assert.deepEqual(l.faltam, ['email'])
+  assert.equal(l.vale_aprofundar, false)
+})
+
+test('WhatsApp conta como canal direto tanto quanto o celular', () => {
+  const l = lacunasDeContato([
+    { tipo: 'whatsapp', valor: '+5511987654321', confianca: 'alta', nome_pessoa: 'Maria' },
+    { tipo: 'email', valor: 'maria@x.com.br', confianca: 'media' },
+  ])
+  assert.deepEqual(l.faltam, [])
+  assert.equal(l.vale_aprofundar, false)
+})
+
+test('um fixo em nome de pessoa não é canal direto: celular continua faltando', () => {
+  const l = lacunasDeContato([
+    { tipo: 'telefone', valor: '+551133334444', confianca: 'alta', nome_pessoa: 'Carlos' },
+    { tipo: 'email', valor: 'carlos@x.com.br', confianca: 'media' },
+  ])
+  assert.deepEqual(l.faltam, ['celular'])
+  assert.equal(l.vale_aprofundar, true)
 })

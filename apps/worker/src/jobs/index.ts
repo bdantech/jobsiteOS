@@ -33,6 +33,7 @@ import {
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
 import {
   atualizarFunilFornecedores,
+  descobertaAprofundada,
   descobertaAutomaticaJob,
   descobertaSobDemanda,
   validarContatosJob,
@@ -1183,6 +1184,21 @@ export async function executarCliqueDescoberta(input: {
   forcar?: boolean
 }): Promise<Awaited<ReturnType<typeof descobertaSobDemanda>>> {
   return descobertaSobDemanda(input.cnpj, {
+    solicitadoPor: input.solicitadoPor ?? null,
+    forcar: input.forcar ?? false,
+  })
+}
+
+/**
+ * A segunda busca. Síncrona como a primeira, e pelo mesmo motivo: a tela mostrou o
+ * custo e perguntou se pode.
+ */
+export async function executarBuscaAprofundada(input: {
+  cnpj: string
+  solicitadoPor?: string | null
+  forcar?: boolean
+}): Promise<Awaited<ReturnType<typeof descobertaAprofundada>>> {
+  return descobertaAprofundada(input.cnpj, {
     solicitadoPor: input.solicitadoPor ?? null,
     forcar: input.forcar ?? false,
   })

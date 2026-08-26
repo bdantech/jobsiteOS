@@ -66,6 +66,7 @@ import {
   dispararDescobertaFornecedores,
   dispararValidarContatos,
   executarCliqueDescoberta,
+  executarBuscaAprofundada,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -342,6 +343,22 @@ app.post('/jobs/fornecedores/buscar-contatos', (req: Request, res: Response, nex
     try {
       const dados = cliqueSchema.parse(req.body ?? {})
       const r = await executarCliqueDescoberta({
+        cnpj: dados.cnpj,
+        solicitadoPor: dados.solicitado_por ?? null,
+        forcar: dados.forcar ?? false,
+      })
+      res.status(200).json(r)
+    } catch (erro) {
+      next(erro)
+    }
+  })()
+})
+
+app.post('/jobs/fornecedores/buscar-contatos-aprofundado', (req: Request, res: Response, next: NextFunction) => {
+  void (async () => {
+    try {
+      const dados = cliqueSchema.parse(req.body ?? {})
+      const r = await executarBuscaAprofundada({
         cnpj: dados.cnpj,
         solicitadoPor: dados.solicitado_por ?? null,
         forcar: dados.forcar ?? false,

@@ -2990,6 +2990,7 @@ export type Database = {
           sem_interesse_ate: string | null
           sem_interesse_motivo: string | null
           sem_interesse_observacao: string | null
+          sem_interesse_origem: string | null
           ultima_busca_em: string | null
           ultima_nf_em: string | null
           volume_90d: number | null
@@ -3015,6 +3016,7 @@ export type Database = {
           sem_interesse_ate?: string | null
           sem_interesse_motivo?: string | null
           sem_interesse_observacao?: string | null
+          sem_interesse_origem?: string | null
           ultima_busca_em?: string | null
           ultima_nf_em?: string | null
           volume_90d?: number | null
@@ -3040,6 +3042,7 @@ export type Database = {
           sem_interesse_ate?: string | null
           sem_interesse_motivo?: string | null
           sem_interesse_observacao?: string | null
+          sem_interesse_origem?: string | null
           ultima_busca_em?: string | null
           ultima_nf_em?: string | null
           volume_90d?: number | null
@@ -6075,6 +6078,7 @@ export type Database = {
           sem_interesse_ate: string | null
           sem_interesse_motivo: string | null
           sem_interesse_observacao: string | null
+          sem_interesse_origem: string | null
           situacao_cadastral: string | null
           suprimido: boolean | null
           uf: string | null
@@ -7363,6 +7367,7 @@ export type Database = {
           sem_interesse_ate: string | null
           sem_interesse_motivo: string | null
           sem_interesse_observacao: string | null
+          sem_interesse_origem: string | null
           ultima_busca_em: string | null
           ultima_nf_em: string | null
           volume_90d: number | null
@@ -7397,6 +7402,7 @@ export type Database = {
           sem_interesse_ate: string | null
           sem_interesse_motivo: string | null
           sem_interesse_observacao: string | null
+          sem_interesse_origem: string | null
           ultima_busca_em: string | null
           ultima_nf_em: string | null
           volume_90d: number | null
@@ -7431,6 +7437,7 @@ export type Database = {
           sem_interesse_ate: string | null
           sem_interesse_motivo: string | null
           sem_interesse_observacao: string | null
+          sem_interesse_origem: string | null
           ultima_busca_em: string | null
           ultima_nf_em: string | null
           volume_90d: number | null

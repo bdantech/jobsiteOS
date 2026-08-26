@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { moverFornecedorAction } from '@/actions/fornecedores'
 import { buscarFunil, fornecedoresKeys } from './queries'
-import { brl, cnpjFormatado, dia } from './formato'
+import { brl, cnpjFormatado, dia, rotuloDescarte } from './formato'
 
 /**
  * Os fornecedores que saíram do funil de cadastro — quem já foi trabalhado e não vai se
@@ -182,14 +182,20 @@ export function FornecedoresSemInteresse() {
                       <TableCell className="text-right tabular-nums">{brl(f.volume_90d)}</TableCell>
                       <TableCell>
                         {/*
-                          Sem data é DEFINITIVO, e o badge diz isso em vez de deixar um
-                          traço — um "—" nesta coluna leria como "não sei", quando a
-                          ausência de data é justamente a informação.
+                          Sem data NÃO é sempre "definitivo": pode ser um descarte feito
+                          na lista a prospectar da Antecipação, que se desfaz lá com um
+                          clique. Chamar os dois de definitivo faria a pessoa desistir de
+                          um lead que está a um botão de voltar.
                         */}
                         {f.sem_interesse_ate ? (
                           <span className="text-xs tabular-nums">{dia(f.sem_interesse_ate)}</span>
                         ) : (
-                          <Badge variant="destructive" className="text-[10px]">definitivo</Badge>
+                          <Badge
+                            variant={f.sem_interesse_origem === 'comercial' ? 'destructive' : 'secondary'}
+                            className="text-[10px]"
+                          >
+                            {rotuloDescarte(null, f.sem_interesse_origem)}
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-xs tabular-nums text-muted-foreground">

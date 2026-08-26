@@ -319,6 +319,20 @@ export async function dispararValidarContatos(): Promise<DispararJobResultado> {
   return postar('/jobs/fornecedores/validar-contatos', {}, 'fornecedores-validar')
 }
 
+/** A segunda busca, mais profunda. Ela vasculha mais fontes: teto de três minutos. */
+export async function dispararBuscaAprofundada(input: {
+  cnpj: string
+  solicitadoPor?: string | null
+  forcar?: boolean
+}): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/fornecedores/buscar-contatos-aprofundado',
+    { cnpj: input.cnpj, solicitado_por: input.solicitadoPor ?? undefined, forcar: input.forcar ?? false },
+    'fornecedores-aprofundado',
+    180_000,
+  )
+}
+
 /** O clique pago. Síncrono, e por isso com teto de dois minutos. */
 export async function dispararBuscarContatos(input: {
   cnpj: string

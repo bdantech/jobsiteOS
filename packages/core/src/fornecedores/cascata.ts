@@ -30,6 +30,7 @@ export const PROVEDORES_CASCATA = [
   'novavida',
   'apollo',
   'claude_busca',
+  'claude_aprofundado',
 ] as const
 export type ProvedorCascata = (typeof PROVEDORES_CASCATA)[number]
 
@@ -42,6 +43,7 @@ export const PROVEDOR_LABELS: Record<ProvedorCascata, string> = {
   novavida: 'Nova Vida TI (sócios)',
   apollo: 'Apollo',
   claude_busca: 'Busca do Claude',
+  claude_aprofundado: 'Busca aprofundada',
 }
 
 /** Em que `contatos_descobertos.fonte` cada provedor grava. */
@@ -54,6 +56,7 @@ export const FONTE_DO_PROVEDOR: Record<ProvedorCascata, FonteContato> = {
   novavida: 'novavida',
   apollo: 'apollo',
   claude_busca: 'claude_busca',
+  claude_aprofundado: 'claude_aprofundado',
 }
 
 export const PROVEDORES_AUTOMATICOS: readonly ProvedorCascata[] = [
@@ -75,6 +78,7 @@ export interface CustosDescoberta {
   novavida: number
   apollo: number
   claude_busca: number
+  claude_aprofundado: number
 }
 
 export const CUSTOS_PADRAO: CustosDescoberta = {
@@ -87,6 +91,12 @@ export const CUSTOS_PADRAO: CustosDescoberta = {
   // orçamento do Radar e o deste módulo divergirem sobre a mesma fatura.
   apollo: 1.2,
   claude_busca: 0.1,
+  /*
+   * Mais cara que a primeira, e é o desenho: ela lê o que já foi achado, o que falhou
+   * na validação, e procura em lugares que a primeira não tenta — sindicato, junta
+   * comercial, notícia local, perfil de sócio. Mais busca web por chamada.
+   */
+  claude_aprofundado: 0.25,
 }
 
 /** O que já sabemos sobre o fornecedor, e que decide o que vale a pena rodar. */
@@ -302,5 +312,68 @@ export function avaliarOrcamento(
     saldo: Math.max(0, teto - gasto),
     cabe: projetado <= teto,
     alerta: teto > 0 && projetado >= teto * alertaPercentual,
+  }
+}
+
+// ─── Segunda passada: o que faltou ──────────────────────────────────────────
+
+/**
+ * O que já temos, o que morreu na validação, e o que ainda falta.
+ *
+ * É o insumo da busca aprofundada, e a razão de ela não ser "buscar de novo". Repetir
+ * o mesmo prompt paga duas vezes pela mesma resposta; mandar junto o que já foi achado
+ * e o que não funcionou muda a pergunta — de "ache contatos desta empresa" para "isto
+ * aqui não serviu, ache o que falta".
+ *
+ * `pessoa` é a lacuna mais valiosa e a que a primeira passada quase nunca preenche: um
+ * `contato@` genérico é um endereço, não alguém com quem falar.
+ */
+export interface ContatoConhecido {
+  tipo: string
+  valor: string
+  confianca: Confianca
+  nome_pessoa?: string | null
+  /** `false` quando a validação reprovou (telefone impossível, domínio sem MX). */
+  valido?: boolean | null
+}
+
+export interface LacunasDeContato {
+  /** Já temos, e servem para a busca não devolver a mesma coisa. */
+  temos: string[]
+  /** Foram achados e NÃO funcionam. Dizer isso evita que ela os traga de novo. */
+  falharam: string[]
+  /** O que procurar. Vazio significa que não há o que pedir. */
+  faltam: ('pessoa' | 'celular' | 'email' | 'whatsapp' | 'qualquer')[]
+  /** Vale gastar? False quando já há canal direto e validado com uma pessoa. */
+  vale_aprofundar: boolean
+}
+
+export function lacunasDeContato(contatos: readonly ContatoConhecido[]): LacunasDeContato {
+  const vivos = contatos.filter((c) => c.valido !== false)
+  const mortos = contatos.filter((c) => c.valido === false)
+
+  const temPessoa = vivos.some((c) => (c.nome_pessoa ?? '').trim().length > 0)
+  const temCelular = vivos.some((c) => c.tipo === 'telefone' && /^\+55\d{2}9\d{8}$/.test(c.valor))
+  const temWhats = vivos.some((c) => c.tipo === 'whatsapp')
+  const temEmail = vivos.some((c) => c.tipo === 'email')
+
+  const faltam: LacunasDeContato['faltam'] = []
+  if (vivos.length === 0) faltam.push('qualquer')
+  else {
+    if (!temPessoa) faltam.push('pessoa')
+    if (!temCelular && !temWhats) faltam.push('celular')
+    if (!temEmail) faltam.push('email')
+  }
+
+  return {
+    temos: vivos.map((c) => `${c.tipo}: ${c.valor}${c.nome_pessoa ? ` (${c.nome_pessoa})` : ''}`),
+    falharam: mortos.map((c) => `${c.tipo}: ${c.valor}`),
+    faltam,
+    /*
+     * Não vale quando já há uma PESSOA com canal direto validado. Aí a segunda busca
+     * gastaria R$ 0,25 para confirmar o que está na tela — e o botão precisa dizer
+     * isso em vez de aceitar o clique.
+     */
+    vale_aprofundar: faltam.length > 0 && !(temPessoa && (temCelular || temWhats)),
   }
 }

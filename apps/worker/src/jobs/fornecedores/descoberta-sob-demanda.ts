@@ -1,8 +1,10 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
   deveParar,
+  lacunasDeContato,
   planejarDescobertaSobDemanda,
   type EstadoFornecedor,
+  type LacunasDeContato,
   type PlanoDescoberta,
 } from '../../../../../packages/core/src/fornecedores/cascata.js'
 import type { Confianca } from '../../../../../packages/core/src/fornecedores/schemas.js'
@@ -27,7 +29,7 @@ import {
   registrarExecucao,
 } from './descoberta.js'
 import { tetoDoOriginador } from './orcamento.js'
-import { buscarComClaude } from './provedores/claude-busca.js'
+import { buscarComClaude, buscarComClaudeAprofundado } from './provedores/claude-busca.js'
 import { buscarNaNovaVida } from './provedores/novavida.js'
 
 /**
@@ -369,4 +371,173 @@ async function espelharContatosDaEmpresa(
   if (linhas.length === 0) return 0
   const r = await gravarContatos(cnpj, linhas, 'apollo')
   return r.novos
+}
+
+/**
+ * A SEGUNDA busca (§4.2c aprofundada), fora da cascata.
+ *
+ * Ela não entra no plano das camadas 2+4 de propósito: só faz sentido DEPOIS de a
+ * primeira ter rodado e voltado com pouco, e pô-la no plano faria a estimativa do
+ * primeiro clique somar um custo que ninguém ia pagar naquele momento.
+ *
+ * ─── O TTL NÃO SE APLICA, E ISSO É DELIBERADO ────────────────────────────────
+ *
+ * `claude_busca` tem TTL de 90 dias — não se paga duas vezes pela mesma pergunta. Mas
+ * esta é OUTRA pergunta: ela carrega o que já foi achado e o que falhou. O TTL dela é
+ * o dela, sobre `claude_aprofundado`.
+ *
+ * ─── ELA RECUSA QUANDO NÃO HÁ LACUNA ─────────────────────────────────────────
+ *
+ * Com uma pessoa nomeada e canal direto validado, gastar R$ 0,25 confirmaria o que
+ * está na tela. É a mesma disciplina do `parar_ao_encontrar_alta`: o clique que não
+ * acrescenta nada é recusado com o motivo, não aceito em silêncio.
+ */
+export async function descobertaAprofundada(
+  cnpj: string,
+  opcoes: { solicitadoPor?: string | null; forcar?: boolean } = {},
+): Promise<ResultadoClique> {
+  const [custos, ttlDias] = await Promise.all([lerCustos(), lerTtlSobDemanda()])
+  const custoPrevisto = custos.claude_aprofundado ?? 0.25
+
+  const { data: funil } = await supabaseAdmin
+    .from('fornecedores_funil')
+    .select('originador_id, sacados_principais, ultima_busca_em')
+    .eq('fornecedor_cnpj', cnpj)
+    .maybeSingle()
+
+  const originadorId = funil?.originador_id ?? null
+  const orcamento = await tetoDoOriginador(originadorId, custoPrevisto)
+  const orcResumo = { gasto: orcamento.gasto, teto: orcamento.teto, saldo: orcamento.saldo }
+  const planoVazio: PlanoDescoberta = {
+    etapas: [],
+    custo_estimado: custoPrevisto,
+    pode_custar_menos: false,
+    apollo_depende_da_busca: false,
+  }
+
+  if (!funil?.ultima_busca_em) {
+    return {
+      ok: false,
+      motivo: 'Rode a busca normal primeiro — a aprofundada parte do que ela achou.',
+      plano: planoVazio,
+      contatosNovos: 0,
+      custo: 0,
+      orcamento: orcResumo,
+    }
+  }
+
+  const { data: existentes } = await supabaseAdmin
+    .from('contatos_descobertos')
+    .select('tipo, valor, confianca, nome_pessoa, validado')
+    .eq('fornecedor_cnpj', cnpj)
+
+  const lacunas: LacunasDeContato = lacunasDeContato(
+    (existentes ?? []).map((c) => ({
+      tipo: c.tipo,
+      valor: c.valor,
+      confianca: c.confianca as Confianca,
+      nome_pessoa: c.nome_pessoa,
+      valido:
+        typeof c.validado === 'object' && c.validado !== null
+          ? ((c.validado as Record<string, unknown>).valido as boolean | undefined) ?? null
+          : null,
+    })),
+  )
+
+  if (!lacunas.vale_aprofundar) {
+    return {
+      ok: false,
+      motivo: 'Já há uma pessoa com canal direto validado — a busca aprofundada não acrescentaria.',
+      plano: planoVazio,
+      contatosNovos: 0,
+      custo: 0,
+      orcamento: orcResumo,
+    }
+  }
+
+  if (await dentroDoTtl(cnpj, 'claude_aprofundado', ttlDias)) {
+    return {
+      ok: false,
+      motivo: `A busca aprofundada já rodou há menos de ${ttlDias} dias para este fornecedor.`,
+      plano: planoVazio,
+      contatosNovos: 0,
+      custo: 0,
+      orcamento: orcResumo,
+    }
+  }
+
+  if (!orcamento.cabe && !opcoes.forcar) {
+    return {
+      ok: false,
+      motivo:
+        `Esta busca custa R$ ${custoPrevisto.toFixed(2)} e o saldo do mês é ` +
+        `R$ ${orcamento.saldo.toFixed(2)}. Peça liberação ao gestor.`,
+      plano: planoVazio,
+      contatosNovos: 0,
+      custo: 0,
+      orcamento: orcResumo,
+    }
+  }
+
+  const cadastral = await cadastralDoFornecedor(cnpj)
+  const sacados = Array.isArray(funil.sacados_principais)
+    ? (funil.sacados_principais as { nome: string | null }[])
+    : []
+
+  const r = await buscarComClaudeAprofundado(cadastral, lacunas, sacados)
+  if (!r.disponivel) {
+    await registrarExecucao({
+      cnpj, camada: 'sob_demanda', provedor: 'claude_aprofundado', status: 'pulado',
+      motivo: r.erro ?? null, originadorId, solicitadoPor: opcoes.solicitadoPor ?? null,
+    })
+    return {
+      ok: false, motivo: r.erro ?? 'Provedor indisponível.', plano: planoVazio,
+      contatosNovos: 0, custo: 0, orcamento: orcResumo,
+    }
+  }
+
+  const g = r.contatos.length
+    ? await gravarContatos(cnpj, r.contatos, 'claude_aprofundado')
+    : { novos: 0 }
+
+  // O site achado aqui também vira domínio — pelo mesmo motivo da primeira passada.
+  if (!cadastral.dominio) {
+    const site = r.contatos.find((c) => c.tipo === 'site')
+    if (site) await gravarDominioDescoberto(cnpj, site.valor, site.evidencia)
+  }
+
+  await registrarExecucao({
+    cnpj,
+    camada: 'sob_demanda',
+    provedor: 'claude_aprofundado',
+    status: r.contatos.length ? 'sucesso' : r.erro ? 'erro' : 'sem_dados',
+    // A lacuna pedida entra no registro: sem ela, "sem_dados" não diz se a busca
+    // falhou ou se a pergunta era impossível.
+    motivo: r.erro ?? `Procurava: ${lacunas.faltam.join(', ')}.`,
+    custo: custoPrevisto,
+    contatosNovos: g.novos,
+    originadorId,
+    solicitadoPor: opcoes.solicitadoPor ?? null,
+  })
+
+  const resumo = await atualizarResumo(cnpj, { camada: 'sob_demanda' })
+  if (g.novos > 0) {
+    await emitirEvento(null, EVENTO_TIPOS.FORNECEDOR_CONTATOS_ENCONTRADOS, {
+      titulo: 'Contatos do fornecedor encontrados',
+      resumo: `${g.novos} contato(s) novo(s) para ${cnpj} na busca aprofundada. Melhor confiança: ${resumo.melhor ?? '—'}.`,
+      url: '/comercial/fornecedores',
+      cnpj,
+      novos: g.novos,
+      custo: custoPrevisto,
+    })
+  }
+
+  logger.info({ cnpj, novos: g.novos, lacunas: lacunas.faltam }, 'Busca aprofundada concluída.')
+  return {
+    ok: true,
+    plano: planoVazio,
+    contatosNovos: g.novos,
+    custo: custoPrevisto,
+    orcamento: orcResumo,
+  }
 }

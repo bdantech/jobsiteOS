@@ -156,10 +156,19 @@ export function ConfigFornecedores() {
             />
             <CampoDecimal
               rotulo="Busca do Claude (R$/consulta)"
-              nota="Última etapa: é ela que alcança a PME que só existe no Instagram."
+              nota="Primeira passada, ampla: é ela que alcança a PME que só existe no Instagram — e é ela que descobre o domínio que o Apollo precisa."
               valor={custos.claude_busca}
               disabled={salvar.isPending}
               onSalvar={(v) => salvar.mutate({ chave: 'custos', valor: { ...custos, claude_busca: v } })}
+            />
+            <CampoDecimal
+              rotulo="Busca aprofundada (R$/consulta)"
+              nota="Segunda passada, sob demanda: recebe o que já foi achado e o que falhou na validação, e procura a lacuna em sindicato, junta comercial e notícia local. Mais cara porque vasculha mais."
+              valor={custos.claude_aprofundado}
+              disabled={salvar.isPending}
+              onSalvar={(v) =>
+                salvar.mutate({ chave: 'custos', valor: { ...custos, claude_aprofundado: v } })
+              }
             />
           </dl>
 

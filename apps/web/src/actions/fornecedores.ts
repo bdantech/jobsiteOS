@@ -12,7 +12,11 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararBuscarContatos, dispararFunilFornecedores } from '@/lib/mercado/worker'
+import {
+  dispararBuscaAprofundada,
+  dispararBuscarContatos,
+  dispararFunilFornecedores,
+} from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -192,6 +196,54 @@ export async function buscarContatosAction(input: {
       contatosNovos: corpo.contatosNovos ?? 0,
       custo: corpo.custo ?? 0,
       ...(corpo.parouEm ? { parouEm: corpo.parouEm } : {}),
+      orcamento: corpo.orcamento ?? { gasto: 0, teto: 0, saldo: 0 },
+    },
+  }
+}
+
+/**
+ * A segunda busca (§4.2c aprofundada).
+ *
+ * Mesma autorização do primeiro clique, e pelas mesmas razões: o worker roda com
+ * service role e não sabe quem clicou, e `forcar` é do gestor.
+ */
+export async function buscaAprofundadaAction(input: {
+  cnpj: string
+  forcar?: boolean
+}): Promise<ActionResult<ResultadoBusca>> {
+  const { erro, supabase, context } = await autorizar()
+  if (erro || !supabase || !context) return erro as ActionResult<never>
+
+  const { data: visivel, error: erroVis } = await supabase.rpc('app_fornecedor_visivel', {
+    p_cnpj: input.cnpj,
+  })
+  if (erroVis) return falha(erroVis)
+  if (visivel !== true) {
+    return { ok: false, message: 'Este fornecedor não está na sua carteira.', code: 'forbidden' }
+  }
+
+  let forcar = false
+  if (input.forcar) {
+    const { data: gestor } = await supabase.rpc('app_gestor_comercial')
+    forcar = gestor === true
+  }
+
+  const r = await dispararBuscaAprofundada({
+    cnpj: input.cnpj,
+    solicitadoPor: context.usuario.id,
+    forcar,
+  })
+  if (!r.ok) return { ok: false, message: r.message, code: 'unknown' }
+
+  revalidatePath(ROTA)
+  const corpo = (r.corpo ?? {}) as Partial<ResultadoBusca>
+  return {
+    ok: true,
+    data: {
+      ok: corpo.ok ?? false,
+      ...(corpo.motivo ? { motivo: corpo.motivo } : {}),
+      contatosNovos: corpo.contatosNovos ?? 0,
+      custo: corpo.custo ?? 0,
       orcamento: corpo.orcamento ?? { gasto: 0, teto: 0, saldo: 0 },
     },
   }

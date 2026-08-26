@@ -194,7 +194,14 @@ export function FunilFornecedores({
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1.5">
+            {/*
+              `min-w-0` e `flex-1`: sem eles a descrição (que é longa) não encolhe, o
+              grupo de botões não cabe na mesma linha e cai para baixo ALINHADO À
+              ESQUERDA — parecendo que os botões estão no lugar errado. Encolhendo, ele
+              fica à direita como nos outros funis; quebrando, o `justify-end` do grupo
+              o mantém à direita mesmo assim.
+            */}
+            <div className="min-w-0 flex-1 space-y-1.5">
               <CardTitle className="text-base">Funil de Cadastro</CardTitle>
               <CardDescription>
                 {cards.length} fornecedor(es), {brl(volumeTotal)} emitidos em 90 dias.{' '}
@@ -242,7 +249,7 @@ export function FunilFornecedores({
               telas vizinhas, e a troca de vista por último. Não é cosmético — quem
               troca de funil não deveria procurar o mesmo botão em lugar diferente.
             */}
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               <div className="relative">
                 <Search
                   className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -252,7 +259,7 @@ export function FunilFornecedores({
                   placeholder="Nome ou CNPJ…"
                   value={termo}
                   onChange={(e) => setTermo(e.target.value)}
-                  className="h-9 w-44 pl-7"
+                  className="h-9 w-40 pl-7"
                 />
               </div>
 
@@ -269,7 +276,7 @@ export function FunilFornecedores({
 
               {ehGestor && (
                 <Select value={filtroDono} onValueChange={setFiltroDono}>
-                  <SelectTrigger className="w-52">
+                  <SelectTrigger className="h-9 w-44">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

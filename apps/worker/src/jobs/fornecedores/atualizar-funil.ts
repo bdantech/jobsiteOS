@@ -208,13 +208,56 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
    * encerrada, que é exatamente o que a supressão soft de 90 dias existe para
    * agendar em vez de improvisar.
    */
+  /*
+   * DUAS FONTES DE DESCARTE, e ler só uma deixava a outra vazar.
+   *
+   *   `supressao`                            bloqueio de canal, com validade (0047)
+   *   `antecipacao_fornecedor_sem_interesse` qualificação do lead, sem validade (0104)
+   *
+   * O RPC da lista a prospectar grava SÓ a segunda — medido: 2 marcados lá, zero com
+   * supressão. Lendo apenas `supressao`, um fornecedor descartado por aquela tela
+   * sumia da lista de candidatos e o card ficava em `a_cadastrar` para sempre, e o
+   * originador ligaria para quem outra pessoa já trabalhou e descartou.
+   */
   const hoje = new Date().toISOString().slice(0, 10)
-  const { data: suprimidos } = await supabaseAdmin
-    .from('supressao')
-    .select('valor, expira_em, contexto')
-    .eq('escopo', 'empresa')
-    .or(`expira_em.is.null,expira_em.gte.${hoje}`)
-  const bloqueados = new Map((suprimidos ?? []).map((s) => [s.valor, s]))
+  const [{ data: suprimidos }, { data: descartados }] = await Promise.all([
+    supabaseAdmin
+      .from('supressao')
+      .select('valor, expira_em, contexto')
+      .eq('escopo', 'empresa')
+      .or(`expira_em.is.null,expira_em.gte.${hoje}`),
+    supabaseAdmin.from('antecipacao_fornecedor_sem_interesse').select('cnpj, motivo, observacao'),
+  ])
+
+  interface Bloqueio {
+    ate: string | null
+    origem: 'antecipacao' | 'supressao'
+    motivo: string
+    observacao: string
+  }
+  const bloqueados = new Map<string, Bloqueio>()
+
+  for (const d of descartados ?? []) {
+    bloqueados.set(d.cnpj, {
+      ate: null,
+      origem: 'antecipacao',
+      motivo: d.motivo,
+      observacao: d.observacao ?? 'Descartado na lista a prospectar da Antecipação.',
+    })
+  }
+  /*
+   * A supressão ENTRA POR CIMA quando existe: ela é a fonte com data, e é a data que
+   * a tela mostra. Um card com as duas marcações precisa dizer "volta em 12/11" e não
+   * "sem prazo" — a informação mais específica ganha.
+   */
+  for (const s of suprimidos ?? []) {
+    bloqueados.set(s.valor, {
+      ate: s.expira_em,
+      origem: 'supressao',
+      motivo: bloqueados.get(s.valor)?.motivo ?? 'sem_contato',
+      observacao: `Suprimido pelo módulo ${s.contexto ?? 'geral'}.`,
+    })
+  }
 
   /*
    * SAIR DA VIEW NÃO É A MESMA COISA QUE VIRAR CLIENTE.
@@ -320,28 +363,34 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
     (f) => f.estagio !== 'sem_interesse' && f.estagio !== 'cadastrado' && bloqueados.has(f.fornecedor_cnpj),
   )
   for (const f of paraSuprimir) {
-    const sup = bloqueados.get(f.fornecedor_cnpj)
+    const b = bloqueados.get(f.fornecedor_cnpj)
     await supabaseAdmin
       .from('fornecedores_funil')
       .update({
         estagio: 'sem_interesse',
         estagio_alterado_em: new Date().toISOString(),
-        sem_interesse_motivo: 'sem_contato',
-        sem_interesse_observacao: `Suprimido pelo módulo ${sup?.contexto ?? 'geral'}.`,
-        sem_interesse_ate: sup?.expira_em ?? null,
+        sem_interesse_motivo: b?.motivo ?? 'sem_contato',
+        sem_interesse_observacao: b?.observacao ?? null,
+        sem_interesse_ate: b?.ate ?? null,
+        // A ORIGEM é o que diz onde o descarte se desfaz. Sem ela, "sem data" na tela
+        // significaria tanto "definitivo, peso de LGPD" quanto "reversível num clique
+        // na outra tela" — e essas duas coisas pedem ações opostas.
+        sem_interesse_origem: b?.origem ?? 'supressao',
       })
       .eq('fornecedor_cnpj', f.fornecedor_cnpj)
   }
   if (paraSuprimir.length > 0) {
-    logger.info({ n: paraSuprimir.length }, 'Fornecedores suprimidos por outro módulo saíram do funil.')
+    logger.info({ n: paraSuprimir.length }, 'Fornecedores descartados por outro módulo saíram do funil.')
   }
 
   /*
-   * O contrário também: supressão vencida devolve o card ao funil.
+   * O contrário também: descarte desfeito na origem devolve o card ao funil.
    *
-   * A limpeza de supressões expiradas (`antecipacao/supressoes.ts`) apaga a linha lá e
-   * não sabe deste funil. Sem esta volta, "soft 90 dias" seria eterna na prática — o
-   * card ficaria em `sem_interesse` para sempre, com uma data de retorno que já passou.
+   * Vale para as duas fontes. A limpeza de supressões expiradas
+   * (`antecipacao/supressoes.ts`) apaga a linha lá e não sabe deste funil — sem esta
+   * volta, "soft 90 dias" seria eterna na prática, com uma data de retorno já vencida
+   * estampada no card. E `app_reverter_fornecedor_sem_interesse` (0104) desfaz a
+   * qualificação sem tocar em nada daqui.
    */
   const paraReabrir = (existentes ?? []).filter(
     (f) => f.estagio === 'sem_interesse' && !bloqueados.has(f.fornecedor_cnpj),
@@ -355,11 +404,12 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
         sem_interesse_motivo: null,
         sem_interesse_observacao: null,
         sem_interesse_ate: null,
+        sem_interesse_origem: null,
       })
       .eq('fornecedor_cnpj', f.fornecedor_cnpj)
   }
   if (paraReabrir.length > 0) {
-    logger.info({ n: paraReabrir.length }, 'Supressão venceu; fornecedores voltaram ao funil.')
+    logger.info({ n: paraReabrir.length }, 'Descarte desfeito na origem; fornecedores voltaram ao funil.')
   }
 
   /*

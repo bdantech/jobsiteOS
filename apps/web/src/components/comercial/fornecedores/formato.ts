@@ -66,3 +66,20 @@ export function exibirValor(tipo: string, valor: string): string {
   const m = /^\+55(\d{2})(\d{4,5})(\d{4})$/.exec(valor)
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : valor
 }
+
+/**
+ * O que dizer sobre um descarte, e onde ele se desfaz.
+ *
+ * Três estados que se pareciam na tela e não são a mesma coisa. "Definitivo" sobre algo
+ * que se desfaz com um clique noutra tela é a pior das três confusões possíveis aqui —
+ * ela faz a pessoa desistir de um lead que está a um botão de voltar.
+ */
+export function rotuloDescarte(
+  ate: string | null | undefined,
+  origem: string | null | undefined,
+): string {
+  if (ate) return `Volta em ${dia(ate)}`
+  if (origem === 'antecipacao') return 'Descartado na Antecipação'
+  if (origem === 'supressao') return 'Suprimido em outro módulo'
+  return 'Definitivo'
+}

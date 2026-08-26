@@ -123,6 +123,35 @@ erro.
 | `novavida` | R$ 0,35 | sempre (sócios enriquecidos — em PME de construção o sócio quase sempre É quem decide) |
 | `apollo` | R$ 1,20 | só com domínio resolvido **e** porte acima do mínimo |
 | `claude_busca` | R$ 0,10 | sempre (site, **Instagram e Facebook**, Maps, listas locais, sindicatos) |
+| `claude_aprofundado` | R$ 0,25 | botão próprio, **depois** da primeira passada e só quando há lacuna |
+
+### A segunda busca não é repetir a primeira
+
+Quando a primeira passada volta com pouco — um `contato@` genérico, um fixo que ninguém
+atende, um e-mail cujo domínio não tem MX — existe uma pergunta melhor a fazer, e ela é
+**outra**:
+
+| | pergunta |
+| --- | --- |
+| primeira | "ache contatos comerciais desta empresa" |
+| aprofundada | "estes já temos, estes não funcionam; ache uma **pessoa** com celular" |
+
+Repetir o mesmo prompt pagaria duas vezes pela mesma resposta. Mandar junto o que já foi
+achado e o que falhou na validação é o que muda a pergunta — e é o que autoriza procurar
+em lugares mais caros de varrer: sindicato patronal, junta comercial, notícia local,
+perfil de sócio, ficha de obra pública.
+
+Três disciplinas:
+
+- **É uma fonte própria** (`claude_aprofundado`), não a mesma com outro prompt. O §6 mede
+  eficácia por fonte, e "a segunda passada paga?" é a pergunta que decide gastá-la —
+  gravando as duas juntas, a resposta ficaria diluída na média.
+- **O botão só aparece quando há lacuna.** Com uma pessoa nomeada e canal direto
+  validado, ela não acrescentaria, e a tela não oferece. A conta é a **mesma função do
+  core** que o worker usa para decidir: se a tela dissesse "vale" e o worker recusasse, o
+  originador aprenderia a regra pelo erro.
+- **O TTL não é o da primeira.** `claude_busca` tem 90 dias porque não se paga duas vezes
+  pela mesma pergunta; esta é outra pergunta, com TTL próprio.
 
 ### O Apollo tinha as duas portas fechadas por construção
 
@@ -296,7 +325,22 @@ Marcar sem interesse grava **três coisas numa transação**:
 1. a **supressão** de canal, com validade (90 dias soft, ou eterna com peso de LGPD);
 2. a linha em `antecipacao_fornecedor_sem_interesse`, que é o que a lista a prospectar da
    Antecipação lê;
-3. o estágio do card.
+3. o estágio do card, com a **origem** do descarte.
+
+### Descartar acontece em três lugares, e a reconciliação precisa ler os três
+
+| Onde | O que grava |
+| --- | --- |
+| Funil de cadastro (04l) | supressão + qualificação + estágio |
+| Lista a prospectar (0104) | **só** `antecipacao_fornecedor_sem_interesse` |
+| Radar / Antecipação (0047) | **só** `supressao` |
+
+O job lia apenas `supressao`. Um fornecedor descartado pela lista a prospectar sumia dos
+candidatos e o card ficava em `a_cadastrar` para sempre — o originador ligaria para quem
+outra pessoa já trabalhou e descartou. Medido: 2 marcados lá, **zero** com supressão.
+
+Por isso existe `sem_interesse_origem`: sem data no card, "definitivo" (LGPD) e
+"reversível na outra tela" apareciam iguais, e essas duas coisas pedem ações opostas.
 
 Sem a segunda, o originador marcaria "não vai se cadastrar" aqui e o fornecedor
 continuaria no topo da lista a prospectar da Antecipação com cara de lead novo. Duas telas

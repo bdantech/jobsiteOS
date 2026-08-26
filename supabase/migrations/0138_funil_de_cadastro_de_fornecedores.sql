@@ -20,6 +20,10 @@
 -- de outros módulos herdou o `anon=X` que eles já tinham) e
 -- `0138l_a_contagem_de_pedidos_custava_uma_rls_por_linha` (uma coluna de `count(*)` na
 -- view cobrava a RLS de outra tabela 500 vezes por página, e nenhuma tela a lia),
+-- `0139_de_onde_veio_o_descarte_decide_onde_se_desfaz` (marcar sem interesse acontece
+-- em TRÊS lugares e a reconciliação lia só um) e
+-- `0140_segunda_busca_e_uma_fonte_propria` (a busca aprofundada grava como fonte
+-- separada, porque "a segunda passada paga?" é a pergunta que decide gastá-la),
 -- `0138m_a_supressao_precisa_saber_que_veio_do_comercial` (o CHECK de `contexto` só
 -- conhecia `geral` e `antecipacao`) e
 -- `0138n_a_view_lia_uma_tabela_que_o_comercial_nao_enxerga` (a view trazia `suprimido`
@@ -146,6 +150,18 @@ create table public.fornecedores_funil (
    * NULL com estágio `sem_interesse` é supressão eterna.
    */
   sem_interesse_ate date,
+  /*
+   * Onde o descarte foi feito, porque é ONDE ELE SE DESFAZ. Três estados que se
+   * parecem na tela e não são a mesma coisa: supressão soft (volta sozinha),
+   * supressão eterna (LGPD, não volta) e qualificação da lista a prospectar
+   * (reversível — mas na outra tela). Sem esta coluna, os dois últimos apareciam
+   * iguais, e "definitivo" sobre algo que se desfaz num clique é a pior das
+   * confusões possíveis aqui.
+   */
+  sem_interesse_origem text
+    constraint fornecedores_funil_sem_interesse_origem_check
+    check (sem_interesse_origem is null
+           or sem_interesse_origem in ('comercial', 'antecipacao', 'supressao')),
 
   -- ── munição (recalculada pelo job) ───────────────────────────────────────
   volume_90d numeric(14, 2),
@@ -240,7 +256,8 @@ create table public.contatos_descobertos (
   cargo text,
   fonte text not null
     constraint contatos_descobertos_fonte_check check (fonte in
-      ('xml_nfe', 'receita', 'google_places', 'site_empresa', 'apollo', 'novavida', 'claude_busca', 'sacado')),
+      ('xml_nfe', 'receita', 'google_places', 'site_empresa', 'apollo', 'novavida',
+       'claude_busca', 'claude_aprofundado', 'sacado')),
   confianca text not null
     constraint contatos_descobertos_confianca_check check (confianca in ('alta', 'media', 'baixa')),
   /* URL, número da NF ou trecho. Contato do Claude SEM evidência é descartado antes
@@ -1504,7 +1521,7 @@ insert into public.fornecedores_config (chave, valor) values
    * cobrança, e dois números para ela fariam os dois orçamentos divergirem sobre a
    * mesma fatura.
    */
-  ('custos', '{"google_places": 0.18, "novavida": 0.35, "apollo": 1.2, "claude_busca": 0.1}'::jsonb),
+  ('custos', '{"google_places": 0.18, "novavida": 0.35, "apollo": 1.2, "claude_busca": 0.1, "claude_aprofundado": 0.25}'::jsonb),
 
   /*
    * O teto mensal POR ORIGINADOR é a autorização, não o gestor.

@@ -87,6 +87,7 @@ export const FONTES_CONTATO = [
   'apollo',
   'novavida',
   'claude_busca',
+  'claude_aprofundado',
   'sacado',
 ] as const
 export type FonteContato = (typeof FONTES_CONTATO)[number]
@@ -99,6 +100,7 @@ export const FONTE_CONTATO_LABELS: Record<FonteContato, string> = {
   apollo: 'Apollo',
   novavida: 'Nova Vida TI',
   claude_busca: 'Busca do Claude',
+  claude_aprofundado: 'Busca aprofundada',
   sacado: 'Indicação do sacado',
 }
 

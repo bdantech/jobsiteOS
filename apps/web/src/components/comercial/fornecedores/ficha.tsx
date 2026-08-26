@@ -4,11 +4,12 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  Building2, Copy, Mail, MessageSquare, Phone, Search, Star, ThumbsDown, UserPlus,
+  Building2, Copy, Mail, MessageSquare, Phone, Search, Sparkles, Star, ThumbsDown, UserPlus,
 } from 'lucide-react'
 import {
   CUSTOS_PADRAO,
   ESTAGIOS_FORNECEDOR_ATIVOS,
+  lacunasDeContato,
   ESTAGIO_FORNECEDOR_LABELS,
   MOTIVOS_SEM_INTERESSE,
   MOTIVO_SEM_INTERESSE_LABELS,
@@ -36,6 +37,7 @@ import { ModalDoCard } from '../modal-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  buscaAprofundadaAction,
   buscarContatosAction,
   descartarFornecedorAction,
   moverFornecedorAction,
@@ -54,7 +56,7 @@ import {
 } from './queries'
 import {
   brl, brlExato, cnpjFormatado, dia, exibirValor, linkDoContato, rotuloConfianca,
-  rotuloFonte, rotuloTipo, varianteConfianca,
+  rotuloDescarte, rotuloFonte, rotuloTipo, varianteConfianca,
 } from './formato'
 
 /**
@@ -178,6 +180,54 @@ export function FichaFornecedor({
     onError: (e: Error) => toast.error(e.message),
   })
 
+  /*
+   * A SEGUNDA busca, e ela só aparece quando tem o que procurar.
+   *
+   * `lacunasDeContato` é a MESMA função que o worker usa para decidir — a tela não faz
+   * uma estimativa própria. Se ela dissesse "vale" e o worker recusasse, o originador
+   * clicaria num botão que devolve "não acrescentaria", que é a pior forma de aprender
+   * uma regra.
+   */
+  const lacunas = React.useMemo(
+    () =>
+      lacunasDeContato(
+        (contatos.data ?? []).map((c) => ({
+          tipo: c.tipo,
+          valor: c.valor,
+          confianca: c.confianca as Confianca,
+          nome_pessoa: c.nome_pessoa,
+          valido:
+            typeof c.validado === 'object' && c.validado !== null
+              ? ((c.validado as Record<string, unknown>).valido as boolean | undefined) ?? null
+              : null,
+        })),
+      ),
+    [contatos.data],
+  )
+
+  const aprofundar = useMutation({
+    mutationFn: async (forcar: boolean) => {
+      const r = await buscaAprofundadaAction({ cnpj, forcar })
+      if (!r.ok) throw new Error(r.message)
+      return r.data
+    },
+    onSuccess: (d) => {
+      if (!d.ok) {
+        setEstourouOTeto((d.motivo ?? '').includes('saldo do mês'))
+        toast.warning(d.motivo ?? 'A busca aprofundada não rodou.')
+        return
+      }
+      setEstourouOTeto(false)
+      toast.success(
+        d.contatosNovos > 0
+          ? `${d.contatosNovos} contato(s) novo(s) na busca aprofundada. Custou ${brlExato(d.custo)}.`
+          : `A busca aprofundada não achou nada novo. Custou ${brlExato(d.custo)}.`,
+      )
+      invalidar()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const promover = useMutation({
     mutationFn: async (id: string) => {
       const r = await promoverContatoAction({ contato_descoberto_id: id, ponto_focal: true })
@@ -236,9 +286,7 @@ export function FichaFornecedor({
             </Badge>
             {suprimido ? (
               <Badge variant="destructive" className="text-[10px]">
-                {card.sem_interesse_ate
-                  ? `Volta em ${dia(card.sem_interesse_ate)}`
-                  : 'Sem interesse (definitivo)'}
+                {rotuloDescarte(card.sem_interesse_ate, card.sem_interesse_origem)}
               </Badge>
             ) : null}
             <div className="relative z-10">
@@ -365,12 +413,33 @@ export function FichaFornecedor({
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={buscar.isPending}
+                        disabled={buscar.isPending || aprofundar.isPending}
                         onClick={() => setConfirmandoBusca(true)}
                       >
                         <Search className="mr-1 h-3.5 w-3.5" aria-hidden />
                         {buscar.isPending ? 'Buscando…' : 'Buscar contatos'}
                       </Button>
+                      {/*
+                        A SEGUNDA passada só aparece depois da primeira ter rodado E
+                        quando há lacuna. Um botão sempre visível que responde "não
+                        acrescentaria" ensina a ignorá-lo.
+                      */}
+                      {card.ultima_busca_em && lacunas.vale_aprofundar ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={buscar.isPending || aprofundar.isPending}
+                          onClick={() => aprofundar.mutate(false)}
+                          title={
+                            `Segunda busca, mais funda: manda o que já achamos e o que não ` +
+                            `funciona, e procura ${lacunas.faltam.join(', ')} em sindicato, ` +
+                            `junta comercial, notícia local e perfil de sócio.`
+                          }
+                        >
+                          <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
+                          {aprofundar.isPending ? 'Aprofundando…' : 'Buscar mais fundo'}
+                        </Button>
+                      ) : null}
                       {estourouOTeto && ehGestor ? (
                         <Button
                           size="sm"
@@ -474,6 +543,14 @@ export function FichaFornecedor({
                         )
                       })
                     )}
+                    {(contatos.data ?? []).length > 0 && lacunas.faltam.length > 0 ? (
+                      <p className="pt-1 text-[11px] text-muted-foreground">
+                        Ainda falta: <strong>{lacunas.faltam.join(', ')}</strong>.
+                        {lacunas.falharam.length > 0
+                          ? ` ${lacunas.falharam.length} contato(s) reprovaram na validação.`
+                          : ''}
+                      </p>
+                    ) : null}
                   </CardContent>
                 </Card>
 
