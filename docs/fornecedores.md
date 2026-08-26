@@ -61,6 +61,17 @@ alguém marcou sem interesse. Só o primeiro é notícia, e só ele emite
 `fornecedor.cadastrado`. Os outros deixam o card onde está: apagar a linha levaria junto
 os contatos descobertos e o dinheiro já gasto para achá-los.
 
+## A ordem é o valor emitido, do maior para o menor
+
+E ela sai de `volume_90d`, não do `potencial_mensal` derivado dele. As duas dão exatamente
+a mesma sequência — potencial é volume ÷ 3, e as 530 linhas concordam linha a linha —, mas
+ordenar pelo número que a pessoa **não vê no card** é pedir que ela confie na ordem sem
+poder conferi-la. O card mostra o volume; a consulta ordena pelo volume.
+
+(A tela de fornecedores a prospectar ordena por **número de notas** por padrão, com o
+argumento de que fluxo recorrente vale mais que uma nota grande e única. As duas leituras
+são defensáveis; aqui a ordem é o valor.)
+
 ## Potencial mensal é volume ÷ 3, e nada além disso
 
 É a conta mais simples possível, de propósito. Ela responde "quanto ele fatura por mês
@@ -220,10 +231,16 @@ O originador de um fornecedor é derivado do **sacado** contra o qual ele mais f
 carteira de originação (`vendedor_carteira`, papel `originacao`). O desempate é o volume,
 porque é a porta de entrada mais forte da abordagem.
 
-Hoje **212 dos 530** têm titular; os outros 318 nascem sem dono. É por isso que a fila sem
-dono é o filtro que o gestor abre por padrão — e por que ela é dele, e não visível a todos
-os originadores: dois deles ligariam para a mesma empresa na mesma semana, cada um achando
-que era seu.
+Hoje **212 dos 530** têm titular; os outros 318 nascem sem dono. A fila sem dono é do
+gestor, e não visível a todos os originadores: dois deles ligariam para a mesma empresa na
+mesma semana, cada um achando que era seu.
+
+Ela **não** é o filtro padrão, e isso foi corrigido depois de ver o efeito. O default era
+a fila sem dono, com o argumento de que é a única ação exclusiva do gestor. O argumento é
+verdadeiro e a decisão era errada: quem comparou esta tela com a de fornecedores a
+prospectar viu o maior fornecedor sumido — ele tem dono — e concluiu que a ordenação
+estava quebrada. Estava certa; a lista é que vinha filtrada, e nada dizia isso alto o
+bastante. Um default que faz a pessoa desconfiar do dado custa mais do que economiza.
 
 Reatribuir marca `originador_origem = 'manual'`, e o job noturno passa a não sobrescrever.
 Sem esse flag a correção do gestor sumiria de madrugada e a pessoa a refaria no dia
@@ -274,7 +291,7 @@ como superusuário — que é o modo como quase toda verificação de banco acab
 | | Originador | Gestor (Admin/Comercial) |
 | --- | --- | --- |
 | Funil e ficha | os fornecedores da carteira dele | tudo |
-| Fila sem dono | não | sim, e é o filtro padrão |
+| Fila sem dono | não | sim, a um clique no cabeçalho |
 | Buscar contatos (pago) | sim, dentro do teto | sim, e pode liberar quem estourou |
 | Pedir apresentação | sim | sim |
 | Tornar ponto focal | sim | sim |

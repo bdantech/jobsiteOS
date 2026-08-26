@@ -73,14 +73,19 @@ export function FunilFornecedores({
   const [termo, setTermo] = React.useState('')
   const [debounce, setDebounce] = React.useState('')
   /*
-   * O default do gestor é a fila SEM DONO, não "todos".
+   * O gestor abre em TODOS, e isto foi corrigido depois de ver o efeito.
    *
-   * Abrir em "todos" faria a primeira coisa que ele vê ser o trabalho de outra pessoa.
-   * A fila sem dono é a única lista deste módulo em que o gestor tem uma ação que
-   * ninguém mais pode fazer — atribuir.
+   * O default era a fila sem dono, com o argumento de que é a única ação exclusiva
+   * dele. O argumento é verdadeiro e a decisão era errada: quem comparou esta tela com
+   * a de fornecedores a prospectar viu o maior fornecedor sumido (ele TEM dono) e
+   * concluiu que a ordenação estava quebrada. Estava certa; a lista é que vinha
+   * filtrada, e nada na tela dizia isso alto o bastante.
+   *
+   * Um default que faz a pessoa desconfiar do dado custa mais do que economiza. A fila
+   * sem dono continua a um clique, no contador do cabeçalho.
    */
   const [filtroDono, setFiltroDono] = React.useState<string>(
-    ehGestor ? 'sem_dono' : (vendedorId ?? ''),
+    ehGestor ? 'todos' : (vendedorId ?? ''),
   )
   const [aberto, setAberto] = React.useState<string | null>(null)
 
@@ -116,7 +121,8 @@ export function FunilFornecedores({
       const r = await atualizarFunilAction()
       if (!r.ok) throw new Error(r.message)
     },
-    onSuccess: () => toast.success('Recálculo disparado. A lista se atualiza em alguns minutos.'),
+    onSuccess: () =>
+      toast.success('Releitura disparada. Volume, prazo e sacados se atualizam em alguns minutos.'),
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -152,8 +158,21 @@ export function FunilFornecedores({
     ? (['cadastrado', 'sem_interesse'] as EstagioFornecedor[])
     : ESTAGIOS_FORNECEDOR_ATIVOS
 
-  const potencial = cards.reduce((s, c) => s + (Number(c.potencial_mensal) || 0), 0)
-  const semDono = cards.filter((c) => !c.originador_id).length
+  const volumeTotal = cards.reduce((s, c) => s + (Number(c.volume_90d) || 0), 0)
+
+  /*
+   * A contagem de sem-dono sai de uma consulta PRÓPRIA, não da lista na tela.
+   *
+   * Contando sobre `cards` ela daria zero justamente quando o filtro "sem dono" está
+   * desligado com um vendedor selecionado — e o atalho para a fila sumiria no momento
+   * em que ele é mais útil.
+   */
+  const contagemSemDono = useQuery({
+    queryKey: fornecedoresKeys.funil('contagem-sem-dono'),
+    queryFn: () => buscarFunil({ originadorId: 'sem_dono', concluidos: false, termo: '' }),
+    enabled: ehGestor,
+  })
+  const semDono = contagemSemDono.data?.length ?? 0
 
   return (
     <div className="space-y-4">
@@ -163,13 +182,44 @@ export function FunilFornecedores({
             <div className="space-y-1.5">
               <CardTitle className="text-base">Funil de Cadastro</CardTitle>
               <CardDescription>
-                {cards.length} fornecedor(es), {brl(potencial)}/mês de potencial.{' '}
-                <strong>
-                  Quem qualifica é o sacado ter crédito aprovado
-                </strong>{' '}
-                — a mesma régua da lista de fornecedores a prospectar da Antecipação.
-                {semDono > 0 ? ` ${semDono} sem dono.` : ''}
+                {cards.length} fornecedor(es), {brl(volumeTotal)} emitidos em 90 dias.{' '}
+                <strong>Do que mais emitiu para o que menos emitiu</strong>, em valor.
+                Quem qualifica é o sacado ter crédito aprovado — a mesma régua da lista
+                de fornecedores a prospectar da Antecipação.
               </CardDescription>
+              {/*
+                O estado do filtro em texto, e não só no seletor.
+                
+                Comparar esta tela com a de prospectar e não achar um fornecedor é o
+                caminho curto para desconfiar da ordenação. A frase diz que a lista está
+                recortada e por quê; o contador de sem-dono é o atalho para a única ação
+                que só o gestor tem.
+              */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {filtroDono !== 'todos' && ehGestor ? (
+                  <span className="rounded bg-muted px-1.5 py-0.5">
+                    Lista filtrada —{' '}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={() => setFiltroDono('todos')}
+                    >
+                      ver todos
+                    </button>
+                  </span>
+                ) : null}
+                {ehGestor && semDono > 0 ? (
+                  <button
+                    type="button"
+                    className="underline underline-offset-2 hover:text-foreground"
+                    onClick={() => setFiltroDono(filtroDono === 'sem_dono' ? 'todos' : 'sem_dono')}
+                  >
+                    {filtroDono === 'sem_dono'
+                      ? `${semDono} sem dono — voltar para todos`
+                      : `${semDono} sem dono`}
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <div className="relative">
@@ -227,19 +277,34 @@ export function FunilFornecedores({
                 )}
               </Button>
 
+              {/*
+                O botão NÃO é o que mantém a lista viva — o job roda sozinho atrás de
+                cada sync de NF, de 4 em 4 horas. Ele existe para o caso de não querer
+                esperar: mudou o corte de volume nas configurações, ou mexeu na carteira
+                de originação, e quer ver o efeito agora.
+
+                O `title` diz o que ele faz porque a pergunta foi feita. Um botão que
+                dispara um job de varredura e se chama só "Recalcular" convida a
+                imaginar o que ele apaga.
+              */}
               {ehGestor && (
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={recalcular.isPending}
                   onClick={() => recalcular.mutate()}
-                  title="Recalcula a munição a partir das notas que já chegaram"
+                  title={
+                    'Relê as notas e atualiza volume, prazo, sacados e o originador de cada card. ' +
+                    'Faz entrar quem passou a qualificar e marca como cadastrado quem virou cliente. ' +
+                    'NÃO mexe em estágio, contato descoberto nem em dono definido à mão. ' +
+                    'Roda sozinho a cada sync de NF (4/4h) — isto é só para não esperar.'
+                  }
                 >
                   <RefreshCw
                     className={cn('mr-1 h-3.5 w-3.5', recalcular.isPending && 'animate-spin')}
                     aria-hidden
                   />
-                  Recalcular
+                  Atualizar da base
                 </Button>
               )}
             </div>
@@ -304,8 +369,20 @@ export function FunilFornecedores({
                                 : 'sem contato'}
                             </Badge>
                           </div>
-                          <p className="text-xs tabular-nums text-muted-foreground">
-                            {brl(c.potencial_mensal)}/mês · {c.qtd_nfs_90d ?? 0} NFs
+                          {/*
+                            O VOLUME lidera porque é a chave da ordenação: é ele que
+                            explica por que este card está acima daquele. O potencial
+                            vem depois, menor — ele é derivado (volume ÷ 3) e não
+                            acrescenta ordem nenhuma, só a leitura mensal.
+                          */}
+                          <p className="text-xs tabular-nums">
+                            <span className="font-medium">{brl(c.volume_90d)}</span>
+                            <span className="text-muted-foreground">
+                              {' '}em 90d · {c.qtd_nfs_90d ?? 0} NFs
+                            </span>
+                          </p>
+                          <p className="text-[11px] tabular-nums text-muted-foreground">
+                            {brl(c.potencial_mensal)}/mês de potencial
                           </p>
                           {/*
                             O dono só aparece na lista NÃO filtrada: com o filtro ligado
@@ -344,8 +421,9 @@ export function FunilFornecedores({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fornecedor</TableHead>
-                    <TableHead className="text-right">Potencial/mês</TableHead>
+                    {/* Volume primeiro: é a coluna pela qual a lista está ordenada. */}
                     <TableHead className="text-right">Volume 90d</TableHead>
+                    <TableHead className="text-right">Potencial/mês</TableHead>
                     <TableHead className="text-right">NFs</TableHead>
                     <TableHead className="text-right">Prazo</TableHead>
                     <TableHead>Contatos</TableHead>
@@ -371,9 +449,11 @@ export function FunilFornecedores({
                         </button>
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
+                        {brl(c.volume_90d)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
                         {brl(c.potencial_mensal)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{brl(c.volume_90d)}</TableCell>
                       <TableCell className="text-right tabular-nums">{c.qtd_nfs_90d ?? '—'}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {c.prazo_medio_dias === null ? '—' : `${c.prazo_medio_dias}d`}

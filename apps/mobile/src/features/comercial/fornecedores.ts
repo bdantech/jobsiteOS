@@ -57,7 +57,8 @@ export function useFunilFornecedores(estagio: EstagioFornecedor | 'todos') {
       let q = supabase
         .from('fornecedores_funil_view')
         .select('fornecedor_cnpj, fornecedor_nome, municipio, uf, estagio, volume_90d, qtd_nfs_90d, prazo_medio_dias, potencial_mensal, ultima_nf_em, contatos_encontrados, melhor_confianca, originador_nome, sacados_principais, suprimido')
-        .order('potencial_mensal', { ascending: false, nullsFirst: false })
+        // Do que mais emitiu em VALOR para o que menos emitiu — a mesma chave da web.
+        .order('volume_90d', { ascending: false, nullsFirst: false })
         .limit(100)
 
       q = estagio === 'todos'

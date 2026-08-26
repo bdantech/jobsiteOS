@@ -120,10 +120,16 @@ export default function FornecedoresScreen() {
               <Card className="gap-1 p-4">
                 <Text className="font-medium">{f.fornecedor_nome}</Text>
                 <Text variant="muted" className="text-xs">
-                  {[f.municipio, f.uf].filter(Boolean).join('/') || '—'} · {f.qtd_nfs_90d ?? 0} NFs em 90 dias
+                  {[f.municipio, f.uf].filter(Boolean).join('/') || '—'} · {f.qtd_nfs_90d ?? 0} NFs ·{' '}
+                  {brl(f.potencial_mensal)}/mês de potencial
                 </Text>
                 <View className="flex-row items-baseline justify-between pt-1">
-                  <Text className="text-lg font-semibold">{brl(f.potencial_mensal)}<Text variant="muted" className="text-xs">/mês</Text></Text>
+                  {/* O VOLUME lidera: é a chave da ordenação, e é ele que explica por
+                      que este card está acima daquele. */}
+                  <Text className="text-lg font-semibold">
+                    {brl(f.volume_90d)}
+                    <Text variant="muted" className="text-xs"> em 90d</Text>
+                  </Text>
                   <Badge variant={f.melhor_confianca === 'alta' ? 'default' : 'outline'}>
                     <Text className="text-[10px]">
                       {f.contatos_encontrados

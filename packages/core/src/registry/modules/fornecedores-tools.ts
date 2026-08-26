@@ -77,7 +77,8 @@ async function meuFunil(input: z.infer<typeof meuFunilSchema>, ctx: ToolContext)
     // Uma string literal só. Concatenar quebra a inferência de tipos do PostgREST e o
     // resultado vira GenericStringError — a mesma cicatriz do 04k.
     .select('fornecedor_cnpj, fornecedor_nome, municipio, uf, estagio, potencial_mensal, volume_90d, qtd_nfs_90d, prazo_medio_dias, contatos_encontrados, melhor_confianca, originador_nome, ultima_nf_em, sacados_principais')
-    .order('potencial_mensal', { ascending: false, nullsFirst: false })
+    // Do que mais emitiu em valor para o que menos emitiu, como nas telas.
+    .order('volume_90d', { ascending: false, nullsFirst: false })
     .limit(input.limite)
 
   q = input.estagio

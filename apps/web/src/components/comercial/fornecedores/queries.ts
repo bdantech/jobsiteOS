@@ -42,11 +42,20 @@ export async function buscarFunil(filtro: FiltroFunil): Promise<FornecedorCard[]
   let q = supabase
     .from('fornecedores_funil_view')
     .select('*')
-    // Potencial desc é a ordenação padrão do §3, e ela é só do fornecedor: o limite
-    // do sacado NÃO entra. Ele é o teto da operação, não do lead — um fornecedor de
-    // R$ 900 mil/mês contra um sacado estourado continua sendo o melhor telefone da
-    // lista, porque limite se resolve com análise.
-    .order('potencial_mensal', { ascending: false, nullsFirst: false })
+    /*
+     * QUEM MAIS EMITIU, EM VALOR, PRIMEIRO.
+     *
+     * A ordem sai de `volume_90d`, não do `potencial_mensal` derivado dele. As duas
+     * dão exatamente a mesma sequência — potencial é volume ÷ 3, e as 530 linhas da
+     * base concordam linha a linha —, mas ordenar pelo número que a pessoa NÃO vê no
+     * card é pedir que ela confie na ordem sem poder conferi-la. O card mostra o
+     * volume; a consulta ordena pelo volume.
+     *
+     * O limite do sacado não entra aqui: ele é o teto da operação, não do lead. Um
+     * fornecedor de R$ 900 mil/mês contra um sacado que já usou o limite continua
+     * sendo o melhor telefone da lista.
+     */
+    .order('volume_90d', { ascending: false, nullsFirst: false })
     .limit(500)
 
   q = filtro.concluidos
