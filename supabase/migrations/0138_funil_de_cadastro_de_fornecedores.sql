@@ -1483,11 +1483,17 @@ comment on function public.fornecedores_eficacia_fontes is
 -- Seeds
 --
 -- Todo valor aqui é editável na tela de settings. Os defaults saíram da medição da
--- base em 25/08/2026, não de arredondamento.
+-- base, não de arredondamento.
+--
+-- `corte_volume` é a ÚNICA diferença entre este funil e a tela de fornecedores a
+-- prospectar: as duas partem da mesma view de candidatos (2.147 CNPJs), e o corte
+-- decide quantos deles valem uma ligação. A R$ 25 mil em 90 dias entram 516 — a faixa
+-- de PME que fatura R$ 8-16 mil/mês contra nossos sacados, que é justamente onde o
+-- Apollo não tem nada e o XML da NF-e tem telefone para 77%.
 -- =============================================================================
 
 insert into public.fornecedores_config (chave, valor) values
-  ('corte_volume', '50000'::jsonb),
+  ('corte_volume', '25000'::jsonb),
 
   /*
    * Custos por consulta, em reais. Ficam em config porque câmbio e tabela de

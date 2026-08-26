@@ -8,38 +8,58 @@ Fica em **Comercial → Cadastro de Fornecedores**.
 
 ## O que já existia, e o que faltava
 
-A view `antecipacao_fornecedores_a_prospectar` (migração 0101) já **listava** esses
-CNPJs desde o Prompt 04. Ela continua existindo e continua correta. O que faltava era
-tudo que separa uma lista de um funil: quem trabalha cada nome, em que ponto da
-conversa ele está, o que dizer na primeira frase, e por onde falar.
+A view `antecipacao_fornecedores_a_prospectar` (migrações 0101/0102) já **listava** esses
+CNPJs desde o Prompt 04. Ela continua existindo, continua correta, e agora é a **fonte
+única** de quem é candidato — este funil não reimplementa a regra, ele lê a view.
 
-Três medições da base, feitas em 25/08/2026, sustentam quase todas as decisões daqui:
+O que faltava era tudo que separa uma lista de um funil: quem trabalha cada nome, em que
+ponto da conversa ele está, o que dizer na primeira frase, e por onde falar.
+
+### A régua é o sacado ter CRÉDITO APROVADO
+
+Não basta o sacado estar cadastrado, e a 0102 mediu o estrago dessa confusão: **70% da
+lista original** eram notas contra empresas que estão na plataforma mas não têm limite
+aprovado. Para essas não há operação a oferecer — o lead não era lead. A aprovação vale
+também quando está noutro CNPJ do grupo (holding ou SPE).
+
+A primeira versão deste funil reimplementou a regra com `sacado_cadastrado` e trouxe o
+problema de volta por outro caminho: dos 390 fornecedores que apareciam aqui e não na
+tela de prospectar, **388 emitiam contra sacados sem limite aprovado**. Duas telas
+discordando sobre quem é candidato é como o originador liga para alguém que a operação
+não consegue atender.
+
+Medido em 26/08/2026:
 
 | Medida | Número |
 | --- | --- |
-| Fornecedores que emitiram contra sacado nosso em 180 dias | 7.892 |
-| Destes, com **volume ≥ R$ 50 mil em 90 dias** | **688** |
-| Volume cedido por esses 688 na janela | R$ 289,2 milhões |
-| Potencial mensal somado (volume 90d ÷ 3) | R$ 96,4 milhões |
-| Com telefone no `<emit>` do XML da NF-e | 528 (77%) |
+| Candidatos (o que a view devolve) | 2.147 |
+| Destes, com **volume ≥ R$ 25 mil em 90 dias** (`corte_volume`) | **516** |
+| Volume cedido pelos candidatos na janela | R$ 77,5 milhões |
+| Potencial mensal no funil | R$ 23,8 milhões |
+| Com telefone no `<emit>` do XML da NF-e (amostra de 688) | 528 (77%) |
 | Com e-mail no `<emit>` | 201 (29%) |
 | Com telefone no cadastro da Receita | 75 (11%) |
 | Com e-mail no cadastro da Receita | 70 (10%) |
-| Com originador titular na carteira de originação | 112 (16%) |
+| Com originador titular na carteira de originação | 212 |
 
-## O corte de volume é a decisão de produto
+## O corte de volume é a única diferença entre as duas telas
 
-Sem corte a lista tem 7.892 nomes. Isso não é um funil — é a mesma lista morta com
-kanban em volta, e a ordenação por potencial não significa nada quando 90% da lista é
-ruído. O corte (`fornecedores_config.corte_volume`, default R$ 50 mil em 90 dias) é o
-que faz o primeiro card da tela ser um card que vale a ligação.
+A tela de prospectar mostra os 2.147; este funil mostra os que passam do corte. É a
+mesma lista, filtrada por quanto o lead vale — e o corte vive em
+`fornecedores_config.corte_volume`, editável em Comercial → Configurações.
+
+Sem corte nenhum, 87% da lista carrega 24% do volume e a ordenação por potencial perde
+força. Com R$ 25 mil, entra a faixa de PME que fatura R$ 8–16 mil/mês contra nossos
+sacados — que é justamente a que o Apollo não alcança e o XML da NF-e alcança.
 
 A entrada é **automática**: quem passa do corte entra, sem curadoria. Ninguém revisa
-688 nomes, e a revisão não acrescentaria nada que o volume já não diga.
+quinhentos nomes, e a revisão não acrescentaria nada que o volume já não diga.
 
-A saída também: quando o sync marca `fornecedor_cadastrado`, o card vira `cadastrado`,
-sai da lista ativa e emite `fornecedor.cadastrado`. As NFs dele seguem o funil normal de
-antecipação e a titularidade passa a ser a do 04k.
+A saída também, mas com uma distinção que importa: sumir da view acontece por quatro
+motivos — entrou na plataforma, o sacado perdeu o limite, parou de emitir na janela, ou
+alguém marcou sem interesse. Só o primeiro é notícia, e só ele emite
+`fornecedor.cadastrado`. Os outros deixam o card onde está: apagar a linha levaria junto
+os contatos descobertos e o dinheiro já gasto para achá-los.
 
 ## Potencial mensal é volume ÷ 3, e nada além disso
 
@@ -48,10 +68,13 @@ contra nossos sacados" — não "quanto ele vai antecipar". A segunda pergunta d
 apetite, prazo e limite, e um número que fingisse respondê-la colocaria o originador
 numa ligação prometendo o que não é dele.
 
-**O limite do sacado não entra na ordenação.** Ele é o teto da operação, não do lead: um
-fornecedor de R$ 900 mil/mês contra um sacado com limite estourado continua sendo o
-melhor telefone da lista, porque limite se resolve com análise e fornecedor grande não
-aparece por decreto.
+**O limite do sacado não entra na ORDENAÇÃO.** Ele é o teto da operação, não do lead: um
+fornecedor de R$ 900 mil/mês contra um sacado que já usou o limite continua sendo o
+melhor telefone da lista.
+
+Isso é diferente de o sacado ter crédito **aprovado**, que é o que qualifica o lead a
+existir. Ter limite e ter usado o limite são coisas distintas: a primeira decide se há
+operação possível, a segunda é conjuntura do mês.
 
 ## A cascata de descoberta
 
@@ -197,7 +220,7 @@ O originador de um fornecedor é derivado do **sacado** contra o qual ele mais f
 carteira de originação (`vendedor_carteira`, papel `originacao`). O desempate é o volume,
 porque é a porta de entrada mais forte da abordagem.
 
-Hoje **112 dos 688** têm titular; os outros 576 nascem sem dono. É por isso que a fila sem
+Hoje **212 dos 530** têm titular; os outros 318 nascem sem dono. É por isso que a fila sem
 dono é o filtro que o gestor abre por padrão — e por que ela é dele, e não visível a todos
 os originadores: dois deles ligariam para a mesma empresa na mesma semana, cada um achando
 que era seu.
@@ -263,6 +286,13 @@ como superusuário — que é o modo como quase toda verificação de banco acab
 
 **Web**: funil (kanban ou tabela), ficha completa, busca paga, pedido de apresentação,
 painel do originador, eficácia por fonte e settings.
+
+O funil usa a **mesma forma** do funil de reuniões, do funil de vendas e da esteira de
+crédito: um cartão só, kanban por estágio com colunas roláveis, tabela como alternativa,
+e o mesmo `ModalDoCard` com trilha de etapas ao abrir. A pergunta é a mesma nas quatro
+telas — "onde está cada coisa, e o que falta nela" —, e duas telas que respondem à mesma
+pergunta com layouts diferentes obrigam a pessoa a reaprender a ler a cada troca de
+módulo. Também não há arrastar-e-soltar, pelo mesmo motivo dos outros.
 
 **Mobile**: é a tela do Comercial que **mais pertence ao celular** — o uso real é na obra
 ou no carro, com a ficha de abordagem na mão e ligar a um toque. Tem funil por estágio,

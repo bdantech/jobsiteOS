@@ -403,10 +403,14 @@ Detalhes em [`docs/fornecedores.md`](docs/fornecedores.md); aqui o que decide di
 
 ### A ordem da cascata é a ordem do custo, e ela foi medida
 
-Dos 688 fornecedores que passam do corte de volume (25/08/2026): **528 (77%) têm telefone no bloco
-`<emit>` do XML da NF-e**; o cadastro da Receita tem telefone para **75 (11%)**. O XML ganha por sete
-vezes e custa zero — ele está no nosso banco desde o Prompt 04. Rodar qualquer provedor pago antes de
-esgotá-lo é pagar por 77% de informação que já temos.
+**528 de 688 (77%) têm telefone no bloco `<emit>` do XML da NF-e**; o cadastro da Receita tem telefone
+para **75 (11%)**. O XML ganha por sete vezes e custa zero — está no nosso banco desde o Prompt 04.
+Rodar qualquer provedor pago antes de esgotá-lo é pagar por 77% de informação que já temos.
+
+Quem é CANDIDATO não é decidido aqui: vem da view `antecipacao_fornecedores_a_prospectar`, a mesma da
+tela de fornecedores a prospectar. O que qualifica é o sacado ter **crédito aprovado** — não bastar
+estar cadastrado foi medido na 0102 (70% da lista original eram notas contra empresas sem limite). A
+única diferença entre as duas telas é o corte de volume (`corte_volume`, R$ 25 mil).
 
 ```
 CAMADA 0+1 — automática, roda para TODOS, sem clique

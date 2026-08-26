@@ -8,25 +8,41 @@ import { lerCorteVolume } from './config.js'
 /**
  * Alimentação do funil (04l §3). Roda depois de cada sync de NF.
  *
- * ─── ENTRADA AUTOMÁTICA, SEM CURADORIA ───────────────────────────────────────
+ * ─── QUEM É CANDIDATO SAI DA VIEW, NÃO DE UMA CÓPIA DA REGRA ─────────────────
  *
- * Ninguém aprova quem entra: quem passa do corte de volume entra. A curadoria
- * manual seria o gargalo que mata o funil — 688 fornecedores é mais do que qualquer
- * gestor revisa, e a revisão não acrescentaria nada que o volume já não diga.
+ * `antecipacao_fornecedores_a_prospectar` (0101/0102) JÁ É a definição de "fornecedor
+ * que vale abordar", e ela é mais estrita do que parece: o que qualifica não é o sacado
+ * estar cadastrado, é ele ter CRÉDITO APROVADO — inclusive noutro CNPJ do grupo.
+ *
+ * A primeira versão deste job reimplementou a regra com `sacado_cadastrado`, e o
+ * resultado foi medido: dos 390 fornecedores que apareciam aqui e não lá, 388 emitiam
+ * contra sacados SEM limite aprovado. Para esses não há operação a oferecer — o lead
+ * não era lead. É exatamente o estrago que a 0102 já tinha medido na lista original
+ * (70% dela) e corrigido; a cópia o trouxe de volta por outro caminho.
+ *
+ * Duas telas discordando sobre quem é candidato é como o originador liga para alguém
+ * que a operação não consegue atender. Agora existe UMA fonte, e ela é a view.
+ *
+ * ─── A MUNIÇÃO É CALCULADA POR CIMA ──────────────────────────────────────────
+ *
+ * A view responde QUEM; ela não traz prazo médio nem os sacados principais com valor,
+ * que são o que a ficha de abordagem precisa. Isso é agregado aqui, sobre as notas dos
+ * CNPJs que a view já aprovou.
  *
  * ─── A MUNIÇÃO É RECALCULADA; O ESTADO NÃO ───────────────────────────────────
  *
- * Volume, prazo, sacados e potencial são derivados das notas e se sobrescrevem toda
- * rodada. Estágio, dono e contatos descobertos são estado humano e nunca são tocados
- * aqui — a única exceção é a saída automática por cadastro, que é fato observado.
+ * Volume, prazo, sacados e potencial se sobrescrevem toda rodada. Estágio, dono e
+ * contatos descobertos são estado humano e nunca são tocados aqui — a única exceção é
+ * a saída automática por cadastro, que é fato observado, e a reconciliação de
+ * supressão, que é fato de outro módulo.
  *
- * ─── POR QUE SQL, E NÃO 688 IDAS AO BANCO ────────────────────────────────────
+ * ─── POR QUE SQL, E NÃO 700 IDAS AO BANCO ────────────────────────────────────
  *
- * A munição de todos os fornecedores sai de UMA consulta agregada sobre `notas_funil`.
- * A alternativa — puxar as notas de cada fornecedor e agregar em TypeScript — faria
- * 688 round-trips para calcular somas que o Postgres faz num scan. `calcularMunicao`
- * continua sendo a fonte da regra (e o que os testes provam); aqui ela é aplicada
- * só onde o SQL não alcança sem ficar ilegível.
+ * A munição de todos sai de UMA consulta agregada. Puxar as notas de cada fornecedor e
+ * agregar em TypeScript faria centenas de round-trips para calcular somas que o
+ * Postgres faz num scan. `calcularMunicao` continua sendo a fonte da regra no core (e o
+ * que os testes provam); aqui ela é aplicada só onde o SQL não alcança sem ficar
+ * ilegível.
  */
 
 interface LinhaAgregada {
@@ -39,68 +55,54 @@ interface LinhaAgregada {
   ultima_nf_em: string | null
   sacados_principais: unknown
   originador_id: string | null
-  cadastrado: boolean
 }
 
 /**
- * A janela de 180 dias decide quem é CANDIDATO; a de 90, quanto ele vale.
+ * A view diz QUEM; esta consulta diz QUANTO.
  *
- * São duas perguntas diferentes. Fornecedor que emitiu forte até três meses atrás e
- * parou continua sendo um lead — a relação com o sacado existe. Mas o volume dele
- * hoje é zero, e ordenar a lista por um volume antigo premiaria justamente o passado.
+ * `notas` é restrito aos CNPJs que a view já aprovou — o `join` com ela é o filtro, e
+ * é o que impede a regra de divergir. A janela é a mesma da view (90 dias), porque a
+ * pergunta é a mesma: quem está emitindo AGORA.
  */
 const SQL_MUNICAO = `
-with notas as (
+with candidatos as (
   select
-    f.fornecedor_cnpj,
-    f.fornecedor_empresa_id,
-    f.sacado_cnpj,
-    f.sacado_nome,
-    f.valor,
-    f.emitida_em,
-    f.vencimento,
-    f.fornecedor_cadastrado
-  from public.notas_funil f
-  where f.sacado_cadastrado
-    and f.emitida_em >= now() - interval '180 days'
+    p.fornecedor_cnpj,
+    p.fornecedor_empresa_id,
+    p.valor_agregado,
+    p.notas,
+    p.ultima_nota_em
+  from public.antecipacao_fornecedores_a_prospectar p
 ),
-por_fornecedor as (
+notas as (
+  select
+    f.fornecedor_cnpj, f.sacado_cnpj, f.sacado_nome,
+    f.valor, f.emitida_em, f.vencimento
+  from public.notas_funil f
+    join candidatos c on c.fornecedor_cnpj = f.fornecedor_cnpj
+  where f.emitida_em >= now() - interval '90 days'
+),
+prazos as (
   select
     n.fornecedor_cnpj,
-    (array_agg(n.fornecedor_empresa_id) filter (where n.fornecedor_empresa_id is not null))[1] as empresa_id,
-    coalesce(sum(n.valor) filter (where n.emitida_em >= now() - interval '90 days'), 0) as volume_90d,
-    count(*) filter (where n.emitida_em >= now() - interval '90 days')::int as qtd_nfs_90d,
-    max(n.emitida_em)::date as ultima_nf_em,
     /*
      * Prazo médio PONDERADO POR VALOR. Uma nota de R$ 500 a 7 dias e uma de R$ 500
      * mil a 90 não têm o mesmo peso na decisão de quem vai operar essa carteira, e a
      * média simples trata as duas igual.
+     *
+     * "date - date" já é INTEIRO de dias em Postgres, não intervalo: um
+     * "extract(day from ...)" aqui não compila.
      */
     (
-      -- "date - date" já é INTEIRO de dias em Postgres, não intervalo: um
-      -- "extract(day from ...)" aqui não compila.
       sum((n.vencimento - n.emitida_em::date) * n.valor) filter (
-        where n.emitida_em >= now() - interval '90 days'
-          and n.vencimento is not null
+        where n.vencimento is not null
           and n.vencimento >= n.emitida_em::date
-          and n.vencimento <= n.emitida_em::date + 365
-      )
-      / nullif(
-        sum(n.valor) filter (
-          where n.emitida_em >= now() - interval '90 days'
-            and n.vencimento is not null
-            and n.vencimento >= n.emitida_em::date
-            and n.vencimento <= n.emitida_em::date + 365
-        ), 0
-      )
-    )::int as prazo_medio_dias,
-    /*
-     * O "não cadastrado" é decidido no GRUPO, não na linha (a mesma cicatriz de
-     * 0101): dois CNPJs aparecem com "fornecedor_cadastrado" true numa nota e false
-     * noutra, porque o flag vem do endpoint por nota. Uma nota cadastrada elimina o
-     * CNPJ inteiro.
-     */
-    bool_or(n.fornecedor_cadastrado) as cadastrado
+          and n.vencimento <= n.emitida_em::date + 365)
+      / nullif(sum(n.valor) filter (
+        where n.vencimento is not null
+          and n.vencimento >= n.emitida_em::date
+          and n.vencimento <= n.emitida_em::date + 365), 0)
+    )::int as prazo_medio_dias
   from notas n
   group by n.fornecedor_cnpj
 ),
@@ -109,7 +111,7 @@ sacados as (
    * "select distinct" no lado esquerdo, e ele é load-bearing: o LATERAL roda uma vez
    * por LINHA da esquerda. Com "from notas n" ele rodava uma vez por NOTA, e o card
    * de um fornecedor com 16 notas trazia a mesma lista de top-5 dezesseis vezes
-   * seguidas. A consulta não erra nem fica lenta o bastante para chamar atenção —
+   * seguidas — a consulta não erra nem fica lenta o bastante para chamar atenção,
    * ela só devolve 80 sacados onde deveria devolver 5.
    */
   select
@@ -123,7 +125,6 @@ sacados as (
       select n2.sacado_cnpj, max(n2.sacado_nome) as nome, sum(n2.valor) as valor, count(*)::int as notas
       from notas n2
       where n2.fornecedor_cnpj = n.fornecedor_cnpj
-        and n2.emitida_em >= now() - interval '90 days'
       group by n2.sacado_cnpj
       order by sum(n2.valor) desc
       limit 5
@@ -144,19 +145,44 @@ dono as (
     join public.empresas e on e.cnpj = n.sacado_cnpj
     join public.vendedor_carteira c
       on c.empresa_id = e.id and c.papel = 'originacao' and c.ate is null
-  where n.emitida_em >= now() - interval '90 days'
   group by n.fornecedor_cnpj, c.vendedor_id
   order by n.fornecedor_cnpj, sum(n.valor) desc
 )
 select
-  p.fornecedor_cnpj, p.empresa_id, p.volume_90d, p.qtd_nfs_90d, p.prazo_medio_dias,
-  round(p.volume_90d / 3, 2) as potencial_mensal,
-  p.ultima_nf_em, p.cadastrado,
+  c.fornecedor_cnpj,
+  c.fornecedor_empresa_id as empresa_id,
+  c.valor_agregado as volume_90d,
+  c.notas as qtd_nfs_90d,
+  pz.prazo_medio_dias,
+  round(c.valor_agregado / 3, 2) as potencial_mensal,
+  c.ultima_nota_em::date as ultima_nf_em,
   coalesce(s.principais, '[]'::jsonb) as sacados_principais,
   d.originador_id
-from por_fornecedor p
-  left join sacados s on s.fornecedor_cnpj = p.fornecedor_cnpj
-  left join dono d on d.fornecedor_cnpj = p.fornecedor_cnpj`
+from candidatos c
+  left join prazos pz on pz.fornecedor_cnpj = c.fornecedor_cnpj
+  left join sacados s on s.fornecedor_cnpj = c.fornecedor_cnpj
+  left join dono d on d.fornecedor_cnpj = c.fornecedor_cnpj`
+
+/*
+ * `estagio` fica FORA do payload de propósito.
+ *
+ * O upsert do PostgREST atualiza exatamente as colunas enviadas. Mandar
+ * `estagio: 'a_cadastrar'` faria a rodada da madrugada devolver ao início todo card
+ * que alguém moveu durante o dia — a coluna tem default, e o default só se aplica no
+ * INSERT, que é onde ele deve valer.
+ */
+function campos(r: LinhaAgregada): Record<string, unknown> {
+  return {
+    fornecedor_cnpj: r.fornecedor_cnpj,
+    volume_90d: Number(r.volume_90d) || 0,
+    qtd_nfs_90d: r.qtd_nfs_90d,
+    prazo_medio_dias: r.prazo_medio_dias,
+    sacados_principais: r.sacados_principais,
+    potencial_mensal: Number(r.potencial_mensal) || 0,
+    ultima_nf_em: r.ultima_nf_em,
+    empresa_id: r.empresa_id,
+  }
+}
 
 export interface ResultadoAtualizarFunil {
   candidatos: number
@@ -168,13 +194,12 @@ export interface ResultadoAtualizarFunil {
 export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFunil> {
   const corte = await lerCorteVolume()
   const { rows } = await pool.query<LinhaAgregada>(SQL_MUNICAO)
+  const porCnpj = new Map(rows.map((r) => [r.fornecedor_cnpj, r]))
 
   const { data: existentes, error } = await supabaseAdmin
     .from('fornecedores_funil')
     .select('fornecedor_cnpj, estagio, originador_id, originador_origem')
   if (error) throw new Error(`Falha ao ler o funil: ${error.message}`)
-
-  const noFunil = new Map(existentes?.map((f) => [f.fornecedor_cnpj, f]) ?? [])
 
   /*
    * A supressão vigente é consultada ANTES de qualquer entrada. Um fornecedor que
@@ -191,6 +216,28 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
     .or(`expira_em.is.null,expira_em.gte.${hoje}`)
   const bloqueados = new Map((suprimidos ?? []).map((s) => [s.valor, s]))
 
+  /*
+   * SAIR DA VIEW NÃO É A MESMA COISA QUE VIRAR CLIENTE.
+   *
+   * Um fornecedor some da lista de candidatos por quatro motivos diferentes: entrou na
+   * plataforma (ganhamos), o sacado dele perdeu o limite aprovado, ele parou de emitir
+   * na janela de 90 dias, ou alguém o marcou sem interesse. Só o primeiro é notícia, e
+   * tratar os quatro igual emitiria `fornecedor.cadastrado` para três coisas que não
+   * são cadastro nenhum.
+   *
+   * O flag vem do endpoint POR NOTA, então a leitura é no grupo (a mesma cicatriz de
+   * 0101): uma nota cadastrada decide o CNPJ inteiro.
+   */
+  const cnpjsNoFunil = (existentes ?? []).map((f) => f.fornecedor_cnpj)
+  const { data: notasCadastradas } = cnpjsNoFunil.length
+    ? await supabaseAdmin
+        .from('notas_fiscais')
+        .select('fornecedor_cnpj')
+        .in('fornecedor_cnpj', cnpjsNoFunil)
+        .eq('fornecedor_cadastrado', true)
+    : { data: [] }
+  const jaCadastrados = new Set((notasCadastradas ?? []).map((n) => n.fornecedor_cnpj))
+
   const paraCadastrado: { cnpj: string; empresaId: string | null }[] = []
   const comDonoAutomatico: Record<string, unknown>[] = []
   const semTocarNoDono: Record<string, unknown>[] = []
@@ -199,66 +246,62 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
   let candidatos = 0
   let atualizados = 0
 
-  for (const r of rows) {
-    const existente = noFunil.get(r.fornecedor_cnpj)
+  // ── Quem JÁ está no funil ────────────────────────────────────────────────
+  for (const f of existentes ?? []) {
+    if (f.estagio === 'cadastrado') continue
 
-    // ── Saída automática: virou cliente ────────────────────────────────────
-    if (r.cadastrado) {
-      if (existente && existente.estagio !== 'cadastrado') {
-        paraCadastrado.push({ cnpj: r.fornecedor_cnpj, empresaId: r.empresa_id })
+    const r = porCnpj.get(f.fornecedor_cnpj)
+
+    if (!r) {
+      // Saiu da lista de candidatos. Só é notícia se virou cliente.
+      if (jaCadastrados.has(f.fornecedor_cnpj) && f.estagio !== 'sem_interesse') {
+        paraCadastrado.push({ cnpj: f.fornecedor_cnpj, empresaId: null })
       }
-      continue
-    }
-
-    const municao = {
-      volume_90d: Number(r.volume_90d) || 0,
-      qtd_nfs_90d: r.qtd_nfs_90d,
-      prazo_medio_dias: r.prazo_medio_dias,
-      sacados_principais: [],
-      potencial_mensal: Number(r.potencial_mensal) || 0,
-      ultima_nf_em: r.ultima_nf_em,
-    }
-
-    const qualifica = entraNoFunil(municao, corte)
-    if (qualifica) candidatos += 1
-
-    // Entrar exige passar do corte E não estar suprimido. Continuar no funil, não:
-    // um card que alguém já pegou continua sendo trabalho dele mesmo que o volume
-    // tenha caído — e ele precisa mostrar o número de hoje, não o do dia da entrada.
-    if (!existente && (!qualifica || bloqueados.has(r.fornecedor_cnpj))) continue
-
-    /*
-     * `estagio` fica FORA do payload de propósito.
-     *
-     * O upsert do PostgREST atualiza exatamente as colunas enviadas. Mandar
-     * `estagio: 'a_cadastrar'` faria a rodada da madrugada devolver ao início todo
-     * card que alguém moveu durante o dia — a coluna tem default, e o default só se
-     * aplica no INSERT, que é onde ele deve valer.
-     */
-    const linha: Record<string, unknown> = {
-      fornecedor_cnpj: r.fornecedor_cnpj,
-      volume_90d: municao.volume_90d,
-      qtd_nfs_90d: municao.qtd_nfs_90d,
-      prazo_medio_dias: municao.prazo_medio_dias,
-      sacados_principais: r.sacados_principais,
-      potencial_mensal: municao.potencial_mensal,
-      ultima_nf_em: municao.ultima_nf_em,
-      empresa_id: r.empresa_id,
-    }
-
-    if (!existente) {
-      novos.push(r.fornecedor_cnpj)
-      comDonoAutomatico.push({ ...linha, originador_id: r.originador_id, originador_origem: 'automatica' })
+      /*
+       * Os demais NÃO são removidos nem zerados. Apagar a linha levaria junto os
+       * contatos descobertos, o histórico de estágio e o dinheiro que já foi gasto
+       * para achá-los — e o fornecedor voltaria do zero na próxima nota.
+       * `ultima_nf_em` já diz que ele esfriou, e um potencial parado desce sozinho
+       * na ordenação.
+       */
       continue
     }
 
     atualizados += 1
-    if (existente.originador_origem === 'manual') {
+    const linha = campos(r)
+    if (f.originador_origem === 'manual') {
       // A reatribuição do gestor não é desfeita de madrugada.
       semTocarNoDono.push(linha)
     } else {
       comDonoAutomatico.push({ ...linha, originador_id: r.originador_id })
     }
+  }
+
+  // ── Quem ainda não está ──────────────────────────────────────────────────
+  const noFunil = new Set(cnpjsNoFunil)
+  for (const r of rows) {
+    const volume = Number(r.volume_90d) || 0
+    const qualifica = entraNoFunil(
+      {
+        volume_90d: volume,
+        qtd_nfs_90d: r.qtd_nfs_90d,
+        prazo_medio_dias: r.prazo_medio_dias,
+        sacados_principais: [],
+        potencial_mensal: Number(r.potencial_mensal) || 0,
+        ultima_nf_em: r.ultima_nf_em,
+      },
+      corte,
+    )
+    if (qualifica) candidatos += 1
+    if (noFunil.has(r.fornecedor_cnpj)) continue
+    if (!qualifica || bloqueados.has(r.fornecedor_cnpj)) continue
+
+    novos.push(r.fornecedor_cnpj)
+    comDonoAutomatico.push({
+      ...campos(r),
+      originador_id: r.originador_id,
+      originador_origem: 'automatica',
+    })
   }
 
   /*
@@ -320,10 +363,10 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
   }
 
   /*
-   * Em lotes, e não linha a linha: são ~700 fornecedores por rodada, e 700
-   * round-trips ao PostgREST levam minutos onde um upsert leva segundos. O limite de
-   * 500 por chamada é folgado o bastante para caber no payload e pequeno o bastante
-   * para uma falha não perder a rodada inteira.
+   * Em lotes, e não linha a linha: são centenas de fornecedores por rodada, e outros
+   * tantos round-trips ao PostgREST levam minutos onde um upsert leva segundos. O
+   * limite de 500 por chamada é folgado para caber no payload e pequeno para uma
+   * falha não perder a rodada inteira.
    */
   const LOTE = 500
   async function gravar(linhas: Record<string, unknown>[]): Promise<void> {
@@ -352,13 +395,13 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
   }
 
   for (const cnpj of novos) {
-    const r = rows.find((x) => x.fornecedor_cnpj === cnpj)
+    const r = porCnpj.get(cnpj)
     await emitirEvento(r?.empresa_id ?? null, EVENTO_TIPOS.FORNECEDOR_ENTROU_FUNIL, {
       titulo: 'Fornecedor entrou no funil de cadastro',
       resumo: `${cnpj} faturou ${(Number(r?.volume_90d) || 0).toLocaleString('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-      })} contra nossos sacados em 90 dias.`,
+      })} contra sacados com crédito aprovado em 90 dias.`,
       url: '/comercial/fornecedores',
       cnpj,
       potencial_mensal: Number(r?.potencial_mensal) || 0,
@@ -367,15 +410,6 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
 
   const entraram = novos.length
   const cadastrados = paraCadastrado.length
-
-  /*
-   * Os que saíram da janela inteira (180 dias sem nota) NÃO são removidos.
-   *
-   * Apagar a linha levaria junto os contatos descobertos, o histórico de estágio e o
-   * dinheiro que já foi gasto para achá-los — e o fornecedor voltaria do zero na
-   * próxima nota. `ultima_nf_em` já diz que ele esfriou, e um potencial zerado desce
-   * sozinho na ordenação.
-   */
 
   logger.info({ candidatos, entraram, atualizados, cadastrados }, 'Funil de fornecedores atualizado.')
   return { candidatos, entraram, atualizados, cadastrados }
