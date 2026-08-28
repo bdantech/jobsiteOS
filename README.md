@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md.
 prompts/         The build specs.
 ```
 
@@ -472,6 +472,134 @@ de validade sumir do relatório parecendo limpo.
 worker**. Nunca em `fornecedores_config` — ela é lida por `authenticated` para o card mostrar o custo do
 clique, e uma credencial ali seria distribuída a todo mundo com o módulo. O token da Nova Vida fica em
 `integracao_tokens`, com RLS sem policy **e** `ALL` revogado de `anon`/`authenticated`.
+
+## Jurídico
+
+O último elo do funil: quando o dinheiro não volta, é aqui que ele é perseguido. Detalhes
+em [`docs/juridico.md`](docs/juridico.md); aqui o que decide comportamento.
+
+### `status_predito` não é `situacao_interna`
+
+Mesma família de distinção de `camada` vs. `estagio` e `faixa` vs. `estagio_funil`.
+**`status_predito`** (`ATIVO` | `INATIVO`) é a leitura do **Escavador** sobre o andamento no
+tribunal; **`situacao_interna`** (`em_andamento` → … → `encerrado`) é onde **nós** colocamos
+o processo. As duas discordam com frequência, e a discordância É a informação: `INATIVO` no
+tribunal com `em_andamento` aqui é um processo que parou e ninguém viu.
+
+Nada vindo do Escavador é escrito por uma pessoa — capa, movimentações e envolvidos são do
+worker, com service role. O que se escreve pela tela é a gestão, as operações cobradas, os
+custos, as recuperações, os prazos e o parecer.
+
+### A fase só anda para a frente
+
+`fase_atual` é a fase **mais avançada já detectada**, não a última. Uma juntada
+classificada como instrução chegando depois da penhora é descartada do cronograma — sem
+isso, o relógio de cada fase reiniciaria a cada vaivém e apagaria a lentidão que o
+cronograma existe para mostrar.
+
+O classificador é **determinístico** (palavra-chave com exceções, régua editável em
+`juridico_config.classificador`). Um modelo que acerta 90% produz trinta cronogramas
+errados por rodada numa carteira de trezentos processos, e ninguém sabe *quais*. Aqui o
+erro é auditável: `termo_detectado` diz na tela qual expressão casou.
+
+Corrigir uma regra **não** reclassifica o passado: é um botão separado, porque a varredura
+move a fase de centenas de processos e mover a fase dispara alerta e notificação.
+
+### Dois níveis de sincronização, e o caro nasce desligado
+
+Ler a base do Escavador é barato e é o padrão. Pedir ao robô que vá ao **site do tribunal**
+(`solicitar-atualizacao`) custa crédito **por processo, por rodada** — com 300 processos e
+5 dias por semana, 1.500 chamadas pagas por semana. A tela escreve essa conta ao lado do
+interruptor.
+
+A **agenda** (dias da semana, hora, escopo) vive em `juridico_config` e é conferida DENTRO
+do job, não no `vercel.json`: o cron dispara todo dia e o job decide se hoje é dia. E o dia
+da semana é o de **São Paulo** — em UTC, uma rodada das 7h de segunda cairia num domingo, e
+o job simplesmente não rodaria nas segundas, em silêncio.
+
+### O callback só grava, e a idempotência é a chave primária
+
+`POST /api/webhooks/escavador` (web) e `POST /webhooks/escavador` (worker) fazem a mesma
+coisa e gravam na mesma tabela — a URL do painel deles pode apontar para qualquer uma. Elas
+validam o token, inserem em `juridico_callbacks` (`uuid` é PK) e respondem. Quem processa é
+o job: o Escavador reenvia até 11 vezes com backoff, e fazer o trabalho na rota levaria
+dezenas de segundos.
+
+`23505` responde **200** — é o reenvio normal. Falha ao gravar responde **500** de
+propósito: aí nós *queremos* o reenvio, porque perder um `novo_processo` é perder uma ação
+nova contra nós.
+
+**Dois segredos diferentes.** `ESCAVADOR_TOKEN` é o Bearer da API e vive só no worker — é
+ele que gasta dinheiro. `ESCAVADOR_CALLBACK_TOKEN` é o de entrada. Reusar o de saída como
+segredo de entrada o publicaria num header que qualquer um pode nos fazer comparar.
+
+### O custo só existe no nosso log
+
+A API não tem extrato. Cada resposta traz `Creditos-Utilizados`, e `juridico_sync_log` é a
+única fonte do gasto — sem ela, o custo aparece na fatura um mês depois. Por isso o cliente
+do Escavador não usa o `requisitarJson` genérico: aquele devolve só o corpo, e aqui o header
+é metade da informação.
+
+### O cálculo vai para os autos
+
+`principal → correção → juros → multa → honorários → custas`, nesta ordem: juros sobre o
+**corrigido**, multa sobre o corrigido sem os juros, honorários sobre o subtotal e **nunca**
+sobre as custas (reembolso não é proveito econômico).
+
+Três coisas que o total esconde: a **mora é fracionada** (45 dias são 1,5 mês, não 1); um
+**mês sem índice não vira zero** — ele não corrige e vai para a lista de faltantes, que
+aparece em âmbar na tela, na memória e no CSV; e os **parâmetros são gravados junto do
+resultado**, nunca referenciados, porque a taxa da casa muda e o cálculo de março continua
+sendo o de março.
+
+`processo_calculos` é append-only. Cada geração é uma linha nova — a memória de março é a
+que sustenta a petição de março, e é a que a parte contrária está atacando.
+
+### O parecer não é peça, e o dossiê é que garante isso
+
+`AVISO_PARECER` aparece **acima** do texto na web, no celular e nas tools. Mas o que
+sustenta a restrição não é a instrução no prompt: é o dossiê fechado, montado campo a campo
+no worker. "Use apenas os dados fornecidos" só vale porque o que não está lá não chega ao
+modelo. `proximo_passo` sai por tool call, não por regex sobre markdown.
+
+### Processo nosso ativo é knockout de crédito
+
+`empresas.tem_processo_nosso_ativo` é cache mantido por **trigger** — não por job, porque a
+pergunta é lida no instante em que alguém decide operar, e uma varredura noturna deixaria
+24h concedendo limite a quem estamos executando.
+
+No scorecard ele vem **antes** de `situacao_irregular`, e não por gravidade: é o único fato
+da lista que **nós** produzimos. Situação cadastral vem da Receita, protesto de cartório,
+negativa da seguradora. Uma execução ajuizada por nós é a casa afirmando, com assinatura de
+advogado, que ele não pagou — não há chance de concessão a estimar.
+
+O score é cache, então ele é reconciliado **na hora** (processo novo) e **diariamente** (no
+job de alertas), porque marcar o processo como "ganho" na tela roda um RPC em SQL que não
+tem como chamar o worker.
+
+### Notificação de processo é POR LINHA, não por perfil
+
+Movimentação relevante, fase lenta e prazo em D-3/D-1 vão para **o advogado daquele
+processo**, com push, por `notify()` no worker. Uma regra de `notificacao_regras` mandaria
+as trezentas movimentações relevantes do mês para todo o time, e o segundo dia disso é o dia
+em que ninguém abre mais o sino.
+
+Advogado **externo** não tem `usuario_id` — nesse caso o aviso vai para o perfil Jurídico +
+Admin, que é quem fala com o escritório. Cair no silêncio seria pior: o processo com
+advogado externo é justamente o que ninguém daqui olha todo dia.
+
+### `processos` é lida por `empresas` também; o conteúdo não
+
+A Company 360 mostra a seção Jurídico para quem trabalha a conta — saber que existe ação
+contra o sacado muda a conversa de hoje. Movimentação e parecer, não: um é texto de tribunal
+sobre o mérito, o outro é análise de risco da casa. E o link para `/juridico/<cnj>` só sai
+para quem tem o módulo, porque um link que leva a `/sem-acesso` é pior que link nenhum.
+
+### Saldo líquido
+
+`recuperado − custos`. É o número que responde se a ação paga o próprio custo, e ele não
+existe em nenhuma das duas somas isoladas — é assim que uma carteira de execuções
+deficitárias passa despercebida com um "recuperado" bonito no topo.
 
 ## Reportar Bugs & Melhorias
 

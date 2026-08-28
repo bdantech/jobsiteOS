@@ -54,11 +54,12 @@ export const FAIXA_SCORE_LABELS: Record<FaixaScore, string> = {
   dados_insuficientes: 'Dados insuficientes',
 }
 
-export type Knockout = 'situacao_irregular' | 'negada_recente'
+export type Knockout = 'situacao_irregular' | 'negada_recente' | 'processo_nosso_ativo'
 
 export const KNOCKOUT_LABELS: Record<Knockout, string> = {
   situacao_irregular: 'Situação cadastral irregular',
   negada_recente: 'Análise negada recentemente',
+  processo_nosso_ativo: 'Temos ação judicial em curso contra ela',
 }
 
 // ─── A definição versionada ─────────────────────────────────────────────────
@@ -123,6 +124,12 @@ export interface SinaisScore {
   /** Se os dois vierem null, o fator de atividade não é avaliável. */
   grupo_conhecido?: boolean
   funcionarios_crescimento_12m?: number | null
+  /**
+   * Existe processo NOSSO em situação interna ativa contra esta empresa (08 §9).
+   * Só `true` é afirmação: `false`/ausente significa "não há registro", que é o
+   * estado de toda empresa antes de o módulo Jurídico existir.
+   */
+  tem_processo_nosso_ativo?: boolean | null
   /** Estado da análise mais recente, quando existe. */
   analise_estagio?: string | null
   analise_vigente?: boolean
@@ -384,6 +391,29 @@ export function calcularScore(
   // ── Knockouts ──
   // Vêm ANTES do corte de completude: uma empresa baixada na Receita é improvável mesmo
   // que não se saiba mais nada sobre ela. "Não sei" não apaga o que se sabe.
+
+  /*
+   * PROCESSO NOSSO EM CURSO VEM PRIMEIRO, e não é uma questão de gravidade relativa:
+   * é o único fato desta lista que NÓS produzimos. Situação cadastral vem da Receita,
+   * protesto vem de cartório, negativa vem da seguradora — todos são leitura de
+   * terceiro. Uma execução ajuizada por nós contra este sacado é a casa afirmando, com
+   * assinatura de advogado, que ele não pagou.
+   *
+   * Não há chance de concessão a estimar aqui. Perguntar "qual a probabilidade de a
+   * seguradora cobrir?" para alguém que estamos executando não é uma pergunta com
+   * resposta errada — é uma pergunta que não deveria ter sido feita, e um score de 58
+   * na tela a faria parecer respondida.
+   */
+  if (sinais.tem_processo_nosso_ativo === true) {
+    return {
+      score: 0,
+      completude,
+      faixa: 'improvavel',
+      knockout: 'processo_nosso_ativo',
+      breakdown,
+    }
+  }
+
   const situacao = (sinais.situacao_cadastral ?? '').toLowerCase()
   if (situacao && situacao !== 'ativa') {
     return {

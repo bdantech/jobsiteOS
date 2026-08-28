@@ -96,6 +96,14 @@
     {
       "path": "/api/cron/fornecedores-validar",
       "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/cron/juridico-sincronizar",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/juridico-alertas",
+      "schedule": "0 11 * * *"
     }
   ]
 }

@@ -86,6 +86,12 @@ import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 import { recalcularPerfil } from './perfil/recalcular.js'
 import { enriquecerLeads } from './leads/enriquecer.js'
 import { enriquecerEmpresa } from './radar/enriquecer-empresa.js'
+import { alertasJuridico } from './juridico/alertas.js'
+import { processarCallbacks } from './juridico/callbacks.js'
+import { classificarFases } from './juridico/classificar-fases.js'
+import { descobrirProcessos, sincronizarMonitoramentos } from './juridico/descobrir-processos.js'
+import { gerarParecer } from './juridico/parecer.js'
+import { drenarSolicitacoes, sincronizarProcessos } from './juridico/sincronizar.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -149,6 +155,13 @@ export type TipoJob =
   | 'leads-enriquecer'
   | 'enriquecer-empresa'
   | 'perfil-recalcular'
+  | 'juridico-descobrir'
+  | 'juridico-sincronizar'
+  | 'juridico-callbacks'
+  | 'juridico-classificar'
+  | 'juridico-alertas'
+  | 'juridico-parecer'
+  | 'juridico-monitoramentos'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -1226,3 +1239,82 @@ export function dispararRotearNotas(): string {
 }
 
 export { aplicarDecisaoCreditoEmVendas }
+
+// ─── Jurídico (Prompt 08) ───────────────────────────────────────────────────
+//
+// Nenhum destes jobs usa a conexão `pg` direta: eles falam com a API do Escavador e
+// escrevem por PostgREST com service role. `dispararAvulso` abre uma sessão dedicada
+// mesmo assim (é o contrato dele) e o `client` fica sem uso — o custo é uma conexão
+// ociosa por corrida, e a alternativa seria uma segunda máquina de estado de job só
+// para este módulo.
+
+/**
+ * Descoberta pelos NOSSOS CNPJs. Sob demanda (botão do admin) e no agendado inicial.
+ *
+ * `comMovimentacoes` desligado por padrão: numa importação de trezentos processos, a
+ * timeline de cada um é uma varredura paginada paga. A capa já dá a lista; as
+ * movimentações chegam na primeira sincronização.
+ */
+export function dispararDescobrirProcessos(opcoes: {
+  incluirInativos?: boolean
+  cnpj?: string
+  comMovimentacoes?: boolean
+} = {}): string {
+  return dispararAvulso('juridico-descobrir', async () => {
+    const descoberta = await descobrirProcessos(opcoes)
+    // Os monitoramentos DEPOIS da descoberta, na mesma corrida: cadastrar um CNPJ novo
+    // e sair sem monitorá-lo deixaria o buraco exato que o monitoramento existe para
+    // fechar — a ação nova que aparece amanhã e ninguém vê.
+    const monitoramentos = await sincronizarMonitoramentos()
+    return { descoberta, monitoramentos }
+  })
+}
+
+/**
+ * A sincronização agendada. A AGENDA é conferida dentro do job (juridico_config), não
+ * aqui nem no cron: mudar os dias da semana é trabalho de tela, não de deploy.
+ */
+export function dispararSincronizarJuridico(opcoes: { forcarAgenda?: boolean; numeroCnj?: string } = {}): string {
+  return dispararAvulso('juridico-sincronizar', async () => {
+    // Os pedidos enfileirados pela tool da IA e pelo botão "Atualizar agora" são
+    // drenados ANTES da varredura: eles são de alguém que está olhando a tela agora,
+    // e a varredura pode levar minutos.
+    const solicitacoes = await drenarSolicitacoes()
+    const sincronizacao = await sincronizarProcessos(opcoes)
+    // Os callbacks que chegaram durante a corrida entram na mesma passada — inclusive
+    // as respostas das atualizações que ela acabou de pedir ao tribunal.
+    const callbacks = await processarCallbacks()
+    return { solicitacoes, sincronizacao, callbacks }
+  })
+}
+
+export function dispararCallbacksJuridico(): string {
+  return dispararAvulso('juridico-callbacks', async () => processarCallbacks())
+}
+
+/** Reclassificar as fases sobre o que já está no banco. Não gasta crédito. */
+export function dispararClassificarFases(numeroCnj?: string): string {
+  return dispararAvulso('juridico-classificar', async () => classificarFases({ numeroCnj }))
+}
+
+export function dispararAlertasJuridico(): string {
+  return dispararAvulso('juridico-alertas', async () => alertasJuridico())
+}
+
+/**
+ * O parecer é SÍNCRONO, ao contrário dos demais.
+ *
+ * Quem clicou "Gerar parecer" está com a tela aberta e acabou de autorizar um gasto
+ * em tokens. Devolver 202 e um id o obrigaria a ficar recarregando para saber se o
+ * texto que ele pagou saiu — e o job leva dezenas de segundos, não horas.
+ */
+export async function executarParecerJuridico(
+  numeroCnj: string,
+  geradoPor: string | null,
+): Promise<unknown> {
+  return gerarParecer(numeroCnj, geradoPor)
+}
+
+export function dispararMonitoramentosJuridico(): string {
+  return dispararAvulso('juridico-monitoramentos', async () => sincronizarMonitoramentos())
+}

@@ -169,6 +169,26 @@ export const EVENTO_TIPOS = {
   ANALISE_PROPRIA_DIVERGENCIA: 'analise_propria.divergencia_seguradora',
   CREDITO_DECISAO_REGISTRADA: 'credito.decisao_registrada',
   REANALISE_SUGERIDA: 'reanalise.sugerida',
+
+  /*
+   * Jurídico (08).
+   *
+   * `processo.importado` e `processo.novo_detectado` NÃO são o mesmo fato, e a
+   * distinção decide quem é avisado: o primeiro é a varredura por CNPJ trazendo
+   * uma ação que já existia (rotina de importação), o segundo é o callback do
+   * Escavador dizendo que apareceu uma ação NOVA contra nós — que é notícia para
+   * os gestores, não para a fila de trabalho do jurídico.
+   */
+  PROCESSO_IMPORTADO: 'processo.importado',
+  PROCESSO_NOVO_DETECTADO: 'processo.novo_detectado',
+  PROCESSO_MOVIMENTACAO_RELEVANTE: 'processo.movimentacao_relevante',
+  PROCESSO_FASE_ALTERADA: 'processo.fase_alterada',
+  PROCESSO_FASE_LENTA: 'processo.fase_lenta',
+  PROCESSO_SEM_MOVIMENTACAO: 'processo.sem_movimentacao',
+  PROCESSO_ENCERRADO: 'processo.encerrado',
+  CALCULO_GERADO: 'calculo.gerado',
+  PARECER_GERADO: 'parecer.gerado',
+  RECUPERACAO_REGISTRADA: 'recuperacao.registrada',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -282,6 +302,16 @@ export const EVENTO_LABELS: Record<string, string> = {
   'analise_propria.divergencia_seguradora': 'Divergência com a seguradora',
   'credito.decisao_registrada': 'Decisão de crédito registrada',
   'reanalise.sugerida': 'Reanálise sugerida',
+  'processo.importado': 'Processo judicial importado',
+  'processo.novo_detectado': 'Novo processo detectado contra nós',
+  'processo.movimentacao_relevante': 'Movimentação relevante no processo',
+  'processo.fase_alterada': 'Processo mudou de fase',
+  'processo.fase_lenta': 'Fase do processo estourou o prazo esperado',
+  'processo.sem_movimentacao': 'Processo parado',
+  'processo.encerrado': 'Processo encerrado',
+  'calculo.gerado': 'Cálculo da dívida gerado',
+  'parecer.gerado': 'Parecer jurídico gerado',
+  'recuperacao.registrada': 'Recuperação registrada',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

@@ -8,6 +8,8 @@ import { env } from './env.js'
 import { logger } from './logger.js'
 import { previewRegra } from './derivadas/reclassificar.js'
 import { processarWebhookApollo, segredoWebhookValido } from './radar/apollo-webhook.js'
+import { callbackEscavadorValido } from './juridico/callback-auth.js'
+import { registrarCallback } from './jobs/juridico/callbacks.js'
 import {
   dispararCno,
   dispararMetricas,
@@ -53,6 +55,13 @@ import {
   dispararDrenarAnalisesProprias,
   dispararExpirarAnalises,
   dispararEnriquecerEmpresa,
+  dispararAlertasJuridico,
+  dispararCallbacksJuridico,
+  dispararClassificarFases,
+  dispararDescobrirProcessos,
+  dispararMonitoramentosJuridico,
+  dispararSincronizarJuridico,
+  executarParecerJuridico,
   dispararEnriquecerLeads,
   dispararSugerirReanalises,
   dispararPollDecisoes,
@@ -110,6 +119,44 @@ app.post('/webhooks/apollo', async (req: Request, res: Response) => {
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Webhook Apollo falhou ao processar.')
     res.status(200).json({ ok: false }) // 200 mesmo em erro: não queremos reenvio.
+  }
+})
+
+/*
+ * ─── Webhook do Escavador (público: eles não mandam o WORKER_SECRET) ────────
+ *
+ * Autenticado pelo `ESCAVADOR_CALLBACK_TOKEN` no header `Authorization`, que é um
+ * segredo DIFERENTE do token da API — reaproveitar o token de saída aqui o
+ * publicaria num header que qualquer um pode fazer a gente comparar batendo na
+ * nossa URL, e é ele que gasta dinheiro.
+ *
+ * ── POR QUE 200 QUASE SEMPRE ───────────────────────────────────────────────
+ * O Escavador reenvia até 11 vezes com backoff quando não recebe 200. A rota só
+ * GRAVA a linha (idempotente pelo `uuid`, que é PK) e responde; quem processa é o
+ * job. Fazer o trabalho aqui levaria dezenas de segundos, o Escavador desistiria
+ * da entrega, e o reenvio chegaria com o primeiro ainda rodando.
+ *
+ * A MESMA rota existe em apps/web (`/api/webhooks/escavador`), porque a URL
+ * cadastrada no painel deles pode apontar para qualquer uma das duas. As duas
+ * gravam na mesma tabela, com a mesma chave — registrar a URL da web e a do worker
+ * ao mesmo tempo não duplica nada.
+ */
+app.post('/webhooks/escavador', async (req: Request, res: Response) => {
+  const cabecalho = req.headers.authorization ?? ''
+  const recebido = cabecalho.toLowerCase().startsWith('bearer ') ? cabecalho.slice(7).trim() : cabecalho
+  if (!callbackEscavadorValido(recebido)) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  try {
+    const r = await registrarCallback(req.body)
+    res.status(200).json({ ok: true, ...r })
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Callback do Escavador falhou ao ser gravado.')
+    // 500 aqui É intencional, ao contrário do webhook do Apollo: se NÃO conseguimos
+    // gravar, queremos o reenvio. A idempotência pela PK torna o reenvio seguro, e
+    // perder um `novo_processo` é perder uma ação nova contra nós.
+    res.status(500).json({ ok: false })
   }
 })
 
@@ -822,6 +869,95 @@ app.post('/jobs/preview-regra', async (req: Request, res: Response, next: NextFu
     const { camada, definicao } = previewSchema.parse(req.body ?? {})
     const previa = await previewRegra(pool, camada, definicao)
     res.json(previa)
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Jurídico (Prompt 08) ───────────────────────────────────────────────────
+
+const descobrirSchema = z.object({
+  cnpj: z.string().optional(),
+  incluirInativos: z.boolean().optional(),
+  comMovimentacoes: z.boolean().optional(),
+})
+
+app.post('/jobs/juridico/descobrir', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const opcoes = descobrirSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararDescobrirProcessos(opcoes), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const sincronizarJuridicoSchema = z.object({
+  /** O botão "Atualizar agora" de UM processo. Ignora a agenda de propósito. */
+  numeroCnj: z.string().optional(),
+  /** Rodar mesmo fora dos dias configurados (botão do admin). */
+  forcarAgenda: z.boolean().optional(),
+})
+
+app.post('/jobs/juridico/sincronizar', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const opcoes = sincronizarJuridicoSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararSincronizarJuridico(opcoes), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/juridico/callbacks', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCallbacksJuridico(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/juridico/classificar', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { numeroCnj } = z.object({ numeroCnj: z.string().optional() }).parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararClassificarFases(numeroCnj), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/juridico/alertas', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAlertasJuridico(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/juridico/monitoramentos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararMonitoramentosJuridico(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * SÍNCRONO, ao contrário de todos os outros jobs desta seção.
+ *
+ * Quem clicou "Gerar parecer" está com a tela aberta e acabou de autorizar um gasto
+ * em tokens. Um 202 com id o obrigaria a recarregar a tela até o texto que ele pagou
+ * aparecer. O teto de tempo é o do próprio modelo (300s), bem dentro do que uma
+ * Server Action aguenta.
+ */
+const parecerSchema = z.object({
+  numeroCnj: z.string().min(1),
+  geradoPor: z.string().uuid().nullish(),
+})
+
+app.post('/jobs/juridico/parecer', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { numeroCnj, geradoPor } = parecerSchema.parse(req.body ?? {})
+    const resultado = await executarParecerJuridico(numeroCnj, geradoPor ?? null)
+    res.json(resultado)
   } catch (erro) {
     next(erro)
   }

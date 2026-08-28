@@ -50,5 +50,11 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
   // empty one — and it would surface as a red box instead of "não encontrada".
   if (!uuidSchema.safeParse(id).success) notFound()
 
-  return <EmpresaDetalhe empresaId={id} />
+  /*
+   * A RLS deixa `processos` ser lida por quem tem `empresas` — é assim que o vendedor
+   * vê que existe ação contra o sacado (08 §8). O CONTEÚDO do processo, não: o link
+   * para /juridico só sai para quem tem o módulo, porque oferecer um link que leva a
+   * /sem-acesso é pior que não oferecer link nenhum.
+   */
+  return <EmpresaDetalhe empresaId={id} podeAbrirJuridico={grantedModuleIds.includes('juridico')} />
 }

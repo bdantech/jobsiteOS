@@ -36,6 +36,7 @@ import { EmpresaContatos } from './empresa-contatos'
 import { FaturamentoEquipe } from './faturamento-equipe'
 import { CreditoCard } from '@/components/credito/credito-card'
 import { SecaoComercial } from '@/components/comercial/secao-comercial'
+import { SecaoJuridico } from '@/components/juridico/secao-juridico'
 import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
 import { EmpresaTimeline } from './empresa-timeline'
@@ -120,7 +121,14 @@ function EstadoVazio({
  * therefore say the same thing in both cases — anything sharper would be an
  * existence oracle for data the user has no right to.
  */
-export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
+export function EmpresaDetalhe({
+  empresaId,
+  podeAbrirJuridico = false,
+}: {
+  empresaId: string
+  /** Se o usuário tem o módulo `juridico` — decide se a seção Jurídico linka (08 §8). */
+  podeAbrirJuridico?: boolean
+}) {
   // Controlado (e não `defaultValue`) só por causa do atalho "Ver quadro societário":
   // um botão que leva a uma aba precisa poder escolhê-la.
   const [aba, setAba] = React.useState('dados')
@@ -320,6 +328,14 @@ export function EmpresaDetalhe({ empresaId }: { empresaId: string }) {
                  * já a trabalha, não antes de saber as duas coisas.
                  */}
                 <SecaoComercial empresaId={data.id} />
+                {/*
+                 * O Jurídico DEPOIS do Comercial e do Crédito, e não antes: a seção só
+                 * existe quando há processo, e quando existe ela é a última palavra —
+                 * ação nossa em curso é knockout de crédito, então ela contradiz o
+                 * limite potencial que está logo acima. Ler na ordem inversa mostraria
+                 * a contradição antes do número contradito.
+                 */}
+                <SecaoJuridico empresaId={data.id} podeAbrirProcesso={podeAbrirJuridico} />
                 <EmpresaForm empresa={data} />
               </TabsContent>
 

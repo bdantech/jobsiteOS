@@ -12,6 +12,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * O feed carrega só TÍTULO e HORÁRIO. Um link de assinatura vaza com facilidade (fica
  * salvo no celular pessoal, é reencaminhado num grupo), e o que vaza junto tem que ser
  * inócuo. Nome de empresa no título já é o limite; valor de proposta, nunca.
+ *
+ * Desde o Prompt 08 ele também carrega os PRAZOS E AUDIÊNCIAS do Jurídico da mesma
+ * pessoa (§9). O elo é `usuarios.id`, não o vendedor: quem é vendedor e advogado é
+ * uma pessoa só, e ela não vai assinar dois calendários.
  */
 
 export const dynamic = 'force-dynamic'
@@ -45,14 +49,47 @@ export async function GET(
     return new NextResponse('Not found', { status: 404 })
   }
 
+  const desde = new Date(Date.now() - 60 * 86_400_000).toISOString()
+
   const { data: eventos } = await supabase
     .from('vendedor_eventos')
     .select('id, titulo, inicio_em, duracao_min')
     .eq('vendedor_id', t.vendedor_id)
     .is('cancelado_em', null)
-    .gte('inicio_em', new Date(Date.now() - 60 * 86_400_000).toISOString())
+    .gte('inicio_em', desde)
     .order('inicio_em')
     .limit(500)
+
+  /*
+   * Os prazos e audiências do Jurídico entram no MESMO feed (08 §9).
+   *
+   * O elo é o USUÁRIO, não o vendedor: `vendedores.usuario_id` = `advogados.usuario_id`.
+   * A pessoa é uma só, e ela não vai assinar dois calendários. Um advogado externo não
+   * tem `usuario_id` e por isso não aparece em feed nenhum — ele também não tem sessão
+   * na plataforma, então não haveria token para gerar.
+   *
+   * A mesma régua de discrição vale: título e horário, nada mais. O CNJ vai junto
+   * porque é o que identifica a audiência na agenda de quem tem cinco no mesmo dia —
+   * e é um número público, ao contrário do valor da causa.
+   */
+  const { data: vendedor } = await supabase
+    .from('vendedores')
+    .select('usuario_id')
+    .eq('id', t.vendedor_id)
+    .maybeSingle()
+
+  const prazos = vendedor?.usuario_id
+    ? (
+        await supabase
+          .from('juridico_agenda')
+          .select('id, titulo, inicio_em, tipo, numero_cnj')
+          .eq('responsavel_usuario_id', vendedor.usuario_id)
+          .eq('concluido', false)
+          .gte('inicio_em', desde)
+          .order('inicio_em')
+          .limit(500)
+      ).data
+    : null
 
   const linhas = [
     'BEGIN:VCALENDAR',
@@ -60,7 +97,7 @@ export async function GET(
     'PRODID:-//JobsiteOS//Comercial//PT-BR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:JobsiteOS — Comercial',
+    'X-WR-CALNAME:JobsiteOS — Agenda',
   ]
   for (const e of eventos ?? []) {
     const fim = new Date(new Date(e.inicio_em).getTime() + (e.duracao_min ?? 60) * 60_000).toISOString()
@@ -74,6 +111,23 @@ export async function GET(
       'END:VEVENT',
     )
   }
+  for (const p of prazos ?? []) {
+    if (!p.inicio_em || !p.id) continue
+    // Uma hora de bloco por prazo: um evento de duração zero some da grade semanal do
+    // Google, e o prazo que some é o que perde.
+    const fim = new Date(new Date(p.inicio_em).getTime() + 60 * 60_000).toISOString()
+    linhas.push(
+      'BEGIN:VEVENT',
+      `UID:${p.id}@jobsiteos-juridico`,
+      `DTSTAMP:${carimbo(new Date().toISOString())}`,
+      `DTSTART:${carimbo(p.inicio_em)}`,
+      `DTEND:${carimbo(fim)}`,
+      `SUMMARY:${ics(`${p.tipo === 'audiencia' ? 'Audiência' : p.tipo === 'pericia' ? 'Perícia' : 'Prazo'}: ${p.titulo ?? ''}`)}`,
+      `DESCRIPTION:${ics(`Processo ${p.numero_cnj ?? ''}`)}`,
+      'END:VEVENT',
+    )
+  }
+
   linhas.push('END:VCALENDAR')
 
   return new NextResponse(linhas.join('\r\n'), {

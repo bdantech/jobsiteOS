@@ -530,11 +530,117 @@ check("a promoção do funil marca origem='antecipacao'", ru4.data?.origem === '
 const ru5 = await user.rpc('app_promover_empresa', { p: { cnpj: CNPJ_FORNEC, tipo: 'gambiarra' } })
 check('rejeita tipo fora do check', !!ru5.error, `-> err=${ru5.error?.code ?? 'NENHUM — ACEITOU!'}`)
 
+// ── Jurídico (08): a fronteira "existe" × "eis o que está acontecendo" ───────
+//
+// `processos` é lida por quem tem `empresas` OU `juridico`, porque a Company 360
+// mostra a seção Jurídico para quem trabalha a conta — saber que existe ação
+// contra o sacado é o que muda a conversa de hoje. O CONTEÚDO, não: movimentação
+// é texto de tribunal sobre o mérito e parecer é análise de risco da casa.
+//
+// Neste ponto o probe TEM `empresas` e NÃO tem `juridico`, que é exatamente o
+// perfil que este teste precisa.
+console.log('\n── Jurídico, COM empresas e SEM o módulo juridico ──')
+
+const CNJ_PROBE = '0000070-07.2026.8.19.0001'
+const { data: empresaAlvo } = await admin
+  .from('empresas').select('id').eq('cnpj', '11222333000181').single()
+
+await admin.from('processos').insert({
+  numero_cnj: CNJ_PROBE,
+  empresa_devedora_id: empresaAlvo.id,
+  cnpj_devedor: '11222333000181',
+  situacao_interna: 'em_andamento',
+  classe: 'Execução de Título Extrajudicial',
+  valor_causa: 1250000,
+})
+await admin.from('processo_movimentacoes').insert({
+  id: 999000143,
+  numero_cnj: CNJ_PROBE,
+  data: '2026-02-10',
+  conteudo: 'Expedido mandado de citação',
+  fase_detectada: 'citacao',
+  relevante: true,
+})
+await admin.from('processo_pareceres').insert({
+  numero_cnj: CNJ_PROBE,
+  parecer_markdown: '## 1. Situação atual\nTexto do parecer.',
+  proximo_passo: 'Peticionar penhora online.',
+  risco: 'alto',
+})
+
+const rj1 = await user.from('processos').select('numero_cnj, valor_causa').eq('numero_cnj', CNJ_PROBE)
+check('com empresas, LÊ que existe processo e quanto vale',
+  rj1.data?.length === 1, `-> ${rj1.data?.length ?? 0} linhas, err=${rj1.error?.code ?? 'nenhum'}`)
+
+const rj2 = await user.from('processo_movimentacoes').select('conteudo').eq('numero_cnj', CNJ_PROBE)
+check('com empresas, NÃO lê o conteúdo das movimentações',
+  (rj2.data?.length ?? 0) === 0, `-> ${rj2.data?.length ?? 0} linhas`)
+
+const rj3 = await user.from('processo_pareceres').select('parecer_markdown').eq('numero_cnj', CNJ_PROBE)
+check('com empresas, NÃO lê o parecer jurídico',
+  (rj3.data?.length ?? 0) === 0, `-> ${rj3.data?.length ?? 0} linhas`)
+
+// A fila de callbacks é tabela sem policy E com ALL revogado. Duas camadas, e o
+// que se espera é ERRO de permissão, não uma lista vazia.
+const rj4 = await user.from('juridico_callbacks').select('uuid')
+check('NUNCA lê juridico_callbacks (sem policy e sem grant)', !!rj4.error,
+  `-> err=${rj4.error?.code ?? 'NENHUM — A FILA FOI LIDA'}`)
+
+// Escrita só por RPC, e o RPC exige o módulo.
+const rj5 = await user.from('processos').update({ situacao_interna: 'ganho' }).eq('numero_cnj', CNJ_PROBE)
+check('não escreve direto em processos (sem grant de UPDATE)', !!rj5.error,
+  `-> err=${rj5.error?.code ?? 'NENHUM — ESCREVEU'}`)
+
+const rj6 = await user.rpc('app_juridico_atualizar_processo', {
+  p: { numero_cnj: CNJ_PROBE, situacao_interna: 'ganho' },
+})
+check('o RPC recusa quem não tem o módulo juridico', rj6.error?.code === '42501',
+  `-> err=${rj6.error?.code ?? 'NENHUM — ESCREVEU'}`)
+
+// A função de cache do knockout ESCREVE em `empresas` e não checa nada — ela só
+// existe para o trigger. Precisa ser inalcançável pelo PostgREST (migração 0143f).
+const rj7 = await user.rpc('recalcular_processo_ativo_da_empresa', { p_empresa: empresaAlvo.id })
+check('não alcança recalcular_processo_ativo_da_empresa', !!rj7.error,
+  `-> err=${rj7.error?.code ?? 'NENHUM — CHAMOU UM UPDATE SEM DONO'}`)
+
+console.log('\n── Jurídico, COM o módulo concedido ──')
+await admin.from('perfil_modulos').insert({ perfil_id: perfilVendas.id, modulo_id: 'juridico' })
+
+const rj8 = await user.from('processo_movimentacoes').select('conteudo, fase_detectada').eq('numero_cnj', CNJ_PROBE)
+check('com juridico, LÊ as movimentações', rj8.data?.length === 1,
+  `-> ${rj8.data?.length ?? 0} linhas, err=${rj8.error?.code ?? 'nenhum'}`)
+
+const rj9 = await user.from('juridico_carteira').select('numero_cnj, saldo_liquido, dias_na_fase').eq('numero_cnj', CNJ_PROBE)
+check('a view juridico_carteira é security_invoker e entrega a linha',
+  rj9.data?.length === 1, `-> ${rj9.data?.length ?? 0} linhas`)
+
+const rj10 = await user.rpc('app_juridico_registrar_recuperacao', {
+  p: { numero_cnj: CNJ_PROBE, valor: 30000, data: '2026-06-01', origem: 'penhora' },
+})
+check('com juridico, o RPC de recuperação grava', !rj10.error,
+  `-> err=${rj10.error?.message ?? 'nenhum'}`)
+
+// Configuração é ADMIN, não "quem tem o módulo": ela muda o custo da carteira.
+const rj11 = await user.rpc('app_juridico_definir_config', {
+  p: { chave: 'monitoramento', valor: { forcar_atualizacao_tribunal: true } },
+})
+check('config do Jurídico continua sendo só do admin', rj11.error?.code === '42501',
+  `-> err=${rj11.error?.code ?? 'NENHUM — MUDOU A AGENDA'}`)
+
+// O trigger do knockout roda com service role e o flag tem de estar ligado.
+const { data: empresaFlag } = await admin
+  .from('empresas').select('tem_processo_nosso_ativo').eq('id', empresaAlvo.id).single()
+check('o trigger marcou tem_processo_nosso_ativo na empresa devedora',
+  empresaFlag?.tem_processo_nosso_ativo === true, `-> ${empresaFlag?.tem_processo_nosso_ativo}`)
+
 // ── teardown ─────────────────────────────────────────────────────────────────
 if (rm7.data?.id) await admin.from('segmentos').delete().eq('id', rm7.data.id)
 await admin.from('notas_fiscais').delete().eq('access_key', CHAVE_PROBE)
 await admin.from('supressao').delete().eq('valor', '11444777000161')
 await admin.from('mercado_universo').delete().in('cnpj', ['11222333000181', '11444777000161', '11444777000242', '33000167000101'])
+// O processo ANTES da empresa: `processo_*` cascateia do CNJ, e deixar a linha
+// para trás faria a próxima corrida bater na chave primária do CNJ.
+await admin.from('processos').delete().eq('numero_cnj', CNJ_PROBE)
 await admin.from('empresas').delete().in('cnpj', ['11222333000181', '11444777000161', '11444777000242', '33000167000101'])
 await admin.from('usuarios').delete().eq('id', uid)
 await admin.auth.admin.deleteUser(uid)

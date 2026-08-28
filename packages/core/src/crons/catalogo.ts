@@ -198,6 +198,23 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/fornecedores/validar-contatos',
   },
   {
+    path: '/api/cron/juridico-sincronizar',
+    nome: 'Sincronização do Jurídico',
+    moduloId: 'juridico',
+    descricao:
+      'Dispara TODO DIA, mas nem todo dia roda: a agenda (dias da semana, horário, escopo) vive em `juridico_config.monitoramento` e é conferida DENTRO do job. Codificar os dias aqui obrigaria um deploy para mudá-los — e a agenda é justamente a setting que decide o custo em créditos do Escavador. Nos dias que não são de rodar, o job devolve "não executado" com o motivo, e isso não é falha: é a agenda funcionando. Antes das 8h de São Paulo porque quem abre o Jurídico de manhã precisa das movimentações da noite já classificadas.',
+    destino: 'POST /jobs/juridico/sincronizar',
+    encadeia: ['drenar as solicitações da IA e do botão "Atualizar agora"', 'processar os callbacks pendentes do Escavador'],
+  },
+  {
+    path: '/api/cron/juridico-alertas',
+    nome: 'Alertas do Jurídico',
+    moduloId: 'juridico',
+    descricao:
+      'Fase lenta, processo parado e prazo a vencer (D-3 e D-1). Roda TODO DIA, inclusive nos que não sincronizam: uma audiência de terça precisa do aviso de segunda mesmo que segunda não seja dia de sincronizar — o prazo corre pelo calendário do fórum, não pelo nosso. Uma hora DEPOIS do sync, para contar dias parados sobre o que acabou de chegar. Reconcilia também o knockout de crédito: marcar um processo como "ganho" na tela roda um RPC em SQL que não tem como chamar o worker, e sem esta passagem a empresa continuaria bloqueada depois de a ação ter acabado.',
+    destino: 'POST /jobs/juridico/alertas',
+  },
+  {
     path: '/api/cron/comercial-reclassificacao',
     nome: 'Alerta de reclassificação',
     moduloId: 'comercial',

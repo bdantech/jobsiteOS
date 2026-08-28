@@ -10,10 +10,63 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      advogados: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          email: string | null
+          escritorio: string | null
+          id: string
+          nome: string
+          oab_numero: string | null
+          oab_uf: string | null
+          telefone: string | null
+          tipo: string
+          usuario_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          email?: string | null
+          escritorio?: string | null
+          id?: string
+          nome: string
+          oab_numero?: string | null
+          oab_uf?: string | null
+          telefone?: string | null
+          tipo: string
+          usuario_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          email?: string | null
+          escritorio?: string | null
+          id?: string
+          nome?: string
+          oab_numero?: string | null
+          oab_uf?: string | null
+          telefone?: string | null
+          tipo?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advogados_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analise_docs: {
         Row: {
           analise_id: string
@@ -2266,6 +2319,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -2330,6 +2384,7 @@ export type Database = {
           score_completude?: number | null
           score_credito?: number | null
           score_faixa?: string | null
+          tem_processo_nosso_ativo?: boolean
           teve_analise_sem_cadastro?: boolean
           tipagem_antecipacao?: string | null
           tipo?: string
@@ -2394,6 +2449,7 @@ export type Database = {
           score_completude?: number | null
           score_credito?: number | null
           score_faixa?: string | null
+          tem_processo_nosso_ativo?: boolean
           teve_analise_sem_cadastro?: boolean
           tipagem_antecipacao?: string | null
           tipo?: string
@@ -3325,6 +3381,130 @@ export type Database = {
           expira_em?: string
           provedor?: string
           token?: string
+        }
+        Relationships: []
+      }
+      juridico_callbacks: {
+        Row: {
+          erro: string | null
+          evento: string
+          numero_cnj: string | null
+          payload: Json
+          processado_em: string | null
+          recebido_em: string
+          uuid: string
+        }
+        Insert: {
+          erro?: string | null
+          evento: string
+          numero_cnj?: string | null
+          payload: Json
+          processado_em?: string | null
+          recebido_em?: string
+          uuid: string
+        }
+        Update: {
+          erro?: string | null
+          evento?: string
+          numero_cnj?: string | null
+          payload?: Json
+          processado_em?: string | null
+          recebido_em?: string
+          uuid?: string
+        }
+        Relationships: []
+      }
+      juridico_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "juridico_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      juridico_indices: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          competencia: string
+          indice: string
+          valor: number
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          competencia: string
+          indice: string
+          valor: number
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          competencia?: string
+          indice?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "juridico_indices_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      juridico_sync_log: {
+        Row: {
+          cnpj: string | null
+          creditos_utilizados: number
+          erro: string | null
+          executado_em: string
+          id: string
+          numero_cnj: string | null
+          status: string | null
+          tipo: string
+        }
+        Insert: {
+          cnpj?: string | null
+          creditos_utilizados?: number
+          erro?: string | null
+          executado_em?: string
+          id?: string
+          numero_cnj?: string | null
+          status?: string | null
+          tipo: string
+        }
+        Update: {
+          cnpj?: string | null
+          creditos_utilizados?: number
+          erro?: string | null
+          executado_em?: string
+          id?: string
+          numero_cnj?: string | null
+          status?: string | null
+          tipo?: string
         }
         Relationships: []
       }
@@ -4612,6 +4792,692 @@ export type Database = {
           nome?: string
         }
         Relationships: []
+      }
+      processo_calculos: {
+        Row: {
+          correcao: number | null
+          criado_em: string
+          custas: number | null
+          data_base: string
+          data_calculo: string
+          gerado_por: string | null
+          honorarios: number | null
+          id: string
+          juros: number | null
+          memoria: Json
+          multa: number | null
+          numero_cnj: string
+          parametros: Json
+          principal: number | null
+          total: number
+        }
+        Insert: {
+          correcao?: number | null
+          criado_em?: string
+          custas?: number | null
+          data_base: string
+          data_calculo?: string
+          gerado_por?: string | null
+          honorarios?: number | null
+          id?: string
+          juros?: number | null
+          memoria: Json
+          multa?: number | null
+          numero_cnj: string
+          parametros: Json
+          principal?: number | null
+          total: number
+        }
+        Update: {
+          correcao?: number | null
+          criado_em?: string
+          custas?: number | null
+          data_base?: string
+          data_calculo?: string
+          gerado_por?: string | null
+          honorarios?: number | null
+          id?: string
+          juros?: number | null
+          memoria?: Json
+          multa?: number | null
+          numero_cnj?: string
+          parametros?: Json
+          principal?: number | null
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_calculos_gerado_por_fkey"
+            columns: ["gerado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processo_calculos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_calculos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      processo_custos: {
+        Row: {
+          comprovante_url: string | null
+          criado_em: string
+          data: string
+          descricao: string | null
+          id: string
+          numero_cnj: string
+          registrado_por: string | null
+          tipo: string
+          valor: number
+        }
+        Insert: {
+          comprovante_url?: string | null
+          criado_em?: string
+          data: string
+          descricao?: string | null
+          id?: string
+          numero_cnj: string
+          registrado_por?: string | null
+          tipo: string
+          valor: number
+        }
+        Update: {
+          comprovante_url?: string | null
+          criado_em?: string
+          data?: string
+          descricao?: string | null
+          id?: string
+          numero_cnj?: string
+          registrado_por?: string | null
+          tipo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_custos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_custos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_custos_registrado_por_fkey"
+            columns: ["registrado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processo_envolvidos: {
+        Row: {
+          advogados: Json
+          atualizado_em: string
+          cpf_cnpj: string | null
+          id: string
+          nome: string
+          numero_cnj: string
+          polo: string | null
+          tipo: string | null
+          tipo_normalizado: string | null
+          tipo_pessoa: string | null
+        }
+        Insert: {
+          advogados?: Json
+          atualizado_em?: string
+          cpf_cnpj?: string | null
+          id?: string
+          nome: string
+          numero_cnj: string
+          polo?: string | null
+          tipo?: string | null
+          tipo_normalizado?: string | null
+          tipo_pessoa?: string | null
+        }
+        Update: {
+          advogados?: Json
+          atualizado_em?: string
+          cpf_cnpj?: string | null
+          id?: string
+          nome?: string
+          numero_cnj?: string
+          polo?: string | null
+          tipo?: string | null
+          tipo_normalizado?: string | null
+          tipo_pessoa?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_envolvidos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_envolvidos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      processo_movimentacoes: {
+        Row: {
+          conteudo: string
+          criado_em: string
+          data: string
+          fase_detectada: string | null
+          fonte_nome: string | null
+          fonte_sigla: string | null
+          grau: number | null
+          id: number
+          numero_cnj: string
+          relevante: boolean
+          termo_detectado: string | null
+          tipo: string | null
+        }
+        Insert: {
+          conteudo: string
+          criado_em?: string
+          data: string
+          fase_detectada?: string | null
+          fonte_nome?: string | null
+          fonte_sigla?: string | null
+          grau?: number | null
+          id: number
+          numero_cnj: string
+          relevante?: boolean
+          termo_detectado?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          conteudo?: string
+          criado_em?: string
+          data?: string
+          fase_detectada?: string | null
+          fonte_nome?: string | null
+          fonte_sigla?: string | null
+          grau?: number | null
+          id?: number
+          numero_cnj?: string
+          relevante?: boolean
+          termo_detectado?: string | null
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_movimentacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_movimentacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      processo_operacoes: {
+        Row: {
+          access_key: string | null
+          antecipacao_id_externo: number | null
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          numero_cnj: string
+          valor_original: number
+          vencimento: string
+        }
+        Insert: {
+          access_key?: string | null
+          antecipacao_id_externo?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          numero_cnj: string
+          valor_original: number
+          vencimento: string
+        }
+        Update: {
+          access_key?: string | null
+          antecipacao_id_externo?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          numero_cnj?: string
+          valor_original?: number
+          vencimento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_operacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "notas_funil"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_antecipacao_id_externo_fkey"
+            columns: ["antecipacao_id_externo"]
+            isOneToOne: false
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      processo_pareceres: {
+        Row: {
+          criado_em: string
+          editado: boolean
+          gerado_por: string | null
+          id: string
+          modelo: string | null
+          numero_cnj: string
+          parecer_markdown: string
+          proximo_passo: string
+          risco: string | null
+          tokens: number | null
+        }
+        Insert: {
+          criado_em?: string
+          editado?: boolean
+          gerado_por?: string | null
+          id?: string
+          modelo?: string | null
+          numero_cnj: string
+          parecer_markdown: string
+          proximo_passo: string
+          risco?: string | null
+          tokens?: number | null
+        }
+        Update: {
+          criado_em?: string
+          editado?: boolean
+          gerado_por?: string | null
+          id?: string
+          modelo?: string | null
+          numero_cnj?: string
+          parecer_markdown?: string
+          proximo_passo?: string
+          risco?: string | null
+          tokens?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_pareceres_gerado_por_fkey"
+            columns: ["gerado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processo_pareceres_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_pareceres_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      processo_prazos: {
+        Row: {
+          avisado_d1_em: string | null
+          avisado_d3_em: string | null
+          concluido: boolean
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          data: string
+          descricao: string
+          id: string
+          numero_cnj: string
+          responsavel_id: string | null
+          tipo: string
+        }
+        Insert: {
+          avisado_d1_em?: string | null
+          avisado_d3_em?: string | null
+          concluido?: boolean
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data: string
+          descricao: string
+          id?: string
+          numero_cnj: string
+          responsavel_id?: string | null
+          tipo: string
+        }
+        Update: {
+          avisado_d1_em?: string | null
+          avisado_d3_em?: string | null
+          concluido?: boolean
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data?: string
+          descricao?: string
+          id?: string
+          numero_cnj?: string
+          responsavel_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_prazos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processo_prazos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_prazos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_prazos_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "advogados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processo_recuperacoes: {
+        Row: {
+          criado_em: string
+          data: string
+          id: string
+          numero_cnj: string
+          observacao: string | null
+          origem: string
+          registrado_por: string | null
+          valor: number
+        }
+        Insert: {
+          criado_em?: string
+          data: string
+          id?: string
+          numero_cnj: string
+          observacao?: string | null
+          origem: string
+          registrado_por?: string | null
+          valor: number
+        }
+        Update: {
+          criado_em?: string
+          data?: string
+          id?: string
+          numero_cnj?: string
+          observacao?: string | null
+          origem?: string
+          registrado_por?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_recuperacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_recuperacoes_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_recuperacoes_registrado_por_fkey"
+            columns: ["registrado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processos: {
+        Row: {
+          advogado_id: string | null
+          area: string | null
+          arquivado: boolean | null
+          assunto: string | null
+          atualizado_em: string
+          classe: string | null
+          cnpj_devedor: string | null
+          comarca: string | null
+          criado_em: string
+          data_arquivamento: string | null
+          data_distribuicao: string | null
+          data_inicio: string | null
+          data_ultima_movimentacao: string | null
+          data_ultima_verificacao: string | null
+          empresa_devedora_id: string | null
+          fase_atual: string | null
+          fase_desde: string | null
+          fisico: boolean | null
+          grau: number | null
+          nosso_cnpj: string | null
+          numero_cnj: string
+          observacoes: string | null
+          orgao_julgador: string | null
+          polo_nosso: string | null
+          qtd_movimentacoes: number | null
+          raw: Json | null
+          segredo_justica: boolean | null
+          sistema: string | null
+          situacao_interna: string
+          status_predito: string | null
+          titulo_polo_ativo: string | null
+          titulo_polo_passivo: string | null
+          tribunal_nome: string | null
+          tribunal_sigla: string | null
+          uf: string | null
+          ultima_sincronizacao: string | null
+          url_tribunal: string | null
+          valor_causa: number | null
+          vinculo_cobranca_id: string | null
+        }
+        Insert: {
+          advogado_id?: string | null
+          area?: string | null
+          arquivado?: boolean | null
+          assunto?: string | null
+          atualizado_em?: string
+          classe?: string | null
+          cnpj_devedor?: string | null
+          comarca?: string | null
+          criado_em?: string
+          data_arquivamento?: string | null
+          data_distribuicao?: string | null
+          data_inicio?: string | null
+          data_ultima_movimentacao?: string | null
+          data_ultima_verificacao?: string | null
+          empresa_devedora_id?: string | null
+          fase_atual?: string | null
+          fase_desde?: string | null
+          fisico?: boolean | null
+          grau?: number | null
+          nosso_cnpj?: string | null
+          numero_cnj: string
+          observacoes?: string | null
+          orgao_julgador?: string | null
+          polo_nosso?: string | null
+          qtd_movimentacoes?: number | null
+          raw?: Json | null
+          segredo_justica?: boolean | null
+          sistema?: string | null
+          situacao_interna?: string
+          status_predito?: string | null
+          titulo_polo_ativo?: string | null
+          titulo_polo_passivo?: string | null
+          tribunal_nome?: string | null
+          tribunal_sigla?: string | null
+          uf?: string | null
+          ultima_sincronizacao?: string | null
+          url_tribunal?: string | null
+          valor_causa?: number | null
+          vinculo_cobranca_id?: string | null
+        }
+        Update: {
+          advogado_id?: string | null
+          area?: string | null
+          arquivado?: boolean | null
+          assunto?: string | null
+          atualizado_em?: string
+          classe?: string | null
+          cnpj_devedor?: string | null
+          comarca?: string | null
+          criado_em?: string
+          data_arquivamento?: string | null
+          data_distribuicao?: string | null
+          data_inicio?: string | null
+          data_ultima_movimentacao?: string | null
+          data_ultima_verificacao?: string | null
+          empresa_devedora_id?: string | null
+          fase_atual?: string | null
+          fase_desde?: string | null
+          fisico?: boolean | null
+          grau?: number | null
+          nosso_cnpj?: string | null
+          numero_cnj?: string
+          observacoes?: string | null
+          orgao_julgador?: string | null
+          polo_nosso?: string | null
+          qtd_movimentacoes?: number | null
+          raw?: Json | null
+          segredo_justica?: boolean | null
+          sistema?: string | null
+          situacao_interna?: string
+          status_predito?: string | null
+          titulo_polo_ativo?: string | null
+          titulo_polo_passivo?: string | null
+          tribunal_nome?: string | null
+          tribunal_sigla?: string | null
+          uf?: string | null
+          ultima_sincronizacao?: string | null
+          url_tribunal?: string | null
+          valor_causa?: number | null
+          vinculo_cobranca_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processos_advogado_id_fkey"
+            columns: ["advogado_id"]
+            isOneToOne: false
+            referencedRelation: "advogados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
       }
       protesto_monitoramento: {
         Row: {
@@ -6281,6 +7147,177 @@ export type Database = {
           },
         ]
       }
+      juridico_agenda: {
+        Row: {
+          concluido: boolean | null
+          devedor_nome: string | null
+          empresa_devedora_id: string | null
+          id: string | null
+          inicio_em: string | null
+          numero_cnj: string | null
+          responsavel_id: string | null
+          responsavel_nome: string | null
+          responsavel_usuario_id: string | null
+          tipo: string | null
+          titulo: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advogados_usuario_id_fkey"
+            columns: ["responsavel_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processo_prazos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_prazos_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_prazos_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "advogados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      juridico_carteira: {
+        Row: {
+          advogado_id: string | null
+          advogado_nome: string | null
+          advogado_usuario_id: string | null
+          arquivado: boolean | null
+          assunto: string | null
+          calculo_em: string | null
+          classe: string | null
+          cnpj_devedor: string | null
+          comarca: string | null
+          custo_acumulado: number | null
+          data_distribuicao: string | null
+          data_ultima_movimentacao: string | null
+          devedor_nome: string | null
+          dias_na_fase: number | null
+          dias_sem_movimentacao: number | null
+          empresa_devedora_id: string | null
+          fase_atual: string | null
+          fase_desde: string | null
+          nosso_cnpj: string | null
+          numero_cnj: string | null
+          orgao_julgador: string | null
+          polo_nosso: string | null
+          proximo_prazo: string | null
+          proximo_prazo_em: string | null
+          qtd_movimentacoes: number | null
+          qtd_operacoes: number | null
+          recuperado: number | null
+          saldo_liquido: number | null
+          situacao_interna: string | null
+          status_predito: string | null
+          tribunal_sigla: string | null
+          uf: string | null
+          ultima_sincronizacao: string | null
+          valor_atualizado: number | null
+          valor_causa: number | null
+          valor_operacoes: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "advogados_usuario_id_fkey"
+            columns: ["advogado_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_advogado_id_fkey"
+            columns: ["advogado_id"]
+            isOneToOne: false
+            referencedRelation: "advogados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_empresa_devedora_id_fkey"
+            columns: ["empresa_devedora_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
       mercado_explorador: {
         Row: {
           analise_estagio: string | null
@@ -6347,6 +7384,7 @@ export type Database = {
           situacao_cadastral: string | null
           tem_analise_vigente: boolean | null
           tem_contato: boolean | null
+          tem_processo_nosso_ativo: boolean | null
           tem_protesto: boolean | null
           teve_analise_sem_cadastro: boolean | null
           tipo: string | null
@@ -6682,6 +7720,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -6919,6 +7958,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -7079,6 +8119,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -7296,6 +8337,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -7369,6 +8411,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -7607,6 +8650,250 @@ export type Database = {
       app_gestor_comercial: { Args: never; Returns: boolean }
       app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
       app_is_admin: { Args: never; Returns: boolean }
+      app_juridico_atualizar_processo: {
+        Args: { p: Json }
+        Returns: {
+          advogado_id: string | null
+          area: string | null
+          arquivado: boolean | null
+          assunto: string | null
+          atualizado_em: string
+          classe: string | null
+          cnpj_devedor: string | null
+          comarca: string | null
+          criado_em: string
+          data_arquivamento: string | null
+          data_distribuicao: string | null
+          data_inicio: string | null
+          data_ultima_movimentacao: string | null
+          data_ultima_verificacao: string | null
+          empresa_devedora_id: string | null
+          fase_atual: string | null
+          fase_desde: string | null
+          fisico: boolean | null
+          grau: number | null
+          nosso_cnpj: string | null
+          numero_cnj: string
+          observacoes: string | null
+          orgao_julgador: string | null
+          polo_nosso: string | null
+          qtd_movimentacoes: number | null
+          raw: Json | null
+          segredo_justica: boolean | null
+          sistema: string | null
+          situacao_interna: string
+          status_predito: string | null
+          titulo_polo_ativo: string | null
+          titulo_polo_passivo: string | null
+          tribunal_nome: string | null
+          tribunal_sigla: string | null
+          uf: string | null
+          ultima_sincronizacao: string | null
+          url_tribunal: string | null
+          valor_causa: number | null
+          vinculo_cobranca_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_concluir_prazo: {
+        Args: { p: Json }
+        Returns: {
+          avisado_d1_em: string | null
+          avisado_d3_em: string | null
+          concluido: boolean
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          data: string
+          descricao: string
+          id: string
+          numero_cnj: string
+          responsavel_id: string | null
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_prazos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_definir_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "juridico_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_editar_parecer: {
+        Args: { p: Json }
+        Returns: {
+          criado_em: string
+          editado: boolean
+          gerado_por: string | null
+          id: string
+          modelo: string | null
+          numero_cnj: string
+          parecer_markdown: string
+          proximo_passo: string
+          risco: string | null
+          tokens: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_pareceres"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_exige_modulo: { Args: never; Returns: undefined }
+      app_juridico_registrar_calculo: {
+        Args: { p: Json }
+        Returns: {
+          correcao: number | null
+          criado_em: string
+          custas: number | null
+          data_base: string
+          data_calculo: string
+          gerado_por: string | null
+          honorarios: number | null
+          id: string
+          juros: number | null
+          memoria: Json
+          multa: number | null
+          numero_cnj: string
+          parametros: Json
+          principal: number | null
+          total: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_calculos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_registrar_custo: {
+        Args: { p: Json }
+        Returns: {
+          comprovante_url: string | null
+          criado_em: string
+          data: string
+          descricao: string | null
+          id: string
+          numero_cnj: string
+          registrado_por: string | null
+          tipo: string
+          valor: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_custos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_registrar_recuperacao: {
+        Args: { p: Json }
+        Returns: {
+          criado_em: string
+          data: string
+          id: string
+          numero_cnj: string
+          observacao: string | null
+          origem: string
+          registrado_por: string | null
+          valor: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_recuperacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_remover_operacao: { Args: { p: Json }; Returns: Json }
+      app_juridico_salvar_advogado: {
+        Args: { p: Json }
+        Returns: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          email: string | null
+          escritorio: string | null
+          id: string
+          nome: string
+          oab_numero: string | null
+          oab_uf: string | null
+          telefone: string | null
+          tipo: string
+          usuario_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "advogados"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_salvar_indices: { Args: { p: Json }; Returns: Json }
+      app_juridico_salvar_operacao: {
+        Args: { p: Json }
+        Returns: {
+          access_key: string | null
+          antecipacao_id_externo: number | null
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          numero_cnj: string
+          valor_original: number
+          vencimento: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_operacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_salvar_prazo: {
+        Args: { p: Json }
+        Returns: {
+          avisado_d1_em: string | null
+          avisado_d3_em: string | null
+          concluido: boolean
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          data: string
+          descricao: string
+          id: string
+          numero_cnj: string
+          responsavel_id: string | null
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "processo_prazos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_juridico_solicitar_atualizacao: { Args: { p: Json }; Returns: Json }
       app_marcar_fornecedor_sem_interesse: {
         Args: { p: Json }
         Returns: {
@@ -7932,6 +9219,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -8005,6 +9293,7 @@ export type Database = {
           score_completude: number | null
           score_credito: number | null
           score_faixa: string | null
+          tem_processo_nosso_ativo: boolean
           teve_analise_sem_cadastro: boolean
           tipagem_antecipacao: string | null
           tipo: string
@@ -8803,6 +10092,10 @@ export type Database = {
         Returns: Json
       }
       raiz_e_spe: { Args: { p_cnpj: string }; Returns: boolean }
+      recalcular_processo_ativo_da_empresa: {
+        Args: { p_empresa: string }
+        Returns: undefined
+      }
       reports_painel: { Args: never; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

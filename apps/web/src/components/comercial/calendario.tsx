@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { gerarTokenIcsAction } from '@/actions/comercial'
 import { buscarAgenda, buscarVendedoresVisiveis, comercialKeys } from './queries'
+import { buscarAgendaJuridica, juridicoKeys } from '@/components/juridico/queries'
 
 /**
  * Calendário interno (v1): a agenda que sai dos funis, por dia.
@@ -31,6 +32,15 @@ function diaLegivel(iso: string): string {
   return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
 }
 
+interface ItemCalendario {
+  id: string
+  titulo: string
+  inicio_em: string
+  origem: 'comercial' | 'juridico'
+  href: string | null
+  detalhe: string | null
+}
+
 export function Calendario({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [link, setLink] = React.useState<string | null>(null)
@@ -44,6 +54,26 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
     queryFn: () => buscarAgenda(vendedorId),
   })
 
+  /*
+   * A agenda JURÍDICA entra no mesmo calendário (08 §9).
+   *
+   * Duas consultas e não uma view unificada: prazo processual e reunião comercial são
+   * entidades diferentes, com donos diferentes (advogado × vendedor) e RLS diferente.
+   * Unir no banco obrigaria uma das duas policies a ceder; unir na tela deixa cada
+   * fonte responder pelo que entrega — e quem não tem o módulo Jurídico simplesmente
+   * recebe zero linhas, sem erro e sem buraco na tela.
+   *
+   * O filtro por vendedor NÃO se aplica aqui: prazo pende de advogado, e um seletor
+   * de vendedor filtrando prazos de advogado esconderia audiências de quem as tem.
+   */
+  const agendaJuridica = useQuery({
+    queryKey: juridicoKeys.agenda(),
+    queryFn: buscarAgendaJuridica,
+    // A RLS devolve vazio para quem não tem o módulo; um erro aqui não pode derrubar
+    // o calendário comercial de quem nunca vai ver um prazo.
+    retry: false,
+  })
+
   async function gerarLink() {
     setGerando(true)
     const r = await gerarTokenIcsAction(vendedorId ?? undefined)
@@ -53,8 +83,31 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
     toast.success('Link novo gerado. O anterior foi revogado.')
   }
 
-  const porDia = new Map<string, typeof agenda.data extends undefined ? never : NonNullable<typeof agenda.data>>()
-  for (const e of agenda.data ?? []) {
+  const itens: ItemCalendario[] = [
+    ...(agenda.data ?? []).map((e) => ({
+      id: e.id,
+      titulo: e.titulo,
+      inicio_em: e.inicio_em,
+      origem: 'comercial' as const,
+      href: e.empresas ? `/empresas/${e.empresas.id}` : null,
+      detalhe: null,
+    })),
+    ...(agendaJuridica.data ?? [])
+      .filter((p): p is typeof p & { id: string; inicio_em: string } => !!p.id && !!p.inicio_em)
+      .map((p) => ({
+        id: p.id,
+        titulo:
+          `${p.tipo === 'audiencia' ? 'Audiência' : p.tipo === 'pericia' ? 'Perícia' : 'Prazo'}: ` +
+          `${p.titulo ?? ''}`,
+        inicio_em: p.inicio_em,
+        origem: 'juridico' as const,
+        href: p.numero_cnj ? `/juridico/${p.numero_cnj}` : null,
+        detalhe: p.devedor_nome,
+      })),
+  ].sort((a, b) => a.inicio_em.localeCompare(b.inicio_em))
+
+  const porDia = new Map<string, ItemCalendario[]>()
+  for (const e of itens) {
     const chave = e.inicio_em.slice(0, 10)
     porDia.set(chave, [...(porDia.get(chave) ?? []), e])
   }
@@ -64,7 +117,9 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Calendário</h1>
-          <p className="text-sm text-muted-foreground">Reuniões dos funis, da semana passada em diante.</p>
+          <p className="text-sm text-muted-foreground">
+            Reuniões dos funis e prazos do Jurídico, da semana passada em diante.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {(ehGestor || (vendedores.data ?? []).length > 1) && (
@@ -106,7 +161,7 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
             <CalendarDays className="h-6 w-6 text-muted-foreground" aria-hidden />
-            <p className="text-sm text-muted-foreground">Nenhuma reunião marcada.</p>
+            <p className="text-sm text-muted-foreground">Nenhuma reunião nem prazo marcado.</p>
           </CardContent>
         </Card>
       ) : (
@@ -118,18 +173,25 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
             <CardContent>
               <ul className="divide-y">
                 {eventos.map((e) => (
-                  <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
+                  <li key={`${e.origem}-${e.id}`} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
                     <span className="flex items-baseline gap-2">
                       <Badge variant="outline" className="text-[10px] tabular-nums">
                         {new Date(e.inicio_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                       </Badge>
-                      {e.empresas ? (
-                        <Link href={`/empresas/${e.empresas.id}`} className="hover:underline">{e.titulo}</Link>
+                      {e.href ? (
+                        <Link href={e.href} className="hover:underline">{e.titulo}</Link>
                       ) : (
                         e.titulo
                       )}
                     </span>
-                    <span className="text-xs text-muted-foreground">{e.duracao_min} min</span>
+                    <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                      {e.detalhe}
+                      {/* A origem marcada: uma audiência e uma reunião no mesmo dia
+                          exigem preparos opostos, e o título sozinho não distingue. */}
+                      {e.origem === 'juridico' ? (
+                        <Badge variant="secondary" className="text-[10px]">Jurídico</Badge>
+                      ) : null}
+                    </span>
                   </li>
                 ))}
               </ul>

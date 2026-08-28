@@ -137,6 +137,8 @@ interface LinhaSacado {
   limite_potencial: number | null
   receita_mensal_prevista: number | null
   valor_esperado_mensal: number | null
+  /** 08 §9: existe ação NOSSA em curso contra ela. É knockout do scorecard. */
+  tem_processo_nosso_ativo: boolean | null
 }
 
 /** Lê os sacados em páginas: 8 mil linhas × várias laterais não cabem numa consulta só. */
@@ -151,7 +153,7 @@ async function paginarSacados(
   for (;;) {
     let q = supabaseAdmin
       .from('empresas')
-      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal')
+      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo')
       .in('tipo', SACADOS)
     if (cnpjs && cnpjs.length > 0) q = q.in('cnpj', [...cnpjs])
     const { data, error } = await q
@@ -269,6 +271,13 @@ function montarSinais(e: LinhaSacado, ctx: ContextoSinais): SinaisScore {
     analise_vigente: a?.vigente ?? false,
     analise_negada_em: a?.negada_em ?? null,
     certificado: ctx.certificados.get(e.cnpj) ?? 'nunca',
+    /*
+     * 08 §9. Lido da COLUNA em `empresas`, mantida por trigger sobre `processos`, e
+     * não de um EXISTS por linha: esta função roda para cada sacado da base numa
+     * varredura mensal, e uma consulta extra por empresa seria oito mil idas ao banco
+     * para responder uma pergunta que quase sempre é "não".
+     */
+    tem_processo_nosso_ativo: e.tem_processo_nosso_ativo ?? false,
   }
 }
 
@@ -432,7 +441,7 @@ export async function recalcularScoresDeCnpjs(cnpjs: readonly string[]): Promise
 
   const { data } = await supabaseAdmin
     .from('empresas')
-    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal')
+    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo')
     .in('cnpj', unicos)
     .in('tipo', SACADOS)
   if (!data?.length) return acc

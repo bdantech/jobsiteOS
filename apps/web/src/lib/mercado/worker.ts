@@ -743,3 +743,62 @@ export async function dispararEnriquecerEmpresa(
 export async function dispararSugerirReanalises(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/sugerir-reanalises', {}, 'credito-reanalises')
 }
+
+// ─── Jurídico (Prompt 08) ───────────────────────────────────────────────────
+
+/**
+ * Descoberta pelos NOSSOS CNPJs. `comMovimentacoes` desligado por padrão: numa
+ * importação de trezentos processos, puxar a timeline de cada um é uma varredura
+ * paginada paga por processo.
+ */
+export async function dispararDescobrirProcessos(input: {
+  cnpj?: string
+  incluirInativos?: boolean
+  comMovimentacoes?: boolean
+} = {}): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/descobrir', input, 'juridico-descobrir')
+}
+
+/**
+ * A sincronização. Sem `numeroCnj` é a varredura agendada (e o worker confere a
+ * agenda); com, é o botão "Atualizar agora" de um processo, que ignora a agenda de
+ * propósito — quem clicou está olhando a tela.
+ */
+export async function dispararSincronizarJuridico(input: {
+  numeroCnj?: string
+  forcarAgenda?: boolean
+} = {}): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/sincronizar', input, 'juridico-sincronizar')
+}
+
+export async function dispararAlertasJuridico(): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/alertas', {}, 'juridico-alertas')
+}
+
+export async function dispararCallbacksJuridico(): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/callbacks', {}, 'juridico-callbacks')
+}
+
+/** Reclassificar as fases sobre o que já está no banco. Não gasta crédito nenhum. */
+export async function dispararClassificarFases(numeroCnj?: string): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/classificar', numeroCnj ? { numeroCnj } : {}, 'juridico-classificar')
+}
+
+export async function dispararMonitoramentosJuridico(): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/monitoramentos', {}, 'juridico-monitoramentos')
+}
+
+/**
+ * O parecer é SÍNCRONO e devolve o corpo, ao contrário de todo o resto desta lista.
+ *
+ * Quem clicou acabou de autorizar um gasto em tokens e está com a tela aberta; um
+ * 202 com id o obrigaria a recarregar até o texto que ele pagou aparecer. O teto de
+ * tempo é generoso pela mesma razão do clique de descoberta do 04l: a chamada faz o
+ * trabalho, não o enfileira.
+ */
+export async function dispararParecerJuridico(input: {
+  numeroCnj: string
+  geradoPor?: string | null
+}): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/parecer', input, 'juridico-parecer', 320_000)
+}

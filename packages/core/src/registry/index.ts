@@ -4,6 +4,7 @@ import { antecipacaoModule } from './modules/antecipacao.js'
 import { comercialModule } from './modules/comercial.js'
 import { creditoModule } from './modules/credito.js'
 import { empresasModule } from './modules/empresas.js'
+import { juridicoModule } from './modules/juridico.js'
 import { mercadoModule } from './modules/mercado.js'
 import { notificacoesModule } from './modules/notificacoes.js'
 import { radarModule } from './modules/radar.js'
@@ -31,6 +32,11 @@ export const MODULES: readonly AppModule[] = [
   // Comercial fecha a sequência de Operações: Mercado acha a empresa, Antecipação
   // encontra a nota, Crédito diz quanto ela sustenta — e é aqui que alguém vende.
   comercialModule,
+  // Jurídico fecha Operações: quando o crédito não volta, é aqui que se persegue o
+  // dinheiro. Depois de Comercial porque é a última etapa do mesmo funil — Mercado
+  // acha a empresa, Antecipação encontra a nota, Crédito diz quanto ela sustenta,
+  // Comercial vende, e o Jurídico cobra o que não foi pago.
+  juridicoModule,
   empresasModule,
   adminModule,
   notificacoesModule,

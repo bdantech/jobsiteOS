@@ -165,6 +165,26 @@ const envSchema = z.object({
   ATRADIUS_SANDBOX_APP_KEY: z.string().optional(),
   ATRADIUS_SANDBOX_POLICY_ID: z.string().optional(),
 
+  // ─── Jurídico (Prompt 08): Escavador ──────────────────────────────────────
+  // Opcional pelo mesmo desenho do resto: sem o token, os jobs do Jurídico param
+  // com "ESCAVADOR_TOKEN não configurado" em vez de falharem com erro de rede — a
+  // diferença entre "não configurado" e "quebrado", que é o que aparece na tela.
+  //
+  // O token NUNCA vai para `juridico_config`: aquela tabela é lida por
+  // `authenticated` para a tela de configurações, e uma credencial ali seria
+  // distribuída a todo mundo que tem o módulo (mesma régua da Nova Vida, 04l).
+  ESCAVADOR_TOKEN: z.string().optional(),
+  /**
+   * Segredo do CALLBACK, e é OUTRO segredo — não o token da API.
+   *
+   * O worker o valida porque o callback do Escavador pode chegar direto aqui; a
+   * rota `/api/webhooks/escavador` do Next tem a MESMA variável, do lado dela.
+   * Reaproveitar `ESCAVADOR_TOKEN` como segredo de callback publicaria a
+   * credencial de saída num header que um terceiro pode observar batendo na nossa
+   * URL — e ela é a que gasta dinheiro.
+   */
+  ESCAVADOR_CALLBACK_TOKEN: z.string().optional(),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })
 

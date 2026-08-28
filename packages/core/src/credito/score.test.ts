@@ -364,3 +364,49 @@ test('com faixa conhecida, a chance não é presumida', () => {
     presumida: false,
   })
 })
+
+// ─── Knockout de processo nosso (08 §9) ─────────────────────────────────────
+
+test('processo nosso em curso zera a chance e vence os demais fatores', () => {
+  const r = calcularScore(
+    {
+      protesto_consultado: true,
+      protesto_valor_total: 0,
+      faturamento_estimado: 80_000_000,
+      situacao_cadastral: 'ativa',
+      capital_social: 10_000_000,
+      data_inicio_atividade: '2005-01-01',
+      grupo_conhecido: true,
+      grupo_spes_24m: 4,
+      obras_ativas: 5,
+      funcionarios_crescimento_12m: 0.3,
+      certificado: 'ativo',
+      tem_processo_nosso_ativo: true,
+    },
+    DEF,
+    PARAMS,
+  )
+  assert.equal(r.knockout, 'processo_nosso_ativo')
+  assert.equal(r.faixa, 'improvavel')
+  assert.equal(r.score, 0)
+})
+
+test('processo nosso vence a situação cadastral irregular — é o fato que a casa produziu', () => {
+  const r = calcularScore(
+    { situacao_cadastral: 'baixada', tem_processo_nosso_ativo: true },
+    DEF,
+    PARAMS,
+  )
+  assert.equal(r.knockout, 'processo_nosso_ativo')
+})
+
+test('sem registro de processo NÃO é knockout — false e ausente são o mesmo "não sei"', () => {
+  const semRegistro = calcularScore({ situacao_cadastral: 'ativa' }, DEF, PARAMS)
+  const explicitoFalso = calcularScore(
+    { situacao_cadastral: 'ativa', tem_processo_nosso_ativo: false },
+    DEF,
+    PARAMS,
+  )
+  assert.equal(semRegistro.knockout, null)
+  assert.equal(explicitoFalso.knockout, null)
+})

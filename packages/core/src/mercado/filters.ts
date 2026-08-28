@@ -476,6 +476,17 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     descricao: 'Aprovada (total ou parcial) e ainda dentro da validade.',
   },
   {
+    id: 'tem_processo_nosso_ativo',
+    label: 'Tem ação judicial nossa em curso',
+    tipo: 'booleano',
+    coluna: 'tem_processo_nosso_ativo',
+    descricao:
+      'Existe processo NOSSO contra esta empresa em situação interna ativa (em andamento, ' +
+      'suspenso ou acordo). É também knockout do scorecard: quem está sendo executado não ' +
+      'tem chance de concessão a estimar. FALSO significa "não há registro", e não ' +
+      '"verificamos que não há".',
+  },
+  {
     id: 'analise_estagio',
     label: 'Estágio da análise',
     tipo: 'enum',
