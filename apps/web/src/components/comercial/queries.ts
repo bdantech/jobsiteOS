@@ -150,7 +150,29 @@ export async function buscarVendas(vendedorId?: string | null): Promise<VendaCom
   return (data ?? []) as unknown as VendaComEmpresa[]
 }
 
-export interface PassivaNaCarteira {
+/**
+ * O limite Onepay da empresa, do temperature report (sync diário).
+ *
+ * Tudo `null` quando a empresa não é cliente Onepay — a carteira também tem prospect
+ * e ex-cliente, e para eles não existe limite algum. `null` aqui é "não há", não
+ * "zero": a tela precisa distinguir uma conta sem cadastro de uma no talo.
+ *
+ * O limite é do CNPJ da empresa, e não do grupo econômico, ao contrário de
+ * `volume_mes` e `nfs_vivas`. O cadastro de crédito da Onepay é da holding.
+ */
+export interface LimiteOnepay {
+  credit_limit: number | null
+  /** Quanto ainda dá para antecipar. É o número que decide a ligação. */
+  available_limit: number | null
+  /** Fração de 0 a 1, não porcentagem — 0.9396 é 94%. */
+  consumed_pct: number | null
+  /** Veredito da Onepay, cru: `operating_normally`, `inoperative`… */
+  operation_status: string | null
+  /** Quando o sync trouxe estes números. O limite é de ontem até o cron rodar. */
+  limite_em: string | null
+}
+
+export interface PassivaNaCarteira extends LimiteOnepay {
   id: string
   cnpj: string
   razao_social: string | null
@@ -166,7 +188,7 @@ export interface PassivaNaCarteira {
   operacoes_via_spe: number
 }
 
-export interface EmpresaDeOriginacao {
+export interface EmpresaDeOriginacao extends LimiteOnepay {
   id: string
   cnpj: string
   razao_social: string | null

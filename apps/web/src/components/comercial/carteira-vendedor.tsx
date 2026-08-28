@@ -3,12 +3,17 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { TIPO_VENDEDOR_LABELS, type TipoVendedorId } from '@jobsiteos/core'
+import {
+  TIPO_VENDEDOR_LABELS,
+  operationStatusGravidade,
+  rotuloOperationStatus,
+  type TipoVendedorId,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { buscarCarteira, buscarVendedoresVisiveis, comercialKeys } from './queries'
+import { buscarCarteira, buscarVendedoresVisiveis, comercialKeys, type LimiteOnepay } from './queries'
 
 /**
  * A carteira de um vendedor — as empresas que são dele, e o número que prova por quê.
@@ -41,6 +46,98 @@ const mesDe = (competencia: string | undefined) =>
   competencia
     ? new Date(`${competencia}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     : 'do mês'
+
+/** Compacto porque a coluna divide a linha com outras seis: R$ 1,6 mi, não o extenso. */
+function brlCompacto(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return '—'
+  const v = Number(n)
+  if (Math.abs(v) >= 1_000_000)
+    return `R$ ${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+  if (Math.abs(v) >= 1_000)
+    return `R$ ${(v / 1_000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} mil`
+  return brl(v)
+}
+
+/**
+ * As três colunas do limite Onepay — as mesmas nas duas tabelas, por isso um
+ * componente e não dois blocos gêmeos: a carteira ativa e a passiva respondem à
+ * MESMA pergunta ("sobra limite aqui?") e divergir na resposta seria só um bug
+ * esperando a próxima edição.
+ *
+ * Um `<>` de `<td>`s, e não uma `<tr>`: quem monta a linha é a tabela que chama.
+ */
+function ColunasLimite({ c }: { c: LimiteOnepay }) {
+  /*
+   * Sem linha em `clientes_onepay` não há limite NENHUM — é prospect, ex-cliente, ou
+   * cliente que o sync ainda não viu. Três travessões dizem "não há"; R$ 0,00 e 0%
+   * diriam "está zerado", que é o oposto e leva a decisão contrária.
+   */
+  if (!c.operation_status && c.credit_limit === null && c.available_limit === null) {
+    return (
+      <>
+        <td className="px-3 py-2 text-xs text-muted-foreground">não é cliente Onepay</td>
+        <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+        <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+      </>
+    )
+  }
+
+  const pct = c.consumed_pct === null ? null : Math.round(Number(c.consumed_pct) * 100)
+  const rotulo = rotuloOperationStatus(c.operation_status)
+  const desde = c.limite_em
+    ? `Números do sync de ${new Date(c.limite_em).toLocaleDateString('pt-BR')}.`
+    : ''
+
+  return (
+    <>
+      <td className="px-3 py-2">
+        {rotulo ? (
+          <Badge variant={operationStatusGravidade(c.operation_status)} className="text-[10px]">
+            {rotulo}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td
+        className="whitespace-nowrap px-3 py-2 text-right tabular-nums"
+        title={`${brl(c.available_limit)} disponíveis de ${brl(c.credit_limit)}. ${desde}`.trim()}
+      >
+        {brlCompacto(c.available_limit)}
+        {/* O disponível sozinho não tem escala: R$ 150 mil livres num limite de
+            R$ 200 mil e num de R$ 20 milhões são contas diferentes. */}
+        <span className="block text-[11px] font-normal text-muted-foreground">
+          de {brlCompacto(c.credit_limit)}
+        </span>
+      </td>
+      <td
+        className={`px-3 py-2 text-right tabular-nums ${
+          pct !== null && pct >= 90 ? 'font-medium text-red-700 dark:text-red-400' : 'text-muted-foreground'
+        }`}
+        title={pct !== null && pct >= 90 ? 'Limite quase esgotado — pouco espaço para nova operação.' : undefined}
+      >
+        {pct === null ? '—' : `${pct}%`}
+      </td>
+    </>
+  )
+}
+
+/** Os `<th>` que casam com `ColunasLimite`, na mesma ordem — nunca um sem o outro. */
+function CabecalhoLimite() {
+  return (
+    <>
+      <th scope="col" className="px-3 py-2 font-normal" title="Status operacional da conta na Onepay.">
+        Status Onepay
+      </th>
+      <th scope="col" className="px-3 py-2 text-right font-normal">
+        Limite disponível
+      </th>
+      <th scope="col" className="px-3 py-2 text-right font-normal">
+        Consumo
+      </th>
+    </>
+  )
+}
 
 export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
@@ -120,7 +217,8 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
               Contas que antecipam sozinhas. O volume delas no mês é o que gera a comissão —
               não há NF roteada nem funil. Conta <strong>a holding e as SPEs do grupo
               dela</strong>: é contra a SPE que a obra fatura. Para mudar quem gere, edite o
-              vendedor em Configurações ou a conta na ficha da empresa.
+              vendedor em Configurações ou a conta na ficha da empresa. O limite e o status
+              vêm da Onepay e são do CNPJ da holding, não do grupo — atualizam uma vez por dia.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -130,12 +228,13 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[34rem] text-sm">
+                <table className="w-full min-w-[52rem] text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs text-muted-foreground">
                       <th scope="col" className="px-3 py-2 font-normal">Empresa</th>
                       <th scope="col" className="px-3 py-2 font-normal">UF</th>
                       <th scope="col" className="px-3 py-2 text-right font-normal">SPEs</th>
+                      <CabecalhoLimite />
                       <th scope="col" className="px-3 py-2 font-normal">Gere desde</th>
                       <th scope="col" className="px-3 py-2 text-right font-normal">Volume no mês</th>
                     </tr>
@@ -160,6 +259,7 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                           {p.spes || '—'}
                         </td>
+                        <ColunasLimite c={p} />
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
                           {new Date(p.desde).toLocaleDateString('pt-BR')}
                         </td>
@@ -189,7 +289,9 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
             <CardDescription>
               As NFs destas empresas — como sacado ou como fornecedor, <strong>e as das SPEs
               do grupo delas</strong> — são roteadas para este originador. Empresa sem NF viva
-              não está entregando trabalho: vale revisar se ela ainda pertence à carteira.
+              não está entregando trabalho: vale revisar se ela ainda pertence à carteira. O
+              limite e o status vêm da Onepay, uma vez por dia, e só existem para quem já é
+              cliente lá.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -199,13 +301,14 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[34rem] text-sm">
+                <table className="w-full min-w-[52rem] text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs text-muted-foreground">
                       <th scope="col" className="px-3 py-2 font-normal">Empresa</th>
                       <th scope="col" className="px-3 py-2 font-normal">UF</th>
                       <th scope="col" className="px-3 py-2 font-normal">Situação</th>
                       <th scope="col" className="px-3 py-2 text-right font-normal">SPEs</th>
+                      <CabecalhoLimite />
                       <th scope="col" className="px-3 py-2 text-right font-normal">NFs vivas</th>
                     </tr>
                   </thead>
@@ -232,6 +335,7 @@ export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                           {e.spes || '—'}
                         </td>
+                        <ColunasLimite c={e} />
                         <td className="px-3 py-2 text-right tabular-nums">{e.nfs_vivas}</td>
                       </tr>
                     ))}

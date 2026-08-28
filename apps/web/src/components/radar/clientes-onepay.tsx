@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Search, ShieldCheck } from 'lucide-react'
-import { formatCnpj } from '@jobsiteos/core'
+import { formatCnpj, operationStatusPreocupa, rotuloOperationStatus } from '@jobsiteos/core'
 import { sincronizarAnalisesPlataformaAction, sincronizarOnepayAction } from '@/actions/radar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -384,8 +384,8 @@ export function ClientesOnepay() {
                         <div className="flex flex-wrap gap-1">
                           {dias >= DORMENTE && <Sinal tom="aviso">Dormente</Sinal>}
                           {pctConsumido >= 0.9 && <Sinal tom="alerta">Limite {pct(c.consumed_pct)}</Sinal>}
-                          {c.operation_status && c.operation_status !== 'operating_normally' && (
-                            <Sinal tom="aviso">{c.operation_status}</Sinal>
+                          {operationStatusPreocupa(c.operation_status) && (
+                            <Sinal tom="aviso">{rotuloOperationStatus(c.operation_status)}</Sinal>
                           )}
                         </div>
                       </td>
