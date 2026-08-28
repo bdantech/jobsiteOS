@@ -20,7 +20,7 @@ const ITENS = [
   { href: '/credito/carteira', label: 'Carteira', icon: ShieldCheck },
   { href: '/credito/painel', label: 'Painel', icon: LayoutDashboard },
   { href: '/credito/scorecard', label: 'Scorecard', icon: SlidersHorizontal },
-  { href: '/credito/parametros', label: 'Parâmetros da análise', icon: Calculator },
+  { href: '/credito/parametros', label: 'Parâmetros da Análise', icon: Calculator },
   { href: '/credito/config', label: 'Configurações', icon: Settings },
 ] as const
 

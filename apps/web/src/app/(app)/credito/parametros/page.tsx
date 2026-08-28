@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { ParametrosEditor } from '@/components/credito/parametros-editor'
 
-export const metadata: Metadata = { title: 'Parâmetros da análise — Crédito' }
+export const metadata: Metadata = { title: 'Parâmetros da Análise — Crédito' }
 
 /**
  * webOnly (04j §10), pelo mesmo motivo do editor de scorecard: são cinco tetos, onze
