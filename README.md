@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md, comunicacao.md.
 prompts/         The build specs.
 ```
 
@@ -94,6 +94,17 @@ pnpm db:types                          # regenerate packages/core/src/types/data
 
 **Regenerate the types after every migration.** They are checked in, and a stale `database.ts` is how
 you get a `supabase.rpc()` call that typechecks locally and 404s in production.
+
+**And re-apply the two repo patches**, which the generator does not emit — the file carries a
+`PATCHES DO REPO` note at the bottom listing both:
+
+1. the `Views<>` helper (the current generator folds views into `Tables<>`, and the repo imports
+   `Views<'name'>` everywhere);
+2. `| null` on the nullable RPC arguments of `app__conversa_para` (every RPC argument comes out
+   required and non-nullable, even when the function accepts null).
+
+Without (1) the web build breaks; without (2) the worker does not compile. `pnpm typecheck` catches
+both, which is why it is the step after `pnpm db:types` and not an optional one.
 
 Run the linter after any schema change — it catches missing RLS policies:
 
@@ -600,6 +611,103 @@ para quem tem o módulo, porque um link que leva a `/sem-acesso` é pior que lin
 `recuperado − custos`. É o número que responde se a ação paga o próprio custo, e ele não
 existe em nenhuma das duas somas isoladas — é assim que uma carteira de execuções
 deficitárias passa despercebida com um "recuperado" bonito no topo.
+
+## Comunicação
+
+O cano, o ledger e o agente (Prompt 05A). Detalhes em [docs/comunicacao.md](docs/comunicacao.md).
+
+### Uma conversa, uma thread — por pessoa, não por card
+
+A mesma pessoa fala com o SDR, com o originador e com o closer. Se a thread morasse no
+card, a segunda conversa começaria do zero: o vendedor abriria o card de vendas sem ver o
+que o SDR combinou na semana passada.
+
+A thread mora em `conversas`, chaveada por **(canal, identificador em forma canônica)**. Os
+cards dos cinco funis apontam para ela — `comunicacoes.funil_card_id` diz de onde a mensagem
+partiu, e isso é destaque na tela, nunca recorte do histórico.
+
+### `comunicacoes` é o ledger canônico, e é a única fonte
+
+Quatro lugares diziam "falamos com o fornecedor" antes deste módulo: o evento
+`toque.manual`, a `mensagens_outbox`, o `pedidos_apresentacao` e — por interpretação de quem
+lia — a `descoberta_execucoes`. Duas cópias divergentes pagam uma coisa e mostram outra.
+
+Agora **todo módulo escreve comunicação aqui e só aqui**, e quem precisa saber o que foi
+falado referencia uma linha em vez de copiar o texto. A `mensagens_outbox` virou fila pura,
+o `pedidos_apresentacao` virou estado puro, e o clique em `wa.me` grava direto no ledger. A
+regra não é uma convenção — são dois CHECKs:
+
+```sql
+-- mensagens_outbox
+check (comunicacao_id is null or (corpo is null and assunto is null))
+-- pedidos_apresentacao
+check (comunicacao_id is null or mensagem is null)
+```
+
+Uma linha que aponta para o ledger não pode carregar a própria cópia do texto. É isso que
+impede a outbox de voltar a ser histórico na primeira tela escrita com pressa.
+
+### O portão: nada sai sem passar por ele
+
+Humano ou IA, compositor, outbox ou agente. Duas metades, e a divisão não é arbitrária: o
+que é **fato do banco** (supressão, base legal, cooldown) é checado na transação que
+enfileira, porque recusar ali é a única forma de a pessoa ver o motivo; o que é **fato do
+relógio e da conta** (janela, teto do número, warmup) é do worker, que é quem sabe quantas
+mensagens aquele número já mandou hoje.
+
+A função pura devolve a **primeira** recusa nesta ordem, da mais permanente para a mais
+temporária:
+
+```
+kill switch → supressão → base legal → teto da thread → teto da conta → cooldown → janela
+```
+
+**Fora da janela é adiamento, não descarte.** Uma mensagem gerada às 22h não é errada, é
+cedo demais: `agendada_para` é a terceira saída. Um humano pode furar a janela com
+confirmação explícita — nunca a supressão.
+
+### O agente é um decisor, e o espaço de ações é fechado
+
+Ele não escolhe o que fazer no mundo: escolhe um item de uma lista de dez, definida no
+playbook. Um agente com ferramentas abertas exige confiar no julgamento dele sobre o que é
+possível; um com espaço fechado só exige confiar sobre qual das dez cabe agora — e a segunda
+é auditável linha a linha em `agente_decisoes`.
+
+`aguardar` é ação de primeira classe. Sem ela, um modelo perguntado "qual o próximo passo?"
+sempre encontra um passo, e a cadência vira perseguição.
+
+**O agente nunca envia: ele enfileira**, e a fila passa pelo portão. Aceitar uma sugestão na
+tela também enfileira — o humano aprovou o texto, não a legalidade do disparo.
+
+Falha do modelo, confiança baixa ou ação fora do playbook caem na cadência fixa (D0/D3/D7).
+O ponto não é a cadência ser boa; é que uma conversa sem próximo passo simplesmente some.
+
+### O filtro de ingestão do Gmail é obrigatório
+
+Só entra no ledger e-mail cujo remetente/destinatário case com um contato conhecido ou com o
+domínio de uma empresa da base. Nunca a caixa inteira, e domínio genérico (`gmail.com`)
+nunca casa.
+
+Não é economia: é a diferença entre um CRM e vigilância sobre o e-mail pessoal de quem
+trabalha aqui. A regra está em `deveIngerir()`, é testada, e está escrita na tela de conexão
+— a pessoa lê antes de autorizar.
+
+### O painel de atividade recusa mostrar você para você
+
+Ele é de gestores e de quem tem `vendedor_acessos`, e ninguém vê o próprio volume. Um painel
+de volume que a pessoa acompanha sobre si vira meta, e a meta mais fácil de bater é mandar
+mais mensagem — por isso, também, volume nunca aparece sozinho: taxa de resposta, reuniões
+agendadas e NFs convertidas vêm na mesma linha.
+
+A regra não cabe numa policy (ela não diz quais linhas alguém vê, diz quem pode perguntar),
+então a view `atividade_comunicacao` **não tem grant** e o acesso é decidido dentro do RPC.
+
+### Segredos
+
+Tokens **sempre no Vault** — o de envio de cada número e o refresh de cada Gmail. O segredo
+de cada webhook é **outro** segredo: reusar o de saída na entrada o publicaria num header que
+qualquer um pode nos fazer comparar batendo na nossa URL, e o de saída é o que manda mensagem
+pelo nosso número. Os dois falham fechados.
 
 ## Reportar Bugs & Melhorias
 

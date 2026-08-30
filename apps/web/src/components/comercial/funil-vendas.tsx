@@ -509,7 +509,17 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
               ),
             },
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
-            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+            {
+              id: 'mensagens',
+              label: 'Mensagens',
+              conteudo: (
+                <AbaMensagens
+                  empresaId={aberto.empresas?.id ?? null}
+                  funil="vendas"
+                  funilCardId={aberto.id}
+                />
+              ),
+            },
           ]}
           /*
            * Ganhar e perder são as duas decisões terminais, e ficam lado a lado no topo

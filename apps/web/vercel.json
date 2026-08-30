@@ -104,6 +104,34 @@
     {
       "path": "/api/cron/juridico-alertas",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/comunicacao-fila",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/comunicacao-triagem",
+      "schedule": "2-59/5 * * * *"
+    },
+    {
+      "path": "/api/cron/comunicacao-gmail",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/comunicacao-lembretes",
+      "schedule": "10 * * * *"
+    },
+    {
+      "path": "/api/cron/comunicacao-plantao",
+      "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/agente-decidir",
+      "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/agente-agendados",
+      "schedule": "45 * * * *"
     }
   ]
 }

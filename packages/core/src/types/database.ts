@@ -67,6 +67,152 @@ export type Database = {
           },
         ]
       }
+      agente_decisoes: {
+        Row: {
+          acao: string
+          aceita_por: string | null
+          canal: string | null
+          confianca: number | null
+          conteudo_sugerido: string | null
+          contexto_resumo: Json
+          conversa_id: string | null
+          criado_em: string
+          descartada: boolean
+          desfecho: string | null
+          desfecho_em: string | null
+          executada: boolean
+          executada_em: string | null
+          gatilho: string
+          id: string
+          justificativa: string | null
+          modelo: string | null
+          modo: string
+          playbook_id: string | null
+          quando: string | null
+          tokens: number | null
+        }
+        Insert: {
+          acao: string
+          aceita_por?: string | null
+          canal?: string | null
+          confianca?: number | null
+          conteudo_sugerido?: string | null
+          contexto_resumo?: Json
+          conversa_id?: string | null
+          criado_em?: string
+          descartada?: boolean
+          desfecho?: string | null
+          desfecho_em?: string | null
+          executada?: boolean
+          executada_em?: string | null
+          gatilho: string
+          id?: string
+          justificativa?: string | null
+          modelo?: string | null
+          modo: string
+          playbook_id?: string | null
+          quando?: string | null
+          tokens?: number | null
+        }
+        Update: {
+          acao?: string
+          aceita_por?: string | null
+          canal?: string | null
+          confianca?: number | null
+          conteudo_sugerido?: string | null
+          contexto_resumo?: Json
+          conversa_id?: string | null
+          criado_em?: string
+          descartada?: boolean
+          desfecho?: string | null
+          desfecho_em?: string | null
+          executada?: boolean
+          executada_em?: string | null
+          gatilho?: string
+          id?: string
+          justificativa?: string | null
+          modelo?: string | null
+          modo?: string
+          playbook_id?: string | null
+          quando?: string | null
+          tokens?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agente_decisoes_aceita_por_fkey"
+            columns: ["aceita_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agente_decisoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agente_decisoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agente_decisoes_playbook_id_fkey"
+            columns: ["playbook_id"]
+            isOneToOne: false
+            referencedRelation: "agente_playbooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agente_playbooks: {
+        Row: {
+          acoes_permitidas: string[]
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          funil: string
+          id: string
+          instrucoes: string
+          nome: string
+          objetivo: string
+          prazos: Json
+          templates_disponiveis: string[]
+          versao: number
+        }
+        Insert: {
+          acoes_permitidas: string[]
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          funil: string
+          id?: string
+          instrucoes: string
+          nome: string
+          objetivo: string
+          prazos?: Json
+          templates_disponiveis?: string[]
+          versao?: number
+        }
+        Update: {
+          acoes_permitidas?: string[]
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          funil?: string
+          id?: string
+          instrucoes?: string
+          nome?: string
+          objetivo?: string
+          prazos?: Json
+          templates_disponiveis?: string[]
+          versao?: number
+        }
+        Relationships: []
+      }
       analise_docs: {
         Row: {
           analise_id: string
@@ -1666,9 +1812,209 @@ export type Database = {
           },
         ]
       }
+      comunicacao_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicacao_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comunicacoes: {
+        Row: {
+          anexos: Json
+          assunto: string | null
+          canal: string
+          conta_remetente: string | null
+          contato_id: string | null
+          conversa_id: string | null
+          corpo: string | null
+          criado_em: string
+          direcao: string
+          empresa_id: string | null
+          enviado_em: string | null
+          erro: string | null
+          funil: string | null
+          funil_card_id: string | null
+          id: string
+          id_externo: string | null
+          origem: string | null
+          por_ia: boolean
+          preview: string | null
+          provedor: string | null
+          status_envio: string | null
+          template_id: string | null
+          tentativas: number
+          thread_externa: string | null
+          triagem: Json | null
+          usuario_id: string | null
+          vendedor_id: string | null
+        }
+        Insert: {
+          anexos?: Json
+          assunto?: string | null
+          canal: string
+          conta_remetente?: string | null
+          contato_id?: string | null
+          conversa_id?: string | null
+          corpo?: string | null
+          criado_em?: string
+          direcao: string
+          empresa_id?: string | null
+          enviado_em?: string | null
+          erro?: string | null
+          funil?: string | null
+          funil_card_id?: string | null
+          id?: string
+          id_externo?: string | null
+          origem?: string | null
+          por_ia?: boolean
+          preview?: string | null
+          provedor?: string | null
+          status_envio?: string | null
+          template_id?: string | null
+          tentativas?: number
+          thread_externa?: string | null
+          triagem?: Json | null
+          usuario_id?: string | null
+          vendedor_id?: string | null
+        }
+        Update: {
+          anexos?: Json
+          assunto?: string | null
+          canal?: string
+          conta_remetente?: string | null
+          contato_id?: string | null
+          conversa_id?: string | null
+          corpo?: string | null
+          criado_em?: string
+          direcao?: string
+          empresa_id?: string | null
+          enviado_em?: string | null
+          erro?: string | null
+          funil?: string | null
+          funil_card_id?: string | null
+          id?: string
+          id_externo?: string | null
+          origem?: string | null
+          por_ia?: boolean
+          preview?: string | null
+          provedor?: string | null
+          status_envio?: string | null
+          template_id?: string | null
+          tentativas?: number
+          thread_externa?: string | null
+          triagem?: Json | null
+          usuario_id?: string | null
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicacoes_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_template_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates_mensagem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contatos: {
         Row: {
           apollo_person_id: string | null
+          base_legal: string | null
+          base_legal_detalhe: string | null
+          base_legal_em: string | null
           cargo: string | null
           criado_em: string
           departamento: string | null
@@ -1678,6 +2024,7 @@ export type Database = {
           enriquecido_em: string | null
           id: string
           linkedin_url: string | null
+          nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
           ponto_focal: boolean
@@ -1688,6 +2035,9 @@ export type Database = {
         }
         Insert: {
           apollo_person_id?: string | null
+          base_legal?: string | null
+          base_legal_detalhe?: string | null
+          base_legal_em?: string | null
           cargo?: string | null
           criado_em?: string
           departamento?: string | null
@@ -1697,6 +2047,7 @@ export type Database = {
           enriquecido_em?: string | null
           id?: string
           linkedin_url?: string | null
+          nao_e_o_decisor?: boolean
           nome?: string | null
           origem?: string | null
           ponto_focal?: boolean
@@ -1707,6 +2058,9 @@ export type Database = {
         }
         Update: {
           apollo_person_id?: string | null
+          base_legal?: string | null
+          base_legal_detalhe?: string | null
+          base_legal_em?: string | null
           cargo?: string | null
           criado_em?: string
           departamento?: string | null
@@ -1716,6 +2070,7 @@ export type Database = {
           enriquecido_em?: string | null
           id?: string
           linkedin_url?: string | null
+          nao_e_o_decisor?: boolean
           nome?: string | null
           origem?: string | null
           ponto_focal?: boolean
@@ -1821,6 +2176,190 @@ export type Database = {
           {
             foreignKeyName: "contatos_descobertos_promovido_contato_id_fkey"
             columns: ["promovido_contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversas: {
+        Row: {
+          atualizada_em: string
+          canal: string
+          contato_id: string | null
+          criada_em: string
+          empresa_id: string | null
+          id: string
+          identificador_externo: string
+          modo_agente: string
+          nao_lidas: number
+          objetivo: string | null
+          playbook_id: string | null
+          proxima_acao_em: string | null
+          responsavel_vendedor_id: string | null
+          status: string
+          ultima_direcao: string | null
+          ultima_mensagem_em: string | null
+        }
+        Insert: {
+          atualizada_em?: string
+          canal: string
+          contato_id?: string | null
+          criada_em?: string
+          empresa_id?: string | null
+          id?: string
+          identificador_externo: string
+          modo_agente?: string
+          nao_lidas?: number
+          objetivo?: string | null
+          playbook_id?: string | null
+          proxima_acao_em?: string | null
+          responsavel_vendedor_id?: string | null
+          status?: string
+          ultima_direcao?: string | null
+          ultima_mensagem_em?: string | null
+        }
+        Update: {
+          atualizada_em?: string
+          canal?: string
+          contato_id?: string | null
+          criada_em?: string
+          empresa_id?: string | null
+          id?: string
+          identificador_externo?: string
+          modo_agente?: string
+          nao_lidas?: number
+          objetivo?: string | null
+          playbook_id?: string | null
+          proxima_acao_em?: string | null
+          responsavel_vendedor_id?: string | null
+          status?: string
+          ultima_direcao?: string | null
+          ultima_mensagem_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversas_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_playbook_fkey"
+            columns: ["playbook_id"]
+            isOneToOne: false
+            referencedRelation: "agente_playbooks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_responsavel_vendedor_id_fkey"
+            columns: ["responsavel_vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversas_nao_vinculadas: {
+        Row: {
+          canal: string
+          conta_recebedora: string | null
+          id: string
+          identificador_externo: string
+          nome_sugerido: string | null
+          primeira_mensagem_em: string
+          qtd_mensagens: number
+          resolvida_em: string | null
+          resolvida_por: string | null
+          status: string
+          ultima_mensagem_em: string
+          vendedor_sugerido_id: string | null
+          vinculada_contato_id: string | null
+        }
+        Insert: {
+          canal: string
+          conta_recebedora?: string | null
+          id?: string
+          identificador_externo: string
+          nome_sugerido?: string | null
+          primeira_mensagem_em?: string
+          qtd_mensagens?: number
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          status?: string
+          ultima_mensagem_em?: string
+          vendedor_sugerido_id?: string | null
+          vinculada_contato_id?: string | null
+        }
+        Update: {
+          canal?: string
+          conta_recebedora?: string | null
+          id?: string
+          identificador_externo?: string
+          nome_sugerido?: string | null
+          primeira_mensagem_em?: string
+          qtd_mensagens?: number
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          status?: string
+          ultima_mensagem_em?: string
+          vendedor_sugerido_id?: string | null
+          vinculada_contato_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversas_nao_vinculadas_resolvida_por_fkey"
+            columns: ["resolvida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_nao_vinculadas_vendedor_sugerido_id_fkey"
+            columns: ["vendedor_sugerido_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_nao_vinculadas_vinculada_contato_id_fkey"
+            columns: ["vinculada_contato_id"]
             isOneToOne: false
             referencedRelation: "contatos"
             referencedColumns: ["id"]
@@ -3266,6 +3805,62 @@ export type Database = {
           },
         ]
       }
+      gmail_contas: {
+        Row: {
+          access_token_expira_em: string | null
+          access_token_secret_id: string | null
+          ativo: boolean
+          atualizado_em: string
+          conectado_em: string
+          endereco: string
+          escopos: string[]
+          history_id: string | null
+          refresh_token_secret_id: string | null
+          ultimo_erro: string | null
+          ultimo_sync_em: string | null
+          usuario_id: string
+          watch_expira_em: string | null
+        }
+        Insert: {
+          access_token_expira_em?: string | null
+          access_token_secret_id?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          conectado_em?: string
+          endereco: string
+          escopos?: string[]
+          history_id?: string | null
+          refresh_token_secret_id?: string | null
+          ultimo_erro?: string | null
+          ultimo_sync_em?: string | null
+          usuario_id: string
+          watch_expira_em?: string | null
+        }
+        Update: {
+          access_token_expira_em?: string | null
+          access_token_secret_id?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          conectado_em?: string
+          endereco?: string
+          escopos?: string[]
+          history_id?: string | null
+          refresh_token_secret_id?: string | null
+          ultimo_erro?: string | null
+          ultimo_sync_em?: string | null
+          usuario_id?: string
+          watch_expira_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_contas_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grupos_economicos: {
         Row: {
           cnpj_cabeca: string | null
@@ -3665,68 +4260,145 @@ export type Database = {
       mensagens_outbox: {
         Row: {
           access_keys: string[]
+          agendada_para: string | null
           assunto: string | null
           atualizada_em: string
           canal: string
+          comunicacao_id: string | null
+          conversa_id: string | null
           corpo: string | null
           criada_em: string
+          criada_por: string | null
           descartada_por: string | null
           destinatario: string | null
           destinatario_contato_id: string | null
           destinatario_ponto_focal: boolean
+          empresa_id: string | null
+          erro: string | null
           faixa: string | null
-          fornecedor_cnpj: string
+          fornecedor_cnpj: string | null
           fornecedor_empresa_id: string | null
           fornecedor_nome: string | null
+          funil: string | null
+          funil_card_id: string | null
           id: string
           motivo_descarte: string | null
+          origem: string
+          por_ia: boolean
           status: string
+          template_id: string | null
+          tentativas: number
+          ultima_tentativa_em: string | null
           valor_total: number | null
+          vendedor_id: string | null
           whatsapp_conta_id: string | null
         }
         Insert: {
-          access_keys: string[]
+          access_keys?: string[]
+          agendada_para?: string | null
           assunto?: string | null
           atualizada_em?: string
           canal: string
+          comunicacao_id?: string | null
+          conversa_id?: string | null
           corpo?: string | null
           criada_em?: string
+          criada_por?: string | null
           descartada_por?: string | null
           destinatario?: string | null
           destinatario_contato_id?: string | null
           destinatario_ponto_focal?: boolean
+          empresa_id?: string | null
+          erro?: string | null
           faixa?: string | null
-          fornecedor_cnpj: string
+          fornecedor_cnpj?: string | null
           fornecedor_empresa_id?: string | null
           fornecedor_nome?: string | null
+          funil?: string | null
+          funil_card_id?: string | null
           id?: string
           motivo_descarte?: string | null
+          origem?: string
+          por_ia?: boolean
           status?: string
+          template_id?: string | null
+          tentativas?: number
+          ultima_tentativa_em?: string | null
           valor_total?: number | null
+          vendedor_id?: string | null
           whatsapp_conta_id?: string | null
         }
         Update: {
           access_keys?: string[]
+          agendada_para?: string | null
           assunto?: string | null
           atualizada_em?: string
           canal?: string
+          comunicacao_id?: string | null
+          conversa_id?: string | null
           corpo?: string | null
           criada_em?: string
+          criada_por?: string | null
           descartada_por?: string | null
           destinatario?: string | null
           destinatario_contato_id?: string | null
           destinatario_ponto_focal?: boolean
+          empresa_id?: string | null
+          erro?: string | null
           faixa?: string | null
-          fornecedor_cnpj?: string
+          fornecedor_cnpj?: string | null
           fornecedor_empresa_id?: string | null
           fornecedor_nome?: string | null
+          funil?: string | null
+          funil_card_id?: string | null
           id?: string
           motivo_descarte?: string | null
+          origem?: string
+          por_ia?: boolean
           status?: string
+          template_id?: string | null
+          tentativas?: number
+          ultima_tentativa_em?: string | null
           valor_total?: number | null
+          vendedor_id?: string | null
           whatsapp_conta_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "mensagens_outbox_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mensagens_outbox_descartada_por_fkey"
             columns: ["descartada_por"]
@@ -3740,6 +4412,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "contatos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
           {
             foreignKeyName: "mensagens_outbox_fornecedor_empresa_id_fkey"
@@ -3775,6 +4482,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "ex_clientes"
             referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates_mensagem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "mensagens_outbox_whatsapp_conta_id_fkey"
@@ -4575,6 +5296,7 @@ export type Database = {
       }
       pedidos_apresentacao: {
         Row: {
+          comunicacao_id: string | null
           contato_sacado_id: string | null
           criado_em: string
           fornecedor_cnpj: string
@@ -4586,6 +5308,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          comunicacao_id?: string | null
           contato_sacado_id?: string | null
           criado_em?: string
           fornecedor_cnpj: string
@@ -4597,6 +5320,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          comunicacao_id?: string | null
           contato_sacado_id?: string | null
           criado_em?: string
           fornecedor_cnpj?: string
@@ -4608,6 +5332,20 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pedidos_apresentacao_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_apresentacao_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pedidos_apresentacao_contato_sacado_id_fkey"
             columns: ["contato_sacado_id"]
@@ -6152,6 +6890,59 @@ export type Database = {
           },
         ]
       }
+      templates_mensagem: {
+        Row: {
+          assunto: string | null
+          ativo: boolean
+          atualizado_em: string
+          canal: string
+          corpo: string
+          criado_em: string
+          criado_por: string | null
+          funil: string | null
+          id: string
+          nome: string
+          objetivo: string | null
+          variaveis: string[]
+        }
+        Insert: {
+          assunto?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          canal: string
+          corpo: string
+          criado_em?: string
+          criado_por?: string | null
+          funil?: string | null
+          id?: string
+          nome: string
+          objetivo?: string | null
+          variaveis?: string[]
+        }
+        Update: {
+          assunto?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          canal?: string
+          corpo?: string
+          criado_em?: string
+          criado_por?: string | null
+          funil?: string | null
+          id?: string
+          nome?: string
+          objetivo?: string | null
+          variaveis?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "templates_mensagem_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           ativo: boolean
@@ -6662,11 +7453,16 @@ export type Database = {
           atualizada_em: string
           criada_em: string
           id: string
+          intervalo_max_seg: number
+          intervalo_min_seg: number
+          mensagens_por_dia: number
           numero: string
           provedor: string
+          tipo: string
           token_definido_em: string | null
           token_secret_id: string | null
           usuario_responsavel: string | null
+          warmup_iniciado_em: string | null
         }
         Insert: {
           apelido: string
@@ -6674,11 +7470,16 @@ export type Database = {
           atualizada_em?: string
           criada_em?: string
           id?: string
+          intervalo_max_seg?: number
+          intervalo_min_seg?: number
+          mensagens_por_dia?: number
           numero: string
           provedor?: string
+          tipo?: string
           token_definido_em?: string | null
           token_secret_id?: string | null
           usuario_responsavel?: string | null
+          warmup_iniciado_em?: string | null
         }
         Update: {
           apelido?: string
@@ -6686,11 +7487,16 @@ export type Database = {
           atualizada_em?: string
           criada_em?: string
           id?: string
+          intervalo_max_seg?: number
+          intervalo_min_seg?: number
+          mensagens_por_dia?: number
           numero?: string
           provedor?: string
+          tipo?: string
           token_definido_em?: string | null
           token_secret_id?: string | null
           usuario_responsavel?: string | null
+          warmup_iniciado_em?: string | null
         }
         Relationships: [
           {
@@ -6857,6 +7663,29 @@ export type Database = {
         }
         Relationships: []
       }
+      atividade_comunicacao: {
+        Row: {
+          canal: string | null
+          contatos_distintos: number | null
+          dia: string | null
+          empresas_tocadas: number | null
+          enviadas: number | null
+          enviadas_por_ia: number | null
+          is_ia: boolean | null
+          recebidas: number | null
+          vendedor_id: string | null
+          vendedor_nome: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicacoes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certificado_universo: {
         Row: {
           certificado_status: string | null
@@ -6937,6 +7766,96 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grupos_economicos"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      comunicacoes_thread: {
+        Row: {
+          anexos: Json | null
+          assunto: string | null
+          canal: string | null
+          conta_remetente: string | null
+          contato_cargo: string | null
+          contato_id: string | null
+          contato_nome: string | null
+          conversa_id: string | null
+          corpo: string | null
+          criado_em: string | null
+          direcao: string | null
+          empresa_cnpj: string | null
+          empresa_id: string | null
+          empresa_nome: string | null
+          enviado_em: string | null
+          erro: string | null
+          funil: string | null
+          funil_card_id: string | null
+          id: string | null
+          origem: string | null
+          por_ia: boolean | null
+          preview: string | null
+          provedor: string | null
+          status_envio: string | null
+          triagem: Json | null
+          usuario_nome: string | null
+          vendedor_is_ia: boolean | null
+          vendedor_nome: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicacoes_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -7141,6 +8060,98 @@ export type Database = {
           {
             foreignKeyName: "fornecedores_funil_originador_id_fkey"
             columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_conversas: {
+        Row: {
+          canal: string | null
+          contato_base_legal: string | null
+          contato_cargo: string | null
+          contato_id: string | null
+          contato_nao_e_o_decisor: boolean | null
+          contato_nome: string | null
+          empresa_cnpj: string | null
+          empresa_id: string | null
+          empresa_nome: string | null
+          id: string | null
+          identificador_externo: string | null
+          modo_agente: string | null
+          nao_lidas: number | null
+          objetivo: string | null
+          playbook_id: string | null
+          proxima_acao_em: string | null
+          responsavel_is_ia: boolean | null
+          responsavel_nome: string | null
+          responsavel_vendedor_id: string | null
+          status: string | null
+          sugestao_acao: string | null
+          sugestao_confianca: number | null
+          sugestao_conteudo: string | null
+          sugestao_id: string | null
+          sugestao_justificativa: string | null
+          ultima_direcao: string | null
+          ultima_mensagem_em: string | null
+          ultima_por_ia: boolean | null
+          ultima_preview: string | null
+          ultima_triagem: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversas_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "conversas_playbook_fkey"
+            columns: ["playbook_id"]
+            isOneToOne: false
+            referencedRelation: "agente_playbooks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_responsavel_vendedor_id_fkey"
+            columns: ["responsavel_vendedor_id"]
             isOneToOne: false
             referencedRelation: "vendedores"
             referencedColumns: ["id"]
@@ -7661,6 +8672,27 @@ export type Database = {
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
       antecipacao_status_conversoes: { Args: { p?: Json }; Returns: Json }
+      /*
+       * PATCH DO REPO (ver a nota no fim deste arquivo): o gerador emite todo
+       * argumento de RPC como NÃO-anulável, e os quatro últimos aqui aceitam
+       * null de propósito — uma conversa pode não ter empresa, contato nem
+       * vendedor resolvidos, que é exatamente o caso do inbox de identificação.
+       * Reaplique isto depois de cada `pnpm db:types`.
+       */
+      app__conversa_para: {
+        Args: {
+          p_canal: string
+          p_contato: string | null
+          p_empresa: string | null
+          p_identificador: string
+          p_vendedor: string | null
+        }
+        Returns: string | null
+      }
+      app__identificador_canonico: {
+        Args: { p_canal: string; p_valor: string }
+        Returns: string
+      }
       app__promover_fornecedor_para_empresa: {
         Args: { p_ator: string; p_cnpj: string; p_origem: string }
         Returns: {
@@ -7745,6 +8777,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      app__segredo_vault: { Args: { p_id: string }; Returns: string }
       app__suprimir_fornecedor: {
         Args: {
           p_ator: string
@@ -7771,6 +8804,51 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_agente_aceitar: {
+        Args: { p: Json }
+        Returns: {
+          access_keys: string[]
+          agendada_para: string | null
+          assunto: string | null
+          atualizada_em: string
+          canal: string
+          comunicacao_id: string | null
+          conversa_id: string | null
+          corpo: string | null
+          criada_em: string
+          criada_por: string | null
+          descartada_por: string | null
+          destinatario: string | null
+          destinatario_contato_id: string | null
+          destinatario_ponto_focal: boolean
+          empresa_id: string | null
+          erro: string | null
+          faixa: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          funil: string | null
+          funil_card_id: string | null
+          id: string
+          motivo_descarte: string | null
+          origem: string
+          por_ia: boolean
+          status: string
+          template_id: string | null
+          tentativas: number
+          ultima_tentativa_em: string | null
+          valor_total: number | null
+          vendedor_id: string | null
+          whatsapp_conta_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mensagens_outbox"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_agente_descartar: { Args: { p: Json }; Returns: undefined }
       app_ajuste_manual_comissao: {
         Args: { p: Json }
         Returns: {
@@ -7840,6 +8918,50 @@ export type Database = {
           to: "lotes_enriquecimento"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      app_aprovar_mensagem: {
+        Args: { p: Json }
+        Returns: {
+          access_keys: string[]
+          agendada_para: string | null
+          assunto: string | null
+          atualizada_em: string
+          canal: string
+          comunicacao_id: string | null
+          conversa_id: string | null
+          corpo: string | null
+          criada_em: string
+          criada_por: string | null
+          descartada_por: string | null
+          destinatario: string | null
+          destinatario_contato_id: string | null
+          destinatario_ponto_focal: boolean
+          empresa_id: string | null
+          erro: string | null
+          faixa: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          funil: string | null
+          funil_card_id: string | null
+          id: string
+          motivo_descarte: string | null
+          origem: string
+          por_ia: boolean
+          status: string
+          template_id: string | null
+          tentativas: number
+          ultima_tentativa_em: string | null
+          valor_total: number | null
+          vendedor_id: string | null
+          whatsapp_conta_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "mensagens_outbox"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       app_ativar_camada_regra: {
@@ -8060,6 +9182,107 @@ export type Database = {
         }
       }
       app_competencia_fechada: { Args: { p_data: string }; Returns: boolean }
+      app_comunicacao_atividade: { Args: { p: Json }; Returns: Json }
+      app_comunicacao_enfileirar: {
+        Args: { p: Json }
+        Returns: {
+          access_keys: string[]
+          agendada_para: string | null
+          assunto: string | null
+          atualizada_em: string
+          canal: string
+          comunicacao_id: string | null
+          conversa_id: string | null
+          corpo: string | null
+          criada_em: string
+          criada_por: string | null
+          descartada_por: string | null
+          destinatario: string | null
+          destinatario_contato_id: string | null
+          destinatario_ponto_focal: boolean
+          empresa_id: string | null
+          erro: string | null
+          faixa: string | null
+          fornecedor_cnpj: string | null
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          funil: string | null
+          funil_card_id: string | null
+          id: string
+          motivo_descarte: string | null
+          origem: string
+          por_ia: boolean
+          status: string
+          template_id: string | null
+          tentativas: number
+          ultima_tentativa_em: string | null
+          valor_total: number | null
+          vendedor_id: string | null
+          whatsapp_conta_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mensagens_outbox"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_conversa_definir_modo: {
+        Args: { p: Json }
+        Returns: {
+          atualizada_em: string
+          canal: string
+          contato_id: string | null
+          criada_em: string
+          empresa_id: string | null
+          id: string
+          identificador_externo: string
+          modo_agente: string
+          nao_lidas: number
+          objetivo: string | null
+          playbook_id: string | null
+          proxima_acao_em: string | null
+          responsavel_vendedor_id: string | null
+          status: string
+          ultima_direcao: string | null
+          ultima_mensagem_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "conversas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_conversa_ignorar: { Args: { p: Json }; Returns: undefined }
+      app_conversa_marcar_lida: { Args: { p: Json }; Returns: undefined }
+      app_conversa_vincular: {
+        Args: { p: Json }
+        Returns: {
+          atualizada_em: string
+          canal: string
+          contato_id: string | null
+          criada_em: string
+          empresa_id: string | null
+          id: string
+          identificador_externo: string
+          modo_agente: string
+          nao_lidas: number
+          objetivo: string | null
+          playbook_id: string | null
+          proxima_acao_em: string | null
+          responsavel_vendedor_id: string | null
+          status: string
+          ultima_direcao: string | null
+          ultima_mensagem_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "conversas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_criar_empresa: {
         Args: { p: Json }
         Returns: {
@@ -8430,6 +9653,9 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           apollo_person_id: string | null
+          base_legal: string | null
+          base_legal_detalhe: string | null
+          base_legal_em: string | null
           cargo: string | null
           criado_em: string
           departamento: string | null
@@ -8439,6 +9665,7 @@ export type Database = {
           enriquecido_em: string | null
           id: string
           linkedin_url: string | null
+          nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
           ponto_focal: boolean
@@ -8458,23 +9685,37 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           access_keys: string[]
+          agendada_para: string | null
           assunto: string | null
           atualizada_em: string
           canal: string
+          comunicacao_id: string | null
+          conversa_id: string | null
           corpo: string | null
           criada_em: string
+          criada_por: string | null
           descartada_por: string | null
           destinatario: string | null
           destinatario_contato_id: string | null
           destinatario_ponto_focal: boolean
+          empresa_id: string | null
+          erro: string | null
           faixa: string | null
-          fornecedor_cnpj: string
+          fornecedor_cnpj: string | null
           fornecedor_empresa_id: string | null
           fornecedor_nome: string | null
+          funil: string | null
+          funil_card_id: string | null
           id: string
           motivo_descarte: string | null
+          origem: string
+          por_ia: boolean
           status: string
+          template_id: string | null
+          tentativas: number
+          ultima_tentativa_em: string | null
           valor_total: number | null
+          vendedor_id: string | null
           whatsapp_conta_id: string | null
         }
         SetofOptions: {
@@ -8484,6 +9725,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_desconectar_gmail: { Args: { p: Json }; Returns: undefined }
       app_desmonitorar_protesto: {
         Args: { p_cnpj: string }
         Returns: undefined
@@ -9087,9 +10329,31 @@ export type Database = {
       app_mudar_status_competencia: { Args: { p: Json }; Returns: number }
       app_ocultar_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
       app_ocultar_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
+      app_pedido_apresentacao_enviar: {
+        Args: { p: Json }
+        Returns: {
+          comunicacao_id: string | null
+          contato_sacado_id: string | null
+          criado_em: string
+          fornecedor_cnpj: string
+          id: string
+          mensagem: string | null
+          respondido_em: string | null
+          sacado_cnpj: string
+          solicitado_por: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pedidos_apresentacao"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_pedido_apresentacao_status: {
         Args: { p: Json }
         Returns: {
+          comunicacao_id: string | null
           contato_sacado_id: string | null
           criado_em: string
           fornecedor_cnpj: string
@@ -9110,6 +10374,7 @@ export type Database = {
       app_pedir_apresentacao: {
         Args: { p: Json }
         Returns: {
+          comunicacao_id: string | null
           contato_sacado_id: string | null
           criado_em: string
           fornecedor_cnpj: string
@@ -9136,6 +10401,9 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           apollo_person_id: string | null
+          base_legal: string | null
+          base_legal_detalhe: string | null
+          base_legal_em: string | null
           cargo: string | null
           criado_em: string
           departamento: string | null
@@ -9145,6 +10413,7 @@ export type Database = {
           enriquecido_em: string | null
           id: string
           linkedin_url: string | null
+          nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
           ponto_focal: boolean
@@ -9644,6 +10913,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_salvar_comunicacao_config: { Args: { p: Json }; Returns: undefined }
       app_salvar_credito_config: {
         Args: { p: Json }
         Returns: {
@@ -9714,6 +10984,30 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_salvar_gmail_conta: {
+        Args: { p: Json }
+        Returns: {
+          access_token_expira_em: string | null
+          access_token_secret_id: string | null
+          ativo: boolean
+          atualizado_em: string
+          conectado_em: string
+          endereco: string
+          escopos: string[]
+          history_id: string | null
+          refresh_token_secret_id: string | null
+          ultimo_erro: string | null
+          ultimo_sync_em: string | null
+          usuario_id: string
+          watch_expira_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "gmail_contas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_salvar_motivo_perda: {
         Args: { p: Json }
         Returns: {
@@ -9763,6 +11057,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_salvar_playbook: {
+        Args: { p: Json }
+        Returns: {
+          acoes_permitidas: string[]
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          funil: string
+          id: string
+          instrucoes: string
+          nome: string
+          objetivo: string
+          prazos: Json
+          templates_disponiveis: string[]
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "agente_playbooks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_salvar_radar_config: {
         Args: { p: Json }
         Returns: {
@@ -9792,6 +11109,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "scorecard_versoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_template_mensagem: {
+        Args: { p: Json }
+        Returns: {
+          assunto: string | null
+          ativo: boolean
+          atualizado_em: string
+          canal: string
+          corpo: string
+          criado_em: string
+          criado_por: string | null
+          funil: string | null
+          id: string
+          nome: string
+          objetivo: string | null
+          variaveis: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "templates_mensagem"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -9840,11 +11180,16 @@ export type Database = {
           atualizada_em: string
           criada_em: string
           id: string
+          intervalo_max_seg: number
+          intervalo_min_seg: number
+          mensagens_por_dia: number
           numero: string
           provedor: string
+          tipo: string
           token_definido_em: string | null
           token_secret_id: string | null
           usuario_responsavel: string | null
+          warmup_iniciado_em: string | null
         }
         SetofOptions: {
           from: "*"
@@ -10231,6 +11576,22 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+/*
+ * ─── PATCHES DO REPO SOBRE O ARQUIVO GERADO ─────────────────────────────────
+ *
+ * Duas coisas neste arquivo NÃO vêm do gerador, e as duas precisam ser
+ * reaplicadas depois de cada `pnpm db:types`:
+ *
+ *   1. O helper `Views<>` abaixo. O gerador novo dobra as views dentro de
+ *      `Tables<>`, e o repo inteiro importa `Views<'nome'>`.
+ *
+ *   2. `| null` nos argumentos anuláveis de `app__conversa_para` (busque pelo
+ *      comentário "PATCH DO REPO" acima). O gerador emite todo argumento de RPC
+ *      como obrigatório e não-anulável, mesmo quando a função aceita null.
+ *
+ * Sem (1) o build da web quebra; sem (2) o worker não compila.
+ */
 
 // Compat: helper Views<> (o gerador novo dobra views em Tables<>, mas o repo importa Views<'x'>).
 export type Views<

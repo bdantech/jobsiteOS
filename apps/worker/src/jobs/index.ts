@@ -92,6 +92,13 @@ import { classificarFases } from './juridico/classificar-fases.js'
 import { descobrirProcessos, sincronizarMonitoramentos } from './juridico/descobrir-processos.js'
 import { gerarParecer } from './juridico/parecer.js'
 import { drenarSolicitacoes, sincronizarProcessos } from './juridico/sincronizar.js'
+import { enviarFila } from './comunicacao/enviar-fila.js'
+import { sincronizarGmail, renovarWatches } from './comunicacao/gmail-sync.js'
+import { lembretesDeReuniao } from './comunicacao/lembretes-reuniao.js'
+import { triarEntradas } from './comunicacao/triagem.js'
+import { decidirProximosPassos } from './agente/decidir.js'
+import { apurarDesfechos, executarAgendados } from './agente/executar-agendados.js'
+import { plantaoDeEventos } from '../comunicacao/plantao.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -162,6 +169,13 @@ export type TipoJob =
   | 'juridico-alertas'
   | 'juridico-parecer'
   | 'juridico-monitoramentos'
+  | 'comunicacao-fila'
+  | 'comunicacao-gmail'
+  | 'comunicacao-triagem'
+  | 'comunicacao-lembretes'
+  | 'comunicacao-plantao'
+  | 'agente-decidir'
+  | 'agente-agendados'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -1317,4 +1331,61 @@ export async function executarParecerJuridico(
 
 export function dispararMonitoramentosJuridico(): string {
   return dispararAvulso('juridico-monitoramentos', async () => sincronizarMonitoramentos())
+}
+
+// ─── Comunicação (05A) ──────────────────────────────────────────────────────
+/*
+ * Seis relógios, e cada um é um relógio diferente porque o que ele guarda é
+ * diferente:
+ *
+ *   fila       de 5 em 5 minutos — uma mensagem aprovada não pode esperar meia
+ *              hora, e o intervalo entre envios já é aplicado dentro do job.
+ *   triagem    de 5 em 5 minutos — a triagem é o que acorda o agente; atrasá-la
+ *              atrasa a resposta a quem acabou de escrever.
+ *   gmail      de 10 em 10 minutos — é o FALLBACK do Pub/Sub, não o caminho
+ *              principal.
+ *   agente     de hora em hora — decisões de relação não são de minuto.
+ *   agendados  de hora em hora — o relógio que o próprio agente marcou.
+ *   lembretes  de hora em hora — o H-1 precisa de granularidade de hora.
+ */
+
+export function dispararEnviarFila(limite?: number): string {
+  return dispararAvulso('comunicacao-fila', async () => enviarFila(limite))
+}
+
+export function dispararTriagem(limite?: number): string {
+  return dispararAvulso('comunicacao-triagem', async () => triarEntradas(limite))
+}
+
+export function dispararGmailSync(): string {
+  return dispararAvulso('comunicacao-gmail', async () => {
+    const sync = await sincronizarGmail()
+    // A renovação do watch anda junto do sync porque as duas dependem do mesmo
+    // access token: separá-las dobraria o número de refreshes por hora.
+    const watches = await renovarWatches()
+    return { ...sync, watches_renovados: watches }
+  })
+}
+
+export function dispararLembretesReuniao(): string {
+  return dispararAvulso('comunicacao-lembretes', async () => lembretesDeReuniao())
+}
+
+export function dispararPlantao(): string {
+  return dispararAvulso('comunicacao-plantao', async () => plantaoDeEventos())
+}
+
+export function dispararAgenteDecidir(limite?: number): string {
+  return dispararAvulso('agente-decidir', async () => decidirProximosPassos(limite))
+}
+
+export function dispararAgenteAgendados(limite?: number): string {
+  return dispararAvulso('agente-agendados', async () => {
+    const passos = await executarAgendados(limite)
+    // O desfecho é apurado na mesma passada: é sobre as decisões que este job
+    // executou, e um segundo relógio só para ele seria um relógio a mais para
+    // manter.
+    const desfechos = await apurarDesfechos()
+    return { ...passos, desfechos }
+  })
 }

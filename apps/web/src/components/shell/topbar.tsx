@@ -3,6 +3,7 @@
 import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AiBarTrigger } from '@/components/ai/ai-bar-trigger'
+import { AvisoNaoVinculadas } from '@/components/comunicacao/aviso-nao-vinculadas'
 import { NotificationsBell } from '@/components/notifications/bell'
 import { ReportTrigger } from '@/components/reports/report-trigger'
 import { TabBar } from '@/components/shell/tab-bar'
@@ -61,6 +62,14 @@ export function TopBar({ grantedModuleIds, usuarioId }: TopBarProps) {
         para fora e o outro de fora para dentro.
       */}
       <div className="flex shrink-0 items-center gap-1">
+        {/*
+          A fila de identificação fica AO LADO do sino, e não dentro do módulo: o
+          sistema não tem home (quem entra cai no primeiro módulo liberado), e uma
+          mensagem de um decisor que ninguém identificou não pode depender de a
+          pessoa abrir a tela certa. Só aparece para quem tem o módulo, e só
+          quando há fila.
+        */}
+        <AvisoNaoVinculadas temModulo={grantedModuleIds.includes('comunicacao')} />
         <AiBarTrigger onOpenRoute={abrirRota} />
         <ReportTrigger usuarioId={usuarioId} />
         <NotificationsBell />

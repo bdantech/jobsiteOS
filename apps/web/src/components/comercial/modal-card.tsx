@@ -8,7 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useQuery } from '@tanstack/react-query'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Compositor } from '@/components/comunicacao/compositor'
+import { ProximoPasso } from '@/components/comunicacao/proximo-passo'
+import { Thread } from '@/components/comunicacao/thread'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 /**
@@ -151,21 +156,75 @@ export function ModalDoCard({
 }
 
 /**
- * A aba de mensagens, em todos os funis.
+ * A aba de mensagens, em todos os cinco funis (05A §9).
  *
- * Existe VAZIA de propósito: o histórico de e-mail e WhatsApp com a empresa é do
- * Prompt 05, e a aba está aqui para que o lugar dele já seja conhecido — de quem usa e
- * de quem for construir. Uma aba que aparece depois muda o mapa da tela; uma aba vazia
- * e honesta não.
+ * ── ELA MOSTRA A THREAD DA PESSOA, NÃO A DO CARD ───────────────────────────
+ * O filtro é a EMPRESA, e o que partiu deste card ganha uma marca — não um
+ * recorte. A mesma pessoa fala com o SDR, com o originador e com o closer; se
+ * cada card mostrasse só o que saiu dele, o vendedor abriria o card de vendas sem
+ * enxergar o que o SDR combinou na semana passada, e essa é exatamente a
+ * duplicação que o ledger existe para não ter.
+ *
+ * ── O PRÓXIMO PASSO APARECE AQUI, NÃO SÓ NO INBOX ──────────────────────────
+ * Quem abre um card está decidindo o que fazer com aquela conta agora. A sugestão
+ * pronta no lugar onde a decisão acontece é o que separa um copiloto de um
+ * relatório.
  */
-export function AbaMensagens() {
+export function AbaMensagens({
+  empresaId,
+  funil,
+  funilCardId,
+}: {
+  empresaId?: string | null
+  funil?: 'nfs' | 'fornecedores' | 'sdr' | 'vendas' | 'certificados'
+  funilCardId?: string | null
+}) {
+  if (!empresaId) {
+    return (
+      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Este card não está ligado a uma empresa.</p>
+        <p className="mt-1">Sem empresa não há contato, e sem contato não há conversa.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-      <p className="font-medium text-foreground">Ainda não temos o histórico aqui.</p>
-      <p className="mt-1">
-        As trocas de e-mail e WhatsApp com esta empresa vão aparecer nesta aba quando os
-        canais forem ligados.
-      </p>
+    <div className="space-y-4">
+      <SugestaoDaEmpresa empresaId={empresaId} />
+      <Thread empresaId={empresaId} funilCardId={funilCardId} alturaClasse="max-h-[38vh]" />
+      <Compositor empresaId={empresaId} funil={funil} funilCardId={funilCardId} />
     </div>
+  )
+}
+
+/** O "próximo passo sugerido" da conversa mais recente desta empresa. */
+function SugestaoDaEmpresa({ empresaId }: { empresaId: string }) {
+  const consulta = useQuery({
+    queryKey: ['comunicacao', 'sugestao-empresa', empresaId],
+    queryFn: async () => {
+      const { data, error } = await createClient()
+        .from('inbox_conversas')
+        .select('sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca')
+        .eq('empresa_id', empresaId)
+        .not('sugestao_id', 'is', null)
+        .order('ultima_mensagem_em', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      return data
+    },
+  })
+
+  const s = consulta.data
+  if (!s?.sugestao_id) return null
+
+  return (
+    <ProximoPasso
+      sugestaoId={s.sugestao_id}
+      acao={s.sugestao_acao}
+      conteudo={s.sugestao_conteudo}
+      justificativa={s.sugestao_justificativa}
+      confianca={s.sugestao_confianca}
+    />
   )
 }

@@ -16,13 +16,16 @@ import { emitirEvento } from '../../radar/eventos.js'
 import { lerConfigDisparo } from '../../antecipacao/config.js'
 
 /**
- * Geração da outbox em MODO SOMBRA (§6). Roda depois de cada reclassificação.
+ * Geração da outbox pela régua de faixas. Roda depois de cada reclassificação.
  *
- * NADA É ENVIADO NESTE PROMPT. O job produz exatamente o que SERIA enviado, na
- * `mensagens_outbox` com status `pendente_envio`, para que a régua possa ser
- * validada por um humano antes de qualquer canal existir. É de propósito que a
- * fila seja o entregável: ligar canais primeiro e conferir depois é como se
- * queima uma base de contatos.
+ * ── ELA GERA `pendente_envio`, E ISSO CONTINUA SENDO O PONTO (05A §5) ───────
+ * O canal existe desde o Prompt 05A, mas o que a MÁQUINA gera não sai sozinho:
+ * uma pessoa aprova (`app_aprovar_mensagem`) e só então o worker de envio pega a
+ * linha. Ligar canais primeiro e conferir depois é como se queima uma base de
+ * contatos — o que mudou foi existir o passo seguinte, não a fila deixar de ser
+ * revisada.
+ *
+ * O compositor não passa por aqui: quem escreveu já aprovou ao apertar enviar.
  *
  * O agrupamento é por FORNECEDOR, nunca por nota: ninguém recebe um toque por
  * nota fiscal, recebe um toque pelo conjunto de notas vivas.
@@ -164,7 +167,7 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
     }
   }
 
-  logger.info(acc, 'Geração da outbox (modo sombra) concluída.')
+  logger.info(acc, 'Geração da outbox concluída (aguardando aprovação).')
   return acc
 }
 
@@ -255,8 +258,22 @@ function sacadoPrincipal(notas: { valor: number | null; sacado_nome: string | nu
 }
 
 /**
- * Cooldown por FORNECEDOR: a última mensagem na outbox e — quando a config manda
- * — o último `toque.manual` registrado pelo app do vendedor.
+ * Cooldown por FORNECEDOR.
+ *
+ * ── A PERGUNTA É FEITA AO LEDGER (05A §2) ──────────────────────────────────
+ * Antes ela era feita em dois lugares — a própria outbox e o evento
+ * `toque.manual` — e essa era exatamente a duplicação que o ledger veio resolver:
+ * o cooldown lia uma fonte, a tela lia outra, e o fornecedor recebia dois toques
+ * no mesmo dia.
+ *
+ * `comunicacoes` responde as duas de uma vez: a mensagem que a régua mandou e o
+ * clique em `wa.me` do vendedor estão lá, com `direcao = 'saida'`. O flag
+ * `considerar_toque_manual` continua existindo porque a pergunta que ele faz
+ * continua sendo uma escolha — só que agora ela é um filtro por `origem`, e não
+ * uma segunda consulta a uma segunda tabela.
+ *
+ * A FILA também é consultada: entre enfileirar e enviar há uma janela em que o
+ * ledger ainda não tem a linha, e a reclassificação roda várias vezes por dia.
  */
 async function emCooldown(
   cnpj: string,
@@ -266,27 +283,37 @@ async function emCooldown(
   if (dias <= 0) return false
   const desde = new Date(Date.now() - dias * 86_400_000).toISOString()
 
-  const { data: msg } = await supabaseAdmin
+  const { data: empresa } = await supabaseAdmin
+    .from('empresas')
+    .select('id')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  if (empresa?.id) {
+    let q = supabaseAdmin
+      .from('comunicacoes')
+      .select('id')
+      .eq('empresa_id', empresa.id)
+      .eq('direcao', 'saida')
+      .gte('criado_em', desde)
+      .limit(1)
+    // Sem toque manual: só o que a MÁQUINA mandou conta. `app_toque` é o clique
+    // do vendedor, e ignorá-lo é o que a config diz quando está desligada.
+    if (!considerarToqueManual) q = q.neq('origem', 'app_toque')
+
+    const { data: ledger } = await q.maybeSingle()
+    if (ledger) return true
+  }
+
+  const { data: naFila } = await supabaseAdmin
     .from('mensagens_outbox')
     .select('id')
     .eq('fornecedor_cnpj', cnpj)
-    .in('status', ['pendente_envio', 'aprovada', 'enviada'])
+    .in('status', ['pendente_envio', 'aprovada'])
     .gte('criada_em', desde)
     .limit(1)
     .maybeSingle()
-  if (msg) return true
-
-  if (!considerarToqueManual) return false
-
-  const { data: toque } = await supabaseAdmin
-    .from('empresa_eventos')
-    .select('id')
-    .eq('tipo', EVENTO_TIPOS.TOQUE_MANUAL)
-    .eq('payload->>cnpj', cnpj)
-    .gte('criado_em', desde)
-    .limit(1)
-    .maybeSingle()
-  return toque !== null
+  return naFila !== null
 }
 
 /**
@@ -383,7 +410,7 @@ async function registrar(args: {
   if (args.status === 'pendente_envio') {
     await emitirEvento(args.fornecedor.fornecedor_empresa_id, EVENTO_TIPOS.OUTBOX_MENSAGEM_GERADA, {
       resumo:
-        `Mensagem de ${args.canal} gerada (modo sombra) para ` +
+        `Mensagem de ${args.canal} gerada (aguardando aprovação) para ` +
         `${args.fornecedor.fornecedor_nome ?? args.fornecedor.fornecedor_cnpj}: ` +
         `${args.accessKeys.length} nota(s), ${formatarMoeda(args.valorTotal)}.`,
       canal: args.canal,

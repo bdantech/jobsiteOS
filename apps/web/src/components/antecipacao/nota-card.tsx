@@ -292,7 +292,17 @@ export function NotaCard({
               // antecipar esta nota, não com o sacado.
               conteudo: <AbaEmpresa empresaId={nota.fornecedor_empresa_id} />,
             },
-            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+            {
+              id: 'mensagens',
+              label: 'Mensagens',
+              conteudo: (
+                <AbaMensagens
+                  empresaId={nota.fornecedor_empresa_id}
+                  funil="nfs"
+                  funilCardId={nota.access_key}
+                />
+              ),
+            },
           ]}
           acoes={<MenuAcoesNota nota={nota} />}
         />

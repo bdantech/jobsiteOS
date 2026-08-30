@@ -553,7 +553,17 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               ),
             },
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
-            { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+            {
+              id: 'mensagens',
+              label: 'Mensagens',
+              conteudo: (
+                <AbaMensagens
+                  empresaId={aberto.empresas?.id ?? null}
+                  funil="sdr"
+                  funilCardId={aberto.id}
+                />
+              ),
+            },
           ]}
           acoes={acoesDoLead(aberto)}
         />

@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AbaEmpresa } from '../aba-empresa'
 import { DonoDoCard } from '../dono-do-card'
 import { EtapasDoFunil } from '../etapas-funil'
-import { ModalDoCard } from '../modal-card'
+import { AbaMensagens, ModalDoCard } from '../modal-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -45,6 +45,7 @@ import {
   promoverContatoAction,
   registrarToqueAction,
 } from '@/actions/fornecedores'
+import { enviarApresentacaoAction } from '@/actions/comunicacao'
 import {
   buscarContatosDescobertos,
   buscarConfigFornecedores,
@@ -235,6 +236,18 @@ export function FichaFornecedor({
     },
     onSuccess: () => {
       toast.success('Promovido a ponto focal da empresa.')
+      invalidar()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const enviarApresentacao = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await enviarApresentacaoAction({ id, canal: 'email' })
+      if (!r.ok) throw new Error(r.message)
+    },
+    onSuccess: () => {
+      toast.success('Pedido na fila. Sai na próxima janela de envio.')
       invalidar()
     },
     onError: (e: Error) => toast.error(e.message),
@@ -559,11 +572,29 @@ export function FichaFornecedor({
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Pedidos de apresentação</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-1 text-xs text-muted-foreground">
+                    <CardContent className="space-y-2 text-xs text-muted-foreground">
                       {(pedidos.data ?? []).map((p) => (
-                        <p key={p.id}>
-                          {cnpjFormatado(p.sacado_cnpj)} · {p.status} · {dia(p.criado_em)}
-                        </p>
+                        <div key={p.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <span>
+                            {cnpjFormatado(p.sacado_cnpj)} · {p.status} · {dia(p.criado_em)}
+                          </span>
+                          {/*
+                            Antes do 05A, "enviado" era marcação manual de quem mandou por
+                            fora. Agora o botão ENFILEIRA de verdade: o texto sai do
+                            rascunho e passa a viver no ledger, e o pedido guarda só o
+                            estado e a referência.
+                          */}
+                          {p.status === 'rascunho' && p.contato_sacado_id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={enviarApresentacao.isPending}
+                              onClick={() => enviarApresentacao.mutate(p.id)}
+                            >
+                              Enviar pela casa
+                            </Button>
+                          ) : null}
+                        </div>
                       ))}
                     </CardContent>
                   </Card>
@@ -575,6 +606,17 @@ export function FichaFornecedor({
             id: 'empresa',
             label: 'Empresa',
             conteudo: <AbaEmpresa empresaId={card.empresa_id} />,
+          },
+          {
+            id: 'mensagens',
+            label: 'Mensagens',
+            conteudo: (
+              <AbaMensagens
+                empresaId={card.empresa_id}
+                funil="fornecedores"
+                funilCardId={card.fornecedor_cnpj}
+              />
+            ),
           },
         ]}
       />

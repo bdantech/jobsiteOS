@@ -365,7 +365,11 @@ function DetalheDoCard({
           ),
         },
         { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={c.empresa_id} /> },
-        { id: 'mensagens', label: 'Mensagens', conteudo: <AbaMensagens /> },
+        {
+          id: 'mensagens',
+          label: 'Mensagens',
+          conteudo: <AbaMensagens empresaId={c.empresa_id} funil="certificados" funilCardId={c.card_id} />,
+        },
       ]}
     />
   )

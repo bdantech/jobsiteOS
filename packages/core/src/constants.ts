@@ -189,6 +189,28 @@ export const EVENTO_TIPOS = {
   CALCULO_GERADO: 'calculo.gerado',
   PARECER_GERADO: 'parecer.gerado',
   RECUPERACAO_REGISTRADA: 'recuperacao.registrada',
+
+  /*
+   * Comunicação (05A).
+   *
+   * `comunicacao.recebida` é evento de TIMELINE, não de sino: quem precisa saber
+   * que chegou mensagem é o dono da thread, e o destinatário por linha sai por
+   * `notify()` no worker. Uma regra de fan-out por perfil aqui daria a todo o
+   * time comercial todas as conversas de todo mundo.
+   *
+   * `toque.manual` continua onde sempre esteve, na Antecipação: é o mesmo fato, e
+   * um segundo tipo para ele partiria a timeline da empresa em duas metades.
+   */
+  COMUNICACAO_ENVIADA: 'comunicacao.enviada',
+  COMUNICACAO_RECEBIDA: 'comunicacao.recebida',
+  COMUNICACAO_FALHOU: 'comunicacao.falhou',
+  CONVERSA_NAO_VINCULADA: 'conversa.nao_vinculada',
+  CONVERSA_VINCULADA: 'conversa.vinculada',
+  CONTATO_INDICADO: 'contato.indicado',
+  AGENTE_DECIDIU: 'agente.decidiu',
+  AGENTE_ESCALOU: 'agente.escalou',
+  AGENTE_EXECUTOU: 'agente.executou',
+  OPTOUT_REGISTRADO: 'optout.registrado',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -312,6 +334,16 @@ export const EVENTO_LABELS: Record<string, string> = {
   'calculo.gerado': 'Cálculo da dívida gerado',
   'parecer.gerado': 'Parecer jurídico gerado',
   'recuperacao.registrada': 'Recuperação registrada',
+  'comunicacao.enviada': 'Mensagem enviada',
+  'comunicacao.recebida': 'Mensagem recebida',
+  'comunicacao.falhou': 'Falha ao enviar mensagem',
+  'conversa.nao_vinculada': 'Conversa aguardando identificação',
+  'conversa.vinculada': 'Conversa identificada',
+  'contato.indicado': 'Outro contato foi indicado',
+  'agente.decidiu': 'Agente sugeriu um próximo passo',
+  'agente.escalou': 'Agente escalou para humano',
+  'agente.executou': 'Agente executou o próximo passo',
+  'optout.registrado': 'Pedido de descadastro registrado',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

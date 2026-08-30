@@ -39,6 +39,8 @@ import { SecaoComercial } from '@/components/comercial/secao-comercial'
 import { SecaoJuridico } from '@/components/juridico/secao-juridico'
 import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
+import { Compositor } from '@/components/comunicacao/compositor'
+import { Thread } from '@/components/comunicacao/thread'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
 
@@ -197,6 +199,12 @@ export function EmpresaDetalhe({
         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="contatos">Contatos</TabsTrigger>
+          {/*
+            Conversas logo depois de Contatos, e antes de Sócios: as duas respondem
+            "com quem se fala nesta conta", e a segunda é a que diz o que já foi
+            dito. É aqui que as conversas dos cinco funis se encontram (05A §9).
+          */}
+          <TabsTrigger value="conversas">Conversas</TabsTrigger>
           <TabsTrigger value="socios">Sócios</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
           <TabsTrigger value="financeiro">Análise financeira</TabsTrigger>
@@ -342,6 +350,13 @@ export function EmpresaDetalhe({
               {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}
               <TabsContent value="contatos" className="mt-0">
                 <EmpresaContatos empresaId={data.id} />
+              </TabsContent>
+
+              <TabsContent value="conversas" className="mt-0">
+                <div className="space-y-4">
+                  <Thread empresaId={data.id} alturaClasse="max-h-[45vh]" />
+                  <Compositor empresaId={data.id} />
+                </div>
               </TabsContent>
 
               {/*

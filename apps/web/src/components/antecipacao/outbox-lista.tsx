@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, EyeOff, Mail, MessageCircle, Star, Trash2, UserX } from 'lucide-react'
+import { AlertTriangle, Check, EyeOff, Mail, MessageCircle, Star, Trash2, UserX } from 'lucide-react'
 import {
   CANAIS,
   CANAL_LABELS,
@@ -32,15 +32,25 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { descartarMensagemAction } from '@/actions/antecipacao'
+import { aprovarMensagensAction } from '@/actions/comunicacao'
 import { cn } from '@/lib/utils'
 import { FAIXA_BADGE, formatarDataHora, formatarMoeda } from './format'
 import { antecipacaoKeys, buscarOutbox, type FiltrosOutbox } from './queries'
 
 /**
- * A Outbox (webOnly, §6): a fila do que SERIA enviado.
+ * A Outbox (webOnly): a FILA DE SAÍDA.
  *
- * É a validação da régua antes de ligar os canais. Cada linha mostra o corpo
- * renderizado, o destinatário escolhido e — importante — SE ele veio do ponto
+ * ── ELA DEIXOU DE SER SOMBRA (05A §2) ──────────────────────────────────────
+ * Até o Prompt 05A esta tela mostrava "o que SERIA enviado" e nada saía. Agora o
+ * canal existe: `aprovada` vira `enviada` no worker, e cada linha aqui é uma
+ * mensagem que ainda não saiu.
+ *
+ * Por isso ela também deixou de ser HISTÓRICO. O corpo some da linha no instante
+ * do envio (`mensagens_outbox_sem_copia_do_ledger`), e o que foi dito passa a
+ * viver em `comunicacoes` — que é onde a aba "Mensagens" e a Company 360 leem. Uma
+ * linha `enviada` aqui é um recibo, não uma cópia.
+ *
+ * Cada linha mostra o destinatário escolhido e — importante — SE ele veio do ponto
  * focal. Uma régua que sempre cai no "primeiro contato disponível" é uma régua que
  * vai falar com o estagiário do financeiro.
  *
@@ -125,27 +135,78 @@ function DescartarDialog({
 export function OutboxLista() {
   const [filtros, setFiltros] = React.useState<FiltrosOutbox>({})
   const [descartando, setDescartando] = React.useState<string | null>(null)
+  const [aprovando, setAprovando] = React.useState(false)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: antecipacaoKeys.outbox(filtros),
     queryFn: () => buscarOutbox(filtros),
   })
 
+  /**
+   * Aprovar em lote é o caso real: a régua gera dezenas por rodada, e aprovar uma
+   * a uma faria a pessoa parar de ler o que aprova depois da quinta. O botão de
+   * cada linha usa o mesmo caminho, com um id só.
+   */
+  const aprovar = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return
+      setAprovando(true)
+      try {
+        const r = await aprovarMensagensAction(ids)
+        if (!r.ok) {
+          toast.error(r.message)
+          return
+        }
+        toast.success(
+          r.data.aprovadas === 1
+            ? 'Aprovada. Sai na próxima janela de envio.'
+            : `${r.data.aprovadas} mensagens aprovadas. Saem na próxima janela de envio.`,
+        )
+        await refetch()
+      } finally {
+        setAprovando(false)
+      }
+    },
+    [refetch],
+  )
+
   const semContato = (data ?? []).filter((m) => m.motivo_descarte === 'sem_contato')
+  const pendentes = (data ?? []).filter((m) => m.status === 'pendente_envio')
 
   return (
     <div className="space-y-4">
       <div className={cn('flex items-start gap-2 rounded-lg border p-3 text-sm', STATUS_SUPERFICIE.info)}>
         <EyeOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         <div>
-          <p className="font-medium">Fila-sombra — nada foi enviado</p>
+          <p className="font-medium">Fila de saída</p>
           <p>
-            Cada linha é o que sairia se o canal estivesse ligado: corpo renderizado, destinatário
-            escolhido pela hierarquia (ponto focal primeiro) e agrupamento por fornecedor. Aprovar e
-            enviar entram no próximo prompt.
+            O que ainda não saiu. Uma mensagem aprovada é enviada na próxima janela (seg–sex,
+            9h–18h) depois de passar pelo portão — supressão, base legal, cooldown e teto do número.
+            Depois de enviada, o texto passa a viver na conversa da pessoa; aqui fica só o recibo.
           </p>
         </div>
       </div>
+
+      {pendentes.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+          <p className="text-sm">
+            <span className="font-medium">
+              {pendentes.length} mensagem{pendentes.length === 1 ? '' : 's'}
+            </span>{' '}
+            <span className="text-muted-foreground">
+              gerada{pendentes.length === 1 ? '' : 's'} pela régua, aguardando aprovação.
+            </span>
+          </p>
+          <Button
+            size="sm"
+            disabled={aprovando}
+            onClick={() => void aprovar(pendentes.map((m) => m.id))}
+          >
+            <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            Aprovar as {pendentes.length} filtradas
+          </Button>
+        </div>
+      ) : null}
 
       {/* ─── Filtros ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
@@ -251,7 +312,11 @@ export function OutboxLista() {
                           <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
                         )}
                         <span className="font-medium">
-                          {m.fornecedor_nome ?? formatCnpj(m.fornecedor_cnpj)}
+                          {/* `fornecedor_cnpj` ficou anulável na 0144: a outbox deixou de ser
+                              exclusiva da Antecipação e o compositor manda para contato de
+                              qualquer funil, onde não há CNPJ de fornecedor nenhum. */}
+                          {m.fornecedor_nome ??
+                            (m.fornecedor_cnpj ? formatCnpj(m.fornecedor_cnpj) : 'Destinatário sem empresa')}
                         </span>
                         {m.faixa && (
                           <Badge className={FAIXA_BADGE[m.faixa as Faixa]}>
@@ -268,12 +333,31 @@ export function OutboxLista() {
                       </CardDescription>
                     </div>
 
-                    {(m.status === 'pendente_envio' || m.status === 'aprovada') && (
-                      <Button variant="ghost" size="sm" onClick={() => setDescartando(m.id)}>
-                        <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
-                        Descartar
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 gap-1">
+                      {/*
+                        Aprovar é o passo entre a régua e o envio (05A §5), e NÃO é
+                        enviar: a linha entra na fila e continua passando pelo portão do
+                        worker. Aprovar o texto não é aprovar o horário nem a saúde do
+                        número.
+                      */}
+                      {m.status === 'pendente_envio' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={aprovando}
+                          onClick={() => void aprovar([m.id])}
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" aria-hidden />
+                          Aprovar
+                        </Button>
+                      )}
+                      {(m.status === 'pendente_envio' || m.status === 'aprovada') && (
+                        <Button variant="ghost" size="sm" onClick={() => setDescartando(m.id)}>
+                          <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                          Descartar
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -295,11 +379,28 @@ export function OutboxLista() {
                   </div>
 
                   {m.assunto && <p className="text-sm font-medium">{m.assunto}</p>}
-                  {m.corpo && (
+                  {m.corpo ? (
                     <p className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm">
                       {m.corpo}
                     </p>
-                  )}
+                  ) : m.comunicacao_id ? (
+                    // Enviada: o texto migrou para o ledger, e a linha guarda só a
+                    // referência. Duas cópias divergentes pagam uma coisa e mostram outra.
+                    <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                      Enviada. O texto está na conversa da pessoa
+                      {m.empresa_id ? (
+                        <>
+                          {' '}
+                          —{' '}
+                          <Link href={`/empresas/${m.empresa_id}`} className="underline">
+                            abrir a ficha da empresa
+                          </Link>
+                        </>
+                      ) : null}
+                      .
+                    </p>
+                  ) : null}
+                  {m.erro ? <p className="text-xs text-destructive">{m.erro}</p> : null}
 
                   {m.fornecedor_cnpj && (
                     <Link

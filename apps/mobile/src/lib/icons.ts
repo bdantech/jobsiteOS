@@ -6,6 +6,7 @@ import {
   Landmark,
   LayoutGrid,
   Map,
+  MessageCircle,
   Gavel,
   Radar,
   Shield,
@@ -28,6 +29,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   landmark: Landmark,
   handshake: Handshake,
   gavel: Gavel,
+  'message-circle': MessageCircle,
 }
 
 export function moduleIcon(token: string): LucideIcon {

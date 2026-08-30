@@ -802,3 +802,67 @@ export async function dispararParecerJuridico(input: {
 }): Promise<DispararJobResultado> {
   return postar('/jobs/juridico/parecer', input, 'juridico-parecer', 320_000)
 }
+
+// ─── Comunicação (05A) ──────────────────────────────────────────────────────
+/*
+ * Os seis relógios do módulo. Todos enfileiram e devolvem 202 — nenhum deles é
+ * um clique que alguém está esperando na tela, e o único que fica perto disso (a
+ * fila de envio) já responde em segundos porque o trabalho pesado é o intervalo
+ * entre envios, que roda dentro do worker.
+ */
+
+export async function dispararEnviarFilaComunicacao(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/enviar-fila', input, 'comunicacao-fila')
+}
+
+export async function dispararTriagemComunicacao(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/triagem', input, 'comunicacao-triagem')
+}
+
+export async function dispararGmailSync(): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/gmail-sync', {}, 'comunicacao-gmail')
+}
+
+export async function dispararLembretesReuniao(): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/lembretes', {}, 'comunicacao-lembretes')
+}
+
+export async function dispararPlantao(): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/plantao', {}, 'comunicacao-plantao')
+}
+
+export async function dispararAgenteDecidir(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/agente/decidir', input, 'agente-decidir')
+}
+
+export async function dispararAgenteAgendados(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/agente/executar-agendados', input, 'agente-agendados')
+}
+
+/**
+ * O repasse dos webhooks de comunicação para o worker.
+ *
+ * As URLs cadastradas no painel do Wasender e do Resend podem apontar para a web
+ * (que tem domínio estável e certificado) ou para o worker. As duas precisam
+ * funcionar, e precisam produzir EXATAMENTE o mesmo efeito — uma segunda
+ * implementação do ledger e da fila de identificação divergiria na primeira
+ * correção que alguém fizesse em só uma delas.
+ *
+ * Então a rota da web autentica o provedor com o segredo DELE e repassa o corpo
+ * cru para a rota do worker, que autentica com o WORKER_SECRET. Um salto a mais,
+ * uma implementação só.
+ */
+export async function repassarWebhookComunicacao(
+  provedor: 'wasender' | 'resend',
+  corpo: unknown,
+): Promise<DispararJobResultado> {
+  return postar(`/webhooks/${provedor}`, corpo, `webhook-${provedor}`)
+}

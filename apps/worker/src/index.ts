@@ -76,9 +76,21 @@ import {
   dispararValidarContatos,
   executarCliqueDescoberta,
   executarBuscaAprofundada,
+  dispararEnviarFila,
+  dispararTriagem,
+  dispararGmailSync,
+  dispararLembretesReuniao,
+  dispararPlantao,
+  dispararAgenteDecidir,
+  dispararAgenteAgendados,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
+import {
+  processarWebhookResend,
+  processarWebhookWasender,
+} from './jobs/comunicacao/webhooks.js'
+import { segredoWasenderValido, segredoResendValido } from './comunicacao/webhook-auth.js'
 
 /**
  * The worker's HTTP surface. Small on purpose: it starts jobs and reports health.
@@ -157,6 +169,59 @@ app.post('/webhooks/escavador', async (req: Request, res: Response) => {
     // gravar, queremos o reenvio. A idempotência pela PK torna o reenvio seguro, e
     // perder um `novo_processo` é perder uma ação nova contra nós.
     res.status(500).json({ ok: false })
+  }
+})
+
+/*
+ * ─── Webhooks de comunicação (públicos: os provedores não mandam o WORKER_SECRET)
+ *
+ * Autenticados por segredo PRÓPRIO — `WASENDER_WEBHOOK_SECRET` e
+ * `RESEND_WEBHOOK_SECRET` — que NÃO são os tokens de envio. O token de envio é
+ * por conta e vive no Vault; reusá-lo aqui o publicaria num header que qualquer
+ * um pode nos fazer comparar batendo na nossa URL, e é ele que manda mensagem
+ * pelo nosso número. É a mesma decisão do callback do Escavador (0143).
+ *
+ * ── POR QUE 200 QUASE SEMPRE ───────────────────────────────────────────────
+ * Os dois provedores reentregam quando não recebem 200 rápido. A rota grava
+ * (idempotente pelo id da mensagem) e responde; a triagem, que chama modelo, é
+ * do job. Classificar aqui estouraria o timeout do provedor e provocaria
+ * exatamente a tempestade de reenvio que a idempotência está contendo.
+ *
+ * A MESMA rota existe em apps/web, porque a URL cadastrada no painel do provedor
+ * pode apontar para qualquer uma das duas — e as duas gravam na mesma tabela com
+ * a mesma chave.
+ */
+app.post('/webhooks/wasender', async (req: Request, res: Response) => {
+  const recebido =
+    (typeof req.query.secret === 'string' ? req.query.secret : undefined) ??
+    (typeof req.headers['x-webhook-secret'] === 'string'
+      ? (req.headers['x-webhook-secret'] as string)
+      : undefined)
+  if (!segredoWasenderValido(recebido)) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  try {
+    const r = await processarWebhookWasender(req.body)
+    res.status(200).json(r)
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Webhook do Wasender falhou ao processar.')
+    res.status(200).json({ ok: false })
+  }
+})
+
+app.post('/webhooks/resend', async (req: Request, res: Response) => {
+  const cabecalho = req.headers['svix-signature'] ?? req.headers['x-webhook-secret']
+  if (!segredoResendValido(typeof cabecalho === 'string' ? cabecalho : undefined)) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  try {
+    const r = await processarWebhookResend(req.body)
+    res.status(200).json(r)
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Webhook do Resend falhou ao processar.')
+    res.status(200).json({ ok: false })
   }
 })
 
@@ -958,6 +1023,70 @@ app.post('/jobs/juridico/parecer', async (req: Request, res: Response, next: Nex
     const { numeroCnj, geradoPor } = parecerSchema.parse(req.body ?? {})
     const resultado = await executarParecerJuridico(numeroCnj, geradoPor ?? null)
     res.json(resultado)
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Comunicação (05A) ──────────────────────────────────────────────────────
+
+const limiteSchema = z.object({ limite: z.coerce.number().int().min(1).max(500).optional() })
+
+app.post('/jobs/comunicacao/enviar-fila', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararEnviarFila(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/triagem', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararTriagem(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/gmail-sync', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararGmailSync(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/lembretes', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararLembretesReuniao(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/plantao', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararPlantao(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/agente/decidir', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararAgenteDecidir(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/agente/executar-agendados', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararAgenteAgendados(limite), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

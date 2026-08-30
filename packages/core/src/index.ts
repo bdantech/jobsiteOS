@@ -14,11 +14,13 @@ export * from './certificados/index.js'
 export * from './leads/index.js'
 export * from './credito/index.js'
 export * from './comercial/index.js'
+export * from './comunicacao/index.js'
 export * from './fornecedores/index.js'
 export * from './perfil/index.js'
 export * from './juridico/index.js'
 export * from './reports/index.js'
 export * from './crons/index.js'
+export * from './transportes/index.js'
 export * from './constants.js'
 export type {
   Database,

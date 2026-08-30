@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { BotaoDeToque } from '@/components/comunicacao/botao-toque'
+import { Compositor } from '@/components/comunicacao/compositor'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -158,6 +160,8 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
   const [novoAberto, setNovoAberto] = React.useState(false)
   const [enriquecendo, setEnriquecendo] = React.useState(false)
   const [excluindo, setExcluindo] = React.useState<string | null>(null)
+  /** Qual contato tem o compositor aberto. Um por vez: dois seriam duas mensagens. */
+  const [compondo, setCompondo] = React.useState<string | null>(null)
 
   /**
    * Recebe o id explicitamente porque, no caminho da promoção, ele acabou de nascer:
@@ -375,13 +379,10 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                     {c.email && (
-                      <a
-                        href={`mailto:${c.email}`}
-                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
-                      >
+                      <span className="flex items-center gap-1 text-muted-foreground">
                         <Mail className="h-3.5 w-3.5" aria-hidden />
                         {c.email}
-                      </a>
+                      </span>
                     )}
                     {c.telefone && (
                       <a
@@ -393,17 +394,48 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
                       </a>
                     )}
                     {c.whatsapp && (
-                      <a
-                        href={`https://wa.me/${c.whatsapp.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
-                      >
+                      <span className="flex items-center gap-1 text-muted-foreground">
                         <MessageCircle className="h-3.5 w-3.5" aria-hidden />
                         {c.whatsapp}
-                      </a>
+                      </span>
                     )}
                   </div>
+
+                  {/*
+                    O botão de um toque (05A §5). As duas formas continuam existindo:
+                    enviar pela casa grava no ledger e mantém a thread; abrir no app é
+                    mais rápido e continua registrando o toque, com a semântica honesta
+                    de "o app abriu". Tirar a segunda faria o vendedor abrir o WhatsApp
+                    por fora, e aí o toque não fica registrado em lugar nenhum.
+                  */}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {c.whatsapp ? (
+                      <BotaoDeToque
+                        link={`https://wa.me/${c.whatsapp.replace(/\D/g, '')}`}
+                        rotulo="Abrir no meu WhatsApp"
+                        onEnviarPelaCasa={() => setCompondo(c.id)}
+                      />
+                    ) : null}
+                    {c.email ? (
+                      <BotaoDeToque
+                        link={`mailto:${c.email}`}
+                        rotulo="Abrir no meu e-mail"
+                        onEnviarPelaCasa={() => setCompondo(c.id)}
+                      />
+                    ) : null}
+                  </div>
+
+                  {/* `empresaId` é nulo enquanto a empresa não foi criada (o fluxo de
+                      promoção do Radar). Sem empresa não há thread para escrever. */}
+                  {compondo === c.id && empresaId ? (
+                    <div className="mt-3">
+                      <Compositor
+                        empresaId={empresaId}
+                        contatoIdInicial={c.id}
+                        onEnviado={() => setCompondo(null)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">

@@ -185,6 +185,48 @@ const envSchema = z.object({
    */
   ESCAVADOR_CALLBACK_TOKEN: z.string().optional(),
 
+  // ─── Comunicação (Prompt 05A): os três canos ──────────────────────────────
+  // Opcionais pelo mesmo desenho do resto: sem a credencial o transporte é
+  // PULADO com o motivo registrado, e a fila fica esperando em vez de falhar. É
+  // a diferença entre "não configurado" e "quebrado", e ela aparece na tela.
+  //
+  // Nenhum token de CONTA está aqui: `whatsapp_contas.token_secret_id` e
+  // `gmail_contas.*_secret_id` apontam para o Vault, e o worker os lê com
+  // `app__segredo_vault`. O que fica em env é o que é da APLICAÇÃO — a base URL
+  // do provedor, o segredo do webhook e as credenciais do app OAuth.
+  WASENDER_BASE_URL: z.string().url().optional(),
+  /**
+   * Segredo do WEBHOOK, e é OUTRO segredo — não o token de envio.
+   *
+   * O token de envio é POR CONTA e vive no Vault; reaproveitá-lo como segredo de
+   * webhook o publicaria num header que qualquer um pode nos fazer comparar
+   * batendo na nossa URL. Mesma régua do callback do Escavador (0143).
+   */
+  WASENDER_WEBHOOK_SECRET: z.string().optional(),
+
+  /** App OAuth do Google. O refresh token de cada pessoa vive no Vault. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /** Tópico do Pub/Sub que o Gmail Watch usa. Sem ele, só o polling roda. */
+  GOOGLE_PUBSUB_TOPIC: z.string().optional(),
+
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
+  /** "ONE OS <contato@oneos.com.br>" — o remetente do SISTEMA. */
+  RESEND_REMETENTE: z.string().optional(),
+  /**
+   * O remetente da IA, em SUBDOMÍNIO DEDICADO. A persona nunca escreve do domínio
+   * principal: volume de máquina e e-mail escrito à mão não podem dividir
+   * reputação, porque quando um queima o outro cai junto.
+   */
+  RESEND_REMETENTE_IA: z.string().optional(),
+
+  /** A conta de WhatsApp do plantão interno. Ausente, vale `tipo = 'plantao'`. */
+  PLANTAO_WHATSAPP_CONTA_ID: z.string().uuid().optional(),
+
+  /** Base pública da web. Usada para montar o link de descadastro. */
+  APP_BASE_URL: z.string().url().optional(),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 })
 

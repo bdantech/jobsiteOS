@@ -2,6 +2,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 import { adminModule } from './modules/admin.js'
 import { antecipacaoModule } from './modules/antecipacao.js'
 import { comercialModule } from './modules/comercial.js'
+import { comunicacaoModule } from './modules/comunicacao.js'
 import { creditoModule } from './modules/credito.js'
 import { empresasModule } from './modules/empresas.js'
 import { juridicoModule } from './modules/juridico.js'
@@ -37,6 +38,10 @@ export const MODULES: readonly AppModule[] = [
   // acha a empresa, Antecipação encontra a nota, Crédito diz quanto ela sustenta,
   // Comercial vende, e o Jurídico cobra o que não foi pago.
   juridicoModule,
+  // Comunicação fecha Operações do lado do relacionamento: os cinco funis
+  // encontram a mesma pessoa aqui. Depois do Jurídico porque é transversal a
+  // todos eles — a thread é por pessoa, não por card.
+  comunicacaoModule,
   empresasModule,
   adminModule,
   notificacoesModule,

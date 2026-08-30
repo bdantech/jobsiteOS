@@ -2,7 +2,22 @@
 
 import type { ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRightLeft, Building2, History, MessageSquare } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  BellOff,
+  Bot,
+  Building2,
+  History,
+  Link2,
+  Link2Off,
+  MessageCircle,
+  MessageSquare,
+  PhoneOutgoing,
+  Send,
+  ShieldAlert,
+  UserPlus,
+} from 'lucide-react'
 import { EVENTO_LABELS } from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,6 +30,21 @@ const ICONES: Record<string, ComponentType<{ className?: string }>> = {
   'empresa.criada': Building2,
   'estagio.alterado': ArrowRightLeft,
   'nota.criada': MessageSquare,
+  // Comunicação (05A §9): toda troca com a empresa cai na timeline, e é aqui que
+  // as conversas dos cinco funis se encontram. Entrada e saída têm ícones
+  // diferentes de propósito — "eles falaram" e "nós falamos" são notícias
+  // distintas para quem lê a ficha de relance.
+  'comunicacao.enviada': Send,
+  'comunicacao.recebida': MessageCircle,
+  'comunicacao.falhou': AlertTriangle,
+  'toque.manual': PhoneOutgoing,
+  'conversa.nao_vinculada': Link2Off,
+  'conversa.vinculada': Link2,
+  'contato.indicado': UserPlus,
+  'agente.decidiu': Bot,
+  'agente.escalou': ShieldAlert,
+  'agente.executou': Bot,
+  'optout.registrado': BellOff,
 }
 
 function TimelineCarregando() {
