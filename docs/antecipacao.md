@@ -55,14 +55,17 @@ cadeia de dependências, não uma preferência:
 Sair da faixa **não** é sair do funil: uma nota que só deixou de casar a regra continua
 `a_prospectar` (a regra pode voltar a casar amanhã). Quem sai do funil é quem expirou.
 
-## O modo sombra, e o que falta para ligar os envios
+## A régua gera; quem aprova é gente
 
-Ligar um canal em `/antecipacao/disparos` **não liga envio**. Liga a *geração* da fila:
+Ligar um canal em `/comunicacao/disparos` **não liga envio**. Liga a *geração* da fila:
 o job produz a mensagem exata que sairia, com o destinatário que seria escolhido, e a
-deixa em `mensagens_outbox` com `status = 'pendente_envio'`. **Nada sai neste prompt.**
+deixa em `mensagens_outbox` com `status = 'pendente_envio'`.
 
-É de propósito que a validação venha antes do canal: ligar canais primeiro e conferir
-depois é como se queima uma base de contatos.
+O transporte existe desde o Prompt 05A, mas `pendente_envio` continua parado: alguém
+aprova na Outbox (`app_aprovar_mensagem`) e só então o worker de envio pega a linha.
+É de propósito que a validação venha antes do canal — ligar canais primeiro e conferir
+depois é como se queima uma base de contatos. O que mudou foi existir o passo seguinte,
+não a fila deixar de ser revisada.
 
 Três portas antes de gerar, cada uma por um motivo diferente:
 
@@ -72,12 +75,12 @@ Três portas antes de gerar, cada uma por um motivo diferente:
 | Cooldown | Protege a relação — e conta **toque manual** do vendedor, para a régua não atropelar quem acabou de ligar |
 | Contato | Sem canal válido não há mensagem. O descarte com motivo `sem_contato` é insumo direto para um lote de contatos no Radar |
 
-**Para ligar os envios (Prompt 05) falta:** o transporte de e-mail (Resend já está nas
-deps do web), o cliente do provedor de WhatsApp lendo o token do Vault, o passo de
-`aprovada` → `enviada` com retry e registro de falha, warmup por número, e o tratamento
-de **resposta** (que é o que transforma a outbox num inbox). A tabela, o agrupamento, a
-escolha de destinatário, o cooldown e o round-robin entre contas **já existem** — o que
-falta é o transporte, não a régua.
+**O transporte chegou no Prompt 05A** — Resend, Wasender e Gmail, `aprovada` → `enviada`
+com retry, warmup por número e o tratamento de resposta que transformou a outbox num
+inbox. Veja `docs/comunicacao.md`. Desta casa continuam sendo o agrupamento por
+fornecedor, a escolha de destinatário, o cooldown e a régua de faixas; o cooldown, aliás,
+passou a ler o **ledger** (`comunicacoes`) em vez da própria outbox, porque agora existe
+mensagem que saiu sem ter nascido aqui.
 
 ## Supressão: soft vs. eterna
 
@@ -782,8 +785,9 @@ e é **ignorada** no aplicar, não zerada.
   por sacado, sacados a prospectar, **fornecedores a prospectar** (+ a sub-tela dos
   **descartados**, `prospectar-fornecedores/sem-interesse`), **antecipações + fila
   de revisão**, métricas por
-  faixa, regras de faixa, disparos, Outbox, contas WhatsApp, settings (com a calibração
-  da carteira no topo).
+  faixa, regras de faixa e settings (com a calibração da carteira no topo). Disparos,
+  Outbox e contas de WhatsApp **mudaram para o menu da Comunicação** — a régua continua
+  desta casa, o lugar de olhar para ela é que não era aqui.
 - **Mobile** (`apps/mobile/app/(tabs)/antecipacao/` + `src/features/antecipacao/`):
   funil (tela principal), detalhe do fornecedor, por sacado, a prospectar.
 
@@ -953,8 +957,9 @@ histórico do fornecedor, não interrupção.
   com as contas de API cadastradas) com mensagem pré-preenchida do template da faixa, e
   `mailto:`. Cada uso registra `toque.manual` — e é esse evento que o cooldown da outbox
   lê. O registro **não bloqueia** a ação: discar é o que o usuário pediu.
-- Editor de regras, Outbox, disparos, contas de WhatsApp e settings são `webOnly` e
-  **não** estão declarados no stack mobile.
+- Editor de regras e settings são `webOnly` e **não** estão declarados no stack mobile.
+  Outbox, disparos e contas de WhatsApp também são web-only, e desde o 05A vivem no menu
+  da Comunicação.
 
 ## Limitações conhecidas
 

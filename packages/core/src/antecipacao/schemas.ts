@@ -322,7 +322,36 @@ export const salvarWhatsappContaSchema = z.object({
   token: z.string().trim().min(8).max(500).optional(),
   usuario_responsavel: z.string().uuid().optional().nullable(),
   ativo: z.boolean().default(true),
+  /**
+   * As cinco abaixo decidem o COMPORTAMENTO do canal (05A §1.3 e §3.1) e por
+   * isso são opcionais aqui: a RPC trata chave ausente como "mantém o que está",
+   * o que permite salvar só a identidade da conta sem reescrever a operação
+   * dela. Os limites repetem os CHECKs da tabela de propósito — o erro tem de
+   * chegar como frase na tela, não como texto de constraint.
+   */
+  tipo: z.enum(['relacionamento', 'ia', 'plantao']).optional(),
+  mensagens_por_dia: z.number().int().min(0).max(2000).optional(),
+  /**
+   * `null` explícito LIMPA o warmup e devolve a conta ao teto cheio. É por isso
+   * que o campo é nullable e não só optional: são duas intenções diferentes, e
+   * confundi-las é a diferença entre "não mexi" e "ligue tudo agora".
+   */
+  warmup_iniciado_em: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use uma data no formato AAAA-MM-DD.')
+    .optional()
+    .nullable(),
+  intervalo_min_seg: z.number().int().min(0).max(3600).optional(),
+  intervalo_max_seg: z.number().int().min(0).max(7200).optional(),
 })
+  .refine(
+    (v) =>
+      v.intervalo_min_seg === undefined ||
+      v.intervalo_max_seg === undefined ||
+      v.intervalo_min_seg <= v.intervalo_max_seg,
+    { message: 'O intervalo mínimo não pode ser maior que o máximo.', path: ['intervalo_min_seg'] },
+  )
 export type SalvarWhatsappContaInput = z.infer<typeof salvarWhatsappContaSchema>
 
 export const descartarMensagemSchema = z.object({

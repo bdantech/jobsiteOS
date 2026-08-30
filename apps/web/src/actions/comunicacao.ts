@@ -89,7 +89,7 @@ export async function aprovarMensagensAction(
   try {
     const linhas = await aprovarMensagens(supabase, ids)
     void dispararEnviarFilaComunicacao().catch(() => undefined)
-    revalidatePath('/antecipacao/outbox')
+    revalidatePath('/comunicacao/outbox')
     revalidatePath(ROTA)
     return { ok: true, data: { aprovadas: Array.isArray(linhas) ? linhas.length : 0 } }
   } catch (e) {

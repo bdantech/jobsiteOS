@@ -209,8 +209,8 @@ export async function salvarFaixaDisparoAction(
     // A régua mudou: regenera a fila-sombra para que a tela de Outbox mostre o
     // que a régua NOVA produziria, não o que a antiga produziu.
     await dispararOutbox()
-    revalidatePath('/antecipacao/disparos')
-    revalidatePath('/antecipacao/outbox')
+    revalidatePath('/comunicacao/disparos')
+    revalidatePath('/comunicacao/outbox')
     return { ok: true, data: cfg }
   } catch (e) {
     return falhaDe(e)
@@ -224,7 +224,7 @@ export async function salvarWhatsappContaAction(
   if (erro) return erro
   try {
     const conta = await salvarWhatsappConta(supabase, input)
-    revalidatePath('/antecipacao/whatsapp')
+    revalidatePath('/comunicacao/whatsapp')
     return { ok: true, data: conta }
   } catch (e) {
     return falhaDe(e)
@@ -238,7 +238,7 @@ export async function descartarMensagemAction(
   if (erro) return erro
   try {
     const msg = await descartarMensagem(supabase, input)
-    revalidatePath('/antecipacao/outbox')
+    revalidatePath('/comunicacao/outbox')
     return { ok: true, data: msg }
   } catch (e) {
     return falhaDe(e)

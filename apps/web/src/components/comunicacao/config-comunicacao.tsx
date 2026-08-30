@@ -2,16 +2,11 @@
 
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, Mail, MessageCircle, Power, ShieldAlert } from 'lucide-react'
-import {
-  CONFIG_COMUNICACAO_PADRAO,
-  TIPO_CONTA_DESCRICOES,
-  TIPO_CONTA_LABELS,
-  type ConfigComunicacao,
-  type TipoContaWhatsapp,
-} from '@jobsiteos/core'
+import { CONFIG_COMUNICACAO_PADRAO, type ConfigComunicacao } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -165,6 +160,11 @@ export function ConfigComunicacaoTela({ ehAdmin }: { ehAdmin: boolean }) {
       </Card>
 
       {/* ─── Contas de WhatsApp ──────────────────────────────────────────── */}
+      {/*
+        Só o resumo e o link. A lista completa (e a edição) vive na aba Contas
+        WhatsApp desde que ela virou editável — duas listas da mesma coisa em
+        telas diferentes é como se descobre tarde que uma delas estava mentindo.
+      */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -177,50 +177,17 @@ export function ConfigComunicacaoTela({ ehAdmin }: { ehAdmin: boolean }) {
             por esta tela.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {(contas.data ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma conta cadastrada. O cadastro é feito em Antecipação → Configurações.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {(contas.data ?? []).map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {c.apelido} <span className="text-muted-foreground">{c.numero}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {TIPO_CONTA_DESCRICOES[c.tipo as TipoContaWhatsapp] ?? c.tipo}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <Badge variant="outline" className="h-5 text-[10px]">
-                      {TIPO_CONTA_LABELS[c.tipo as TipoContaWhatsapp] ?? c.tipo}
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      até {c.mensagens_por_dia}/dia · {c.intervalo_min_seg}–{c.intervalo_max_seg}s
-                    </span>
-                    {c.warmup_iniciado_em ? (
-                      <Badge variant="secondary" className="h-5 text-[10px]">
-                        em warmup
-                      </Badge>
-                    ) : null}
-                    {!c.token_definido_em ? (
-                      <Badge variant="destructive" className="h-5 text-[10px]">
-                        sem token
-                      </Badge>
-                    ) : null}
-                    {!c.ativo ? (
-                      <Badge variant="secondary" className="h-5 text-[10px]">
-                        inativa
-                      </Badge>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            {contas.isPending
+              ? 'Carregando…'
+              : `${(contas.data ?? []).length} conta(s) cadastrada(s) · ${
+                  (contas.data ?? []).filter((c) => c.tipo === 'ia' && c.ativo).length
+                } de IA ativa(s)`}
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/comunicacao/whatsapp">Gerenciar contas</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

@@ -7,10 +7,7 @@ import {
   ChartPie,
   Factory,
   HandCoins,
-  Inbox,
   KanbanSquare,
-  MessageCircle,
-  Send,
   Settings,
   SlidersHorizontal,
   Sparkles,
@@ -21,9 +18,9 @@ import { cn } from '@/lib/utils'
  * Navegação interna do módulo. O registry dá o item de sidebar de primeiro nível;
  * este layout liga as telas.
  *
- * O que é admin-only aqui é o que mexe na RÉGUA (faixas, disparos, contas,
- * settings): mudar uma regra de faixa reclassifica o funil de todo mundo. Ver o
- * funil, os sacados e a outbox é para todo o time.
+ * O que é admin-only aqui é o que mexe na RÉGUA (faixas, settings): mudar uma
+ * regra de faixa reclassifica o funil de todo mundo. Ver o funil e os sacados é
+ * para todo o time.
  */
 
 interface ItemNav {
@@ -43,9 +40,8 @@ const ITENS: readonly ItemNav[] = [
   { href: '/antecipacao/antecipacoes', label: 'Antecipações', icon: HandCoins },
   { href: '/antecipacao/metricas', label: 'Métricas', icon: ChartPie },
   { href: '/antecipacao/faixas', label: 'Regras de Faixa', icon: SlidersHorizontal, somenteAdmin: true },
-  { href: '/antecipacao/disparos', label: 'Disparos', icon: Send, somenteAdmin: true },
-  { href: '/antecipacao/outbox', label: 'Outbox', icon: Inbox },
-  { href: '/antecipacao/whatsapp', label: 'Contas WhatsApp', icon: MessageCircle, somenteAdmin: true },
+  // Disparos, Outbox e Contas WhatsApp mudaram para o menu da Comunicação. A
+  // régua continua sendo desta casa — o que mudou é onde se olha para ela.
   { href: '/antecipacao/config', label: 'Configurações', icon: Settings, somenteAdmin: true },
 ]
 
