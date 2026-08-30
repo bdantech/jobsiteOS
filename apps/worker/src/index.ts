@@ -83,6 +83,10 @@ import {
   dispararPlantao,
   dispararAgenteDecidir,
   dispararAgenteAgendados,
+  dispararCampanhaSimular,
+  dispararCampanhasExecutar,
+  dispararCampanhasSequencia,
+  dispararCampanhasMetricas,
   statusJob,
   JobEmExecucaoError,
 } from './jobs/index.js'
@@ -1087,6 +1091,49 @@ app.post('/jobs/agente/executar-agendados', (req: Request, res: Response, next: 
   try {
     const { limite } = limiteSchema.parse(req.body ?? {})
     res.status(202).json({ job_id: dispararAgenteAgendados(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Campanhas (05B) ────────────────────────────────────────────────────────
+
+const campanhaIdSchema = z.object({ campanha_id: z.string().uuid() })
+
+/*
+ * A simulação é o único job de campanha que recebe um id: os outros três são
+ * varreduras. É também o único que alguém está esperando na tela — e mesmo assim
+ * ele devolve 202 e um job id, porque simular 5 mil empresas leva mais que o
+ * timeout de uma requisição.
+ */
+app.post('/jobs/campanhas/simular', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { campanha_id } = campanhaIdSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararCampanhaSimular(campanha_id), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/campanhas/executar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCampanhasExecutar(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/campanhas/avancar-sequencia', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCampanhasSequencia(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/campanhas/metricas', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCampanhasMetricas(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -866,3 +866,27 @@ export async function repassarWebhookComunicacao(
 ): Promise<DispararJobResultado> {
   return postar(`/webhooks/${provedor}`, corpo, `webhook-${provedor}`)
 }
+
+// ─── Campanhas (05B) ────────────────────────────────────────────────────────
+
+/**
+ * A simulação é disparada por uma PESSOA que está esperando na tela, mas volta
+ * 202 mesmo assim: montar o público de cinco mil empresas passa do timeout de
+ * uma requisição. A tela faz polling na campanha até `simulada_em` mudar.
+ */
+export async function dispararSimularCampanha(campanhaId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/campanhas/simular', { campanha_id: campanhaId }, 'campanhas-simular')
+}
+
+/** Materializa, enfileira a leva do dia e conclui o que acabou. */
+export async function dispararExecutarCampanhas(): Promise<DispararJobResultado> {
+  return postar('/jobs/campanhas/executar', {}, 'campanhas-executar')
+}
+
+export async function dispararSequenciaCampanhas(): Promise<DispararJobResultado> {
+  return postar('/jobs/campanhas/avancar-sequencia', {}, 'campanhas-sequencia')
+}
+
+export async function dispararMetricasCampanhas(): Promise<DispararJobResultado> {
+  return postar('/jobs/campanhas/metricas', {}, 'campanhas-metricas')
+}

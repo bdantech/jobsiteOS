@@ -1,11 +1,13 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
   Mail,
+  Megaphone,
   MessageCircle,
   Phone,
   Plus,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buscarContatosEmCampanha } from '@/components/campanhas/queries'
 import { BotaoDeToque } from '@/components/comunicacao/botao-toque'
 import { Compositor } from '@/components/comunicacao/compositor'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -225,6 +228,27 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
     enabled: empresaId !== null,
   })
 
+  /*
+   * "Esta pessoa está em campanha AGORA?" (05B §8).
+   *
+   * Existe para responder antes de o telefonema acontecer: o clássico é o
+   * vendedor ligar sem saber que a pessoa recebeu um disparo nosso hoje de
+   * manhã. A view só traz campanhas VIVAS — de campanha concluída há dois meses
+   * o badge seria ruído.
+   */
+  const emCampanha = useQuery({
+    queryKey: ['campanhas', 'contatos-da-empresa', empresaId ?? 'sem-empresa'],
+    queryFn: () => buscarContatosEmCampanha(empresaId as string),
+    enabled: empresaId !== null,
+    staleTime: 60_000,
+  })
+
+  const campanhaPorContato = new Map(
+    (emCampanha.data ?? [])
+      .filter((x) => x.contato_id !== null)
+      .map((x) => [x.contato_id as string, x]),
+  )
+
   async function alternar(id: string, atual: boolean) {
     setMarcando(id)
     const r = await definirPontoFocalAction({ id, ponto_focal: !atual })
@@ -358,6 +382,17 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
                         <Star className="h-3 w-3 fill-current" aria-hidden />
                         Ponto focal
                       </Badge>
+                    )}
+                    {campanhaPorContato.has(c.id) && (
+                      <Link
+                        href={`/comercial/campanhas/${campanhaPorContato.get(c.id)!.campanha_id}`}
+                        title="Recebeu (ou vai receber) um disparo desta campanha"
+                      >
+                        <Badge className="gap-1 bg-sky-100 text-sky-900 hover:bg-sky-200 dark:bg-sky-500/20 dark:text-sky-200">
+                          <Megaphone className="h-3 w-3" aria-hidden />
+                          {campanhaPorContato.get(c.id)!.campanha_nome}
+                        </Badge>
+                      </Link>
                     )}
                     {c.senioridade && <Badge variant="outline">{c.senioridade}</Badge>}
                     {c.origem === 'manual' && (

@@ -132,6 +132,18 @@
     {
       "path": "/api/cron/agente-agendados",
       "schedule": "45 * * * *"
+    },
+    {
+      "path": "/api/cron/campanhas-executar",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/campanhas-sequencia",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/campanhas-metricas",
+      "schedule": "25,55 * * * *"
     }
   ]
 }

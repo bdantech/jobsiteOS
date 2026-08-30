@@ -207,6 +207,14 @@ export const EVENTO_TIPOS = {
   CONVERSA_NAO_VINCULADA: 'conversa.nao_vinculada',
   CONVERSA_VINCULADA: 'conversa.vinculada',
   CONTATO_INDICADO: 'contato.indicado',
+  // ─── Campanhas (05B) ──────────────────────────────────────────────────────
+  CAMPANHA_APROVADA: 'campanha.aprovada',
+  CAMPANHA_INICIADA: 'campanha.iniciada',
+  CAMPANHA_PAUSADA: 'campanha.pausada',
+  CAMPANHA_CONCLUIDA: 'campanha.concluida',
+  CAMPANHA_DESTINATARIO_RESPONDEU: 'campanha.destinatario_respondeu',
+  CAMPANHA_ALERTA_SAUDE: 'campanha.alerta_saude',
+
   AGENTE_DECIDIU: 'agente.decidiu',
   AGENTE_ESCALOU: 'agente.escalou',
   AGENTE_EXECUTOU: 'agente.executou',

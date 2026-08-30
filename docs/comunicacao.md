@@ -145,6 +145,26 @@ impossível de explicar a quem vê a conta parar.
 O intervalo entre dois envios da mesma conta é **aleatório** (25–70s por padrão). Uma
 cadência perfeitamente regular é a assinatura mais óbvia de robô que existe.
 
+Os quatro campos ficam em **Comunicação → Contas WhatsApp**. A 0144 acrescentou as colunas
+e não estendeu junto nem o grant nem a escrita — o efeito só apareceu depois: a 0052 tinha
+trocado o `grant select` de TABELA por um coluna a coluna (para esconder `token_secret_id`),
+e um grant coluna a coluna **não alcança colunas futuras**. As cinco novas nasceram
+ilegíveis para `authenticated` e a tela de Configurações quebrava com `permission denied`.
+A 0145 concede as cinco explicitamente — nunca a tabela, que reabriria o ponteiro do Vault —
+e estende `app_salvar_whatsapp_conta` para alcançar a linha inteira.
+
+### As três telas que vieram da Antecipação
+
+Disparos, Outbox e Contas WhatsApp nasceram no menu da Antecipação por ordem de chegada, não
+por assunto. Desde o 05A vivem aqui: a régua, a fila que ela produz e os números que a enviam
+são comunicação. Os componentes continuam em `components/antecipacao/` — os dados são faixas,
+e faixa é conceito de lá; o que mudou foi o menu, não o dono.
+
+O select de `whatsapp_contas`, `mensagens_outbox` e `faixa_disparos` passou a aceitar
+`comunicacao` **ou** `antecipacao` (0145). Não alarga exposição de fato: quem tem Comunicação
+já lê o ledger inteiro, e a outbox é um subconjunto do que vai virar ledger. Sem isso a tela
+apareceria no menu e viria vazia para quem tem exatamente o módulo em que ela agora está.
+
 ### O plantão interno é transporte separado
 
 Alerta crítico (`orcamento.estourado`, `mercado.ingestao_falhou`, …) sai por conta própria,
@@ -326,11 +346,28 @@ estado duplicado e mente quando o envio falha.
   do grant coluna a coluna (mesma correção da 0052: revogar SELECT de coluna depois de um
   grant de TABELA não corta nada).
 
+## O que o 05B acrescentou aqui
+
+Campanhas (05B) não trouxeram transporte novo: elas escrevem em `mensagens_outbox` com
+`origem = 'campanha'` e o job de envio deste módulo continua sendo quem envia. Três coisas
+mudaram deste lado:
+
+- `mensagens_outbox` ganhou `campanha_id` e `campanha_destinatario_id`, e a ordenação da fila
+  passou a ser `campanha_id NULLS FIRST` — o envio individual tem prioridade sobre disparo em
+  massa, e isso é um ORDER BY em vez de um acordo entre dois processos.
+- `comunicacoes` ganhou `campanha_id`, que é como o painel agrupa. E um trigger de INSERT:
+  toda mensagem de ENTRADA marca o destinatário de campanha correspondente como `respondida`.
+- Campanha conta como **automática** no portão, então o kill switch alcança um disparo em
+  massa — que é exatamente para o que ele existe.
+
+Detalhes em [`campanhas.md`](campanhas.md).
+
 ## Como ligar
 
-1. **WhatsApp** — cadastre as contas em Antecipação → Configurações (o token vai para o
+1. **WhatsApp** — cadastre as contas em Comunicação → Contas WhatsApp (o token vai para o
    Vault) e defina o `tipo` de cada uma: `relacionamento`, `ia` ou `plantao`. O número da IA
-   **nunca** é o de um humano. Ponha `WASENDER_BASE_URL` e `WASENDER_WEBHOOK_SECRET` no
+   **nunca** é o de um humano — enquanto não houver uma conta `ia` ativa com token, a persona
+   simplesmente não envia, e a tela avisa. Ponha `WASENDER_BASE_URL` e `WASENDER_WEBHOOK_SECRET` no
    worker e na web, e cadastre `https://<dominio>/api/webhooks/wasender?secret=<segredo>` no
    painel do provedor.
 2. **Gmail** — crie o app OAuth no Google Cloud com `redirect_uri`
@@ -341,7 +378,9 @@ estado duplicado e mente quando o envio falha.
 3. **Resend** — verifique o domínio e o subdomínio de automação, ponha `RESEND_API_KEY`,
    `RESEND_REMETENTE` e `RESEND_REMETENTE_IA`, e cadastre o webhook em
    `https://<dominio>/api/webhooks/resend`.
-4. **Warmup** — preencha `warmup_iniciado_em` em cada número novo. Sem isso ele já nasce com
-   o teto cheio, e o teto cheio no primeiro dia é como se bane um número.
+4. **Warmup** — deixe "Em warmup" ligado em cada número novo (é o padrão da tela). Sem
+   `warmup_iniciado_em` o número já nasce com o teto cheio, e o teto cheio no primeiro dia é
+   como se bane um número. Desligar a chave limpa a data e devolve o teto — é uma decisão, e
+   por isso a RPC distingue "não mandei o campo" de "mandei `null`".
 5. **Kill switch** — está em Comunicação → Configurações, primeiro card. É a única coisa
    naquela tela que alguém aperta com pressa.

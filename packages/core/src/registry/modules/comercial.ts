@@ -20,6 +20,7 @@ import {
 } from '../../comercial/index.js'
 import { moverLeadSdr, moverVenda } from '../../comercial/mutations.js'
 import type { AppModule, ToolContext } from '../types.js'
+import { campanhasTools } from './campanhas-tools.js'
 import { fornecedoresTools } from './fornecedores-tools.js'
 
 /**
@@ -242,6 +243,10 @@ export const comercialModule: AppModule = {
     // Funil de cadastro de fornecedores (04l). Em arquivo próprio: é um domínio
     // inteiro que só divide o módulo com a comissão por conveniência de menu.
     ...fornecedoresTools,
+    // Campanhas (05B), pelo mesmo motivo. Note que não há tool de APROVAR: a
+    // aprovação existe para ter um dono humano com nome, e uma tool que
+    // aprovasse tornaria `aprovada_por` uma ficção.
+    ...campanhasTools,
   ],
 }
 

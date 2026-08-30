@@ -85,10 +85,11 @@ interface LinhaFila {
   tentativas: number
   agendada_para: string | null
   fornecedor_empresa_id: string | null
+  campanha_id: string | null
 }
 
 const COLUNAS =
-  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, fornecedor_empresa_id'
+  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, fornecedor_empresa_id, campanha_id'
 
 export async function enviarFila(limite = 100): Promise<ResultadoEnvioFila> {
   const cfg = await lerConfigComunicacao(true)
@@ -99,6 +100,15 @@ export async function enviarFila(limite = 100): Promise<ResultadoEnvioFila> {
     .select(COLUNAS)
     .eq('status', 'aprovada')
     .or(`agendada_para.is.null,agendada_para.lte.${agora.toISOString()}`)
+    /*
+     * O INDIVIDUAL TEM PRIORIDADE (05B §7).
+     *
+     * `campanha_id` nulo primeiro: o vendedor que apertou enviar às 11h não pode
+     * ficar atrás de duzentos disparos. Ordenar assim é o que torna a promessa
+     * verdadeira sem precisar de duas filas — e duas filas seriam dois lugares
+     * contando o mesmo teto de número, que é como o warmup vira ficção.
+     */
+    .order('campanha_id', { ascending: true, nullsFirst: true })
     .order('criada_em', { ascending: true })
     .limit(limite)
   if (error) {
@@ -182,7 +192,10 @@ async function processar(
   const fatos: FatosDoEnvio = {
     canal,
     tipoConta: (conta?.tipo ?? 'relacionamento') as FatosDoEnvio['tipoConta'],
-    automatica: linha.origem === 'agente' || linha.por_ia,
+    // Campanha conta como automática: o kill switch do 05A precisa alcançá-la.
+    // Ele existe justamente para o momento em que alguém percebe que algo está
+    // saindo errado em massa.
+    automatica: linha.origem === 'agente' || linha.origem === 'campanha' || linha.por_ia,
     suprimido: await estaSuprimido(canal, linha.destinatario, empresaId),
     baseLegal: (contato?.base_legal ?? null) as BaseLegal | null,
     enviadasNaThreadHoje: conversaId ? await enviadasNaThreadHoje(conversaId, agora) : 0,
@@ -288,6 +301,7 @@ async function processar(
     templateId: linha.template_id,
     funil: linha.funil,
     funilCardId: linha.funil_card_id,
+    campanhaId: linha.campanha_id,
     enviadoEm: agora,
   })
 
@@ -301,6 +315,10 @@ async function processar(
     .update({
       status: 'enviada',
       comunicacao_id: comunicacaoId,
+      // A conversa que este envio abriu (ou continuou). Sem isto a linha da fila
+      // esquecia em qual thread ela caiu, e o destinatário de campanha ficava sem
+      // saber para onde olhar quando a resposta chegasse.
+      conversa_id: conversaId,
       corpo: null,
       assunto: null,
       erro: null,

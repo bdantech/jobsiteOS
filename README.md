@@ -388,14 +388,15 @@ fonte `onepay_nf`, so the Ingestões screen and its re-run button work with no n
 `raw_xml` is **always** stored — it is the seed of the future Pricing module. A parse failure logs and
 carries on (`xml_parse_erro`); value and due date also come from the endpoint.
 
-### Shadow mode: nothing is sent
+### The cadence generates; a person approves
 
-Enabling a channel in `/antecipacao/disparos` does **not** enable sending. It enables *generation*: the
+Enabling a channel in `/comunicacao/disparos` does **not** enable sending. It enables *generation*: the
 job writes the exact message that would go out, to the recipient it would pick, into `mensagens_outbox`
-as `pendente_envio`. Validating the cadence before wiring the channels is the whole point — wiring
-first and checking later is how a contact base gets burned. What Prompt 05 still owes is the
-**transport**, not the cadence: grouping, recipient hierarchy, cooldown and account round-robin already
-exist.
+as `pendente_envio`. Transport shipped in Prompt 05A, but that row still sits there until someone
+approves it in the Outbox (`app_aprovar_mensagem`) — only then does the sender job pick it up.
+Validating the cadence before wiring the channels is the whole point: wiring first and checking later
+is how a contact base gets burned. Grouping, recipient hierarchy, cooldown and account round-robin are
+the Antecipação side; the transport is in `docs/comunicacao.md`.
 
 Discards with reason `sem_contato` are not failures, they are input: each is a supplier in a faixa that
 nobody can reach, and the list of them is exactly the filter for a Radar contacts batch.
@@ -708,6 +709,42 @@ Tokens **sempre no Vault** — o de envio de cada número e o refresh de cada Gm
 de cada webhook é **outro** segredo: reusar o de saída na entrada o publicaria num header que
 qualquer um pode nos fazer comparar batendo na nossa URL, e o de saída é o que manda mensagem
 pelo nosso número. Os dois falham fechados.
+
+## Campanhas
+
+Disparo em massa a partir de segmento, win-back e lotes operacionais (Prompt 05B). Detalhes em
+[docs/campanhas.md](docs/campanhas.md); aqui o que muda o comportamento do resto da casa.
+
+**Campanha não tem transporte próprio.** Ela materializa destinatários e empurra para
+`mensagens_outbox` — a mesma fila do compositor, da régua e do Agente. Três consequências, e as
+três são o motivo do desenho:
+
+- **Um teto por número.** Com uma segunda fila, os dois remetentes contariam o mesmo número
+  separadamente: cada um respeitando metade do limite, os dois juntos estourando. O warmup
+  viraria ficção.
+- **O individual tem prioridade**, e isso é um `ORDER BY campanha_id NULLS FIRST` — não um
+  acordo entre dois processos. O vendedor que aperta enviar às 11h não fica atrás de duzentos
+  disparos.
+- **O portão roda no envio**, não só na simulação, porque o envio é o mesmo código de sempre.
+  Quem virou suprimido no meio do caminho é barrado sem que campanha saiba que supressão existe.
+
+**Resposta encerra a campanha**, e o gatilho é o LEDGER. Um trigger em `comunicacoes` marca o
+destinatário como `respondida` e o Agente assume dali em diante. Estar no ledger e não no
+webhook é deliberado: o Gmail precisaria da sua cópia da regra e o Resend do dele, e três
+lugares para a mesma regra é a receita para um deles ficar desatualizado.
+
+**A simulação é obrigatória e vence.** Sem dry-run não há aprovação (o RPC recusa), e qualquer
+edição zera a simulação anterior — aprovar sobre um retrato antigo é aprovar outra campanha. O
+público congela na materialização pelo mesmo motivo.
+
+**Não existe tool de aprovar.** `campanhas.criar` cria sempre em RASCUNHO; `campanhas.pausar`
+pausa. Aprovar é o passo que transforma um rascunho em mil mensagens saindo, e ele existe para
+ter um dono humano com nome — `campanhas.aprovada_por` é uma coluna, não um log, e uma tool que
+aprovasse tornaria essa coluna uma ficção.
+
+**A atribuição do funil é por JANELA**: a empresa recebeu e depois avançou. Correlação temporal,
+não prova de causa. Sem grupo de controle não dá para afirmar mais que isso, e a tela diz isso
+em voz alta em vez de mostrar um número que parece maior do que é.
 
 ## Reportar Bugs & Melhorias
 

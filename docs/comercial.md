@@ -554,6 +554,47 @@ falou com a empresa, não que ela não presta (que é o que um estágio "desqual
 dizia). Expirado **não tem carência**: a empresa continua boa, quem não trabalhou foi a
 gente.
 
+## A terceira porta: pôr no funil à mão (0146)
+
+`sdr_leads.origem` aceitava `'manual'` desde a 0091 e nada nunca escrevia esse valor. As
+portas eram a distribuição semanal e o formulário de inbound; quem olhava uma empresa e
+sabia que ela valia uma reunião só podia esperar a distribuição da semana escolhê-la.
+
+O botão fica na seção **Comercial** da ficha da empresa e chama `app_criar_lead_sdr`. As
+regras são **as mesmas** da distribuição automática, de propósito: uma porta manual mais
+frouxa vira o caminho para furar a fila, e a primeira coisa a quebrar seria a promessa de
+que dois SDRs nunca batem na mesma porta.
+
+| Regra | O que acontece |
+| --- | --- |
+| Cliente ou ex-cliente | **Recusa.** Cliente já tem outra conversa; ex-cliente é win-back, que tem outro dono e outra régua |
+| Lead vivo na empresa | **Recusa**, e devolve o id do lead existente |
+| `sem_fit` dentro da carência | **Passa**, com aviso e data na tela; o evento registra `carencia_ignorada: true` |
+| SDR de destino | Gestor escolhe qualquer um; quem não é gestor só puxa para a própria fila |
+
+Duas coisas que ele deliberadamente **não** faz. Não move `empresas.estagio` de `mercado`
+para `lead` — a distribuição automática também não move, e duas portas para o mesmo funil
+que deixam a empresa em estados diferentes é como o funil começa a mentir. E não carimba
+`ultimo_toque_em`: pôr uma empresa na fila não é ter falado com ela, e carimbar daria a um
+lead intocado sete dias de folga no relógio do SLA. (O inbound carimba `now()` porque lá a
+pessoa realmente escreveu.)
+
+Vindo do Universo, o caminho é o que já existia: **Promover para Empresas** na ficha do
+Explorador e então o botão. A ordem é imposta pelo banco — `sdr_leads.empresa_id` é FK
+para `empresas`, então não há lead sem ficha.
+
+## Campanhas
+
+O menu ganhou **Campanhas** (05B): disparo em massa a partir de segmento, win-back de
+ex-clientes e lotes operacionais. Fica ao lado de Leads porque as duas respondem "de onde vem
+quem chega" — uma é o que entra sozinho, a outra é o que a gente foi buscar.
+
+Visível para o time todo, editável por gestor. Quem não é gestor lê o placar e não vê o botão
+de criar: saber que a conta recebeu um disparo hoje é informação de quem vai ligar amanhã, e é
+por isso que o badge "em campanha X" também aparece na ficha da empresa.
+
+Detalhes em [`campanhas.md`](campanhas.md).
+
 ## Calendário
 
 Eventos dos funis, mais o feed `.ics` por vendedor em `/api/calendario/<token>`.

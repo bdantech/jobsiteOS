@@ -12,7 +12,10 @@ import { ModuleStack } from '@/components/shell/module-stack'
  * (04k) a tornou live: o número muda enquanto a pessoa trabalha, e é justamente esse
  * número que ela quer conferir entre uma reunião e outra — e o CADASTRO DE FORNECEDORES
  * (04l), que é a tela que mais pertence ao celular de todas: o uso real dela é na obra
- * ou no carro, com a ficha de abordagem na mão e o botão de ligar a um toque.
+ * ou no carro, com a ficha de abordagem na mão e o botão de ligar a um toque. E as
+ * CAMPANHAS (05B), das quais o celular ganha exatamente três botões — aprovar, pausar,
+ * retomar: aprovar é a decisão que trava esperando alguém fora do escritório, e pausar
+ * é o que se aperta quando algo parece errado, que quase nunca acontece na mesa.
  *
  * O que continua na web: settings, simulador, reclassificação, o painel de eficácia por
  * fonte e o clique pago de busca de contatos. As cinco exigem comparar tabela ou decidir
@@ -28,6 +31,7 @@ export default function ComercialLayout() {
       <Stack.Screen name="vendas" options={{ title: 'Vendas' }} />
       <Stack.Screen name="comissoes" options={{ title: 'Comissão' }} />
       <Stack.Screen name="fornecedores" options={{ title: 'Fornecedores' }} />
+      <Stack.Screen name="campanhas" options={{ title: 'Campanhas' }} />
     </ModuleStack>
   )
 }

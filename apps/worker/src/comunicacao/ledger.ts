@@ -45,6 +45,8 @@ export interface EscreverNoLedger {
   templateId?: string | null
   funil?: string | null
   funilCardId?: string | null
+  /** A campanha que gerou a mensagem (05B). O painel agrupa por ela. */
+  campanhaId?: string | null
   enviadoEm?: Date | null
   criadoEm?: Date | null
 }
@@ -83,6 +85,7 @@ export async function escreverNoLedger(m: EscreverNoLedger): Promise<string | nu
     template_id: m.templateId ?? null,
     funil: m.funil ?? null,
     funil_card_id: m.funilCardId ?? null,
+    campanha_id: m.campanhaId ?? null,
     enviado_em: m.enviadoEm?.toISOString() ?? null,
     criado_em: m.criadoEm?.toISOString() ?? undefined,
   }

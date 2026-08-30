@@ -96,6 +96,10 @@ import { enviarFila } from './comunicacao/enviar-fila.js'
 import { sincronizarGmail, renovarWatches } from './comunicacao/gmail-sync.js'
 import { lembretesDeReuniao } from './comunicacao/lembretes-reuniao.js'
 import { triarEntradas } from './comunicacao/triagem.js'
+import { avancarSequencias } from './campanhas/avancar-sequencia.js'
+import { executarCampanhas } from './campanhas/executar.js'
+import { varrerSaudeDasCampanhas } from './campanhas/metricas.js'
+import { simularCampanha } from './campanhas/simular.js'
 import { decidirProximosPassos } from './agente/decidir.js'
 import { apurarDesfechos, executarAgendados } from './agente/executar-agendados.js'
 import { plantaoDeEventos } from '../comunicacao/plantao.js'
@@ -176,6 +180,10 @@ export type TipoJob =
   | 'comunicacao-plantao'
   | 'agente-decidir'
   | 'agente-agendados'
+  | 'campanhas-simular'
+  | 'campanhas-executar'
+  | 'campanhas-sequencia'
+  | 'campanhas-metricas'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -1388,4 +1396,33 @@ export function dispararAgenteAgendados(limite?: number): string {
     const desfechos = await apurarDesfechos()
     return { ...passos, desfechos }
   })
+}
+
+/**
+ * ─── OS QUATRO RELÓGIOS DAS CAMPANHAS (05B §9) ──────────────────────────────
+ *
+ *   simular    sob demanda — é a pessoa que pede, e ela está esperando na tela.
+ *   executar   de 15 em 15 minutos. O ritmo do dia é espalhado pelo próprio job
+ *              em horários agendados, então o executor não precisa ser fino: ele
+ *              só precisa acordar antes de a leva anterior acabar.
+ *   sequência  diário — `dias_apos` é medido em dias, e um job de hora em hora
+ *              acordaria 24 vezes para responder "ainda não".
+ *   métricas   de 30 em 30 minutos. É a varredura de saúde para quando NINGUÉM
+ *              está olhando; o painel de quem abre a tela é calculado na hora.
+ */
+
+export function dispararCampanhaSimular(campanhaId: string): string {
+  return dispararAvulso('campanhas-simular', async () => simularCampanha(campanhaId))
+}
+
+export function dispararCampanhasExecutar(): string {
+  return dispararAvulso('campanhas-executar', async () => executarCampanhas())
+}
+
+export function dispararCampanhasSequencia(): string {
+  return dispararAvulso('campanhas-sequencia', async () => avancarSequencias())
+}
+
+export function dispararCampanhasMetricas(): string {
+  return dispararAvulso('campanhas-metricas', async () => varrerSaudeDasCampanhas())
 }

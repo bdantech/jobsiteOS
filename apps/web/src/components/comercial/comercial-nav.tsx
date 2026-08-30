@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, PackageSearch, Settings,
-  ShieldCheck, Sparkles, Target, TrendingDown, Users,
+  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Megaphone, PackageSearch,
+  Settings, ShieldCheck, Sparkles, Target, TrendingDown, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -66,6 +66,11 @@ const ITENS: readonly ItemNav[] = [
   // Leads é do time todo (o SDR precisa ver de onde veio o que chegou na fila dele),
   // mas só o gestor cria formulário — a página resolve isso por dentro.
   { href: '/comercial/leads', label: 'Leads', icon: Sparkles },
+  // Campanhas ao lado de Leads porque as duas respondem "de onde vem quem chega":
+  // uma é o que entra sozinho, a outra é o que a gente foi buscar. Visível para o
+  // time todo — quem não é gestor lê o placar e não vê o botão de criar, e saber
+  // que a conta recebeu um disparo hoje é informação de quem vai ligar amanhã.
+  { href: '/comercial/campanhas', label: 'Campanhas', icon: Megaphone },
   { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true },
   { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },
