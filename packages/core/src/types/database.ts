@@ -1056,6 +1056,305 @@ export type Database = {
           },
         ]
       }
+      campanha_destinatarios: {
+        Row: {
+          agendada_para: string | null
+          atualizado_em: string
+          campanha_id: string
+          comunicacao_id: string | null
+          contato_id: string | null
+          conversa_id: string | null
+          criado_em: string
+          empresa_id: string | null
+          enviada_em: string | null
+          erro: string | null
+          id: string
+          motivo_exclusao: string | null
+          passo: number
+          respondida_em: string | null
+          status: string
+          variante_id: string | null
+        }
+        Insert: {
+          agendada_para?: string | null
+          atualizado_em?: string
+          campanha_id: string
+          comunicacao_id?: string | null
+          contato_id?: string | null
+          conversa_id?: string | null
+          criado_em?: string
+          empresa_id?: string | null
+          enviada_em?: string | null
+          erro?: string | null
+          id?: string
+          motivo_exclusao?: string | null
+          passo?: number
+          respondida_em?: string | null
+          status?: string
+          variante_id?: string | null
+        }
+        Update: {
+          agendada_para?: string | null
+          atualizado_em?: string
+          campanha_id?: string
+          comunicacao_id?: string | null
+          contato_id?: string | null
+          conversa_id?: string | null
+          criado_em?: string
+          empresa_id?: string | null
+          enviada_em?: string | null
+          erro?: string | null
+          id?: string
+          motivo_exclusao?: string | null
+          passo?: number
+          respondida_em?: string | null
+          status?: string
+          variante_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_lista"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      campanhas: {
+        Row: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        Insert: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          atualizada_em?: string
+          canal: string
+          concluida_em?: string | null
+          contas_remetentes?: string[]
+          criada_em?: string
+          criada_por?: string | null
+          definicao_filtro?: Json | null
+          empresas_manuais?: string[]
+          excluir_contatados_dias?: number
+          excluir_conversa_aberta?: boolean
+          id?: string
+          inicio_em?: string | null
+          modo_agente_ao_responder?: string
+          nome: string
+          objetivo?: string | null
+          origem_publico: string
+          pausa_motivo?: string | null
+          preset?: string | null
+          preset_params?: Json
+          respeitar_janela?: boolean
+          ritmo_por_dia?: number
+          segmento_id?: string | null
+          simulacao?: Json | null
+          simulada_em?: string | null
+          status?: string
+          tipo: string
+          variantes?: Json
+          vendedor_id?: string | null
+        }
+        Update: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          atualizada_em?: string
+          canal?: string
+          concluida_em?: string | null
+          contas_remetentes?: string[]
+          criada_em?: string
+          criada_por?: string | null
+          definicao_filtro?: Json | null
+          empresas_manuais?: string[]
+          excluir_contatados_dias?: number
+          excluir_conversa_aberta?: boolean
+          id?: string
+          inicio_em?: string | null
+          modo_agente_ao_responder?: string
+          nome?: string
+          objetivo?: string | null
+          origem_publico?: string
+          pausa_motivo?: string | null
+          preset?: string | null
+          preset_params?: Json
+          respeitar_janela?: boolean
+          ritmo_por_dia?: number
+          segmento_id?: string | null
+          simulacao?: Json | null
+          simulada_em?: string | null
+          status?: string
+          tipo?: string
+          variantes?: Json
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanhas_aprovada_por_fkey"
+            columns: ["aprovada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_segmento_id_fkey"
+            columns: ["segmento_id"]
+            isOneToOne: false
+            referencedRelation: "segmentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campanhas_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanhas_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certificado_card_eventos: {
         Row: {
           automatico: boolean
@@ -1845,6 +2144,7 @@ export type Database = {
         Row: {
           anexos: Json
           assunto: string | null
+          campanha_id: string | null
           canal: string
           conta_remetente: string | null
           contato_id: string | null
@@ -1874,6 +2174,7 @@ export type Database = {
         Insert: {
           anexos?: Json
           assunto?: string | null
+          campanha_id?: string | null
           canal: string
           conta_remetente?: string | null
           contato_id?: string | null
@@ -1903,6 +2204,7 @@ export type Database = {
         Update: {
           anexos?: Json
           assunto?: string | null
+          campanha_id?: string | null
           canal?: string
           conta_remetente?: string | null
           contato_id?: string | null
@@ -1930,6 +2232,20 @@ export type Database = {
           vendedor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "comunicacoes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comunicacoes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_lista"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "comunicacoes_contato_id_fkey"
             columns: ["contato_id"]
@@ -4263,6 +4579,8 @@ export type Database = {
           agendada_para: string | null
           assunto: string | null
           atualizada_em: string
+          campanha_destinatario_id: string | null
+          campanha_id: string | null
           canal: string
           comunicacao_id: string | null
           conversa_id: string | null
@@ -4298,6 +4616,8 @@ export type Database = {
           agendada_para?: string | null
           assunto?: string | null
           atualizada_em?: string
+          campanha_destinatario_id?: string | null
+          campanha_id?: string | null
           canal: string
           comunicacao_id?: string | null
           conversa_id?: string | null
@@ -4333,6 +4653,8 @@ export type Database = {
           agendada_para?: string | null
           assunto?: string | null
           atualizada_em?: string
+          campanha_destinatario_id?: string | null
+          campanha_id?: string | null
           canal?: string
           comunicacao_id?: string | null
           conversa_id?: string | null
@@ -4364,6 +4686,34 @@ export type Database = {
           whatsapp_conta_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "mensagens_outbox_campanha_destinatario_id_fkey"
+            columns: ["campanha_destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_destinatarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_campanha_destinatario_id_fkey"
+            columns: ["campanha_destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_destinatarios_lista"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_outbox_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_lista"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mensagens_outbox_comunicacao_id_fkey"
             columns: ["comunicacao_id"]
@@ -7686,6 +8036,166 @@ export type Database = {
           },
         ]
       }
+      campanha_destinatarios_lista: {
+        Row: {
+          agendada_para: string | null
+          campanha_id: string | null
+          comunicacao_id: string | null
+          conta_remetente: string | null
+          contato_cargo: string | null
+          contato_email: string | null
+          contato_id: string | null
+          contato_nome: string | null
+          contato_whatsapp: string | null
+          conversa_id: string | null
+          criado_em: string | null
+          empresa_cnpj: string | null
+          empresa_id: string | null
+          empresa_nome: string | null
+          enviada_em: string | null
+          erro: string | null
+          id: string | null
+          motivo_exclusao: string | null
+          passo: number | null
+          respondida_em: string | null
+          status: string | null
+          status_envio: string | null
+          triagem: Json | null
+          variante_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_lista"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      campanhas_lista: {
+        Row: {
+          aprovada_em: string | null
+          aprovada_por_nome: string | null
+          canal: string | null
+          concluida_em: string | null
+          criada_em: string | null
+          criada_por_nome: string | null
+          enviadas: number | null
+          excluidas: number | null
+          falhas: number | null
+          id: string | null
+          inicio_em: string | null
+          nome: string | null
+          objetivo: string | null
+          optouts: number | null
+          origem_publico: string | null
+          pendentes: number | null
+          preset: string | null
+          respondidas: number | null
+          ritmo_por_dia: number | null
+          segmento_id: string | null
+          segmento_nome: string | null
+          status: string | null
+          tipo: string | null
+          total: number | null
+          vendedor_id: string | null
+          vendedor_nome: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanhas_segmento_id_fkey"
+            columns: ["segmento_id"]
+            isOneToOne: false
+            referencedRelation: "segmentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certificado_universo: {
         Row: {
           certificado_status: string | null
@@ -7852,6 +8362,76 @@ export type Database = {
           },
           {
             foreignKeyName: "comunicacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      contatos_em_campanha: {
+        Row: {
+          agendada_para: string | null
+          campanha_id: string | null
+          campanha_nome: string | null
+          canal: string | null
+          contato_id: string | null
+          destinatario_status: string | null
+          empresa_id: string | null
+          enviada_em: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas_lista"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_destinatarios_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "ex_clientes"
@@ -8687,7 +9267,7 @@ export type Database = {
           p_identificador: string
           p_vendedor: string | null
         }
-        Returns: string | null
+        Returns: string
       }
       app__identificador_canonico: {
         Args: { p_canal: string; p_valor: string }
@@ -8811,6 +9391,8 @@ export type Database = {
           agendada_para: string | null
           assunto: string | null
           atualizada_em: string
+          campanha_destinatario_id: string | null
+          campanha_id: string | null
           canal: string
           comunicacao_id: string | null
           conversa_id: string | null
@@ -8893,6 +9475,47 @@ export type Database = {
         Args: { p_ano: number; p_cnpj: string; p_metrica: string }
         Returns: number
       }
+      app_aprovar_campanha: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_aprovar_lote: {
         Args: { p: Json }
         Returns: {
@@ -8927,6 +9550,8 @@ export type Database = {
           agendada_para: string | null
           assunto: string | null
           atualizada_em: string
+          campanha_destinatario_id: string | null
+          campanha_id: string | null
           canal: string
           comunicacao_id: string | null
           conversa_id: string | null
@@ -9106,6 +9731,131 @@ export type Database = {
           uf: string
         }[]
       }
+      app_campanha_definir_status: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_campanha_metricas: { Args: { p: Json }; Returns: Json }
+      app_campanha_pode_gerir: { Args: never; Returns: boolean }
+      app_campanha_registrar_simulacao: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cancelar_campanha: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_cancelar_lote: {
         Args: { p: Json }
         Returns: {
@@ -9190,6 +9940,8 @@ export type Database = {
           agendada_para: string | null
           assunto: string | null
           atualizada_em: string
+          campanha_destinatario_id: string | null
+          campanha_id: string | null
           canal: string
           comunicacao_id: string | null
           conversa_id: string | null
@@ -9357,6 +10109,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_criar_lead_sdr: { Args: { p: Json }; Returns: Json }
       app_criar_lote: {
         Args: { p: Json }
         Returns: {
@@ -9688,6 +10441,8 @@ export type Database = {
           agendada_para: string | null
           assunto: string | null
           atualizada_em: string
+          campanha_destinatario_id: string | null
+          campanha_id: string | null
           canal: string
           comunicacao_id: string | null
           conversa_id: string | null
@@ -10329,6 +11084,47 @@ export type Database = {
       app_mudar_status_competencia: { Args: { p: Json }; Returns: number }
       app_ocultar_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
       app_ocultar_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
+      app_pausar_campanha: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_pedido_apresentacao_enviar: {
         Args: { p: Json }
         Returns: {
@@ -10721,6 +11517,47 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_retomar_campanha: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_reverter_fornecedor_sem_interesse: {
         Args: { p: Json }
         Returns: boolean
@@ -10855,6 +11692,47 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "camada_regras"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_campanha: {
+        Args: { p: Json }
+        Returns: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          atualizada_em: string
+          canal: string
+          concluida_em: string | null
+          contas_remetentes: string[]
+          criada_em: string
+          criada_por: string | null
+          definicao_filtro: Json | null
+          empresas_manuais: string[]
+          excluir_contatados_dias: number
+          excluir_conversa_aberta: boolean
+          id: string
+          inicio_em: string | null
+          modo_agente_ao_responder: string
+          nome: string
+          objetivo: string | null
+          origem_publico: string
+          pausa_motivo: string | null
+          preset: string | null
+          preset_params: Json
+          respeitar_janela: boolean
+          ritmo_por_dia: number
+          segmento_id: string | null
+          simulacao: Json | null
+          simulada_em: string | null
+          status: string
+          tipo: string
+          variantes: Json
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campanhas"
           isOneToOne: true
           isSetofReturn: false
         }

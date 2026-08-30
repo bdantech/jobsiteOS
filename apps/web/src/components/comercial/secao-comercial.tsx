@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Handshake } from 'lucide-react'
+import { Handshake, Target } from 'lucide-react'
 import {
   ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS, GESTAO_OPERACAO_DESCRICOES, GESTAO_OPERACAO_LABELS,
   PAPEL_CARTEIRA_LABELS, TIPO_VENDEDOR_LABELS, aceitaGestaoOperacao,
@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { definirGestaoAction } from '@/actions/comercial'
+import { criarLeadSdrAction, definirGestaoAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 
 /**
@@ -29,6 +29,23 @@ import { buscarVendedores, comercialKeys } from './queries'
  * A decisão mora aqui, e não numa tela de administração, porque ela é sobre ESTA
  * empresa e se toma olhando o histórico dela — não numa lista de cem contas.
  */
+
+/**
+ * Quem sou eu no Comercial. Mesmas duas funções que `lib/comercial.ts` usa no
+ * servidor — e é de propósito que a resposta venha do BANCO e não de uma conta
+ * local: uma segunda régua para "sou gestor?" é uma régua a mais para divergir.
+ */
+async function buscarMeuPapel() {
+  const supabase = createClient()
+  const [vendedor, gestor] = await Promise.all([
+    supabase.rpc('app_vendedor_atual'),
+    supabase.rpc('app_gestor_comercial'),
+  ])
+  return {
+    vendedorId: (vendedor.data as string | null) ?? null,
+    ehGestor: gestor.data === true,
+  }
+}
 
 async function buscarComercialDaEmpresa(empresaId: string) {
   const supabase = createClient()
@@ -40,7 +57,11 @@ async function buscarComercialDaEmpresa(empresaId: string) {
       .order('desde', { ascending: false }),
     supabase
       .from('sdr_leads')
-      .select('id, estagio, distribuido_em, vendedores!sdr_leads_sdr_id_fkey(nome)')
+      // `encerrado_*` não é enfeite: é o que separa "já tem dono" de "já foi
+      // recusada" — duas respostas diferentes para quem quer pôr a empresa no funil.
+      .select(
+        'id, estagio, origem, distribuido_em, encerrado_em, encerrado_motivo, vendedores!sdr_leads_sdr_id_fkey(nome)',
+      )
       .eq('empresa_id', empresaId)
       .order('distribuido_em', { ascending: false })
       .limit(10),
@@ -73,10 +94,12 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   // campo do passivo, e quem marcava "ativa" via um seletor vazio de gente que não
   // existe naquele papel — e concluía, com razão, que a tela estava quebrada.
   const [escolha, setEscolha] = React.useState<'' | GestaoOperacao>('')
+  const [pondoNoFunil, setPondoNoFunil] = React.useState(false)
 
   const chave = ['comercial', 'empresa', empresaId] as const
   const { data } = useQuery({ queryKey: chave, queryFn: () => buscarComercialDaEmpresa(empresaId) })
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
+  const papel = useQuery({ queryKey: ['comercial', 'meu-papel'], queryFn: buscarMeuPapel, staleTime: 5 * 60_000 })
 
   if (!data) return null
 
@@ -91,6 +114,44 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   const ativos = (vendedores.data ?? []).filter((v) => v.ativo)
   const originadores = ativos.filter((v) => v.tipo === 'originador')
   const closers = ativos.filter((v) => v.tipo === 'vendedor')
+  const sdrs = ativos.filter((v) => v.tipo === 'sdr')
+
+  // ─── Pôr no funil de reuniões ─────────────────────────────────────────────
+  // As três condições são as mesmas do RPC. Repeti-las aqui não é duplicar a
+  // regra: é evitar oferecer um botão que só existe para dar erro — e a régua
+  // que decide continua sendo a do banco, que roda de novo no clique.
+  const estagio = data.gestao?.estagio ?? null
+  const ehClienteOuEx = estagio === 'cliente' || estagio === 'ex_cliente'
+  const leadVivo = data.leads.find((l) => l.encerrado_em === null && l.estagio !== 'qualificada') ?? null
+  const meuVendedor = ativos.find((v) => v.id === papel.data?.vendedorId) ?? null
+  const ehGestor = papel.data?.ehGestor === true
+  // Quem não é gestor só puxa para a própria fila — logo, precisa SER um SDR.
+  const podeEscolherSdr = ehGestor
+  const podePorNoFunil = !ehClienteOuEx && !leadVivo && (ehGestor || meuVendedor?.tipo === 'sdr')
+  // A recusa por falta de fit não impede: quem clica sabe algo que a régua não
+  // sabe. Mas ela precisa aparecer ANTES do clique, com a data, para a decisão
+  // ser tomada de olhos abertos — e o RPC registra que a carência foi ignorada.
+  const recusadaPorFit = data.leads.find((l) => l.encerrado_motivo === 'sem_fit') ?? null
+
+  async function porNoFunil(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const escolhido = String(fd.get('sdr') ?? '')
+    setSalvando(true)
+    const r = await criarLeadSdrAction({
+      empresa_id: empresaId,
+      ...(escolhido === '' ? {} : { sdr_id: escolhido }),
+    })
+    setSalvando(false)
+    if (!r.ok) return toast.error(r.message)
+    toast.success(
+      r.data.carencia_ignorada
+        ? `No funil de ${r.data.sdr_nome}. A carência de "sem fit" foi ignorada e ficou registrada.`
+        : `No funil de reuniões de ${r.data.sdr_nome}.`,
+    )
+    setPondoNoFunil(false)
+    void qc.invalidateQueries({ queryKey: chave })
+  }
 
   /** O dono vigente num papel — o seletor abre já apontando para ele. */
   function donoAtual(papel: PapelCarteira): string | null {
@@ -148,6 +209,12 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
               <Badge variant={gestao === 'passivo' ? 'secondary' : 'default'}>
                 {GESTAO_OPERACAO_LABELS[gestao]}
               </Badge>
+            ) : null}
+            {podePorNoFunil ? (
+              <Button size="sm" onClick={() => setPondoNoFunil(true)}>
+                <Target className="mr-2 h-4 w-4" aria-hidden />
+                Pôr no funil de reuniões
+              </Button>
             ) : null}
             {podeDefinirGestao ? (
               <Button size="sm" variant="outline" onClick={abrir}>
@@ -239,6 +306,67 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
           </details>
         )}
       </CardContent>
+
+      <Dialog open={pondoNoFunil} onOpenChange={setPondoNoFunil}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={porNoFunil}>
+            <DialogHeader>
+              <DialogTitle>Pôr no funil de reuniões</DialogTitle>
+              <DialogDescription>
+                Cria um card em &ldquo;A contatar&rdquo; com origem manual. O relógio do SLA começa
+                agora: pôr uma empresa na fila não é ter falado com ela.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              {podeEscolherSdr ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="sdr">SDR que vai trabalhar esta empresa</Label>
+                  <select
+                    id="sdr"
+                    name="sdr"
+                    required
+                    defaultValue={meuVendedor?.tipo === 'sdr' ? meuVendedor.id : ''}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Selecione…</option>
+                    {sdrs.map((v) => (
+                      <option key={v.id} value={v.id}>{v.nome}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {sdrs.length === 0
+                      ? 'Nenhum SDR ativo cadastrado — cadastre um em Comercial › Configurações.'
+                      : 'A empresa entra na fila dele sem passar pela distribuição da semana, e sem gastar a cota dela.'}
+                  </p>
+                </div>
+              ) : (
+                <p className="rounded-md border bg-muted/40 p-3 text-sm">
+                  Vai para a <span className="font-medium">sua</span> fila. Só gestores põem empresa
+                  na fila de outro SDR — uma fila que enche sem o dono ter decidido nada deixa de
+                  ser dele.
+                </p>
+              )}
+
+              {recusadaPorFit?.encerrado_em ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  Esta empresa já foi <span className="font-medium">recusada por falta de fit</span>{' '}
+                  em {new Date(recusadaPorFit.encerrado_em).toLocaleDateString('pt-BR')}. A
+                  distribuição automática respeita uma carência antes de voltar a ela; você pode
+                  seguir, e a decisão fica registrada no histórico da empresa.
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPondoNoFunil(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={salvando || (podeEscolherSdr && sdrs.length === 0)}>
+                {salvando ? 'Colocando…' : 'Pôr no funil'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editando} onOpenChange={setEditando}>
         <DialogContent className="sm:max-w-md">

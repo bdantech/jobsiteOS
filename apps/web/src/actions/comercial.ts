@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import {
   atribuirLeadSdr,
+  criarLeadSdr,
   atribuirNf,
   atribuirVenda,
   definirCarteira,
@@ -158,6 +159,28 @@ export async function atribuirLeadSdrAction(input: unknown): Promise<ActionResul
   try {
     await atribuirLeadSdr(supabase, input)
     return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Devolve o nome do SDR para a tela poder dizer PARA QUEM foi, e não só "pronto".
+ * `revalidatePath` no funil e na ficha: o card novo tem de aparecer nos dois.
+ */
+export async function criarLeadSdrAction(
+  input: unknown,
+): Promise<ActionResult<{ lead_id: string; sdr_nome: string; carencia_ignorada: boolean }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await criarLeadSdr(supabase, input)) as {
+      lead_id: string
+      sdr_nome: string
+      carencia_ignorada: boolean
+    }
+    revalidatePath('/comercial/sdr')
+    return { ok: true, data: r }
   } catch (error) {
     return falha(error)
   }

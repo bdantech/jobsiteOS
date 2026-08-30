@@ -339,6 +339,17 @@ export const atribuirLeadSdrSchema = z.object({
 })
 export type AtribuirLeadSdrInput = z.infer<typeof atribuirLeadSdrSchema>
 
+/**
+ * Pôr uma empresa no funil de reuniões à mão. `sdr_id` é opcional porque um SDR
+ * que puxa para si não precisa se escolher numa lista — o RPC resolve pelo
+ * `app_vendedor_atual()`. Gestor manda o id de quem vai receber.
+ */
+export const criarLeadSdrSchema = z.object({
+  empresa_id: uuid,
+  sdr_id: uuid.optional(),
+})
+export type CriarLeadSdrInput = z.infer<typeof criarLeadSdrSchema>
+
 export const atribuirVendaSchema = z.object({
   venda_id: uuid,
   vendedor_id: uuid,

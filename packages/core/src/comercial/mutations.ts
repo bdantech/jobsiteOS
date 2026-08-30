@@ -2,6 +2,7 @@ import type { Json } from '../types/database.js'
 import type { Supabase } from '../registry/types.js'
 import {
   atribuirLeadSdrSchema,
+  criarLeadSdrSchema,
   atribuirNfSchema,
   atribuirVendaSchema,
   salvarAcessoSchema,
@@ -78,6 +79,13 @@ export async function moverVenda(supabase: Supabase, input: unknown) {
 export async function atribuirLeadSdr(supabase: Supabase, input: unknown) {
   const dados = atribuirLeadSdrSchema.parse(input)
   const { data, error } = await supabase.rpc('app_atribuir_lead_sdr', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function criarLeadSdr(supabase: Supabase, input: unknown) {
+  const dados = criarLeadSdrSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_criar_lead_sdr', { p: dados as unknown as Json })
   if (error) throw new Error(error.message)
   return data
 }
