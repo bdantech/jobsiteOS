@@ -157,11 +157,40 @@ app.post('/webhooks/apollo', async (req: Request, res: Response) => {
  * gravam na mesma tabela, com a mesma chave — registrar a URL da web e a do worker
  * ao mesmo tempo não duplica nada.
  */
-app.post('/webhooks/escavador', async (req: Request, res: Response) => {
+/**
+ * O segredo vem do header OU da query string, como no webhook do Wasender: nem
+ * todo painel de provedor tem campo para header, e exigir um campo que o painel
+ * não oferece é a diferença entre "integração configurada" e "o botão de salvar
+ * não faz nada". É um segredo só de ENTRADA — quem o roubar consegue nos entregar
+ * um callback falso, não gastar nosso crédito.
+ */
+function tokenDoCallback(req: Request): string | undefined {
   const cabecalho = req.headers.authorization ?? ''
-  const recebido = cabecalho.toLowerCase().startsWith('bearer ') ? cabecalho.slice(7).trim() : cabecalho
-  if (!callbackEscavadorValido(recebido)) {
+  const doHeader = cabecalho.toLowerCase().startsWith('bearer ')
+    ? cabecalho.slice(7).trim()
+    : cabecalho.trim()
+  if (doHeader) return doHeader
+  const q = req.query.token ?? req.query.secret
+  return typeof q === 'string' ? q : undefined
+}
+
+/** A verificação de URL que o painel faz antes de salvar. */
+app.get('/webhooks/escavador', (req: Request, res: Response) => {
+  if (!callbackEscavadorValido(tokenDoCallback(req))) {
     res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  res.status(200).json({ ok: true, servico: 'callback do Escavador' })
+})
+
+app.post('/webhooks/escavador', async (req: Request, res: Response) => {
+  if (!callbackEscavadorValido(tokenDoCallback(req))) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  // Corpo vazio com token válido é teste de conexão, não evento malformado.
+  if (!req.body || Object.keys(req.body as object).length === 0) {
+    res.status(200).json({ ok: true, ping: true })
     return
   }
   try {

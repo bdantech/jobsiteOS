@@ -29,6 +29,21 @@ import { dispararCallbacksJuridico } from '@/lib/mercado/worker'
  * `ESCAVADOR_CALLBACK_TOKEN` (aqui) não é `ESCAVADOR_TOKEN` (o da API, que fica só
  * no worker). Reaproveitar o token de saída como segredo de entrada o publicaria
  * num header que qualquer um pode nos fazer comparar — e é ele que gasta dinheiro.
+ *
+ * ── O TOKEN TAMBÉM VEM PELA URL, E ISSO NÃO É DESCUIDO ─────────────────────
+ * A spec do 08 dizia "header Authorization", e a rota só aceitava isso. Nem todo
+ * painel de provedor tem campo para header — o do Wasender não tem, e por isso
+ * aquela rota já lia `?secret=`. Exigir um campo que o painel não oferece é a
+ * diferença entre "integração configurada" e "o botão de salvar não faz nada".
+ *
+ * Um segredo na query string aparece em log de proxy, e é por isso que ele é
+ * um segredo SÓ DE ENTRADA: quem o roubar consegue nos entregar um callback
+ * falso, não gastar nosso crédito. O de saída continua onde estava.
+ *
+ * ── GET/HEAD RESPONDEM 200 ─────────────────────────────────────────────────
+ * Painel que valida a URL antes de salvar costuma bater com GET. Sem isto ele
+ * recebia 405 e recusava a URL — e a pessoa ficava clicando em salvar sem
+ * entender por quê.
  */
 
 export const dynamic = 'force-dynamic'
@@ -54,10 +69,36 @@ interface PayloadCallback {
   processo?: { numero_cnj?: string }
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+/** Header `Authorization: Bearer x`, header cru, ou `?token=x` na URL. */
+function tokenDaRequisicao(request: Request): string | null {
   const cabecalho = request.headers.get('authorization') ?? ''
-  const recebido = cabecalho.toLowerCase().startsWith('bearer ') ? cabecalho.slice(7).trim() : cabecalho
-  if (!tokenValido(recebido || null)) {
+  const doHeader = cabecalho.toLowerCase().startsWith('bearer ')
+    ? cabecalho.slice(7).trim()
+    : cabecalho.trim()
+  if (doHeader) return doHeader
+  const url = new URL(request.url)
+  return url.searchParams.get('token') ?? url.searchParams.get('secret')
+}
+
+/**
+ * A verificação da URL feita pelo painel. Responde 200 para dizer "estou aqui e
+ * o segredo confere" — e 401 quando não confere, que é a resposta que ajuda a
+ * pessoa a descobrir que copiou o token errado.
+ */
+export async function GET(request: Request): Promise<NextResponse> {
+  if (!tokenValido(tokenDaRequisicao(request))) {
+    return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
+  }
+  return NextResponse.json({ ok: true, servico: 'callback do Escavador' })
+}
+
+export async function HEAD(request: Request): Promise<NextResponse> {
+  const ok = tokenValido(tokenDaRequisicao(request))
+  return new NextResponse(null, { status: ok ? 200 : 401 })
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  if (!tokenValido(tokenDaRequisicao(request))) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
 
@@ -65,7 +106,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     corpo = (await request.json()) as PayloadCallback
   } catch {
-    return NextResponse.json({ erro: 'Corpo inválido.' }, { status: 400 })
+    // Corpo vazio com token válido é o teste de conexão do painel, não um evento
+    // malformado. 400 aqui fazia o painel concluir que a URL não serve.
+    return NextResponse.json({ ok: true, ping: true })
   }
 
   const uuid = typeof corpo.uuid === 'string' && corpo.uuid.length > 0 ? corpo.uuid : null

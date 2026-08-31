@@ -311,18 +311,49 @@ para contar dias parados sobre o que acabou de chegar.
 O parecer é o único síncrono: quem clicou acabou de autorizar um gasto em tokens e está com
 a tela aberta.
 
+## A ordem de ligar o módulo
+
+Os três botões em **Configurações → Jurídico** fazem coisas diferentes, e a ordem
+importa. Rodar o terceiro primeiro não dá erro: dá silêncio.
+
+| Botão | O que faz | Quando |
+| --- | --- | --- |
+| **Descobrir processos agora** | Pergunta ao Escavador quais processos existem para cada CNPJ nosso e traz a capa deles | **Primeiro.** É o único que popula `processos` do zero |
+| **Cadastrar monitoramentos** | Registra um monitoramento por CNPJ para o Escavador nos avisar de ação nova | Depois, uma vez (idempotente por termo) |
+| **Sincronizar agora** | Relê capa e movimentações dos processos **que já conhecemos** | Depois — com a tabela vazia ele não tem o que fazer e não escreve log nenhum |
+
 ## Cadastrar a URL de callback no Escavador
 
 1. Painel do Escavador → **Configurações → Callbacks**.
-2. URL: `https://<seu-dominio>/api/webhooks/escavador` (ou
-   `https://<worker>/webhooks/escavador` — as duas funcionam e gravam na mesma tabela).
-3. Header `Authorization: Bearer <ESCAVADOR_CALLBACK_TOKEN>`.
-4. Eventos: **`novo_processo`** e **`atualizacao_processo_concluida`**. Os demais chegam,
+2. URL, nas duas formas que funcionam:
+   - com o segredo na própria URL (use esta se o painel só tiver campo de URL):
+     `https://<seu-dominio>/api/webhooks/escavador?token=<ESCAVADOR_CALLBACK_TOKEN>`
+   - ou `https://<seu-dominio>/api/webhooks/escavador` + header
+     `Authorization: Bearer <ESCAVADOR_CALLBACK_TOKEN>`, se o painel oferecer header.
+
+   A URL do worker (`https://<worker>/webhooks/escavador`) aceita exatamente as mesmas
+   duas formas e grava na mesma tabela, com a mesma chave — cadastrar as duas não
+   duplica nada.
+3. Eventos: **`novo_processo`** e **`atualizacao_processo_concluida`**. Os demais chegam,
    são marcados como processados e ignorados — o que impede a fila de crescer para sempre
    com linhas que ninguém vai olhar.
-5. Em **Configurações → Jurídico → Nossos CNPJs**, clique em **Cadastrar monitoramentos**:
-   é o que faz o Escavador avisar quando surgir ação nova contra uma entidade nossa. É
-   idempotente por termo — rodar de novo depois de acrescentar um CNPJ cria só o novo.
+
+### Se o painel recusa a URL ao salvar
+
+A rota responde **GET e HEAD com 200** quando o token confere, e responde 200 a um POST
+de corpo vazio: é a verificação que os painéis fazem antes de salvar. Antes ela só
+aceitava POST com header, então a verificação levava 401 ou 405 e o botão de salvar
+parecia não fazer nada.
+
+Para conferir de fora, sem depender do painel:
+
+```bash
+curl -i "https://<seu-dominio>/api/webhooks/escavador?token=<ESCAVADOR_CALLBACK_TOKEN>"
+```
+
+`200` com `{"ok":true}` significa URL no ar e segredo certo. `401` é token errado (ou
+`ESCAVADOR_CALLBACK_TOKEN` faltando no ambiente da web — a rota **falha fechada** de
+propósito). `404` significa que o deploy com esta rota ainda não subiu.
 
 ## Custo por tipo de chamada
 
