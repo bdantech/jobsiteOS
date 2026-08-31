@@ -803,6 +803,18 @@ export async function dispararParecerJuridico(input: {
   return postar('/jobs/juridico/parecer', input, 'juridico-parecer', 320_000)
 }
 
+/**
+ * O briefing do processo. Síncrono como o parecer, e pela mesma razão: alguém
+ * abriu a tela e está esperando o texto. O teto é bem menor porque ele lê 25
+ * movimentações em vez de 80 e escreve três frases em vez de seis seções.
+ */
+export async function dispararBriefingJuridico(input: {
+  numeroCnj: string
+  forcar?: boolean
+}): Promise<DispararJobResultado> {
+  return postar('/jobs/juridico/briefing', input, 'juridico-briefing', 90_000)
+}
+
 // ─── Comunicação (05A) ──────────────────────────────────────────────────────
 /*
  * Os seis relógios do módulo. Todos enfileiram e devolvem 202 — nenhum deles é

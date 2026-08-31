@@ -52,12 +52,14 @@ import {
   salvarOperacaoAction,
   salvarPrazoAction,
 } from '@/actions/juridico'
+import { BriefingCard } from './briefing-card'
 import { CalculoCard } from './calculo-card'
 import { Cronograma } from './cronograma'
 import { ParecerCard } from './parecer-card'
 import { brl, data, dataHora, faseLabel, haDias } from './format'
 import {
   buscarAdvogados,
+  buscarBriefing,
   buscarCalculos,
   buscarCustos,
   buscarEnvolvidos,
@@ -122,6 +124,11 @@ export function ProcessoDetalhe({ numeroCnj }: { numeroCnj: string }) {
     queryFn: () => buscarRecuperacoes(numeroCnj),
   })
   const prazos = useQuery({ queryKey: juridicoKeys.prazos(numeroCnj), queryFn: () => buscarPrazos(numeroCnj) })
+  const briefing = useQuery({
+    queryKey: juridicoKeys.briefing(numeroCnj),
+    queryFn: () => buscarBriefing(numeroCnj),
+  })
+
   const pareceres = useQuery({
     queryKey: juridicoKeys.pareceres(numeroCnj),
     queryFn: () => buscarPareceres(numeroCnj),
@@ -311,6 +318,20 @@ export function ProcessoDetalhe({ numeroCnj }: { numeroCnj: string }) {
           nota="recuperado − custos"
         />
       </div>
+
+      {/*
+        O briefing acima do cronograma, e acima das abas: é a primeira coisa que
+        alguém lê ao abrir. O cronograma mostra ONDE o processo está; o briefing
+        diz o que isso significa e o que fazer — e a segunda pergunta é a que a
+        pessoa realmente tinha.
+      */}
+      <BriefingCard
+        numeroCnj={numeroCnj}
+        briefing={briefing.data ?? null}
+        carregando={briefing.isPending}
+        ultimaMovimentacao={p.data_ultima_movimentacao}
+        temMovimentacoes={(movimentacoes.data ?? []).length > 0}
+      />
 
       <Cronograma movimentacoes={fases.data ?? []} benchmark={benchmark} />
 

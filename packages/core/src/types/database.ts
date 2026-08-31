@@ -5881,6 +5881,60 @@ export type Database = {
         }
         Relationships: []
       }
+      processo_briefings: {
+        Row: {
+          ate_movimentacao_em: string | null
+          criado_em: string
+          modelo: string | null
+          numero_cnj: string
+          proxima_acao: string
+          qtd_movimentacoes_lidas: number
+          resumo_fase: string
+          resumo_movimentacoes: string
+          tokens: number | null
+          urgencia: string | null
+        }
+        Insert: {
+          ate_movimentacao_em?: string | null
+          criado_em?: string
+          modelo?: string | null
+          numero_cnj: string
+          proxima_acao: string
+          qtd_movimentacoes_lidas?: number
+          resumo_fase: string
+          resumo_movimentacoes: string
+          tokens?: number | null
+          urgencia?: string | null
+        }
+        Update: {
+          ate_movimentacao_em?: string | null
+          criado_em?: string
+          modelo?: string | null
+          numero_cnj?: string
+          proxima_acao?: string
+          qtd_movimentacoes_lidas?: number
+          resumo_fase?: string
+          resumo_movimentacoes?: string
+          tokens?: number | null
+          urgencia?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_briefings_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: true
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "processo_briefings_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: true
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
       processo_calculos: {
         Row: {
           correcao: number | null
@@ -9257,7 +9311,7 @@ export type Database = {
        * argumento de RPC como NÃO-anulável, e os quatro últimos aqui aceitam
        * null de propósito — uma conversa pode não ter empresa, contato nem
        * vendedor resolvidos, que é exatamente o caso do inbox de identificação.
-       * Reaplique isto depois de cada `pnpm db:types`.
+       * Reaplique isto depois de cada \`pnpm db:types\`.
        */
       app__conversa_para: {
         Args: {

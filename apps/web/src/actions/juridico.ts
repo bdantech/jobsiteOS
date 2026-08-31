@@ -29,6 +29,7 @@ import {
   dispararClassificarFases,
   dispararDescobrirProcessos,
   dispararMonitoramentosJuridico,
+  dispararBriefingJuridico,
   dispararParecerJuridico,
   dispararSincronizarJuridico,
 } from '@/lib/mercado/worker'
@@ -320,6 +321,28 @@ export async function gerarCalculoAction(input: {
 // ─── §7 Parecer ─────────────────────────────────────────────────────────────
 
 /** Gera o parecer no worker (que tem a chave da Anthropic) e devolve o resultado. */
+/**
+ * Gera (ou regenera) o briefing do processo.
+ *
+ * Sem `forcar`, o worker devolve "já atualizado" sem chamar o modelo quando o
+ * texto ainda cobre a última movimentação — então o botão da tela pode ser
+ * apertado à toa sem custar nada.
+ */
+export async function gerarBriefingAction(
+  numeroCnj: string,
+  forcar = false,
+): Promise<ActionResult<{ gerado: boolean; motivo?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+
+  const r = await dispararBriefingJuridico({ numeroCnj, forcar })
+  if (!r.ok) return { ok: false, message: r.message, code: r.code }
+
+  revalidar(numeroCnj)
+  const corpo = (r.corpo ?? {}) as { gerado?: boolean; motivo?: string }
+  return { ok: true, data: { gerado: corpo.gerado === true, motivo: corpo.motivo } }
+}
+
 export async function gerarParecerAction(
   numeroCnj: string,
 ): Promise<ActionResult<{ risco: string | null; proximo_passo: string; tokens: number }>> {

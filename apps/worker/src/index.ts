@@ -62,6 +62,8 @@ import {
   dispararMonitoramentosJuridico,
   dispararSincronizarJuridico,
   executarParecerJuridico,
+  executarBriefingJuridico,
+  dispararBriefingsJuridico,
   dispararEnriquecerLeads,
   dispararSugerirReanalises,
   dispararPollDecisoes,
@@ -1085,6 +1087,36 @@ app.post('/jobs/juridico/parecer', async (req: Request, res: Response, next: Nex
     const { numeroCnj, geradoPor } = parecerSchema.parse(req.body ?? {})
     const resultado = await executarParecerJuridico(numeroCnj, geradoPor ?? null)
     res.json(resultado)
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const briefingSchema = z.object({
+  numeroCnj: z.string().min(1),
+  forcar: z.coerce.boolean().optional(),
+})
+
+/**
+ * Síncrono, como o parecer: quem clicou está com a tela aberta. Sem `numeroCnj`
+ * a rota abaixo roda o LOTE, que é assíncrono — são duas perguntas diferentes e
+ * duas rotas.
+ */
+app.post('/jobs/juridico/briefing', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { numeroCnj, forcar } = briefingSchema.parse(req.body ?? {})
+    res.json(await executarBriefingJuridico(numeroCnj, forcar ?? false))
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/juridico/briefings', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = z
+      .object({ limite: z.coerce.number().int().min(1).max(200).optional() })
+      .parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararBriefingsJuridico(limite), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

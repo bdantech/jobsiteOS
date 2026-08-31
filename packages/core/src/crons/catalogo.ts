@@ -204,7 +204,11 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Dispara TODO DIA, mas nem todo dia roda: a agenda (dias da semana, horário, escopo) vive em `juridico_config.monitoramento` e é conferida DENTRO do job. Codificar os dias aqui obrigaria um deploy para mudá-los — e a agenda é justamente a setting que decide o custo em créditos do Escavador. Nos dias que não são de rodar, o job devolve "não executado" com o motivo, e isso não é falha: é a agenda funcionando. Antes das 8h de São Paulo porque quem abre o Jurídico de manhã precisa das movimentações da noite já classificadas.',
     destino: 'POST /jobs/juridico/sincronizar',
-    encadeia: ['drenar as solicitações da IA e do botão "Atualizar agora"', 'processar os callbacks pendentes do Escavador'],
+    encadeia: [
+      'drenar as solicitações da IA e do botão "Atualizar agora"',
+      'processar os callbacks pendentes do Escavador',
+      'regerar os resumos de IA que ficaram velhos com a movimentação nova',
+    ],
   },
   {
     path: '/api/cron/juridico-alertas',
@@ -244,6 +248,90 @@ export const CRONS: readonly CronCatalogado[] = [
     moduloId: 'admin',
     descricao:
       'Não faz trabalho de negócio: prova o caminho Vercel Cron → CRON_SECRET → handler autenticado. É a sonda que denuncia agenda quebrada ou segredo trocado antes de um job de verdade falhar calado.',
+  },
+  // ─── Comunicação (05A): os seis relógios do cano ──────────────────────────
+  {
+    path: '/api/cron/comunicacao-fila',
+    nome: 'Fila de envio',
+    moduloId: 'comunicacao',
+    descricao:
+      'Consome as mensagens APROVADAS e envia. De 5 em 5 minutos porque uma mensagem que uma pessoa acabou de aprovar não pode esperar meia hora — e o intervalo entre um envio e o próximo é aplicado DENTRO do job, por conta, com valor sorteado: espaçar aqui, no cron, produziria a cadência perfeitamente regular que denuncia um robô. O portão (supressão, base legal, janela, teto do número, warmup) roda no instante do envio, não na aprovação: quem virou suprimido no meio do caminho é barrado aqui.',
+    destino: 'POST /jobs/comunicacao/enviar-fila',
+  },
+  {
+    path: '/api/cron/comunicacao-triagem',
+    nome: 'Triagem das respostas',
+    moduloId: 'comunicacao',
+    descricao:
+      'Classifica o que chegou: intenção, urgência e se precisa escalar. É a triagem que ACORDA o agente, então atrasá-la atrasa a resposta a quem acabou de escrever. Desencontrada da fila em 2 minutos de propósito — as duas de 5 em 5 no mesmo minuto disputariam a mesma conexão sem ganhar nada.',
+    destino: 'POST /jobs/comunicacao/triagem',
+  },
+  {
+    path: '/api/cron/comunicacao-gmail',
+    nome: 'Sync do Gmail',
+    moduloId: 'comunicacao',
+    descricao:
+      'FALLBACK do Pub/Sub, não o caminho principal: o push do Google chega em segundos, e isto existe para o dia em que ele não chega. De 10 em 10 minutos porque uma perda de push é rara e um atraso de dez minutos num e-mail é tolerável — de 1 em 1 minuto seria pagar refresh de token o dia inteiro para cobrir uma falha que quase não acontece. Renova o watch na mesma passada, porque as duas coisas dependem do mesmo access token.',
+    destino: 'POST /jobs/comunicacao/gmail-sync',
+  },
+  {
+    path: '/api/cron/comunicacao-lembretes',
+    nome: 'Lembretes de reunião',
+    moduloId: 'comunicacao',
+    descricao:
+      'H-1 da reunião agendada. De hora em hora, que é a granularidade que um lembrete de uma hora antes precisa — mais fino não muda nada, mais grosso erra o alvo.',
+    destino: 'POST /jobs/comunicacao/lembretes-reuniao',
+  },
+  {
+    path: '/api/cron/comunicacao-plantao',
+    nome: 'Plantão interno',
+    moduloId: 'comunicacao',
+    descricao:
+      'Alerta crítico para o time, por um número próprio. É transporte SEPARADO: não passa por warmup, supressão, janela nem teto — um orçamento estourado às 23h de um sábado é exatamente o alerta que precisa sair às 23h de um sábado.',
+    destino: 'POST /jobs/comunicacao/plantao',
+  },
+  {
+    path: '/api/cron/agente-decidir',
+    nome: 'Agente: decidir o próximo passo',
+    moduloId: 'comunicacao',
+    descricao:
+      'Lê as conversas e decide o que fazer em cada uma, dentro de um espaço de ações FECHADO. De hora em hora: decisão de relação não é de minuto, e um agente que reavalia a cada cinco minutos produz mudança de ideia, não diligência.',
+    destino: 'POST /jobs/agente/decidir',
+  },
+  {
+    path: '/api/cron/agente-agendados',
+    nome: 'Agente: executar o que foi marcado',
+    moduloId: 'comunicacao',
+    descricao:
+      'O relógio que o próprio agente marcou — o "aguardar até quinta" vira ação na quinta. Apura o desfecho das decisões na mesma passada, porque é sobre as que este job acabou de executar: um segundo relógio só para isso seria um relógio a mais para manter.',
+    destino: 'POST /jobs/agente/executar-agendados',
+    encadeia: ['apurar o desfecho das decisões executadas'],
+  },
+
+  // ─── Campanhas (05B) ──────────────────────────────────────────────────────
+  {
+    path: '/api/cron/campanhas-executar',
+    nome: 'Executor de campanhas',
+    moduloId: 'comercial',
+    descricao:
+      'Materializa o público na primeira passada (e só nela: público que muda depois de aprovado é público que ninguém aprovou), enfileira a leva do dia no ritmo configurado e conclui o que acabou. NÃO envia — quem envia é a fila da Comunicação, e é isso que faz o teto por número ser um só. De 15 em 15 minutos: o próprio job espalha a leva em horários agendados, então ele não precisa ser fino, só precisa acordar antes de a leva anterior acabar.',
+    destino: 'POST /jobs/campanhas/executar',
+  },
+  {
+    path: '/api/cron/campanhas-sequencia',
+    nome: 'Sequência das campanhas',
+    moduloId: 'comercial',
+    descricao:
+      'O segundo e o terceiro toque, quando existem. Diário porque `dias_apos` é medido em dias — de hora em hora ele acordaria 24 vezes para responder "ainda não". Às 9h, antes da janela de envio abrir, para o toque que vence hoje entrar na fila de hoje. Para no primeiro sinal: resposta, opt-out, supressão ou ação do Agente.',
+    destino: 'POST /jobs/campanhas/avancar-sequencia',
+  },
+  {
+    path: '/api/cron/campanhas-metricas',
+    nome: 'Saúde das campanhas',
+    moduloId: 'comercial',
+    descricao:
+      'Varre as campanhas vivas atrás de opt-out e bounce acima do limiar. Existe para quando NINGUÉM está olhando — o painel de quem abre a tela é calculado na hora. Alerta uma vez por campanha por tipo, e só com amostra mínima: 1 opt-out em 3 enviadas é 33% e não significa nada, e um alerta que grita cedo é um alerta que o time aprende a ignorar.',
+    destino: 'POST /jobs/campanhas/metricas',
   },
 ]
 

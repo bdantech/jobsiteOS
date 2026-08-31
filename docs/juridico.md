@@ -371,6 +371,42 @@ curl -i "https://<seu-dominio>/api/webhooks/escavador?token=<ESCAVADOR_CALLBACK_
 `ESCAVADOR_CALLBACK_TOKEN` faltando no ambiente da web — a rota **falha fechada** de
 propósito). `404` significa que o deploy com esta rota ainda não subiu.
 
+## O briefing e o parecer são coisas diferentes
+
+Duas saídas de IA no módulo, e a diferença não é de tamanho:
+
+| | Briefing | Parecer |
+| --- | --- | --- |
+| Responde | "abri este processo, me situe" | "preciso entender este caso a fundo" |
+| Onde | topo da ficha, sem pedir | aba **Parecer**, sob demanda |
+| Lê | 25 movimentações | 80 + todas as relevantes |
+| Devolve | fase, o que aconteceu, próxima ação, urgência | 6 seções + risco + próximo passo |
+| Guarda | uma linha, sobrescrita | histórico, com edição |
+
+Fundir os dois transformaria o briefing num parecer curto, que é pior nas duas
+funções: longo demais para situar, raso demais para decidir.
+
+### A validade é por movimentação, não por data
+
+`processo_briefings.ate_movimentacao_em` guarda até onde o texto leu. Um briefing de
+três meses atrás sobre um processo parado há um ano **está atual**; um de ontem sobre um
+processo que teve penhora hoje **não está**, e a tela mostra a tarja. Expirar por tempo
+erraria os dois casos e gastaria token justamente nos processos parados, que são a
+maioria de qualquer carteira.
+
+O sync regenera o que ficou velho na mesma corrida que trouxe a movimentação nova — não
+há relógio próprio para isso, porque um relógio próprio acordaria de hora em hora para
+descobrir que nada mudou. Se a geração falhar, ela **não derruba** a sincronização: o
+dado do tribunal já está gravado, e um texto de apoio que não saiu não é motivo para
+marcar como falha uma corrida que trouxe o que importava.
+
+### O modelo não conta prazo
+
+Mesma restrição do parecer, repetida no prompt do briefing: ele não tem calendário
+forense nem contagem de prazos. Pode **repetir** um prazo que uma movimentação cite
+literalmente, atribuindo a ela; não pode afirmar quantos dias faltam nem se cabe recurso.
+"Contestar até sexta" é o tipo de frase que soa útil e perde prazo.
+
 ## Custo por tipo de chamada
 
 O painel em **Configurações → Nossos CNPJs** mostra créditos, chamadas e erros dos últimos

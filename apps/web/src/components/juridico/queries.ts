@@ -14,6 +14,7 @@ export const juridicoKeys = {
   recuperacoes: (cnj: string) => [...juridicoKeys.all, 'recuperacoes', cnj] as const,
   prazos: (cnj: string) => [...juridicoKeys.all, 'prazos', cnj] as const,
   pareceres: (cnj: string) => [...juridicoKeys.all, 'pareceres', cnj] as const,
+  briefing: (cnj: string) => [...juridicoKeys.all, 'briefing', cnj] as const,
   advogados: () => [...juridicoKeys.all, 'advogados'] as const,
   config: () => [...juridicoKeys.all, 'config'] as const,
   indices: (indice: string) => [...juridicoKeys.all, 'indices', indice] as const,
@@ -285,4 +286,18 @@ export async function buscarAgendaJuridica(): Promise<EventoAgendaJuridica[]> {
     .limit(300)
   if (error) throw new Error(error.message)
   return (data ?? []) as EventoAgendaJuridica[]
+}
+
+/** O resumo por IA que abre a ficha do processo. Uma linha por processo. */
+export type BriefingDoProcesso = Tables<'processo_briefings'>
+
+export async function buscarBriefing(numeroCnj: string): Promise<BriefingDoProcesso | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('processo_briefings')
+    .select('*')
+    .eq('numero_cnj', numeroCnj)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data
 }

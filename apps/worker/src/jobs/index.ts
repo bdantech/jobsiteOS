@@ -90,6 +90,7 @@ import { alertasJuridico } from './juridico/alertas.js'
 import { processarCallbacks } from './juridico/callbacks.js'
 import { classificarFases } from './juridico/classificar-fases.js'
 import { descobrirProcessos, sincronizarMonitoramentos } from './juridico/descobrir-processos.js'
+import { gerarBriefing, gerarBriefingsPendentes } from './juridico/briefing.js'
 import { gerarParecer } from './juridico/parecer.js'
 import { drenarSolicitacoes, sincronizarProcessos } from './juridico/sincronizar.js'
 import { enviarFila } from './comunicacao/enviar-fila.js'
@@ -172,6 +173,7 @@ export type TipoJob =
   | 'juridico-classificar'
   | 'juridico-alertas'
   | 'juridico-parecer'
+  | 'juridico-briefing'
   | 'juridico-monitoramentos'
   | 'comunicacao-fila'
   | 'comunicacao-gmail'
@@ -1306,7 +1308,21 @@ export function dispararSincronizarJuridico(opcoes: { forcarAgenda?: boolean; nu
     // Os callbacks que chegaram durante a corrida entram na mesma passada — inclusive
     // as respostas das atualizações que ela acabou de pedir ao tribunal.
     const callbacks = await processarCallbacks()
-    return { solicitacoes, sincronizacao, callbacks }
+    /*
+     * O briefing por último, e na MESMA corrida: ele fica velho exatamente
+     * quando chega movimentação nova, e é isto aqui que acabou de trazê-la. Um
+     * relógio próprio para ele acordaria de hora em hora para descobrir que nada
+     * mudou — e gastaria token nos dias em que mudou pouco.
+     *
+     * Não derruba a sincronização se falhar: o dado do tribunal já está gravado,
+     * e um texto de apoio que não saiu não é motivo para marcar como falha uma
+     * corrida que trouxe o que importava.
+     */
+    const briefings = await gerarBriefingsPendentes().catch((erro: unknown) => {
+      logger.error({ erro: String(erro) }, 'Briefings falharam depois do sync.')
+      return null
+    })
+    return { solicitacoes, sincronizacao, callbacks, briefings }
   })
 }
 
@@ -1335,6 +1351,23 @@ export async function executarParecerJuridico(
   geradoPor: string | null,
 ): Promise<unknown> {
   return gerarParecer(numeroCnj, geradoPor)
+}
+
+/**
+ * SÍNCRONO, como o parecer: quem clicou está com a tela aberta esperando o
+ * texto. A geração leva poucos segundos porque o briefing lê 25 movimentações,
+ * não 80.
+ */
+export async function executarBriefingJuridico(
+  numeroCnj: string,
+  forcar: boolean,
+): Promise<unknown> {
+  return gerarBriefing(numeroCnj, forcar)
+}
+
+/** Em lote, depois do sync — que é quando os briefings ficam velhos. */
+export function dispararBriefingsJuridico(limite?: number): string {
+  return dispararAvulso('juridico-briefing', async () => gerarBriefingsPendentes(limite))
 }
 
 export function dispararMonitoramentosJuridico(): string {
