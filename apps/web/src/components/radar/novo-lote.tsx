@@ -20,7 +20,6 @@ const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', curren
 interface Params {
   incluir_claude?: boolean
   revelar_telefone?: boolean
-  incluir_fora_sp?: boolean
   forcar_ttl?: boolean
 }
 
@@ -30,7 +29,11 @@ function custoEstimado(tipo: Tipo, total: number, params: Params, custos: Custos
   // `organizations/enrich` não consome crédito de revelação. Zero é o custo REAL, e
   // mostrar zero é o ponto: este lote não precisa da mesma cerimônia dos pagos.
   if (tipo === 'funcionarios') return 0
-  return total * (params.incluir_fora_sp ? custos.protesto_nacional : custos.protesto_sp)
+  // Protesto tem um preço só desde 01/09/2026: a DirectD desativou o endpoint de
+  // SP ao consolidar tudo no IEPTB, e com ele foi embora a opção barata. O que
+  // era "R$ 0,36 em SP, R$ 3,50 fora" virou R$ 3,50 para todo mundo — e é essa
+  // conta que a pessoa precisa ver ANTES de aprovar o lote.
+  return total * custos.protesto_nacional
 }
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -146,11 +149,12 @@ export function NovoLote() {
               />
             )}
             {tipo === 'protestos' && (
-              <Check
-                label="Incluir empresas fora de SP (endpoint nacional, R$ 3,50 cada)"
-                checked={!!params.incluir_fora_sp}
-                onChange={(v) => setParams((p) => ({ ...p, incluir_fora_sp: v }))}
-              />
+              <p className="text-sm text-muted-foreground">
+                Consulta <strong>nacional</strong>, via IEPTB, para todas as empresas do lote.
+                Não há mais a opção só-SP: a DirectD a desativou em 01/09/2026. O custo por
+                item subiu de R$ 0,36 para o preço nacional, e a estimativa acima já reflete
+                isso.
+              </p>
             )}
             {tipo === 'funcionarios' && (
               <p className="text-sm text-muted-foreground">

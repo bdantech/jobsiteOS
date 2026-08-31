@@ -9,7 +9,6 @@ import { supabaseAdmin } from '../db.js'
 export interface CustosRadar {
   dominio_claude: number
   contato_apollo: number
-  protesto_sp: number
   protesto_nacional: number
 }
 
@@ -70,7 +69,9 @@ async function ler<T>(chave: string, padrao: T): Promise<T> {
 }
 
 export const lerCustos = (): Promise<CustosRadar> =>
-  ler('custos', { dominio_claude: 0.1, contato_apollo: 1.2, protesto_sp: 0.36, protesto_nacional: 3.5 })
+  // `protesto_sp` saiu com o endpoint (01/09/2026). A chave pode continuar no
+  // jsonb de instalações antigas; ninguém mais a lê.
+  ler('custos', { dominio_claude: 0.1, contato_apollo: 1.2, protesto_nacional: 3.5 })
 
 /**
  * O TTL de funcionários mora na chave `funcionarios` (04c §3), não em `ttl_dias`, e

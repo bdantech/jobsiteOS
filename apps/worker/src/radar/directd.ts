@@ -4,119 +4,56 @@ import type {
 } from '../../../../packages/core/src/radar/credit.js'
 import { env } from '../env.js'
 import { requisitarJson } from '../net/http.js'
+import { extrair } from './directd-parser.js'
+
+export { extrair, parseNumero, somarCartorios } from './directd-parser.js'
 
 /**
- * Provedores de protesto DirectD (§5), implementando a porta ProvedorCredito do core.
- * Dois endpoints, custos bem diferentes:
- *   SP       — ProtestosSP      (R$ 0,36) — só cartórios de SP.
- *   Nacional — ProtestosOnline  (R$ 3,50) — cobertura nacional.
- * Score/negativação entram depois registrando outro provedor, sem refatorar.
+ * Protestos DirectD (§5), implementando a porta ProvedorCredito do core.
+ *
+ * ─── UM ENDPOINT, DESDE 01/09/2026 ──────────────────────────────────────────
+ * Havia dois: `ProtestosSP` (R$ 0,36, só cartórios de SP) e `ProtestosOnline`
+ * (R$ 3,50, nacional). A DirectD consolidou as consultas numa integração direta
+ * com o IEPTB e **desativou o ProtestosSP em 01/09/2026** — requisições àquele
+ * endereço deixaram de ser processadas.
+ *
+ * O roteamento por UF morreu junto: não existe mais uma opção barata a escolher,
+ * e manter a bifurcação seria manter um `if` cujo lado curto nunca executa. O
+ * valor `directd_sp` continua aceito em `protestos_consultas.fonte` porque as
+ * consultas antigas existem e o histórico não muda de nome quando um fornecedor
+ * muda de produto.
+ *
+ * O efeito prático é de PREÇO, não de cobertura: onde antes se pagava R$ 0,36
+ * por uma resposta que só via SP, paga-se R$ 3,50 por uma que vê o país. A
+ * estimativa de lote e o botão do funil passam a mostrar sempre o preço nacional.
  */
 
 const BASE = 'https://apiv3.directd.com.br/api'
 
-/**
- * Um valor de protesto chega ora como number, ora como string no formato BR
- * ("293.265,96" = 293265,96): ponto é milhar, vírgula é decimal. `Number("293.265,96")`
- * é NaN — por isso o valor caía para 0 e a empresa aparecia com R$ 0 protestado.
- */
-function parseNumero(v: unknown): number {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-  if (typeof v !== 'string') return 0
-  const s = v.trim()
-  if (!s) return 0
-  // Se há vírgula, ela é o decimal e o ponto é separador de milhar (BR). Sem vírgula,
-  // o ponto (se houver) já é o decimal (US) — não o apague.
-  const normal = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
-  const n = Number(normal.replace(/[^\d.-]/g, ''))
-  return Number.isFinite(n) ? n : 0
-}
-
-/**
- * Fallback: soma qtd/valor descendo na árvore de cartórios. As duas respostas do DirectD
- * têm formatos diferentes:
- *   SP       — estado.cartoriosProtesto[] , cartório.numProtestos
- *   Nacional — estado.cartorios[]         , cartório.numeroProtestos
- * ambos com cartório.valorTotalProtestosCartorio (o Nacional prefixa "R$ ").
- */
-function somarCartorios(cartorios: unknown): { qtd: number; valor: number } {
-  let qtd = 0
-  let valor = 0
-  if (!Array.isArray(cartorios)) return { qtd, valor }
-  for (const uf of cartorios) {
-    const e = (uf ?? {}) as Record<string, unknown>
-    const qUf = parseNumero(e.totalNumProtestosUf)
-    const vUf = parseNumero(e.valorTotalProtestosEstado)
-    if (qUf > 0 || vUf > 0) {
-      qtd += qUf
-      valor += vUf
-      continue
-    }
-    const filhos = e.cartoriosProtesto ?? e.cartorios
-    if (Array.isArray(filhos)) {
-      for (const c of filhos) {
-        const cc = (c ?? {}) as Record<string, unknown>
-        qtd += parseNumero(cc.numProtestos ?? cc.numeroProtestos)
-        valor += parseNumero(cc.valorTotalProtestosCartorio)
-      }
-    }
-  }
-  return { qtd, valor }
-}
-
-/** A resposta da DirectD varia por endpoint/versão; extrai defensivamente e guarda o bruto. */
-function extrair(payload: unknown, custo: number): ResultadoConsultaCredito {
-  const p = (payload ?? {}) as Record<string, unknown>
-  const raiz = (p.retorno ?? p.RetornoProtestos ?? p.dados ?? p) as Record<string, unknown>
-  const num = (...chaves: string[]): number => {
-    for (const k of chaves) {
-      if (k in raiz) {
-        const n = parseNumero(raiz[k])
-        if (n > 0) return n
-      }
-    }
-    return 0
-  }
-  let qtd = num('totalNumProtestos', 'qtdTitulos', 'totalTitulos', 'TotalTitulos', 'quantidadeProtestos', 'qtdeProtestos')
-  let valor = num('valorTotalProtestos', 'valorTotal', 'ValorTotal', 'valorProtestado')
-  const cartorios = (raiz.protestos ?? raiz.cartorios ?? raiz.Cartorios ?? raiz.detalhes ?? null) as unknown
-  // Fallback POR CAMPO: o Nacional traz valorTotalProtestos no topo mas não a contagem
-  // com o mesmo nome — então valor vinha certo e qtd ficava 0. Soma dos cartórios cobre.
-  if (qtd === 0 || valor === 0) {
-    const s = somarCartorios(cartorios)
-    if (qtd === 0) qtd = s.qtd
-    if (valor === 0) valor = s.valor
-  }
-  const constam = raiz.constamProtestos === true || raiz.constaProtesto === true
-  const tem = constam || qtd > 0 || valor > 0 || (Array.isArray(cartorios) && cartorios.length > 0)
-  return { tem_protesto: tem, qtd_protestos: qtd, valor_total: valor, cartorios, payload, custo }
-}
-
 class ProvedorDirectD implements ProvedorCredito {
-  constructor(
-    readonly fonte: string,
-    private readonly rota: string,
-    private readonly custo: number,
-    private readonly soSp: boolean,
-  ) {}
+  readonly fonte = 'directd_nacional'
 
-  cobreUf(uf: string | null): boolean {
-    return this.soSp ? uf === 'SP' : true
+  // Campo explícito, e não parameter property: `node --experimental-strip-types`
+  // (que roda os testes) recusa `constructor(private readonly x)`.
+  private readonly custo: number
+
+  constructor(custo: number) {
+    this.custo = custo
+  }
+
+  /** Nacional: cobre qualquer UF, inclusive a desconhecida. */
+  cobreUf(): boolean {
+    return true
   }
 
   async consultar(cnpj: string): Promise<ResultadoConsultaCredito> {
-    const url = `${BASE}/${this.rota}?CNPJ=${cnpj}&TOKEN=${env.DIRECTD_API_KEY ?? ''}`
+    const url = `${BASE}/ProtestosOnline?CNPJ=${cnpj}&TOKEN=${env.DIRECTD_API_KEY ?? ''}`
     const payload = await requisitarJson(url, { timeoutMs: 30_000, tentativas: 2 })
     return extrair(payload, this.custo)
   }
 }
 
-export function provedoresDirectD(
-  custoSp: number,
-  custoNacional: number,
-): { sp: ProvedorCredito; nacional: ProvedorCredito } {
-  return {
-    sp: new ProvedorDirectD('directd_sp', 'ProtestosSP', custoSp, true),
-    nacional: new ProvedorDirectD('directd_nacional', 'ProtestosOnline', custoNacional, false),
-  }
+/** O único provedor de protesto que existe desde 01/09/2026. */
+export function provedorProtestos(custoNacional: number): ProvedorCredito {
+  return new ProvedorDirectD(custoNacional)
 }

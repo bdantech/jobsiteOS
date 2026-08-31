@@ -256,14 +256,15 @@ a decidir quem vale promover.
 
 - Botão na ficha do fornecedor → lote de **1 item** em `lotes_enriquecimento`, com
   `motivo: 'antecipacao_fornecedor'`. O gasto continua auditável no mesmo lugar de sempre.
-- `incluir_fora_sp: true` de propósito: o roteamento **pula** o item quando a UF não é SP
-  e o parâmetro está desligado. Num clique deliberado, voltar "pulado" sem consultar nada
-  seria o pior resultado.
+- Sempre **nacional**, e não há mais o que escolher: a DirectD desativou o endpoint de
+  SP em 01/09/2026 ao consolidar as consultas no IEPTB. O parâmetro `incluir_fora_sp`
+  saiu junto — ele significava "pague dez vezes mais para cobrir fora de SP", e agora
+  todo item custa o mesmo.
 - **Reclassifica o funil em seguida**, na mesma corrida. Consultar e não reclassificar
   deixaria o dado novo na tabela e a faixa velha no card — pagou-se por uma informação
   que a tela ainda não usa.
-- O preço aparece **antes** do clique (R$ 0,36 SP / R$ 3,50 nacional), vindo de
-  `radar_config` por um DEFINER que devolve só dois números (0067). Chumbar no front
+- O preço aparece **antes** do clique (R$ 3,50, base nacional), vindo de
+  `radar_config` por um DEFINER que devolve só o número (0067/0148). Chumbar no front
   criaria uma segunda verdade, e um botão que promete um preço e cobra outro é pior que
   um botão sem preço.
 

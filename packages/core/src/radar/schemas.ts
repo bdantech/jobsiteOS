@@ -66,7 +66,7 @@ export const criarLoteSchema = z.object({
       '{ variavel, operador, valor }. Só variáveis do catálogo são aceitas.',
   ),
   parametros: z.record(z.unknown()).optional().describe(
-    'Parâmetros do lote, ex.: { incluir_fora_sp: true, revelar_telefone: false }.',
+    'Parâmetros do lote, ex.: { revelar_telefone: false, forcar_ttl: true }.',
   ),
   total_itens: z.number().int().nonnegative().optional(),
   custo_estimado_min: z.number().nonnegative().optional(),

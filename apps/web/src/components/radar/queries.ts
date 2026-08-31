@@ -303,7 +303,7 @@ export async function buscarSupressao(): Promise<Tables<'supressao'>[]> {
 export interface CustosConfig {
   dominio_claude: number
   contato_apollo: number
-  protesto_sp: number
+  /** `protesto_sp` saiu com o endpoint, em 01/09/2026. */
   protesto_nacional: number
 }
 
@@ -314,7 +314,6 @@ export async function buscarCustos(): Promise<CustosConfig> {
     (data?.valor as CustosConfig | undefined) ?? {
       dominio_claude: 0.1,
       contato_apollo: 1.2,
-      protesto_sp: 0.36,
       protesto_nacional: 3.5,
     }
   )

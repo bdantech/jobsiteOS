@@ -7,17 +7,24 @@ import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { lerCustos } from '../../radar/config.js'
-import { provedoresDirectD } from '../../radar/directd.js'
+import { provedorProtestos } from '../../radar/directd.js'
 import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
 import { executarLote } from './lote.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
 /**
- * Protestos DirectD (§5). Roteamento:
- *   - Clientes (cliente=true no lote, ou e_cliente_onepay): SEMPRE nacional (decisão
- *     de crédito — cobertura parcial é risco, não economia).
- *   - Prospecção: uf=SP → endpoint SP; fora de SP → nacional só se incluir_fora_sp,
- *     senão o item é PULADO (a escolha é explícita, mostrada na estimativa do lote).
+ * Protestos DirectD (§5). SEM roteamento, desde 01/09/2026.
+ *
+ * Havia uma escolha: cliente ia para o endpoint nacional (cobertura parcial é
+ * risco, não economia) e prospecção em SP ia para o endpoint de SP, dez vezes
+ * mais barato. A DirectD desativou o `ProtestosSP` ao consolidar tudo no IEPTB, e
+ * com ele foi embora o único motivo de existir uma bifurcação — não há mais lado
+ * barato a escolher.
+ *
+ * `incluir_fora_sp` some junto. O parâmetro significava "pague dez vezes mais
+ * para cobrir fora de SP"; agora todo item custa o mesmo, e um item PULADO seria
+ * uma consulta que ninguém pediu para pular. Lotes antigos com o parâmetro
+ * gravado continuam legíveis — ele simplesmente deixa de decidir qualquer coisa.
  *
  * Sempre INSERE em protestos_consultas (append-only). A derivada é o que importa:
  * mudou de sem→com protesto (ou o valor cresceu além do limiar) → evento.
@@ -26,9 +33,7 @@ import type { ProcessarItem, ResultadoItem } from './lote.js'
 const LIMIAR_AGRAVAMENTO = 1.2 // por empresa: valor cresceu >20% → protesto.agravado
 const LIMIAR_GRUPO = 1.1 // por grupo (rotina mensal): total cresceu >10% vs. mês anterior
 
-export function criarProcessadorProtestos(lote: Tables<'lotes_enriquecimento'>): ProcessarItem {
-  const params = (lote.parametros ?? {}) as { incluir_fora_sp?: boolean; cliente?: boolean }
-
+export function criarProcessadorProtestos(_lote: Tables<'lotes_enriquecimento'>): ProcessarItem {
   return async (item: Tables<'lote_itens'>): Promise<ResultadoItem> => {
     if (!env.DIRECTD_API_KEY) {
       return { status: 'erro', fonte: 'directd_nacional', erro: 'DIRECTD_API_KEY não configurada.' }
@@ -36,25 +41,16 @@ export function criarProcessadorProtestos(lote: Tables<'lotes_enriquecimento'>):
     const cnpj = item.cnpj
     if (!cnpj) return { status: 'erro', fonte: 'directd_nacional', erro: 'Item sem CNPJ.' }
 
+    // A UF não decide mais nada; a empresa é lida para resolver o `empresa_id` do
+    // registro e nada além disso.
     const { data: emp } = await supabaseAdmin
       .from('mercado_explorador')
-      .select('uf, e_cliente_onepay, empresa_id')
+      .select('empresa_id')
       .eq('cnpj', cnpj)
       .maybeSingle()
 
     const custos = await lerCustos()
-    const { sp, nacional } = provedoresDirectD(custos.protesto_sp, custos.protesto_nacional)
-
-    let prov: ProvedorCredito
-    if (params.cliente || emp?.e_cliente_onepay) {
-      prov = nacional
-    } else if (emp?.uf === 'SP') {
-      prov = sp
-    } else if (params.incluir_fora_sp) {
-      prov = nacional
-    } else {
-      return { status: 'pulado', fonte: 'directd_sp', erro: 'Fora de SP e incluir_fora_sp=false.' }
-    }
+    const prov: ProvedorCredito = provedorProtestos(custos.protesto_nacional)
 
     // Estado anterior ANTES de inserir a nova consulta (para a derivada).
     const { data: anterior } = await supabaseAdmin
@@ -218,10 +214,9 @@ export async function protestosEmpresa(opts: {
  * quem interessa. `protestos_consultas.cnpj` é NOT NULL e `empresa_id` é nullable —
  * o modelo sempre permitiu isto.
  *
- * `incluir_fora_sp: true` de propósito. O roteamento manda para o endpoint SP quando
- * a UF é SP e PULA o item quando é fora, a menos que este parâmetro esteja ligado.
- * Num clique deliberado sobre um fornecedor específico, voltar "pulado" sem consultar
- * nada seria o pior resultado — e a tela mostra o custo antes de o clique acontecer.
+ * Desde 01/09/2026 a consulta é sempre nacional e sempre custa o mesmo: não há mais
+ * o que rotear nem o que pular. A tela continua mostrando o custo antes do clique —
+ * e o número que ela mostra subiu, porque o endpoint barato deixou de existir.
  */
 export async function protestoFornecedor(opts: {
   cnpj: string
@@ -245,7 +240,6 @@ export async function protestoFornecedor(opts: {
       definicao_filtro: {} as never,
       parametros: {
         cliente: false,
-        incluir_fora_sp: true,
         motivo: 'antecipacao_fornecedor',
         cnpj: opts.cnpj,
       } as never,
@@ -266,7 +260,7 @@ export async function protestoFornecedor(opts: {
   const loteMin = {
     id: lote.id,
     tipo: 'protestos',
-    parametros: { cliente: false, incluir_fora_sp: true },
+    parametros: { cliente: false },
   } as unknown as Tables<'lotes_enriquecimento'>
   const r = await executarLote(lote.id, criarProcessadorProtestos(loteMin))
   return { lote_id: lote.id, ...r }

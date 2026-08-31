@@ -284,7 +284,6 @@ export function FornecedorDetalhe({ cnpj }: { cnpj: string }) {
        */}
       <ProtestoFornecedor
         cnpj={cnpj}
-        uf={primeira?.fornecedor_uf ?? null}
         temProtesto={primeira?.fornecedor_tem_protesto ?? false}
         valor={primeira?.fornecedor_protesto_valor ?? null}
         consultadoEm={primeira?.fornecedor_protesto_em ?? null}

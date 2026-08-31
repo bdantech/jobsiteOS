@@ -98,13 +98,50 @@ pagaria N vezes).
 
 Tudo em `radar_config` (tela **Configurações**, admin):
 
-- `custos`: R$ por unidade (`dominio_claude`, `contato_apollo`, `protesto_sp`,
-  `protesto_nacional`). Ajuste ao seu plano Apollo/DirectD.
+- `custos`: R$ por unidade (`dominio_claude`, `contato_apollo`, `protesto_nacional`).
+  Ajuste ao seu plano Apollo/DirectD. `protesto_sp` saiu em 01/09/2026, junto com o
+  endpoint.
 - `cargos_alvo`: `titulos`, `departamentos`, `senioridades`, `max_contatos_por_empresa`
   — quem revelar no Apollo.
 - `orcamento`: `teto_mensal_total` (bloqueia execução), `alerta_percentual` (notifica).
 - `apollo`: `revelar_telefone_em_lote`, `bulk_size`.
-- `protestos`: `clientes_sempre_nacional`, `prospeccao_incluir_fora_sp_default`.
+- `protestos`: `clientes_sempre_nacional`. (`prospeccao_incluir_fora_sp_default` saiu
+  com o roteamento por UF — ver abaixo.)
+
+## Protestos: um endpoint só, desde 01/09/2026
+
+A DirectD consolidou as consultas numa integração direta com o IEPTB e **desativou o
+`ProtestosSP`**. Havia dois endpoints: SP (R$ 0,36, só cartórios paulistas) e nacional
+(R$ 3,50). O código escolhia por UF, e essa escolha acabou — não porque o roteamento
+piorou, mas porque não existe mais lado barato.
+
+O efeito é de **preço, não de cobertura**: onde se pagava R$ 0,36 por uma resposta que
+via só SP, paga-se R$ 3,50 por uma que vê o país. `incluir_fora_sp` saiu junto: ele
+significava "pague dez vezes mais para cobrir fora de SP", e agora todo item custa igual.
+Lotes antigos com o parâmetro gravado continuam legíveis; ele apenas deixou de decidir.
+
+`protestos_consultas.fonte` **mantém** `directd_sp` no CHECK — as consultas antigas
+existem e a ficha lê o payload delas. O histórico não muda de nome quando um fornecedor
+muda de produto.
+
+### O zero silencioso que a migração desenterrou
+
+Ao conferir o retorno real do IEPTB antes de trocar, apareceu um defeito antigo: das 24
+consultas nacionais **com** protesto, 20 tinham `qtd_protestos = 0` e valor gravado.
+Três bugs de grafia no parser, e os três só apareciam juntos:
+
+1. a raiz do IEPTB traz `numeroTotalProtestos`, chave que não estava na lista;
+2. o estado traz `numeroTotalProtestos**UF**` e o código lia `totalNumProtestosUf`;
+3. o fallback desistia de descer aos cartórios assim que achava o **valor** — e a
+   contagem estava justamente lá embaixo.
+
+O parser agora compara chaves **ignorando maiúsculas** e cai para os cartórios **por
+campo**: achar um não é ter achado os dois. `directd-parser.ts` é um módulo sem
+dependências justamente para poder ser testado, e o teste usa o payload real.
+
+A 0148 recompôs o passado a partir do `payload`, que é guardado inteiro desde o começo —
+6.654 protestos recuperados sem gastar R$ 3,50 por linha para redescobrir um número que
+já estava no banco.
 
 ## Ciclo de um lote e quando ele falha
 

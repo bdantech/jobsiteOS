@@ -33,22 +33,22 @@ import { antecipacaoKeys } from './queries'
  * decidir quem vale promover.
  */
 
-interface Custos {
-  sp: number
-  nacional: number
-}
-
-async function buscarCustoProtesto(): Promise<Custos> {
+/**
+ * Um preço só desde 01/09/2026: a DirectD desativou o `ProtestosSP` ao consolidar
+ * as consultas no IEPTB. A RPC ainda devolve a chave `sp` (igual à nacional) para
+ * que um build da web em voo durante o deploy não mostre "R$ 0,00" — aqui ela é
+ * ignorada de propósito.
+ */
+async function buscarCustoProtesto(): Promise<number> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('antecipacao_custo_protesto' as never)
   if (error) throw new Error(error.message)
-  const c = data as unknown as { sp?: number; nacional?: number } | null
-  return { sp: Number(c?.sp ?? 0), nacional: Number(c?.nacional ?? 0) }
+  const c = data as unknown as { nacional?: number } | null
+  return Number(c?.nacional ?? 0)
 }
 
 export interface ProtestoFornecedorProps {
   cnpj: string
-  uf: string | null
   temProtesto: boolean
   valor: number | null
   /** `null` = nunca consultamos. Diferente de "consultado e limpo". */
@@ -57,7 +57,6 @@ export interface ProtestoFornecedorProps {
 
 export function ProtestoFornecedor({
   cnpj,
-  uf,
   temProtesto,
   valor,
   consultadoEm,
@@ -79,18 +78,11 @@ export function ProtestoFornecedor({
     if (esperandoDesde !== undefined && consultadoEm !== esperandoDesde) setEsperandoDesde(undefined)
   }, [consultadoEm, esperandoDesde])
 
-  const { data: custos } = useQuery({
+  const { data: custo = null } = useQuery({
     queryKey: [...antecipacaoKeys.all, 'custo-protesto'],
     queryFn: buscarCustoProtesto,
     staleTime: 60 * 60_000,
   })
-
-  // O roteamento do lote manda para o endpoint de SP quando a UF é SP e para o
-  // nacional no resto — inclusive quando a UF ainda é desconhecida, porque o lookup
-  // cadastral não respondeu. Mostrar o preço do caso otimista seria mentir por
-  // omissão justo na tela que pede aprovação de gasto.
-  const emSp = uf === 'SP'
-  const custo = custos ? (emSp ? custos.sp : custos.nacional) : null
 
   const jaConsultado = consultadoEm !== null
 
@@ -227,20 +219,12 @@ export function ProtestoFornecedor({
                   Consulta paga na DirectD{' '}
                   {custo !== null ? (
                     <>
-                      — <strong>{formatarMoedaExata(custo)}</strong>{' '}
-                      {emSp ? '(base SP)' : '(base nacional)'}.
+                      — <strong>{formatarMoedaExata(custo)}</strong> (base nacional, IEPTB).
                     </>
                   ) : (
                     '.'
                   )}
                 </p>
-                {!emSp && (
-                  <p className="text-xs">
-                    {uf
-                      ? `O fornecedor é de ${uf}, fora da base de SP.`
-                      : 'A UF deste CNPJ ainda não foi enriquecida, então vai pela base nacional.'}
-                  </p>
-                )}
                 {jaConsultado && (
                   <p className="text-xs">
                     Já consultado em {formatarDataHora(consultadoEm)} — isto cobra de novo.
