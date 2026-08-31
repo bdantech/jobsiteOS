@@ -291,3 +291,64 @@ test('página vazia no meio não interrompe a varredura', async () => {
   assert.deepEqual(r.itens, [1, 3])
   assert.equal(r.truncado, false)
 })
+
+// ─── O valor da causa, contra o retorno REAL do Escavador ───────────────────
+
+/**
+ * O payload destes testes é o que a API devolveu de verdade numa descoberta de
+ * 31/08/2026. Eles existem porque a regra antiga ("ponto seguido de três dígitos
+ * é milhar") lia `"722332.8400"` como 7.223.328.400 — dez mil vezes o valor real,
+ * num campo que aparece na tela e vai para o parecer da IA.
+ */
+test('valor da causa: quatro casas decimais com ponto, o formato do Escavador', () => {
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{
+      grau: 1,
+      capa: { valor_causa: { valor: '722332.8400', moeda: 'R$', valor_formatado: 'R$ 722.332,84' } },
+    },],
+  } as never)
+  assert.equal(c?.valor_causa, 722332.84)
+})
+
+test('valor da causa: vírgula manda, e o ponto vira milhar', () => {
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{ grau: 1, capa: { valor_causa: { valor: '1.250.000,50' } } },],
+  } as never)
+  assert.equal(c?.valor_causa, 1250000.5)
+})
+
+test('valor da causa: grupos perfeitos de três, sem decimal, continuam milhar', () => {
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{ grau: 1, capa: { valor_causa: '1.250.000' } }],
+  } as never)
+  assert.equal(c?.valor_causa, 1250000)
+})
+
+test('valor da causa: número já numérico passa direto', () => {
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{ grau: 1, capa: { valor_causa: 999.5 } }],
+  } as never)
+  assert.equal(c?.valor_causa, 999.5)
+})
+
+test('valor da causa: ausente é null, e não zero', () => {
+  // "Não informado" não é "de graça": um zero somaria na carteira como se o
+  // processo não valesse nada.
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{ grau: 1, capa: {} }],
+  } as never)
+  assert.equal(c?.valor_causa, null)
+})
+
+test('valor da causa: lixo não vira NaN no banco', () => {
+  const c = consolidarCapa({
+    numero_cnj: '1001425-65.2025.8.26.0100',
+    fontes: [{ grau: 1, capa: { valor_causa: 'não informado' } }],
+  } as never)
+  assert.equal(c?.valor_causa, null)
+})

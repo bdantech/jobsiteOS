@@ -119,9 +119,45 @@ export function creditosDoHeader(headers: { get(nome: string): string | null }):
 
 // ─── Consolidação da capa ───────────────────────────────────────────────────
 
+/**
+ * Um número que chega como string, em qualquer das convenções.
+ *
+ * ─── O ERRO DE 10.000× QUE ISTO CONSERTA ────────────────────────────────────
+ * A regra antiga era `\.(?=\d{3})` — "ponto seguido de três dígitos é separador
+ * de milhar". O Escavador manda o valor da causa com QUATRO casas decimais:
+ * `"722332.8400"` é R$ 722.332,84. A regra via `.840` e apagava o ponto,
+ * gravando 7.223.328.400 — dez mil vezes o valor real, num campo que aparece na
+ * tela e alimenta o parecer.
+ *
+ * A regra nova pergunta a coisa certa: a string INTEIRA parece um número com
+ * grupos de milhar (`1.250.000`) ou é um decimal com ponto? Só o primeiro caso
+ * apaga pontos.
+ *
+ *   "722332.8400"  → 722332.84   (decimal com 4 casas — o caso do Escavador)
+ *   "1.250.000,50" → 1250000.5   (vírgula manda: BR)
+ *   "1.250.000"    → 1250000     (grupos perfeitos de milhar)
+ *   "1.250"        → 1250        (idem — em moeda, é o mais provável)
+ */
 function numeroOuNulo(v: unknown): number | null {
   if (v === null || v === undefined) return null
-  const n = typeof v === 'string' ? Number(v.replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.')) : Number(v)
+  if (typeof v !== 'string') {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+
+  const limpo = v.replace(/[^\d.,-]/g, '').trim()
+  if (limpo === '') return null
+
+  // Vírgula presente: convenção BR, e ela decide sozinha. Ponto é milhar.
+  const texto = limpo.includes(',')
+    ? limpo.replace(/\./g, '').replace(',', '.')
+    : // Sem vírgula: só apaga os pontos quando a string inteira é feita de
+      // grupos de três. Qualquer outra coisa tem o ponto como decimal.
+      /^-?\d{1,3}(\.\d{3})+$/.test(limpo)
+      ? limpo.replace(/\./g, '')
+      : limpo
+
+  const n = Number(texto)
   return Number.isFinite(n) ? n : null
 }
 
