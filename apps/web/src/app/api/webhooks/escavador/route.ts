@@ -69,15 +69,62 @@ interface PayloadCallback {
   processo?: { numero_cnj?: string }
 }
 
-/** Header `Authorization: Bearer x`, header cru, ou `?token=x` na URL. */
-function tokenDaRequisicao(request: Request): string | null {
-  const cabecalho = request.headers.get('authorization') ?? ''
-  const doHeader = cabecalho.toLowerCase().startsWith('bearer ')
-    ? cabecalho.slice(7).trim()
-    : cabecalho.trim()
-  if (doHeader) return doHeader
+/**
+ * De onde o segredo pode vir.
+ *
+ * Quando o token é GERADO PELO ESCAVADOR (é o caso: o painel deles emite um), não
+ * temos como escolher onde ele chega — a spec do 08 assumiu `Authorization`, mas
+ * isso era suposição, não observação. Ler de vários lugares é mais barato que
+ * descobrir o certo por tentativa e erro num painel de terceiro.
+ *
+ * Nenhum destes lugares afrouxa a segurança: a comparação com
+ * `ESCAVADOR_CALLBACK_TOKEN` é a mesma, em tempo constante, e continua falhando
+ * fechada. O que muda é só ONDE procuramos a string.
+ */
+const CABECALHOS = [
+  'authorization',
+  'x-escavador-token',
+  'x-callback-token',
+  'x-api-token',
+  'x-token',
+]
+
+function candidatos(request: Request): string[] {
+  const out: string[] = []
+  for (const nome of CABECALHOS) {
+    const v = request.headers.get(nome)
+    if (!v) continue
+    out.push(v.toLowerCase().startsWith('bearer ') ? v.slice(7).trim() : v.trim())
+  }
   const url = new URL(request.url)
-  return url.searchParams.get('token') ?? url.searchParams.get('secret')
+  for (const chave of ['token', 'secret']) {
+    const v = url.searchParams.get(chave)
+    if (v) out.push(v)
+  }
+  return out.filter(Boolean)
+}
+
+function tokenDaRequisicao(request: Request): string | null {
+  const achados = candidatos(request)
+  // O que CONFERE, não o primeiro que aparece: com vários cabeçalhos presentes,
+  // devolver o primeiro faria um `Authorization` de proxy mascarar o token certo.
+  return achados.find((t) => tokenValido(t)) ?? achados[0] ?? null
+}
+
+/**
+ * Quando recusamos, registra os NOMES dos cabeçalhos que vieram — nunca os
+ * valores. É o que transforma "o painel não salva" em "eles mandam em
+ * `X-Alguma-Coisa` e a gente não lê", sem escrever um segredo no log.
+ */
+function registrarRecusa(request: Request): void {
+  const nomes = [...request.headers.keys()].filter(
+    (n) => !['cookie', 'authorization'].includes(n),
+  )
+  console.warn('[juridico] callback do Escavador recusado', {
+    cabecalhos: nomes,
+    temAuthorization: request.headers.has('authorization'),
+    temQueryToken: new URL(request.url).searchParams.has('token'),
+  })
 }
 
 /**
@@ -87,6 +134,7 @@ function tokenDaRequisicao(request: Request): string | null {
  */
 export async function GET(request: Request): Promise<NextResponse> {
   if (!tokenValido(tokenDaRequisicao(request))) {
+    registrarRecusa(request)
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
   return NextResponse.json({ ok: true, servico: 'callback do Escavador' })
@@ -99,6 +147,7 @@ export async function HEAD(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   if (!tokenValido(tokenDaRequisicao(request))) {
+    registrarRecusa(request)
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
 

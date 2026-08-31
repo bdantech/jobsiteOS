@@ -127,9 +127,25 @@ nós queremos o reenvio, porque perder um `novo_processo` é perder uma ação n
 ### Dois segredos, e eles não se misturam
 
 `ESCAVADOR_TOKEN` é o Bearer da API — é ele que **gasta dinheiro**, e vive só no worker.
-`ESCAVADOR_CALLBACK_TOKEN` é o segredo de **entrada**, cadastrado no painel deles.
-Reaproveitar o token de saída como segredo de entrada o publicaria num header que qualquer
-um pode nos fazer comparar batendo na nossa URL.
+`ESCAVADOR_CALLBACK_TOKEN` é o segredo de **entrada**. Reaproveitar o token de saída como
+segredo de entrada o publicaria num header que qualquer um pode nos fazer comparar batendo
+na nossa URL.
+
+**Os dois são gerados no painel do Escavador**, e são valores diferentes: o da API, na
+área de credenciais; o do callback, junto da configuração de callback. Nós não inventamos
+nenhum dos dois — o do callback a gente **copia** do painel deles para
+`ESCAVADOR_CALLBACK_TOKEN`, no worker **e** na web, com o mesmo valor. Se divergirem, uma
+das duas URLs recusa tudo em silêncio.
+
+A rota aceita esse segredo em `Authorization` (com ou sem `Bearer`), em
+`X-Escavador-Token`, `X-Callback-Token`, `X-Api-Token`, `X-Token` ou em `?token=` na URL.
+A lista é larga de propósito: quando o token é emitido por eles, não escolhemos onde ele
+chega, e descobrir o lugar certo por tentativa e erro num painel de terceiro é caro. A
+comparação é a mesma em todos os casos — tempo constante, falha fechada.
+
+Quando a rota recusa, ela registra no log os **nomes** dos cabeçalhos que vieram (nunca os
+valores). É o que transforma "o painel não salva" em "eles mandam em `X-Alguma-Coisa` e a
+gente não lê".
 
 ## O custo só existe no nosso log
 

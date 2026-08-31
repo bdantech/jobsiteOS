@@ -164,19 +164,47 @@ app.post('/webhooks/apollo', async (req: Request, res: Response) => {
  * não faz nada". É um segredo só de ENTRADA — quem o roubar consegue nos entregar
  * um callback falso, não gastar nosso crédito.
  */
+const CABECALHOS_CALLBACK = [
+  'authorization',
+  'x-escavador-token',
+  'x-callback-token',
+  'x-api-token',
+  'x-token',
+]
+
 function tokenDoCallback(req: Request): string | undefined {
-  const cabecalho = req.headers.authorization ?? ''
-  const doHeader = cabecalho.toLowerCase().startsWith('bearer ')
-    ? cabecalho.slice(7).trim()
-    : cabecalho.trim()
-  if (doHeader) return doHeader
-  const q = req.query.token ?? req.query.secret
-  return typeof q === 'string' ? q : undefined
+  const achados: string[] = []
+  for (const nome of CABECALHOS_CALLBACK) {
+    const v = req.headers[nome]
+    const bruto = Array.isArray(v) ? v[0] : v
+    if (!bruto) continue
+    achados.push(bruto.toLowerCase().startsWith('bearer ') ? bruto.slice(7).trim() : bruto.trim())
+  }
+  for (const chave of ['token', 'secret']) {
+    const q = req.query[chave]
+    if (typeof q === 'string' && q) achados.push(q)
+  }
+  // O que CONFERE, não o primeiro: com vários cabeçalhos presentes, devolver o
+  // primeiro faria um `Authorization` de proxy mascarar o token certo.
+  return achados.find((t) => callbackEscavadorValido(t)) ?? achados[0]
+}
+
+/** Nomes dos cabeçalhos recebidos, NUNCA os valores — para diagnosticar sem vazar. */
+function registrarRecusaCallback(req: Request): void {
+  logger.warn(
+    {
+      cabecalhos: Object.keys(req.headers).filter((n) => n !== 'cookie' && n !== 'authorization'),
+      tem_authorization: Boolean(req.headers.authorization),
+      tem_query_token: Boolean(req.query.token),
+    },
+    'Callback do Escavador recusado: o segredo não veio em nenhum lugar conhecido.',
+  )
 }
 
 /** A verificação de URL que o painel faz antes de salvar. */
 app.get('/webhooks/escavador', (req: Request, res: Response) => {
   if (!callbackEscavadorValido(tokenDoCallback(req))) {
+    registrarRecusaCallback(req)
     res.status(401).json({ erro: 'Não autorizado.' })
     return
   }
@@ -185,6 +213,7 @@ app.get('/webhooks/escavador', (req: Request, res: Response) => {
 
 app.post('/webhooks/escavador', async (req: Request, res: Response) => {
   if (!callbackEscavadorValido(tokenDoCallback(req))) {
+    registrarRecusaCallback(req)
     res.status(401).json({ erro: 'Não autorizado.' })
     return
   }
