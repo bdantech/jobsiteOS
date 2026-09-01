@@ -386,7 +386,9 @@ Detalhes em [`campanhas.md`](campanhas.md).
    Com dois ou mais números, cadastre o segredo de cada um na ficha — um segredo global faria
    os webhooks do segundo número levarem 401, e um 401 em webhook não aparece em tela nenhuma:
    as respostas daquele número simplesmente sumiriam. Ponha `WASENDER_BASE_URL` (`https://wasenderapi.com`, só o host — o cliente
-   concatena `/api/send-message`) e `WASENDER_WEBHOOK_SECRET` no worker e na web, e cadastre
+   concatena `/api/send-message`) **no worker**, que é o único que envia;
+   `WASENDER_WEBHOOK_SECRET` vai nos dois, porque a URL cadastrada no painel pode apontar para
+   qualquer um deles. Cadastre
    `https://<dominio>/api/webhooks/wasender?secret=<segredo>` no painel do provedor.
 
    `WASENDER_BASE_URL` é a falta que **não** aparece na ficha da conta: o número pode ter
