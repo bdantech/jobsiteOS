@@ -364,10 +364,28 @@ Detalhes em [`campanhas.md`](campanhas.md).
 
 ## Como ligar
 
-1. **WhatsApp** — cadastre as contas em Comunicação → Contas WhatsApp (o token vai para o
-   Vault) e defina o `tipo` de cada uma: `relacionamento`, `ia` ou `plantao`. O número da IA
-   **nunca** é o de um humano — enquanto não houver uma conta `ia` ativa com token, a persona
-   simplesmente não envia, e a tela avisa. Ponha `WASENDER_BASE_URL` e `WASENDER_WEBHOOK_SECRET` no
+1. **WhatsApp** — cadastre as contas em Comunicação → Contas WhatsApp e defina o `tipo` de
+   cada uma: `relacionamento`, `ia` ou `plantao`. O número da IA **nunca** é o de um humano —
+   enquanto não houver uma conta `ia` ativa com token, a persona simplesmente não envia, e a
+   tela avisa.
+
+   O Wasender emite **duas credenciais por número**, e as duas vão na ficha da conta:
+
+   | | O que faz | Como guardamos |
+   | --- | --- | --- |
+   | **Token de envio** | manda mensagem — é o que **gasta dinheiro** | Vault (0045). Nunca reexibido |
+   | **Segredo do webhook** | prova que o webhook veio dele | **hash** (0152). Nunca lido, só comparado |
+
+   O segundo é hash e não Vault porque ele nunca precisa ser LIDO — só comparado. Guardar o
+   digest basta, é estritamente mais seguro (não há caminho que o devolva, nem para o service
+   role) e a validação vira uma consulta indexada em vez de N leituras do Vault num caminho
+   quente.
+
+   `WASENDER_WEBHOOK_SECRET` continua valendo como **fallback**: é o caminho de quem tem um
+   número só, e sem ele ligar o primeiro exigiria cadastrar a conta antes de o webhook existir.
+   Com dois ou mais números, cadastre o segredo de cada um na ficha — um segredo global faria
+   os webhooks do segundo número levarem 401, e um 401 em webhook não aparece em tela nenhuma:
+   as respostas daquele número simplesmente sumiriam. Ponha `WASENDER_BASE_URL` e `WASENDER_WEBHOOK_SECRET` no
    worker e na web, e cadastre `https://<dominio>/api/webhooks/wasender?secret=<segredo>` no
    painel do provedor.
 2. **Gmail** — crie o app OAuth no Google Cloud com `redirect_uri`

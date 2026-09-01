@@ -320,6 +320,12 @@ export const salvarWhatsappContaSchema = z.object({
    * "definido em {data}" e a opção de substituir.
    */
   token: z.string().trim().min(8).max(500).optional(),
+  /**
+   * O SEGUNDO segredo do provedor, e ele é de ENTRADA: é o que o Wasender
+   * devolve a cada webhook DESTE número. Guardado como hash — nunca é lido, só
+   * comparado. Como o token, só na escrita.
+   */
+  webhook_secret: z.string().trim().min(8).max(500).optional(),
   usuario_responsavel: z.string().uuid().optional().nullable(),
   ativo: z.boolean().default(true),
   /**

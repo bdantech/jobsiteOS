@@ -68,6 +68,7 @@ function ContaDialog({
   const [apelido, setApelido] = React.useState(conta?.apelido ?? '')
   const [numero, setNumero] = React.useState(conta?.numero ?? '')
   const [token, setToken] = React.useState('')
+  const [webhookSecret, setWebhookSecret] = React.useState('')
   const [ativo, setAtivo] = React.useState(conta?.ativo ?? true)
   const [tipo, setTipo] = React.useState<TipoContaWhatsapp>(
     (conta?.tipo as TipoContaWhatsapp | undefined) ?? 'relacionamento',
@@ -105,6 +106,7 @@ function ContaDialog({
       apelido: apelido.trim(),
       numero: digitos,
       token: token.trim() === '' ? undefined : token.trim(),
+      webhook_secret: webhookSecret.trim() === '' ? undefined : webhookSecret.trim(),
       ativo,
       tipo,
       mensagens_por_dia: nTeto,
@@ -121,6 +123,7 @@ function ContaDialog({
     }
     toast.success(conta ? 'Conta atualizada.' : 'Conta cadastrada.')
     setToken('')
+    setWebhookSecret('')
     onOpenChange(false)
     void qc.invalidateQueries({ queryKey: CHAVE_CONTAS })
   }
@@ -210,7 +213,7 @@ function ContaDialog({
 
           <div className="space-y-2">
             <Label htmlFor="token">
-              Token {conta ? '(deixe em branco para manter o atual)' : ''}
+              Token de envio {conta ? '(deixe em branco para manter o atual)' : ''}
             </Label>
             <Input
               id="token"
@@ -224,6 +227,33 @@ function ContaDialog({
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               Guardado cifrado no Vault. Não há como reexibi-lo depois — nem por esta tela, nem por
               consulta direta. Perdido, só substituir.
+            </p>
+          </div>
+
+          {/*
+            O SEGUNDO segredo, e ele é de ENTRADA. O provedor emite um par por
+            número: o token acima manda mensagem (gasta dinheiro), este só prova
+            que o webhook veio mesmo dele. Guardá-los no mesmo campo entregaria o
+            caro num lugar onde só o barato precisa estar.
+          */}
+          <div className="space-y-2">
+            <Label htmlFor="webhook">
+              Segredo do webhook {conta ? '(deixe em branco para manter o atual)' : ''}
+            </Label>
+            <Input
+              id="webhook"
+              type="password"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              autoComplete="new-password"
+              placeholder={
+                conta?.webhook_secret_definido_em ? '••••••••  (já definido)' : 'emitido pelo provedor'
+              }
+            />
+            <p className="flex items-start gap-1 text-xs text-muted-foreground">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              É o que o provedor devolve a cada webhook DESTE número. Guardamos só o hash — ele
+              nunca é lido, apenas comparado. Sem ele, o número usa o segredo global do ambiente.
             </p>
           </div>
 
@@ -388,7 +418,7 @@ export function ContasWhatsapp() {
                     <TableHead>Número</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Ritmo</TableHead>
-                    <TableHead>Token</TableHead>
+                    <TableHead>Credenciais</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead />
                   </TableRow>
@@ -420,13 +450,18 @@ export function ContasWhatsapp() {
                           </Badge>
                         ) : null}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="space-y-1 text-xs text-muted-foreground">
                         {c.token_definido_em ? (
-                          `definido em ${dataHora(c.token_definido_em)}`
+                          <div>envio: {dataHora(c.token_definido_em)}</div>
                         ) : (
                           <Badge variant="destructive" className="h-5 text-[10px]">
-                            sem token
+                            sem token de envio
                           </Badge>
+                        )}
+                        {c.webhook_secret_definido_em ? (
+                          <div>webhook: {dataHora(c.webhook_secret_definido_em)}</div>
+                        ) : (
+                          <div className="text-muted-foreground/70">webhook: segredo global</div>
                         )}
                       </TableCell>
                       <TableCell>

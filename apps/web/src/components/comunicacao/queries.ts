@@ -203,6 +203,7 @@ export interface ContaWhatsappLida {
   intervalo_min_seg: number
   intervalo_max_seg: number
   token_definido_em: string | null
+  webhook_secret_definido_em: string | null
 }
 
 export async function buscarContasWhatsapp(): Promise<ContaWhatsappLida[]> {
@@ -211,7 +212,7 @@ export async function buscarContasWhatsapp(): Promise<ContaWhatsappLida[]> {
   // `select *` aqui falharia — que é exatamente o comportamento desejado.
   const { data, error } = await supabase
     .from('whatsapp_contas')
-    .select('id, apelido, numero, tipo, ativo, mensagens_por_dia, warmup_iniciado_em, intervalo_min_seg, intervalo_max_seg, token_definido_em')
+    .select('id, apelido, numero, tipo, ativo, mensagens_por_dia, warmup_iniciado_em, intervalo_min_seg, intervalo_max_seg, token_definido_em, webhook_secret_definido_em')
     .order('tipo')
     .order('apelido')
   if (error) throw new Error(error.message)

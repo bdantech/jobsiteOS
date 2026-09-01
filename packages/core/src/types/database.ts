@@ -7867,6 +7867,8 @@ export type Database = {
           token_secret_id: string | null
           usuario_responsavel: string | null
           warmup_iniciado_em: string | null
+          webhook_secret_definido_em: string | null
+          webhook_secret_hash: string | null
         }
         Insert: {
           apelido: string
@@ -7884,6 +7886,8 @@ export type Database = {
           token_secret_id?: string | null
           usuario_responsavel?: string | null
           warmup_iniciado_em?: string | null
+          webhook_secret_definido_em?: string | null
+          webhook_secret_hash?: string | null
         }
         Update: {
           apelido?: string
@@ -7901,6 +7905,8 @@ export type Database = {
           token_secret_id?: string | null
           usuario_responsavel?: string | null
           warmup_iniciado_em?: string | null
+          webhook_secret_definido_em?: string | null
+          webhook_secret_hash?: string | null
         }
         Relationships: [
           {
@@ -9306,6 +9312,10 @@ export type Database = {
       antecipacao_metricas_faixa: { Args: never; Returns: Json }
       antecipacao_resumo_funil: { Args: never; Returns: Json }
       antecipacao_status_conversoes: { Args: { p?: Json }; Returns: Json }
+      app__conta_do_webhook: {
+        Args: { p_segredo: string }
+        Returns: { apelido: string; id: string; numero: string }[]
+      }
       /*
        * PATCH DO REPO (ver a nota no fim deste arquivo): o gerador emite todo
        * argumento de RPC como NÃO-anulável, e os quatro últimos aqui aceitam
@@ -12122,6 +12132,8 @@ export type Database = {
           token_secret_id: string | null
           usuario_responsavel: string | null
           warmup_iniciado_em: string | null
+          webhook_secret_definido_em: string | null
+          webhook_secret_hash: string | null
         }
         SetofOptions: {
           from: "*"

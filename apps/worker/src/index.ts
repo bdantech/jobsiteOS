@@ -96,7 +96,7 @@ import {
   processarWebhookResend,
   processarWebhookWasender,
 } from './jobs/comunicacao/webhooks.js'
-import { segredoWasenderValido, segredoResendValido } from './comunicacao/webhook-auth.js'
+import { webhookWasenderAutorizado, segredoResendValido } from './comunicacao/webhook-auth.js'
 
 /**
  * The worker's HTTP surface. Small on purpose: it starts jobs and reports health.
@@ -280,7 +280,7 @@ app.post('/webhooks/wasender', async (req: Request, res: Response) => {
     (typeof req.headers['x-webhook-secret'] === 'string'
       ? (req.headers['x-webhook-secret'] as string)
       : undefined)
-  if (!segredoWasenderValido(recebido)) {
+  if (!(await webhookWasenderAutorizado(recebido))) {
     res.status(401).json({ erro: 'Não autorizado.' })
     return
   }

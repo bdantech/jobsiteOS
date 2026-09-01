@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
+import { supabaseAdmin } from '../db.js'
 import { env } from '../env.js'
 
 /**
@@ -24,6 +25,30 @@ function iguais(a: string | undefined, b: string | undefined): boolean {
 
 export function segredoWasenderValido(recebido: string | undefined): boolean {
   return iguais(recebido, env.WASENDER_WEBHOOK_SECRET)
+}
+
+/**
+ * O segredo de webhook DE ALGUMA CONTA ATIVA.
+ *
+ * O Wasender emite um par (access token, webhook secret) por número. O token já
+ * era por conta desde a 0045; o segredo virou por conta na 0152, guardado como
+ * HASH — ele nunca é lido, só comparado.
+ *
+ * A comparação acontece no BANCO, por índice: trazer os hashes para a memória do
+ * worker para comparar aqui seria manter material de credencial num processo que
+ * não precisa dele, e o índice já resolve em uma consulta.
+ *
+ * `WASENDER_WEBHOOK_SECRET` continua valendo como fallback — é o caminho de quem
+ * tem um número só, e sem ele ligar o primeiro exigiria cadastrar a conta antes
+ * de o webhook existir.
+ */
+export async function webhookWasenderAutorizado(recebido: string | undefined): Promise<boolean> {
+  if (!recebido) return false
+  if (segredoWasenderValido(recebido)) return true
+  const { data, error } = await supabaseAdmin.rpc('app__conta_do_webhook', { p_segredo: recebido })
+  // Erro de banco não vira "autorizado": falha fechada, como o resto do módulo.
+  if (error) return false
+  return Array.isArray(data) ? data.length > 0 : data !== null
 }
 
 /**
