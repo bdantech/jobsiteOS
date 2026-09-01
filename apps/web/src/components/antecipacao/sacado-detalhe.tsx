@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { FichaVoltar } from '@/components/ficha/ficha'
 import { promoverEmpresaAction } from '@/actions/mercado'
 import { cn } from '@/lib/utils'
+import { MenuAcoesNota } from './acoes-nota'
 import { NotaModal } from './documento/nota-modal'
 import {
   FAIXA_BADGE,
@@ -331,6 +332,10 @@ export function SacadoDetalhe({ cnpj }: { cnpj: string }) {
           subtitulo={`${nota.fornecedor_nome ?? nota.fornecedor_cnpj} → ${nome}`}
           aberto
           onOpenChange={(v) => !v && setNota(null)}
+          /* A nota é a mesma do funil, e o que se faz com ela também. Sem isto o
+             menu existia num caminho e sumia no outro, e a diferença não tinha
+             razão nenhuma — era só o `acoes` que não fora passado aqui. */
+          acoes={<MenuAcoesNota nota={nota} />}
         />
       ) : null}
 

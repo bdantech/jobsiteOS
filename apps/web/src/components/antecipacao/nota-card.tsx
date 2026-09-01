@@ -92,7 +92,7 @@ export function NotaCard({
             )}
           >
             <header className="flex items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
+              <div className="min-w-0 flex-1 space-y-1">
                 {/* O link tem de parar a propagação: clicar no NOME vai para o
                     fornecedor, clicar em qualquer outro lugar abre a nota. */}
                 <Link
@@ -123,8 +123,23 @@ export function NotaCard({
                 </div>
               </div>
 
-              {/* As ações foram para o modal: um menu por card, vezes dezenas de
-                  cards, é um clique de decisão tomado sem abrir a nota. */}
+              {/*
+                O menu no CARD, além do modal.
+                
+                Ele tinha saído daqui de propósito — "um clique de decisão tomado
+                sem abrir a nota" —, e a preocupação continua válida: mover para
+                "perdida" e marcar fornecedor sem interesse pedem motivo por texto,
+                e os dois diálogos continuam exigindo isso. O que mudou é o
+                reconhecimento de que quem varre uma coluna de trinta notas já sabe
+                o que fazer com a maioria delas, e obrigar a abrir cada uma para
+                mover uma etapa é atrito sem proteção.
+
+                `stopPropagation` porque o card inteiro é um botão que abre a nota:
+                sem isso, clicar no menu abriria o modal por baixo dele.
+              */}
+              <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                <MenuAcoesNota nota={nota} />
+              </div>
             </header>
 
             {/* Identificação da nota + valor, numa linha só. */}
