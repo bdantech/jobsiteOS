@@ -114,9 +114,28 @@ app.use(express.json({ limit: '256kb' }))
 
 // ─── /health (público: é o probe do Railway) ────────────────────────────────
 
+/*
+ * O `/health` diz QUAL BUILD está no ar, e isso não é vaidade.
+ *
+ * Um parser foi corrigido, testado e mergeado; quatro horas depois o worker
+ * ainda gravava o valor errado. Não havia como responder "o deploy subiu?" sem
+ * abrir o painel do Railway — e a resposta muda completamente o diagnóstico:
+ * código errado se conserta escrevendo, deploy parado se conserta clicando.
+ *
+ * `RAILWAY_GIT_COMMIT_SHA` é injetada pelo Railway em cada build. Fora dele a
+ * chave vem nula, que é honesto: significa "não sei", e não uma versão inventada.
+ */
 app.get('/health', async (_req: Request, res: Response) => {
   const db = await pingDb()
-  res.status(db ? 200 : 503).json({ ok: db, db: db ? 'ok' : 'indisponível', versao: '0.1.0' })
+  res.status(db ? 200 : 503).json({
+    ok: db,
+    db: db ? 'ok' : 'indisponível',
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    branch: process.env.RAILWAY_GIT_BRANCH ?? null,
+    // Quando o processo subiu. Um commit certo com uptime de duas semanas é um
+    // processo que nunca reiniciou depois do deploy.
+    desde: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+  })
 })
 
 // ─── Webhook do Apollo (público: o Apollo não manda o WORKER_SECRET) ─────────

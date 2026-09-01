@@ -371,6 +371,23 @@ curl -i "https://<seu-dominio>/api/webhooks/escavador?token=<ESCAVADOR_CALLBACK_
 `ESCAVADOR_CALLBACK_TOKEN` faltando no ambiente da web — a rota **falha fechada** de
 propósito). `404` significa que o deploy com esta rota ainda não subiu.
 
+## Conferir qual build do worker está no ar
+
+`GET https://<worker>/health` devolve o **commit** e desde quando o processo está de pé:
+
+```json
+{ "ok": true, "db": "ok", "commit": "52ca741", "branch": "main", "desde": "..." }
+```
+
+Isso existe por um caso concreto. Um parser do valor da causa foi corrigido, testado e
+mergeado; quatro horas depois o worker ainda gravava o valor errado e sobrescreveu um
+backfill que já tinha corrigido o passado. Sem o commit no `/health` não havia como
+distinguir as duas hipóteses — e elas pedem coisas opostas: **código errado se conserta
+escrevendo, deploy parado se conserta clicando**.
+
+Um `commit` certo com `desde` de duas semanas atrás também é resposta: o build subiu, o
+processo não reiniciou.
+
 ## O briefing e o parecer são coisas diferentes
 
 Duas saídas de IA no módulo, e a diferença não é de tamanho:
