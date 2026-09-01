@@ -80,6 +80,22 @@ export function NotaCard({
             aria-label={`Abrir a nota ${nota.numero ?? nota.access_key} de ${nomeFornecedor}`}
             onClick={() => setNotaAberta(true)}
             onKeyDown={(e) => {
+              /*
+               * SÓ quando o card é o próprio alvo.
+               *
+               * Sem esta linha, digitar o motivo da perda abria a nota: no React
+               * o evento sobe pela ÁRVORE DE COMPONENTES, não pela do DOM, e o
+               * diálogo do menu — ainda que o Radix o renderize num portal no
+               * `body` — continua sendo filho deste `<article>`. Cada espaço
+               * digitado no textarea chegava aqui como `e.key === ' '`, era
+               * engolido pelo `preventDefault` e abria o modal por cima.
+               *
+               * `stopPropagation` no wrapper do menu resolveria este caso e
+               * deixaria o próximo controle aninhado com o mesmo defeito. A
+               * checagem de alvo vale para todos: o card só responde ao teclado
+               * quando o foco está NELE, que é o que `role="button"` promete.
+               */
+              if (e.target !== e.currentTarget) return
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
                 setNotaAberta(true)

@@ -385,9 +385,14 @@ Detalhes em [`campanhas.md`](campanhas.md).
    número só, e sem ele ligar o primeiro exigiria cadastrar a conta antes de o webhook existir.
    Com dois ou mais números, cadastre o segredo de cada um na ficha — um segredo global faria
    os webhooks do segundo número levarem 401, e um 401 em webhook não aparece em tela nenhuma:
-   as respostas daquele número simplesmente sumiriam. Ponha `WASENDER_BASE_URL` e `WASENDER_WEBHOOK_SECRET` no
-   worker e na web, e cadastre `https://<dominio>/api/webhooks/wasender?secret=<segredo>` no
-   painel do provedor.
+   as respostas daquele número simplesmente sumiriam. Ponha `WASENDER_BASE_URL` (`https://wasenderapi.com`, só o host — o cliente
+   concatena `/api/send-message`) e `WASENDER_WEBHOOK_SECRET` no worker e na web, e cadastre
+   `https://<dominio>/api/webhooks/wasender?secret=<segredo>` no painel do provedor.
+
+   `WASENDER_BASE_URL` é a falta que **não** aparece na ficha da conta: o número pode ter
+   token, estar ativo e mesmo assim nenhum envio sair, porque a base URL é da aplicação e vive
+   no Railway/Vercel, não no Vault. A fila diz qual das duas faltou — leia o erro da linha em
+   Comunicação → Outbox antes de mexer na credencial.
 2. **Gmail** — crie o app OAuth no Google Cloud com `redirect_uri`
    `https://<dominio>/api/auth/gmail/callback` e escopos `gmail.send`, `gmail.readonly`,
    `gmail.modify`. Cada pessoa conecta a própria caixa em Comunicação → Configurações. Para

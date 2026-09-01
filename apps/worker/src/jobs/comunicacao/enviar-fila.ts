@@ -244,9 +244,12 @@ async function processar(
   }
 
   // ── O transporte ─────────────────────────────────────────────────────────
-  const { transporte, remetente } = await montarTransporte(linha, canal, conta)
+  const { transporte, remetente, motivo } = await montarTransporte(linha, canal, conta)
   if (!transporte) {
-    await marcarFalha(linha, 'Transporte indisponível (credencial ausente).')
+    // O MOTIVO, não o rótulo. "Credencial ausente" mandou alguém conferir uma
+    // credencial que estava certa enquanto o que faltava era uma variável de
+    // ambiente do worker — a falta e o conserto ficam no mesmo texto.
+    await marcarFalha(linha, motivo ?? 'Transporte indisponível.')
     return { desfecho: 'falhas', conta }
   }
 
@@ -354,10 +357,11 @@ async function montarTransporte(
   linha: LinhaFila,
   canal: CanalThread,
   conta: ContaWhatsapp | null,
-): Promise<{ transporte: Transporte | null; remetente: string | null }> {
+): Promise<{ transporte: Transporte | null; remetente: string | null; motivo: string | null }> {
   if (canal === 'whatsapp') {
-    if (!conta) return { transporte: null, remetente: null }
-    return { transporte: await transporteWhatsapp(conta), remetente: conta.numero }
+    if (!conta) return { transporte: null, remetente: null, motivo: 'Nenhuma conta de WhatsApp escolhida.' }
+    const { transporte, motivo } = await transporteWhatsapp(conta)
+    return { transporte, remetente: conta.numero, motivo }
   }
 
   /*
@@ -380,15 +384,26 @@ async function montarTransporte(
         .eq('id', linha.criada_por)
         .maybeSingle()
       const t = await transporteGmail(contaGmail, u?.nome ?? null)
-      if (t) return { transporte: t, remetente: contaGmail.endereco }
+      if (t) return { transporte: t, remetente: contaGmail.endereco, motivo: null }
     }
   }
 
   const remetente = linha.por_ia
     ? (env.RESEND_REMETENTE_IA ?? env.RESEND_REMETENTE ?? null)
     : (env.RESEND_REMETENTE ?? null)
-  if (!remetente) return { transporte: null, remetente: null }
-  return { transporte: transporteResend(remetente), remetente }
+  if (!remetente) {
+    return {
+      transporte: null,
+      remetente: null,
+      motivo: 'Nenhum remetente de e-mail configurado (RESEND_REMETENTE) e o Gmail de quem enviou não está conectado.',
+    }
+  }
+  const t = transporteResend(remetente)
+  return {
+    transporte: t,
+    remetente,
+    motivo: t ? null : 'RESEND_API_KEY não configurada no worker — nenhum e-mail do sistema sai sem ela.',
+  }
 }
 
 /**

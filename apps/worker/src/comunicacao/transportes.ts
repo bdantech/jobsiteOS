@@ -80,23 +80,47 @@ export async function escolherConta(tipo: 'relacionamento' | 'ia' | 'plantao'): 
   return usos.sort((a, b) => a.usos - b.usos)[0]!.conta
 }
 
-export async function transporteWhatsapp(conta: ContaWhatsapp): Promise<Transporte | null> {
+/**
+ * O transporte de WhatsApp, ou O MOTIVO exato pelo qual ele não existe.
+ *
+ * Devolver só `null` custou uma investigação: a fila registrou "credencial
+ * ausente" num envio cuja conta TINHA token no Vault, e quem leu a mensagem foi
+ * conferir a credencial — que estava certa. O que faltava era a
+ * `WASENDER_BASE_URL`, uma variável do worker, do outro lado do sistema.
+ *
+ * São duas faltas com dois donos diferentes: o token é da CONTA e se resolve na
+ * tela de Comunicação; a base URL é da APLICAÇÃO e se resolve no Railway. Uma
+ * mensagem de erro que não distingue as duas manda a pessoa para o lugar errado,
+ * e ela volta de lá achando que o sistema está quebrado.
+ */
+export async function transporteWhatsapp(
+  conta: ContaWhatsapp,
+): Promise<{ transporte: Transporte | null; motivo: string | null }> {
+  if (!env.WASENDER_BASE_URL) {
+    logger.warn('WASENDER_BASE_URL não configurada — envio de WhatsApp indisponível.')
+    return {
+      transporte: null,
+      motivo: 'WASENDER_BASE_URL não configurada no worker — nenhum envio de WhatsApp sai sem ela.',
+    }
+  }
   const token = await lerSegredo(conta.token_secret_id)
   if (!token) {
     // "Não configurado" e "quebrado" são coisas diferentes, e a tela precisa
     // distinguir as duas. Mesma régua do Radar e do Jurídico.
     logger.warn({ conta: conta.apelido }, 'Conta de WhatsApp sem token no Vault — envio pulado.')
-    return null
+    return {
+      transporte: null,
+      motivo: `A conta "${conta.apelido}" não tem token da API do Wasender — cadastre-o em Comunicação › Contas de WhatsApp.`,
+    }
   }
-  if (!env.WASENDER_BASE_URL) {
-    logger.warn('WASENDER_BASE_URL não configurada — envio de WhatsApp indisponível.')
-    return null
+  return {
+    transporte: new TransporteWasender({
+      baseUrl: env.WASENDER_BASE_URL,
+      token,
+      numero: conta.numero,
+    }),
+    motivo: null,
   }
-  return new TransporteWasender({
-    baseUrl: env.WASENDER_BASE_URL,
-    token,
-    numero: conta.numero,
-  })
 }
 
 export function transporteResend(remetente: string, responderPara?: string | null): Transporte | null {
