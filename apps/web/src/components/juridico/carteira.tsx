@@ -15,6 +15,8 @@ import {
   BENCHMARK_FASES_PADRAO,
   COLUNAS_JURIDICO,
   SITUACAO_INTERNA_LABELS,
+  SITUACOES_OCULTAS_POR_PADRAO,
+  pesoNaCarteira,
   type BenchmarkFases,
   type Fase,
   type SituacaoInterna,
@@ -59,7 +61,13 @@ function Lentidao({ linha, benchmark }: { linha: LinhaCarteira; benchmark: Bench
 export function Carteira() {
   const [visao, setVisao] = React.useState<Visao>('lista')
   const [busca, setBusca] = React.useState('')
-  const [situacao, setSituacao] = React.useState<string>('todas')
+  /*
+   * Abre em `abertos`, não em `todas`. A lista é de DECISÃO, e um processo
+   * encerrado não pede decisão nenhuma — deixá-lo no meio faz o time rolar por
+   * cima de trabalho já feito para achar o que falta fazer. `todas` continua a
+   * um clique, e o rótulo diz quantos estão escondidos.
+   */
+  const [situacao, setSituacao] = React.useState<string>('abertos')
   const [uf, setUf] = React.useState<string>('todas')
   const [advogado, setAdvogado] = React.useState<string>('todos')
   const [fase, setFase] = React.useState<string>('todas')
@@ -92,7 +100,9 @@ export function Carteira() {
   const filtradas = React.useMemo(() => {
     const termo = busca.trim().toLowerCase()
     return linhas.filter((l) => {
-      if (situacao !== 'todas' && l.situacao_interna !== situacao) return false
+      if (situacao === 'abertos') {
+        if (SITUACOES_OCULTAS_POR_PADRAO.includes(l.situacao_interna as never)) return false
+      } else if (situacao !== 'todas' && l.situacao_interna !== situacao) return false
       if (uf !== 'todas' && l.uf !== uf) return false
       if (advogado !== 'todos' && l.advogado_nome !== advogado) return false
       if (fase !== 'todas' && l.fase_atual !== fase) return false
@@ -104,6 +114,17 @@ export function Carteira() {
         (l.classe ?? '').toLowerCase().includes(termo)
       )
     })
+    /*
+     * A ordenação primária (valor decrescente) vem do banco. Aqui só se aplica o
+     * desempate que o SQL não expressa bem: ACORDO no fim. Um processo em acordo
+     * já foi resolvido — o que resta é acompanhar o pagamento, não decidir — e
+     * mantê-lo no topo por ser o de maior valor empurraria para baixo justamente
+     * os que ainda pedem decisão.
+     *
+     * `sort` sobre a cópia que o `filter` acabou de criar; a ordem do banco
+     * sobrevive dentro de cada grupo porque `Array.sort` é estável.
+     */
+      .sort((a, b) => pesoNaCarteira(a.situacao_interna) - pesoNaCarteira(b.situacao_interna))
   }, [linhas, busca, situacao, uf, advogado, fase])
 
   const semVinculo = filtradas.filter((l) => !l.empresa_devedora_id).length
@@ -149,6 +170,7 @@ export function Carteira() {
             <SelectValue placeholder="Situação" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="abertos">Abertos (sem encerrados)</SelectItem>
             <SelectItem value="todas">Todas as situações</SelectItem>
             {COLUNAS_JURIDICO.map((s) => (
               <SelectItem key={s} value={s}>

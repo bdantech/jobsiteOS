@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  Archive,
   ArrowLeft,
   CircleAlert,
   ExternalLink,
+  Handshake,
   Link2Off,
   Plus,
   RefreshCw,
@@ -52,6 +54,7 @@ import {
   salvarOperacaoAction,
   salvarPrazoAction,
 } from '@/actions/juridico'
+import { cn } from '@/lib/utils'
 import { BriefingCard } from './briefing-card'
 import { CalculoCard } from './calculo-card'
 import { Cronograma } from './cronograma'
@@ -228,6 +231,21 @@ export function ProcessoDetalhe({ numeroCnj }: { numeroCnj: string }) {
         </div>
       </div>
 
+      {/*
+        O briefing vem ANTES dos números, e é a primeira coisa da tela depois do
+        cabeçalho. Devedor, foro e valores respondem "o que é este processo"; o
+        briefing responde "o que fazer com ele" — e quem abre um processo tem a
+        segunda pergunta, não a primeira. Os números continuam logo abaixo, para
+        conferir o que o texto afirma.
+      */}
+      <BriefingCard
+        numeroCnj={numeroCnj}
+        briefing={briefing.data ?? null}
+        carregando={briefing.isPending}
+        ultimaMovimentacao={p.data_ultima_movimentacao}
+        temMovimentacoes={(movimentacoes.data ?? []).length > 0}
+      />
+
       {/* ── Capa ── */}
       <Card>
         <CardHeader className="pb-3">
@@ -237,6 +255,40 @@ export function ProcessoDetalhe({ numeroCnj }: { numeroCnj: string }) {
               <p className="mt-1 text-sm text-muted-foreground">
                 {[p.classe, p.assunto].filter(Boolean).join(' · ') || SEM_VALOR}
               </p>
+              {/*
+                Os dois estados que se marca e se desmarca no dia a dia, como
+                BOTÃO e não escondidos no seletor de seis valores lá embaixo.
+                Encerrar tira o processo da lista (que abre sem encerrados);
+                acordo o manda para o fim dela. As duas ações são reversíveis, e
+                o rótulo diz isso — "desfazer" é diferente de "cancelar".
+              */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant={p.situacao_interna === 'acordo' ? 'default' : 'outline'}
+                  onClick={() =>
+                    void salvarGestao({
+                      situacao_interna: p.situacao_interna === 'acordo' ? 'em_andamento' : 'acordo',
+                    })
+                  }
+                >
+                  <Handshake className="mr-1 h-4 w-4" aria-hidden />
+                  {p.situacao_interna === 'acordo' ? 'Desfazer acordo' : 'Marcar acordo'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={p.situacao_interna === 'encerrado' ? 'default' : 'outline'}
+                  onClick={() =>
+                    void salvarGestao({
+                      situacao_interna:
+                        p.situacao_interna === 'encerrado' ? 'em_andamento' : 'encerrado',
+                    })
+                  }
+                >
+                  <Archive className="mr-1 h-4 w-4" aria-hidden />
+                  {p.situacao_interna === 'encerrado' ? 'Reabrir' : 'Encerrar'}
+                </Button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">{SITUACAO_INTERNA_LABELS[p.situacao_interna as SituacaoInterna]}</Badge>
@@ -318,20 +370,6 @@ export function ProcessoDetalhe({ numeroCnj }: { numeroCnj: string }) {
           nota="recuperado − custos"
         />
       </div>
-
-      {/*
-        O briefing acima do cronograma, e acima das abas: é a primeira coisa que
-        alguém lê ao abrir. O cronograma mostra ONDE o processo está; o briefing
-        diz o que isso significa e o que fazer — e a segunda pergunta é a que a
-        pessoa realmente tinha.
-      */}
-      <BriefingCard
-        numeroCnj={numeroCnj}
-        briefing={briefing.data ?? null}
-        carregando={briefing.isPending}
-        ultimaMovimentacao={p.data_ultima_movimentacao}
-        temMovimentacoes={(movimentacoes.data ?? []).length > 0}
-      />
 
       <Cronograma movimentacoes={fases.data ?? []} benchmark={benchmark} />
 
@@ -590,13 +628,19 @@ function Movimentacoes({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm">Movimentações ({linhas.length})</CardTitle>
         <Button variant="outline" size="sm" onClick={() => setSoRelevantes((v) => !v)}>
           {soRelevantes ? 'Ver todas' : 'Só as relevantes'}
         </Button>
       </CardHeader>
-      <CardContent className="space-y-3">
+      {/*
+        `divide-y` em vez de `space-y`: as movimentações são uma LISTA, e sem
+        régua entre elas um texto de cinco linhas e o de duas seguintes viram um
+        parágrafo só. O padding vertical dá ao divisor o ar que ele precisa para
+        separar em vez de riscar.
+      */}
+      <CardContent className="divide-y divide-border p-0">
         {exibidas.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {linhas.length === 0
@@ -607,27 +651,39 @@ function Movimentacoes({
           exibidas.map((m) => (
             <div
               key={m.id}
-              className={
-                m.relevante
-                  ? 'rounded-md border-l-2 border-primary bg-primary/5 p-3'
-                  : 'rounded-md border-l-2 border-transparent p-3'
-              }
+              className={cn(
+                'px-6 py-4',
+                // A barra à esquerda marca a relevante sem tirá-la da lista: um
+                // fundo colorido em metade das linhas faz a lista inteira virar
+                // um mosaico e nenhuma delas se destacar.
+                m.relevante && 'border-l-2 border-primary bg-primary/[0.04]',
+              )}
             >
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="tabular-nums">{data(m.data)}</span>
-                {m.tipo ? <Badge variant="outline">{m.tipo}</Badge> : null}
-                {m.fonte_sigla ? <span>{m.fonte_sigla}</span> : null}
-                {m.fase_detectada ? (
-                  <Badge
-                    variant="secondary"
-                    title={m.termo_detectado ? `Casou com: "${m.termo_detectado}"` : undefined}
-                  >
-                    {faseLabel(m.fase_detectada)}
-                  </Badge>
+              <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                {/* A DATA em destaque: é por ela que se procura numa lista de 88. */}
+                <span className="text-sm font-semibold tabular-nums">{data(m.data)}</span>
+                {m.tipo ? (
+                  <span className="text-sm text-foreground">{m.tipo}</span>
                 ) : null}
-                {m.relevante ? <Badge>relevante</Badge> : null}
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {m.fase_detectada ? (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px]"
+                      title={m.termo_detectado ? `Casou com: "${m.termo_detectado}"` : undefined}
+                    >
+                      {faseLabel(m.fase_detectada)}
+                    </Badge>
+                  ) : null}
+                  {m.relevante ? <Badge className="text-[10px]">relevante</Badge> : null}
+                  {m.fonte_sigla ? (
+                    <span className="text-[11px] text-muted-foreground">{m.fonte_sigla}</span>
+                  ) : null}
+                </span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm">{m.conteudo}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                {m.conteudo}
+              </p>
             </div>
           ))
         )}

@@ -371,6 +371,23 @@ curl -i "https://<seu-dominio>/api/webhooks/escavador?token=<ESCAVADOR_CALLBACK_
 `ESCAVADOR_CALLBACK_TOKEN` faltando no ambiente da web — a rota **falha fechada** de
 propósito). `404` significa que o deploy com esta rota ainda não subiu.
 
+## A carteira abre nos que pedem decisão
+
+A lista entra filtrada em **Abertos** — tudo menos `encerrado`. `ganho` e `perdido` ficam
+de propósito: eles ainda têm dinheiro a receber ou custo a apurar depois do fim da ação, e
+escondê-los faria a recuperação ser esquecida justamente quando ela é possível.
+`encerrado` é o único que quer dizer "não há mais nada aqui". "Todas as situações" continua
+a um clique.
+
+A ordem é **valor decrescente, com acordo no fim**. Um processo em acordo já foi resolvido
+— o que resta é acompanhar o pagamento, não decidir — e mantê-lo no topo por ser o de maior
+valor empurraria para baixo justamente os que ainda pedem decisão.
+
+**Encerrar** e **marcar acordo** são botões no topo da ficha, e os dois desfazem: o rótulo
+vira "Reabrir" e "Desfazer acordo". O seletor completo de seis situações continua em
+"Gestão do processo" — os botões são o atalho das duas transições do dia a dia, não um
+segundo dono do campo.
+
 ## Conferir qual build do worker está no ar
 
 `GET https://<worker>/health` devolve o **commit** e desde quando o processo está de pé:
@@ -402,6 +419,18 @@ Duas saídas de IA no módulo, e a diferença não é de tamanho:
 
 Fundir os dois transformaria o briefing num parecer curto, que é pior nas duas
 funções: longo demais para situar, raso demais para decidir.
+
+### Quando ele é regerado sozinho
+
+No sync do dia configurado em `juridico_config.monitoramento.dia_resumo_ia` — **sexta por
+padrão**. Um dia, e não todos: o resumo custa token por processo, e ele muda quando chega
+movimentação, não quando o relógio vira. Rodá-lo nas cinco sincronizações da semana
+pagaria cinco vezes pelo mesmo texto.
+
+Fica junto dos dias de sync, e não no código, pela mesma razão que eles: é a setting que
+decide o custo. `null` desliga o automático; o botão de cada processo continua em qualquer
+dia. A tela avisa quando o dia escolhido não está na agenda de sync — porque aí os resumos
+nunca seriam regerados.
 
 ### A validade é por movimentação, não por data
 

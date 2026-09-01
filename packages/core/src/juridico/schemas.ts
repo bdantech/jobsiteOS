@@ -76,6 +76,31 @@ export function situacaoEhAtiva(s: string | null | undefined): boolean {
   return SITUACOES_ATIVAS.includes(s as SituacaoInterna)
 }
 
+/**
+ * As situações que somem da lista por padrão.
+ *
+ * Só `encerrado`. `ganho` e `perdido` continuam aparecendo de propósito: eles
+ * têm dinheiro a receber ou custo a apurar depois do fim da ação, e uma lista
+ * que os esconde faz a recuperação ser esquecida justamente quando ela é
+ * possível. `encerrado` é o único que quer dizer "não há mais nada aqui".
+ */
+export const SITUACOES_OCULTAS_POR_PADRAO: readonly SituacaoInterna[] = ['encerrado']
+
+/**
+ * A ordem da lista: valor decrescente, com ACORDO no fim.
+ *
+ * Um processo em acordo já foi resolvido — o que resta dele é acompanhar o
+ * pagamento, não decidir o que fazer. Deixá-lo no topo por ser o de maior valor
+ * empurraria para baixo justamente os que ainda pedem decisão, que é a pergunta
+ * que a lista existe para responder.
+ *
+ * Devolve a chave de ordenação; quem ordena passa por `sort` com ela.
+ */
+export function pesoNaCarteira(situacao: string | null | undefined): number {
+  if (situacao === 'acordo') return 1
+  return 0
+}
+
 /** A ordem do kanban. Espelha o ciclo de vida, não o alfabeto. */
 export const COLUNAS_JURIDICO: readonly SituacaoInterna[] = [
   'em_andamento',
@@ -309,6 +334,20 @@ export const monitoramentoSchema = z.object({
   forcar_atualizacao_tribunal: z.boolean().default(false),
   /** Sem movimentação há mais de N dias → evento `processo.sem_movimentacao`. */
   dias_sem_movimentacao: z.number().int().min(7).max(365).default(60),
+  /**
+   * Em que dia da semana o sync também regera os RESUMOS DE IA dos processos que
+   * ficaram velhos. Sexta (5) por padrão.
+   *
+   * Um dia, e não todos: o resumo custa token por processo, e regerá-lo cinco
+   * vezes por semana paga cinco vezes por um texto que muda quando chega
+   * movimentação — não quando o relógio vira. Sexta porque é quando alguém olha
+   * a carteira para planejar a semana seguinte.
+   *
+   * `null` desliga o automático; o botão de cada processo continua funcionando.
+   * A escolha vive aqui, e não no código, pela mesma razão dos dias de sync: é a
+   * setting que decide o custo, e mudá-la não pode exigir deploy.
+   */
+  dia_resumo_ia: z.number().int().min(0).max(6).nullable().default(5),
 })
 export type ConfigMonitoramento = z.infer<typeof monitoramentoSchema>
 

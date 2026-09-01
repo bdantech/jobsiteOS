@@ -90,6 +90,7 @@ import { alertasJuridico } from './juridico/alertas.js'
 import { processarCallbacks } from './juridico/callbacks.js'
 import { classificarFases } from './juridico/classificar-fases.js'
 import { descobrirProcessos, sincronizarMonitoramentos } from './juridico/descobrir-processos.js'
+import { ehDiaDeResumoIa, lerMonitoramento } from '../juridico/config.js'
 import { gerarBriefing, gerarBriefingsPendentes } from './juridico/briefing.js'
 import { gerarParecer } from './juridico/parecer.js'
 import { drenarSolicitacoes, sincronizarProcessos } from './juridico/sincronizar.js'
@@ -1309,19 +1310,26 @@ export function dispararSincronizarJuridico(opcoes: { forcarAgenda?: boolean; nu
     // as respostas das atualizações que ela acabou de pedir ao tribunal.
     const callbacks = await processarCallbacks()
     /*
-     * O briefing por último, e na MESMA corrida: ele fica velho exatamente
-     * quando chega movimentação nova, e é isto aqui que acabou de trazê-la. Um
-     * relógio próprio para ele acordaria de hora em hora para descobrir que nada
-     * mudou — e gastaria token nos dias em que mudou pouco.
+     * Os resumos de IA na MESMA corrida, mas só no DIA configurado (sexta, por
+     * padrão — `juridico_config.monitoramento.dia_resumo_ia`).
+     *
+     * Na mesma corrida porque o resumo fica velho exatamente quando chega
+     * movimentação nova, e é isto aqui que acabou de trazê-la: um relógio próprio
+     * acordaria de hora em hora para descobrir que nada mudou. Num dia só porque
+     * ele custa token por processo — cinco vezes por semana é pagar cinco vezes
+     * por um texto que muda com a movimentação, não com o calendário.
      *
      * Não derruba a sincronização se falhar: o dado do tribunal já está gravado,
      * e um texto de apoio que não saiu não é motivo para marcar como falha uma
      * corrida que trouxe o que importava.
      */
-    const briefings = await gerarBriefingsPendentes().catch((erro: unknown) => {
-      logger.error({ erro: String(erro) }, 'Briefings falharam depois do sync.')
-      return null
-    })
+    const cfgMonitoramento = await lerMonitoramento()
+    const briefings = ehDiaDeResumoIa(cfgMonitoramento)
+      ? await gerarBriefingsPendentes().catch((erro: unknown) => {
+          logger.error({ erro: String(erro) }, 'Briefings falharam depois do sync.')
+          return null
+        })
+      : { pulado: 'Hoje não é o dia de regerar os resumos de IA.' }
     return { solicitacoes, sincronizacao, callbacks, briefings }
   })
 }

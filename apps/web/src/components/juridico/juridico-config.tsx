@@ -155,6 +155,7 @@ const MONITORAMENTO_PADRAO: ConfigMonitoramento = {
   apenas_ativos: true,
   forcar_atualizacao_tribunal: false,
   dias_sem_movimentacao: 60,
+  dia_resumo_ia: 5,
 }
 
 function NossosCnpjs({
@@ -455,6 +456,44 @@ function Monitoramento({
             checked={c.forcar_atualizacao_tribunal}
             onCheckedChange={(v) => setC({ ...c, forcar_atualizacao_tribunal: v })}
           />
+        </div>
+
+        {/*
+         * O resumo de IA num dia só, e não em todos: ele custa token POR PROCESSO
+         * e muda quando chega movimentação, não quando o relógio vira. Rodá-lo nas
+         * cinco sincronizações da semana pagaria cinco vezes pelo mesmo texto.
+         */}
+        <div className="space-y-1 rounded-md border border-border p-3">
+          <Label htmlFor="dia-resumo">Regerar os resumos de IA</Label>
+          <p className="text-xs text-muted-foreground">
+            No sync deste dia, os resumos que ficaram velhos são reescritos. O botão de cada
+            processo continua funcionando em qualquer dia.
+          </p>
+          <select
+            id="dia-resumo"
+            value={c.dia_resumo_ia === null ? 'nunca' : String(c.dia_resumo_ia)}
+            onChange={(e) =>
+              setC({
+                ...c,
+                dia_resumo_ia: e.target.value === 'nunca' ? null : Number(e.target.value),
+              })
+            }
+            className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="nunca">Nunca (só sob demanda)</option>
+            {DIAS.map((d) => (
+              <option key={d.valor} value={d.valor}>
+                {d.rotulo}
+              </option>
+            ))}
+          </select>
+          {c.dia_resumo_ia !== null && !c.dias_semana.includes(c.dia_resumo_ia) ? (
+            <p className="pt-1 text-xs text-amber-600">
+              O sync não roda em {DIAS.find((d) => d.valor === c.dia_resumo_ia)?.rotulo} — os
+              resumos nunca seriam regerados
+              automaticamente. Escolha um dia que esteja na agenda acima.
+            </p>
+          ) : null}
         </div>
 
         <Button size="sm" onClick={() => void onSalvar(c)}>

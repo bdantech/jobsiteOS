@@ -36,6 +36,9 @@ export const MONITORAMENTO_PADRAO: ConfigMonitoramento = {
   apenas_ativos: true,
   forcar_atualizacao_tribunal: false,
   dias_sem_movimentacao: 60,
+  // Sexta. Ver a nota no schema: um dia, não todos, porque o resumo custa token
+  // por processo e ele muda quando chega movimentação, não quando o relógio vira.
+  dia_resumo_ia: 5,
 }
 
 export async function lerNossosCnpjs(): Promise<NossoCnpj[]> {
@@ -80,6 +83,25 @@ const DIAS_SEMANA = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
  * configurou. O erro seria silencioso: o job simplesmente não rodaria nas segundas, e a
  * tela continuaria dizendo que roda.
  */
+/**
+ * Hoje é o dia de regerar os resumos de IA?
+ *
+ * Mesma leitura de fuso do `ehDiaDeSincronizar`, e pelo mesmo motivo: o
+ * container roda em UTC, e "sexta" às 22h de São Paulo já é sábado lá.
+ */
+export function ehDiaDeResumoIa(cfg: ConfigMonitoramento, agora: Date = new Date()): boolean {
+  if (cfg.dia_resumo_ia === null || cfg.dia_resumo_ia === undefined) return false
+  const abrev = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+  }).format(agora)
+  const dia = DIAS_SEMANA.indexOf(abrev as (typeof DIAS_SEMANA)[number])
+  // Fuso desconhecido: NÃO roda. Rodar por engano gasta token; não rodar aparece
+  // na tela como um resumo com a tarja de desatualizado.
+  if (dia < 0) return false
+  return dia === cfg.dia_resumo_ia
+}
+
 export function ehDiaDeSincronizar(cfg: ConfigMonitoramento, agora: Date = new Date()): boolean {
   const abrev = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
