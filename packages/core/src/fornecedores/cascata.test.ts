@@ -192,16 +192,26 @@ test('o que a validação reprovou entra como FALHOU, não como temos', () => {
   assert.match(l.temos[0] as string, /Ana/)
 })
 
-test('pessoa com celular validado: NÃO vale aprofundar, mesmo faltando e-mail', () => {
+test('pessoa com celular e sem e-mail: VALE aprofundar — falta o e-mail', () => {
   /*
-   * O botão precisa recusar aqui. Gastar R$ 0,25 para achar um e-mail quando já se tem
-   * o celular de alguém com nome é pagar para confirmar o que está na tela — e é
-   * exatamente o tipo de clique que faz um recurso pago parecer caro sem ser útil.
+   * Esta regra já foi o contrário, e travava o botão no caso mais comum de todos: um
+   * contato de confiança alta achado pela varredura noturna, sem e-mail e sem segunda
+   * pessoa. O originador ficava sem caminho para procurar o decisor, que é justamente
+   * o que a busca funda faz. Quem decide gastar R$ 0,25 é quem clica.
    */
   const l = lacunasDeContato([
     { tipo: 'telefone', valor: '+5511987654321', confianca: 'alta', nome_pessoa: 'João Silva' },
   ])
   assert.deepEqual(l.faltam, ['email'])
+  assert.equal(l.vale_aprofundar, true)
+})
+
+test('nada faltando é o único caso que ainda recusa', () => {
+  const l = lacunasDeContato([
+    { tipo: 'whatsapp', valor: '+5511987654321', confianca: 'alta', nome_pessoa: 'Maria' },
+    { tipo: 'email', valor: 'maria@x.com.br', confianca: 'media' },
+  ])
+  assert.deepEqual(l.faltam, [])
   assert.equal(l.vale_aprofundar, false)
 })
 

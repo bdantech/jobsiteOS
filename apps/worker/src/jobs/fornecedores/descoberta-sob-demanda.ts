@@ -470,7 +470,7 @@ export async function descobertaAprofundada(
   if (!lacunas.vale_aprofundar) {
     return {
       ok: false,
-      motivo: 'Já há uma pessoa com canal direto validado — a busca aprofundada não acrescentaria.',
+      motivo: 'Já temos pessoa, telefone e e-mail deste fornecedor — não falta o que procurar.',
       plano: planoVazio,
       contatosNovos: 0,
       custo: 0,

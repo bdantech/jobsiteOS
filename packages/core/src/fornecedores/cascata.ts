@@ -370,10 +370,18 @@ export function lacunasDeContato(contatos: readonly ContatoConhecido[]): Lacunas
     falharam: mortos.map((c) => `${c.tipo}: ${c.valor}`),
     faltam,
     /*
-     * Não vale quando já há uma PESSOA com canal direto validado. Aí a segunda busca
-     * gastaria R$ 0,25 para confirmar o que está na tela — e o botão precisa dizer
-     * isso em vez de aceitar o clique.
+     * VALE SEMPRE QUE FALTA ALGO, e quem decide gastar é quem clica.
+     *
+     * A regra era mais estreita: `!(temPessoa && (temCelular || temWhats))`, para não
+     * gastar R$ 0,25 confirmando o que está na tela. Na prática ela travava o botão
+     * no caso mais comum de todos — um contato de confiança alta achado pela
+     * varredura noturna, sem e-mail e sem segunda pessoa — e o originador ficava
+     * sem caminho para procurar o decisor, que é exatamente o que a busca funda faz.
+     *
+     * A economia continua existindo onde ela não atrapalha: `faltam` vazio (temos
+     * pessoa, celular/WhatsApp E e-mail) continua devolvendo false, e o TTL segue
+     * recusando a repetição da mesma busca dentro da janela.
      */
-    vale_aprofundar: faltam.length > 0 && !(temPessoa && (temCelular || temWhats)),
+    vale_aprofundar: faltam.length > 0,
   }
 }
