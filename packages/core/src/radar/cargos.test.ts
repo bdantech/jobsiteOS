@@ -134,10 +134,29 @@ test('o caso real da cury.net: 8 slots deixam de ir para obra', () => {
   assert.deepEqual(nomes(doApollo), ['comptroller', 'controladoria', 'eng-rj', 'suprimentos'])
 })
 
-test('senioridade fora da allow-list é eliminada, não só rebaixada', () => {
-  // Sem senioridade reconhecida não entra: é o que barra entry/intern/senior.
-  assert.equal(qualifica({ title: 'Diretor Técnico' }, CFG), false)
-  assert.equal(qualifica({ title: 'Diretor Técnico', seniority: 'director' }, CFG), true)
+test('senioridade fora da lista REBAIXA, não elimina', () => {
+  /*
+   * Era o contrário, e era a maior fonte de perda: o Apollo classifica boa parte dos
+   * cargos brasileiros como 'senior' ou não classifica, e o diretor era descartado
+   * pelo rótulo enquanto o título casava perfeitamente.
+   */
+  assert.equal(qualifica({ title: 'Diretor Técnico' }, CFG), true)
+  assert.equal(qualifica({ title: 'Diretor Financeiro', seniority: 'senior' }, CFG), true)
+  // E quem não casa título nenhum continua fora, com ou sem senioridade.
+  assert.equal(qualifica({ title: 'Motorista' }, CFG), false)
+})
+
+test('sem senioridade reconhecida, cai para o FIM da fila', () => {
+  // É o que substitui a eliminação: entra, mas só é revelado se sobrar vaga no
+  // corte de `max_contatos_por_empresa`.
+  const ordenados = selecionarAlvos(
+    [
+      { id: 'sem-rotulo', title: 'Diretor Financeiro' },
+      { id: 'com-rotulo', title: 'Diretor Financeiro', seniority: 'director' },
+    ],
+    { ...CFG, prioritarios: undefined },
+  )
+  assert.deepEqual(ordenados.map((p) => p.id), ['com-rotulo', 'sem-rotulo'])
 })
 
 /**
@@ -153,12 +172,24 @@ test('7lm: sigla COO não pode casar "Coordenador"', () => {
   assert.equal(qualifica({ title: 'CFO e DRI', seniority: 'c_suite' }, CFG), true)
 })
 
-test('7lm: estagiário e analista não entram, nem como prioritários', () => {
-  // Ambos casavam termo do grupo prioritário e iam para o TOPO da fila paga.
-  assert.equal(qualifica({ title: 'Finance Department Intern', seniority: 'intern', departments: ['master_finance'] }, CFG), false)
-  assert.equal(qualifica({ title: 'Controller Analyst', seniority: 'entry', departments: ['master_finance'] }, CFG), false)
-  // O mesmo cargo em nível de gestão entra.
-  assert.equal(qualifica({ title: 'Controller', seniority: 'director', departments: ['master_finance'] }, CFG), true)
+test('7lm: estagiário e analista agora dependem de excluir_titulos', () => {
+  /*
+   * Estes dois eram barrados pela allow-list de senioridade, que saiu. Com ela fora,
+   * quem os segura é a exclusão POR TÍTULO — que é a ferramenta certa: ela olha o
+   * cargo, e não um rótulo que o provedor pode não ter posto.
+   *
+   * Sem os termos na configuração, os dois voltam a passar: `Finance Department
+   * Intern` casa 'finance' no grupo prioritário e vai para o TOPO da fila paga, que
+   * é exatamente o que aconteceu na leva da 7lm.
+   */
+  const semGuarda: CargosAlvo = { ...CFG, excluir_titulos: [] }
+  assert.equal(qualifica({ title: 'Finance Department Intern', seniority: 'intern', departments: ['master_finance'] }, semGuarda), true)
+
+  const comGuarda: CargosAlvo = { ...CFG, excluir_titulos: [...(CFG.excluir_titulos ?? []), 'intern', 'estagi', 'analyst', 'analista'] }
+  assert.equal(qualifica({ title: 'Finance Department Intern', seniority: 'intern', departments: ['master_finance'] }, comGuarda), false)
+  assert.equal(qualifica({ title: 'Controller Analyst', seniority: 'entry', departments: ['master_finance'] }, comGuarda), false)
+  // O mesmo cargo em nível de gestão continua entrando com a guarda ligada.
+  assert.equal(qualifica({ title: 'Controller', seniority: 'director', departments: ['master_finance'] }, comGuarda), true)
 })
 
 test('7lm: "Business Partner" de RH não é sócio', () => {

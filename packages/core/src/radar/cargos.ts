@@ -44,7 +44,11 @@ export interface CargosAlvo {
   excluir_titulos?: string[]
   /** Idem, por departamento do Apollo (`human_resources`, `sales`…). */
   excluir_departamentos?: string[]
-  /** ORDEM = PRIORIDADE, da maior senioridade para a menor. */
+  /**
+   * ORDEM = PRIORIDADE, da maior senioridade para a menor. Só ordena: quem está
+   * fora da lista (ou sem senioridade nenhuma) vai para o fim da fila, não é
+   * eliminado — eliminar por aqui descartava diretor que o Apollo marcou 'senior'.
+   */
   senioridades: string[]
   /**
    * Senioridades que entram SEM depender do título. Existe porque o alto escalão
@@ -125,23 +129,33 @@ export function ehExcluido(p: CandidatoCargo, cfg: CargosAlvo): boolean {
  * um financeiro como "Comptroller", sem casar termo nenhum) e o alto escalão de
  * `senioridades_qualificam`.
  *
- * Duas barreiras vêm ANTES de qualquer uma dessas portas:
+ * A única barreira que vem ANTES dessas portas é a área vetada (`excluir_*`): RH e
+ * vendas não decidem antecipação.
  *
- * 1. área vetada (`excluir_*`) — RH e vendas não decidem antecipação;
- * 2. senioridade fora de `senioridades` — 'entry' e 'intern' não entram nem como
- *    prioritários. Já pagamos por um "Finance Department Intern" que, por casar
- *    'finance', foi classificado prioritário e furou a fila à frente de diretores.
+ * ── A SENIORIDADE DEIXOU DE ELIMINAR ───────────────────────────────────────
+ * Havia aqui uma allow-list: sem `seniority` dentro de `cfg.senioridades`, ninguém
+ * passava — nem casando o título, nem como prioritário. A intenção era barrar
+ * estagiário e analista, e o efeito colateral era grande demais: o Apollo classifica
+ * boa parte dos cargos brasileiros como 'senior' ou não classifica, e um "Diretor
+ * Financeiro" marcado assim era descartado em silêncio. Foi o que fez 12 empresas
+ * terminarem com "nenhuma pessoa nos cargos-alvo" tendo 742 pessoas à vista.
+ *
+ * `cfg.senioridades` continua existindo e continua importando — mas como ORDEM, em
+ * `selecionarAlvos`: quem tem senioridade reconhecida sobe, quem não tem desce para
+ * o fim da fila. Como o corte pago acontece em `max_contatos_por_empresa`, o efeito
+ * prático é que os desconhecidos só são revelados quando não há gente melhor.
+ *
+ * Isso NÃO vale para os prioritários, que são a primeira chave da ordenação: um
+ * "Finance Department Intern" casa 'finance' e vai para o topo da fila paga. Quem
+ * quiser barrá-lo tem `excluir_titulos`, que é a ferramenta certa para isso — ela
+ * olha o cargo, e não um rótulo que o provedor pode não ter posto.
  *
  * Departamento de propósito NÃO qualifica: `master_operations` deixaria entrar todo
  * "Construction Manager" da obra, que é exatamente o que se quer evitar.
  */
 export function qualifica(p: CandidatoCargo, cfg: CargosAlvo): boolean {
   if (ehExcluido(p, cfg)) return false
-  // Allow-list de senioridade: sem senioridade reconhecida, não passa. Assumimos que
-  // o Apollo classifica quem importa — perder um sócio sem `seniority` custa menos
-  // que revelar a base de estagiários de toda empresa da carteira.
-  if (!p.seniority || !cfg.senioridades.includes(p.seniority)) return false
-  if ((cfg.senioridades_qualificam ?? []).includes(p.seniority)) return true
+  if (p.seniority && (cfg.senioridades_qualificam ?? []).includes(p.seniority)) return true
   return casa(p.title, cfg.titulos) || ehPrioritario(p, cfg)
 }
 
