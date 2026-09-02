@@ -5,6 +5,12 @@ import {
   MutationError,
   ativarScorecardVersao,
   canAccessRoute,
+  criarApiKey,
+  criarApiKeySchema,
+  enviarWebhookTeste,
+  reenviarEntrega,
+  revogarApiKey,
+  salvarWebhook,
   moverAnalise,
   registrarDocAnalise,
   salvarCreditoConfig,
@@ -13,6 +19,7 @@ import {
   type FieldErrors,
   type Tables,
 } from '@jobsiteos/core'
+import { gerarChave } from '@/app/api/v1/_lib/api-key'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -22,6 +29,7 @@ import {
   dispararEstimarPotencial,
   dispararPollDecisoes,
   dispararRecalcularScores,
+  dispararEntregarWebhooks,
   dispararSyncAtradius,
 } from '@/lib/mercado/worker'
 
@@ -64,6 +72,8 @@ async function autorizarSolicitacao() {
   if (!pode) return { erro: SEM_MODULO as Falha, supabase: null }
   return { erro: null, supabase: await createClient() }
 }
+
+const ROTA_INTEGRACOES = '/credito/integracoes'
 
 function falhaDe(e: unknown): Falha {
   if (e instanceof MutationError) return { ok: false, message: e.message, code: e.code, fieldErrors: e.fieldErrors }
@@ -201,3 +211,87 @@ export const backfillAtradiusAction = async (): Promise<Disparo> =>
 /** O ensaio: lê e mapeia tudo, relata o que faria e não grava nada. */
 export const simularBackfillAtradiusAction = async (): Promise<Disparo> =>
   disparar(() => dispararBackfillAtradius(true))
+
+
+// ─── Integrações (04n §4) ───────────────────────────────────────────────────
+
+/**
+ * Cria a chave e devolve o SEGREDO — a única vez que ele existe fora da máquina
+ * de quem chamou. O banco recebe o hash e o prefixo; não há caminho que
+ * reconstrua o valor, o que faz de "perdi a chave" uma rotação, e não um chamado.
+ */
+export async function criarApiKeyAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string; chave: string; prefixo: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const dados = criarApiKeySchema.parse(input)
+    const { chave, hash, prefixo } = gerarChave()
+    const criada = (await criarApiKey(supabase, {
+      nome: dados.nome,
+      escopos: dados.escopos,
+      key_hash: hash,
+      prefixo,
+    })) as { id?: string } | null
+    revalidatePath(ROTA_INTEGRACOES)
+    return { ok: true, data: { id: criada?.id ?? '', chave, prefixo } }
+  } catch (e) {
+    return falhaDe(e) as ActionResult<never>
+  }
+}
+
+export async function revogarApiKeyAction(id: string): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await revogarApiKey(supabase, id)
+    revalidatePath(ROTA_INTEGRACOES)
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falhaDe(e) as ActionResult<never>
+  }
+}
+
+export async function salvarWebhookAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const w = (await salvarWebhook(supabase, input)) as { id?: string } | null
+    revalidatePath(ROTA_INTEGRACOES)
+    return { ok: true, data: { id: w?.id ?? '' } }
+  } catch (e) {
+    return falhaDe(e) as ActionResult<never>
+  }
+}
+
+/**
+ * Reenvio e teste terminam cutucando a fila: sem isso a pessoa clica e fica
+ * olhando para uma linha "pendente" até o cron dos cinco minutos passar, sem
+ * saber se o clique fez alguma coisa.
+ */
+export async function reenviarEntregaAction(id: string): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await reenviarEntrega(supabase, id)
+    void dispararEntregarWebhooks().catch(() => undefined)
+    revalidatePath(ROTA_INTEGRACOES)
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falhaDe(e) as ActionResult<never>
+  }
+}
+
+export async function enviarWebhookTesteAction(webhookId: string): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await enviarWebhookTeste(supabase, webhookId)
+    void dispararEntregarWebhooks().catch(() => undefined)
+    revalidatePath(ROTA_INTEGRACOES)
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falhaDe(e) as ActionResult<never>
+  }
+}

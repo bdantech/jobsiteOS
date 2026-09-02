@@ -746,6 +746,60 @@ aprovasse tornaria essa coluna uma ficção.
 não prova de causa. Sem grupo de controle não dá para afirmar mais que isso, e a tela diz isso
 em voz alta em vez de mostrar um número que parece maior do que é.
 
+## API de Crédito (04n)
+
+A plataforma de produção cria análises de crédito aqui e recebe de volta cada
+mudança de estágio. O documento para o time deles é
+[`docs/integracao-credito-plataforma-producao.md`](docs/integracao-credito-plataforma-producao.md).
+
+### A chave é da INTEGRAÇÃO, não de um usuário
+
+Quem chama é um sistema: não há sessão, perfil nem RLS que signifique algo para
+ele. A autorização inteira é a chave e o escopo dela, conferidos em
+`app/api/v1/_lib/api-key.ts` — o único lugar do caminho da API que decide quem
+entra. A chave é guardada como SHA-256 e mostrada uma vez; não existe consulta que
+a devolva, o que faz de "perdi a chave" uma rotação e não um chamado.
+
+### Duas portas de idempotência
+
+`Idempotency-Key` cobre o reenvio cego (timeout, retry de fila) e devolve a MESMA
+resposta guardada — não um 409 que o cliente não sabe interpretar. `external_id`
+cobre o reenvio consciente com outra chave. Juntas fecham o caso em que ninguém
+sabe se a primeira chamada chegou.
+
+### O payload de entrada é insumo, nunca decisão
+
+Nada do que a produção manda define estágio, limite ou aprovação. A única coisa
+que o corpo decide é se a análise nasce em `solicitada` ou `docs_pendentes` — e
+mesmo isso sai do checklist que o Crédito configurou, não de um campo do JSON.
+
+### A emissão do webhook é da TABELA
+
+O estágio muda por cinco caminhos (RPC do kanban, sync da Atradius, job de
+expiração, esta API, e a mão de um admin no SQL). Pendurar a emissão em cada um
+garantiria esquecê-la no sexto, e um webhook que não sai é uma integração que
+mente em silêncio. Por isso um gatilho em `analises_credito` enfileira, e o worker
+entrega.
+
+### Um construtor só para o payload
+
+O mesmo objeto sai pelo webhook e pelo `GET /analises/{id}`. `montarPayloadCredito`
+(em `core/src/server/credito-api.ts`) é o único lugar que o monta — inclusive para
+o gatilho, que enfileira só uma semente e deixa o worker construir. Duas montagens
+divergiriam na primeira mudança feita em só uma.
+
+### Campo ausente vai como `null`, nunca omitido
+
+O contrato promete forma estável. Um consumidor que faz `payload.credito.score`
+não pode receber `undefined` no dia em que a empresa ainda não tinha score.
+
+### O documento vive conosco
+
+URL externa vira 404 no dia em que o outro lado faz uma limpeza — e o documento é
+a base de uma decisão de crédito, que uma auditoria vai querer ver muito depois.
+Quando a produção manda `url`, o worker baixa e guarda no bucket privado; a
+requisição não espera por isso, para não ficar refém do servidor deles.
+
 ## Reportar Bugs & Melhorias
 
 Um botão ao lado do sino, em toda a aplicação. Detalhes em [`docs/reports.md`](docs/reports.md);

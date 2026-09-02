@@ -908,6 +908,21 @@ export async function repassarWebhookComunicacao(
   })
 }
 
+// ─── API de Crédito (04n) ───────────────────────────────────────────────────
+
+/**
+ * Baixa para o nosso bucket um documento que a plataforma de produção declarou
+ * por URL. Best-effort do lado da rota: a linha já existe e o worker reprocessa.
+ */
+export async function dispararBaixarDocumentoExterno(docId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/baixar-documento', { doc_id: docId }, 'credito-baixar-documento')
+}
+
+/** Cutuca a fila de webhooks. O cron a varre de qualquer forma; isto só antecipa. */
+export async function dispararEntregarWebhooks(): Promise<DispararJobResultado> {
+  return postar('/jobs/webhooks/entregar', {}, 'webhooks-entregar')
+}
+
 // ─── Campanhas (05B) ────────────────────────────────────────────────────────
 
 /**

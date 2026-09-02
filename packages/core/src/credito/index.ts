@@ -1,4 +1,6 @@
 // Crédito (Prompt 04d): limite potencial, scorecard e esteira de análise.
+export * from './api.js'
+export * from './integracoes.js'
 export * from './score.js'
 export * from './analise.js'
 export * from './economia.js'

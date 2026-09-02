@@ -21,7 +21,9 @@ import { sincronizarOnepay } from './radar/onepay.js'
 import { sincronizarCertificados } from './radar/certificados.js'
 import { executarLote } from './radar/lote.js'
 import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
+import { baixarDocumentoExterno } from './credito/baixar-documento.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
+import { entregarWebhooks } from './webhooks/entregar.js'
 import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/comissoes.js'
 import {
   alertaReclassificacaoJob,
@@ -114,6 +116,8 @@ import { plantaoDeEventos } from '../comunicacao/plantao.js'
  */
 
 export type TipoJob =
+  | 'webhooks-entregar'
+  | 'credito-baixar-documento'
   | 'receita'
   | 'cno'
   | 'reclassificar'
@@ -568,6 +572,20 @@ export function dispararContatosEmpresa(opts: {
   return dispararAvulso('contatos-empresa', async () => {
     logger.info({ empresaId: opts.empresaId }, 'Contatos sob demanda.')
     return contatosEmpresa(opts)
+  })
+}
+
+// ─── API de Crédito e webhooks (04n) ─────────────────────────────────────────
+
+/** A fila de entrega de webhooks. Roda por cron e por cutucada da API. */
+export function dispararEntregarWebhooks(): string {
+  return dispararAvulso('webhooks-entregar', async () => entregarWebhooks())
+}
+
+export function dispararBaixarDocumento(docId: string): string {
+  return dispararAvulso('credito-baixar-documento', async () => {
+    logger.info({ docId }, 'Baixando documento externo.')
+    return baixarDocumentoExterno(docId)
   })
 }
 

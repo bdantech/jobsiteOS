@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./registry": "./src/registry/index.ts",
     "./schemas": "./src/schemas/index.ts",
-    "./types": "./src/types/database.ts"
+    "./types": "./src/types/database.ts",
+    "./server/*": "./src/server/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

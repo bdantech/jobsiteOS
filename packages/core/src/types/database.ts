@@ -213,11 +213,203 @@ export type Database = {
         }
         Relationships: []
       }
+      api_idempotencia: {
+        Row: {
+          api_key_id: string
+          chave: string
+          criada_em: string
+          id: string
+          resposta: Json
+          rota: string
+          status_http: number
+        }
+        Insert: {
+          api_key_id: string
+          chave: string
+          criada_em?: string
+          id?: string
+          resposta: Json
+          rota: string
+          status_http: number
+        }
+        Update: {
+          api_key_id?: string
+          chave?: string
+          criada_em?: string
+          id?: string
+          resposta?: Json
+          rota?: string
+          status_http?: number
+        }
+        Relationships: []
+      }
+      api_keys: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          escopos: string[]
+          id: string
+          key_hash: string
+          nome: string
+          prefixo: string
+          revogada_em: string | null
+          ultimo_uso_em: string | null
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          escopos?: string[]
+          id?: string
+          key_hash: string
+          nome: string
+          prefixo: string
+          revogada_em?: string | null
+          ultimo_uso_em?: string | null
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          escopos?: string[]
+          id?: string
+          key_hash?: string
+          nome?: string
+          prefixo?: string
+          revogada_em?: string | null
+          ultimo_uso_em?: string | null
+        }
+        Relationships: []
+      }
+      api_requests_log: {
+        Row: {
+          api_key_id: string | null
+          criado_em: string
+          duracao_ms: number | null
+          erro: string | null
+          id: string
+          idempotency_key: string | null
+          metodo: string
+          rota: string
+          status_http: number
+        }
+        Insert: {
+          api_key_id?: string | null
+          criado_em?: string
+          duracao_ms?: number | null
+          erro?: string | null
+          id?: string
+          idempotency_key?: string | null
+          metodo: string
+          rota: string
+          status_http: number
+        }
+        Update: {
+          api_key_id?: string | null
+          criado_em?: string
+          duracao_ms?: number | null
+          erro?: string | null
+          id?: string
+          idempotency_key?: string | null
+          metodo?: string
+          rota?: string
+          status_http?: number
+        }
+        Relationships: []
+      }
+      webhook_entregas: {
+        Row: {
+          analise_id: string | null
+          criado_em: string
+          entregue_em: string | null
+          evento: string
+          evento_id: string
+          id: string
+          payload: Json
+          proxima_tentativa_em: string
+          status: string
+          tentativas: number
+          ultima_resposta: string | null
+          ultimo_erro: string | null
+          ultimo_status_http: number | null
+          webhook_id: string
+        }
+        Insert: {
+          analise_id?: string | null
+          criado_em?: string
+          entregue_em?: string | null
+          evento: string
+          evento_id: string
+          id?: string
+          payload: Json
+          proxima_tentativa_em?: string
+          status?: string
+          tentativas?: number
+          ultima_resposta?: string | null
+          ultimo_erro?: string | null
+          ultimo_status_http?: number | null
+          webhook_id: string
+        }
+        Update: {
+          analise_id?: string | null
+          criado_em?: string
+          entregue_em?: string | null
+          evento?: string
+          evento_id?: string
+          id?: string
+          payload?: Json
+          proxima_tentativa_em?: string
+          status?: string
+          tentativas?: number
+          ultima_resposta?: string | null
+          ultimo_erro?: string | null
+          ultimo_status_http?: number | null
+          webhook_id?: string
+        }
+        Relationships: []
+      }
+      webhooks_saida: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          criado_por: string | null
+          eventos: string[]
+          id: string
+          nome: string
+          secret: string
+          url: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          eventos: string[]
+          id?: string
+          nome: string
+          secret: string
+          url: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          eventos?: string[]
+          id?: string
+          nome?: string
+          secret?: string
+          url?: string
+        }
+        Relationships: []
+      }
       analise_docs: {
         Row: {
           analise_id: string
           arquivo_url: string
           enviado_em: string
+          exercicio: number | null
+          external_id: string | null
+          origem: string
           enviado_por: string | null
           extraido_em: string | null
           id: string
@@ -229,6 +421,9 @@ export type Database = {
           analise_id: string
           arquivo_url: string
           enviado_em?: string
+          exercicio?: number | null
+          external_id?: string | null
+          origem?: string
           enviado_por?: string | null
           extraido_em?: string | null
           id?: string
@@ -240,6 +435,9 @@ export type Database = {
           analise_id?: string
           arquivo_url?: string
           enviado_em?: string
+          exercicio?: number | null
+          external_id?: string | null
+          origem?: string
           enviado_por?: string | null
           extraido_em?: string | null
           id?: string
@@ -308,6 +506,10 @@ export type Database = {
       }
       analises_credito: {
         Row: {
+          contato_externo: Json | null
+          external_id: string | null
+          origem_externa: string | null
+          origem_motivo: string | null
           analise_propria_id: string | null
           atradius_buyer_id: string | null
           atradius_case_id: string | null
@@ -336,6 +538,10 @@ export type Database = {
           solicitada_por: string | null
         }
         Insert: {
+          contato_externo?: Json | null
+          external_id?: string | null
+          origem_externa?: string | null
+          origem_motivo?: string | null
           analise_propria_id?: string | null
           atradius_buyer_id?: string | null
           atradius_case_id?: string | null
@@ -364,6 +570,10 @@ export type Database = {
           solicitada_por?: string | null
         }
         Update: {
+          contato_externo?: Json | null
+          external_id?: string | null
+          origem_externa?: string | null
+          origem_motivo?: string | null
           analise_propria_id?: string | null
           atradius_buyer_id?: string | null
           atradius_case_id?: string | null
@@ -10705,6 +10915,91 @@ export type Database = {
         }
       }
       app_fornecedor_toque: { Args: { p: Json }; Returns: undefined }
+      app__enfileirar_webhook: {
+        Args: { p_evento: string; p_analise: string | null; p_semente: Json }
+        Returns: undefined
+      }
+      app_criar_api_key: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          escopos: string[]
+          id: string
+          key_hash: string
+          nome: string
+          prefixo: string
+          revogada_em: string | null
+          ultimo_uso_em: string | null
+        }
+      }
+      app_revogar_api_key: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          escopos: string[]
+          id: string
+          key_hash: string
+          nome: string
+          prefixo: string
+          revogada_em: string | null
+          ultimo_uso_em: string | null
+        }
+      }
+      app_salvar_webhook: {
+        Args: { p: Json }
+        Returns: {
+          ativo: boolean
+          criado_em: string
+          criado_por: string | null
+          eventos: string[]
+          id: string
+          nome: string
+          secret: string
+          url: string
+        }
+      }
+      app_reenviar_entrega: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string | null
+          criado_em: string
+          entregue_em: string | null
+          evento: string
+          evento_id: string
+          id: string
+          payload: Json
+          proxima_tentativa_em: string
+          status: string
+          tentativas: number
+          ultima_resposta: string | null
+          ultimo_erro: string | null
+          ultimo_status_http: number | null
+          webhook_id: string
+        }
+      }
+      app_webhook_teste: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string | null
+          criado_em: string
+          entregue_em: string | null
+          evento: string
+          evento_id: string
+          id: string
+          payload: Json
+          proxima_tentativa_em: string
+          status: string
+          tentativas: number
+          ultima_resposta: string | null
+          ultimo_erro: string | null
+          ultimo_status_http: number | null
+          webhook_id: string
+        }
+      }
       app_fornecedor_contato_manual: {
         Args: { p: Json }
         Returns: {

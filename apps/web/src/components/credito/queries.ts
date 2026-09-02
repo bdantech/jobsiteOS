@@ -28,6 +28,10 @@ export interface AnaliseNaEsteira {
   expira_em: string | null
   motivo: string | null
   origem: string
+  /** 'plataforma_producao' quando a análise entrou pela API do 04n. */
+  origem_externa: string | null
+  /** O id dela no sistema de origem — é por ele que a produção nos procura. */
+  external_id: string | null
   atradius_case_id: string | null
   criada_em: string
   atualizada_em: string
@@ -46,7 +50,7 @@ export async function buscarEsteira(): Promise<AnaliseNaEsteira[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('analises_credito')
-    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
+    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, origem_externa, external_id, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
     .order('atualizada_em', { ascending: false })
     .limit(LIMITE_ESTEIRA)
   if (error) throw new Error(error.message)
@@ -65,7 +69,7 @@ export async function buscarAnalise(id: string): Promise<AnaliseNaEsteira | null
   const supabase = createClient()
   const { data, error } = await supabase
     .from('analises_credito')
-    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
+    .select('id, cnpj, empresa_id, estagio, limite_solicitado, limite_aprovado, limite_operacional, decisao_interna, expira_em, motivo, origem, origem_externa, external_id, atradius_case_id, criada_em, atualizada_em, empresas(razao_social, nome_fantasia)')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)

@@ -34,7 +34,9 @@ import {
   dispararRotearNotas,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
+  dispararBaixarDocumento,
   dispararContatosEmpresa,
+  dispararEntregarWebhooks,
   dispararSyncNfs,
   dispararSyncAntecipacoes,
   dispararPerfilRecalcular,
@@ -654,6 +656,31 @@ app.post('/jobs/radar/contatos-empresa', (req: Request, res: Response, next: Nex
       forcar,
     })
     res.status(202).json({ job_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── API de Crédito e webhooks (04n) ─────────────────────────────────────────
+
+/*
+ * A fila de webhooks. 202 e assíncrona: a entrega tem timeout de 10s por
+ * tentativa e pode ter cinquenta na fila — quem cutuca não espera por isso.
+ */
+app.post('/jobs/webhooks/entregar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEntregarWebhooks(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const baixarDocSchema = z.object({ doc_id: z.string().uuid() })
+
+app.post('/jobs/credito/baixar-documento', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { doc_id } = baixarDocSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararBaixarDocumento(doc_id), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

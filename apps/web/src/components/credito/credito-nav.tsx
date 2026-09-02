@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Calculator,
   LayoutDashboard,
+  Plug,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -21,6 +22,7 @@ const ITENS = [
   { href: '/credito/painel', label: 'Painel', icon: LayoutDashboard },
   { href: '/credito/scorecard', label: 'Scorecard', icon: SlidersHorizontal },
   { href: '/credito/parametros', label: 'Parâmetros da Análise', icon: Calculator },
+  { href: '/credito/integracoes', label: 'Integrações', icon: Plug },
   { href: '/credito/config', label: 'Configurações', icon: Settings },
 ] as const
 

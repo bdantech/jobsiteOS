@@ -144,6 +144,10 @@
     {
       "path": "/api/cron/campanhas-metricas",
       "schedule": "25,55 * * * *"
+    },
+    {
+      "path": "/api/cron/webhooks-entregar",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -115,6 +115,17 @@ function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
               da apólice
             </Badge>
           )}
+          {a.origem_externa === 'plataforma_producao' && (
+            /*
+             * Veio pela API (04n §4). A marca e o `external_id` ficam no card porque
+             * a primeira pergunta sobre uma dessas análises é sempre "de qual pedido
+             * lá deles isso veio?" — e a resposta é o número que o suporte da
+             * produção vai citar no chamado.
+             */
+            <Badge variant="outline" className="mt-1 max-w-full text-[10px]">
+              <span className="truncate">plataforma de produção · {a.external_id ?? 'sem id'}</span>
+            </Badge>
+          )}
         </div>
       </div>
     </div>
