@@ -81,7 +81,7 @@ function proximo(e: EstagioVenda): EstagioVenda | null {
   return i >= 0 && i < ESTAGIOS_VENDA.length - 1 ? (ESTAGIOS_VENDA[i + 1] as EstagioVenda) : null
 }
 
-export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
+export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolean; temCredito?: boolean }) {
   const qc = useQueryClient()
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
@@ -340,6 +340,24 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                           {v.analises_credito?.limite_aprovado ? (
                             <p className="text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
                               {BRL_CARD.format(Number(v.analises_credito.limite_aprovado))} aprovados
+                              {v.analises_credito.estagio === 'aprovada_parcial' ? ' (parcial)' : ''}
+                            </p>
+                          ) : null}
+                          {/*
+                            A RECUSA TAMBÉM É RETORNO DA ESTEIRA, e ela sumia do card.
+                            Só o valor aprovado aparecia aqui: um negócio negado ficava
+                            visualmente igual a um que ninguém analisou, e a diferença
+                            entre os dois é a única que importa nessa coluna. O motivo
+                            vem cortado — o inteiro está no modal, na aba Crédito.
+                          */}
+                          {v.analises_credito?.estagio === 'negada' ? (
+                            <p className="text-[11px] font-medium text-destructive">
+                              Crédito negado
+                              {v.analises_credito.motivo ? (
+                                <span className="block font-normal text-muted-foreground line-clamp-2">
+                                  {v.analises_credito.motivo}
+                                </span>
+                              ) : null}
                             </p>
                           ) : null}
                           {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
@@ -504,6 +522,7 @@ export function FunilVendas({ ehGestor }: { ehGestor: boolean }) {
                 <AbaCredito
                   vendaId={aberto.id}
                   analise={aberto.analises_credito}
+                  temCredito={temCredito}
                   onMudou={() => void qc.invalidateQueries({ queryKey: comercialKeys.vendas(vendedorId) })}
                 />
               ),

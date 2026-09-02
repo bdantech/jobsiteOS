@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { FileUp, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
+import { ExternalLink, FileUp, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
 import { ESTAGIOS_ANALISE, ESTAGIO_ANALISE_LABELS, type EstagioAnalise } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,10 +83,18 @@ export function AbaCredito({
   vendaId,
   analise,
   onMudou,
+  temCredito = false,
 }: {
   vendaId: string
   analise: AnaliseDaVenda | null
   onMudou: () => void
+  /**
+   * A pessoa alcança /credito? O botão só aparece para quem pode abrir a página —
+   * o layout do módulo manda para /sem-acesso quem não tem, e um botão que leva a
+   * uma porta trancada ensina que o sistema erra. A leitura AQUI não depende do
+   * módulo: vem da RLS estreita da 0129, ligada à venda.
+   */
+  temCredito?: boolean
 }) {
   const qc = useQueryClient()
   const [pedindo, setPedindo] = React.useState(false)
@@ -127,11 +136,21 @@ export function AbaCredito({
 
   return (
     <div className="space-y-4">
-      <EtapasDoFunil
-        etapas={TRILHA.map((e) => ({ id: e, label: ESTAGIO_ANALISE_LABELS[e] }))}
-        atual={analise.estagio}
-        somenteLeitura
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <EtapasDoFunil
+          etapas={TRILHA.map((e) => ({ id: e, label: ESTAGIO_ANALISE_LABELS[e] }))}
+          atual={analise.estagio}
+          somenteLeitura
+        />
+        {temCredito ? (
+          <Button size="sm" variant="outline" asChild className="shrink-0">
+            <Link href={`/credito/analises/${analise.id}`}>
+              Abrir no Crédito
+              <ExternalLink className="ml-1 h-3 w-3" aria-hidden />
+            </Link>
+          </Button>
+        ) : null}
+      </div>
 
       {aprovada && (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
