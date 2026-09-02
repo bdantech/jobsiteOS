@@ -7,8 +7,8 @@ import { AlertTriangle, Clock, Mail, MessageCircle, Send } from 'lucide-react'
 import {
   BASE_LEGAL_LABELS,
   exigeDescadastro,
-  primeiroNome,
   renderizarMensagem,
+  variaveisPendentes,
   type BaseLegal,
   type CanalThread,
 } from '@jobsiteos/core'
@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { enviarMensagemAction } from '@/actions/comunicacao'
+import { enviarMensagemAction, valoresVariaveisAction } from '@/actions/comunicacao'
 import { buscarContatos, buscarTemplates, type ContatoDaEmpresa } from './queries'
 
 /**
@@ -30,6 +30,12 @@ import { buscarContatos, buscarTemplates, type ContatoDaEmpresa } from './querie
  * enviado. Mostrar `{contato_nome}` e substituir no servidor faria a pessoa
  * apertar enviar sem ter lido o que a outra vai ler, que é a única coisa que o
  * compositor precisa garantir.
+ *
+ * Os valores vêm todos de `valoresVariaveisAction`, e o template só é aplicado
+ * depois que eles chegam. Antes, o compositor preenchia três chaves de dezessete
+ * com o que tinha à mão e mandava o resto literal — "Aqui é {remetente_nome}, da
+ * ONE OS" saiu assim para um fornecedor. O que sobrar de `{chave}` no texto
+ * bloqueia o botão: sair literal é pior que não sair.
  *
  * ── O QUE ELE RECUSA ANTES DE CHAMAR O SERVIDOR ────────────────────────────
  * Contato sem o canal escolhido e contato sem base legal. As duas seriam recusas
@@ -80,40 +86,56 @@ export function Compositor({
   const contato = lista.find((c) => c.id === contatoId) ?? null
   const destino = contato ? (canal === 'email' ? contato.email : (contato.whatsapp ?? contato.telefone)) : null
 
-  const { data: empresaNome } = useQuery({
-    queryKey: ['comunicacao', 'empresa-nome', empresaId],
+  // Tudo que o catálogo sabe preencher para ESTA empresa e ESTE contato. Uma
+  // consulta só: as chaves atravessam quatro módulos, e quinze idas ao banco
+  // pelo cliente seriam quinze chances de o texto sair pela metade.
+  const valores = useQuery({
+    queryKey: ['comunicacao', 'valores-variaveis', empresaId, contatoId],
     queryFn: async () => {
-      const { createClient } = await import('@/lib/supabase/client')
-      const { data } = await createClient()
-        .from('empresas')
-        .select('razao_social, nome_fantasia')
-        .eq('id', empresaId)
-        .maybeSingle()
-      return data?.razao_social ?? data?.nome_fantasia ?? ''
+      const r = await valoresVariaveisAction(empresaId, contatoId || null)
+      if (!r.ok) throw new Error(r.message)
+      return r.data
     },
+    enabled: Boolean(empresaId),
   })
 
-  /** O texto renderizado. É o que se lê e é o que sai. */
-  const aplicarTemplate = (id: string) => {
-    setTemplateId(id)
-    const t = (templates.data ?? []).find((x) => x.id === id)
+  /*
+   * O template é aplicado por EFEITO, não no clique.
+   *
+   * No clique, os valores podiam ainda estar viajando — e era exatamente isso que
+   * mandava `{empresa_nome}` para o WhatsApp de quem escolheu o template rápido
+   * demais. Aqui a aplicação acontece quando (template, contato, valores) estão
+   * todos de pé, na ordem em que chegarem. A assinatura evita que um refetch
+   * apague o que a pessoa editou à mão depois.
+   */
+  const aplicado = React.useRef('')
+  React.useEffect(() => {
+    if (!templateId || !valores.data) return
+    const assinatura = `${templateId}|${contatoId}`
+    if (aplicado.current === assinatura) return
+    const t = (templates.data ?? []).find((x) => x.id === templateId)
     if (!t) return
-    const valores = {
-      contato_nome: primeiroNome(contato?.nome),
-      contato_cargo: contato?.cargo ?? '',
-      empresa_nome: empresaNome ?? '',
-    }
-    setCorpo(renderizarMensagem(t.corpo, valores, { canal, baseLegal: (contato?.base_legal ?? null) as BaseLegal | null }))
-    if (t.assunto) {
-      setAssunto(renderizarMensagem(t.assunto, valores, { canal, baseLegal: null }))
-    }
-  }
+    aplicado.current = assinatura
+    const base = (contato?.base_legal ?? null) as BaseLegal | null
+    setCorpo(renderizarMensagem(t.corpo, valores.data, { canal, baseLegal: base }))
+    if (t.assunto) setAssunto(renderizarMensagem(t.assunto, valores.data, { canal, baseLegal: null }))
+  }, [templateId, contatoId, valores.data, templates.data, canal, contato?.base_legal])
+
+  /*
+   * O que sobrou de `{chave}` no texto. O worker recusa a linha por isto também,
+   * mas descobrir no envio é tarde: a pessoa já foi embora da tela e a mensagem
+   * vira uma notificação de falha. Aqui ela vê antes, com as chaves pelo nome.
+   */
+  const pendentes = variaveisPendentes(`${canal === 'email' ? assunto : ''}\n${corpo}`)
 
   const motivoBloqueio = ((): string | null => {
     if (!contato) return 'Escolha um contato.'
     if (!destino) return `Este contato não tem ${canal === 'email' ? 'e-mail' : 'WhatsApp'} cadastrado.`
     if (!contato.base_legal) return 'Contato sem base legal — não é possível abordá-lo.'
     if (!corpo.trim()) return 'Escreva a mensagem.'
+    if (pendentes.length > 0) {
+      return `Sem valor para ${pendentes.map((v) => `{${v}}`).join(', ')} — sairia assim, literal. Escreva à mão ou escolha outro template.`
+    }
     return null
   })()
 
@@ -139,6 +161,7 @@ export function Compositor({
       setCorpo('')
       setAssunto('')
       setTemplateId('')
+      aplicado.current = ''
       setForcarJanela(false)
       await qc.invalidateQueries({ queryKey: ['comunicacao'] })
       onEnviado?.()
@@ -213,9 +236,9 @@ export function Compositor({
 
       <div className="space-y-1">
         <Label className="text-xs">Template</Label>
-        <Select value={templateId} onValueChange={aplicarTemplate}>
+        <Select value={templateId} onValueChange={setTemplateId} disabled={valores.isPending}>
           <SelectTrigger className="h-9">
-            <SelectValue placeholder="Escrever do zero" />
+            <SelectValue placeholder={valores.isPending ? 'Carregando os dados…' : 'Escrever do zero'} />
           </SelectTrigger>
           <SelectContent>
             {(templates.data ?? []).map((t) => (
@@ -242,9 +265,19 @@ export function Compositor({
           rows={6}
           placeholder="O que você quer dizer?"
         />
-        <p className="text-[11px] text-muted-foreground">
-          É este texto que a pessoa vai ler — as variáveis já foram substituídas.
-        </p>
+        {pendentes.length > 0 ? (
+          <p className="flex items-start gap-1.5 text-[11px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+            <span>
+              Sem valor para {pendentes.map((v) => `{${v}}`).join(', ')} nesta empresa. Do jeito que
+              está, é isso que a pessoa leria.
+            </span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            É este texto que a pessoa vai ler — as variáveis já foram substituídas.
+          </p>
+        )}
       </div>
 
       <label className="flex items-start gap-2 text-xs text-muted-foreground">

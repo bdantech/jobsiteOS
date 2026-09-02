@@ -5,6 +5,7 @@ import {
   renderizarMensagem,
   variaveisDesconhecidasDoTemplate,
   variaveisDoTemplate,
+  variaveisPendentes,
 } from './templates.ts'
 
 test('as variáveis usadas saem do próprio corpo, ordenadas e sem repetição', () => {
@@ -60,4 +61,26 @@ test('chave sem valor sobrevive à renderização, para o erro ser visto no prev
     baseLegal: 'relacao_comercial',
   })
   assert.equal(corpo, 'Olá Ana, {inexistente}')
+})
+
+test('o que sobrou de {chave} no texto renderizado é o que barra o envio', () => {
+  const corpo = renderizarMensagem('Aqui é {remetente_nome}, sobre {qtd_notas} notas da {empresa_nome}.', {
+    empresa_nome: 'J.A. Projetos',
+  }, { canal: 'whatsapp', baseLegal: 'relacao_comercial' })
+  assert.deepEqual(variaveisPendentes(corpo), ['qtd_notas', 'remetente_nome'])
+})
+
+test('valor vazio SUBSTITUI — por isso o resolvedor omite o que não sabe', () => {
+  // Se o compositor mandasse `empresa_nome: ''` para uma empresa sem razão social,
+  // a frase sairia quebrada e sem nenhuma chave à vista para alguém barrar.
+  const corpo = renderizarMensagem('A {empresa_nome} tem notas.', { empresa_nome: '' }, {
+    canal: 'whatsapp',
+    baseLegal: 'relacao_comercial',
+  })
+  assert.equal(corpo, 'A  tem notas.')
+  assert.deepEqual(variaveisPendentes(corpo), [])
+})
+
+test('texto sem chave nenhuma passa limpo', () => {
+  assert.deepEqual(variaveisPendentes('Olá Ana, tudo bem?'), [])
 })

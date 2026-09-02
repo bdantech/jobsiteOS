@@ -13,10 +13,13 @@ import {
   marcarConversaLida,
   salvarComunicacaoConfig,
   salvarPlaybook,
+  montarValoresVariaveis,
   salvarTemplateMensagem,
   vincularConversa,
+  type ValoresVariaveis,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { dispararEnviarFilaComunicacao } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
@@ -55,6 +58,47 @@ function falha(error: unknown): ActionResult<never> {
 }
 
 const ROTA = '/comunicacao'
+
+/**
+ * Os VALORES das variáveis do compositor, antes de o template ser aplicado.
+ *
+ * ── POR QUE SERVICE ROLE ───────────────────────────────────────────────────
+ * As chaves do catálogo atravessam módulos: `{qtd_notas}` mora na Antecipação,
+ * `{data_reuniao}` no Comercial, `{qtd_spes}` nos Certificados. Quem tem
+ * Comunicação sem eles leria zero linhas sob RLS — e o compositor bloquearia o
+ * envio dizendo que falta um dado que existe. A escalação é escopada à empresa
+ * que a pessoa JÁ enxerga: a leitura de `empresas` abaixo é feita com o client do
+ * USUÁRIO, e é ela que autoriza o resto. Mesma régua do `getSessionContext`.
+ */
+export async function valoresVariaveisAction(
+  empresaId: string,
+  contatoId: string | null,
+): Promise<ActionResult<ValoresVariaveis>> {
+  const { erro, supabase, context } = await autorizar()
+  if (erro || !supabase || !context) return erro as ActionResult<never>
+  try {
+    const { data: visivel } = await supabase.from('empresas').select('id').eq('id', empresaId).maybeSingle()
+    if (!visivel) return { ok: false, message: 'Empresa não encontrada.', code: 'forbidden' }
+
+    const admin = createAdminClient()
+    // O nome que assina é o do VENDEDOR quando a pessoa é um; quem não é vendedor
+    // assina com o próprio nome. Cair no e-mail seria assinar "admin@oneos.com.br".
+    const { data: vendedor } = await admin
+      .from('vendedores')
+      .select('nome')
+      .eq('usuario_id', context.usuario.id)
+      .maybeSingle()
+
+    const valores = await montarValoresVariaveis(admin, {
+      empresaId,
+      contatoId,
+      remetenteNome: vendedor?.nome ?? context.usuario.nome,
+    })
+    return { ok: true, data: valores }
+  } catch (e) {
+    return falha(e)
+  }
+}
 
 /**
  * Enviar é ENFILEIRAR, e a tela diz isso.

@@ -5,13 +5,13 @@ import {
   type Variante,
 } from '../../../../../packages/core/src/campanhas/index.js'
 import {
-  primeiroNome,
+  montarValoresVariaveis,
   renderizarMensagem,
   tetoDiarioDaConta,
+  variaveisPendentes,
   type BaseLegal,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
 import { avaliarPublico, type CampanhaParaAvaliar } from '../../campanhas/avaliar.js'
 import { lerLimitesCampanhas } from '../../campanhas/config.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
@@ -270,15 +270,22 @@ async function enfileirarLevaDoDia(c: LinhaCampanha): Promise<number> {
     const destino = contexto.identificadores.get(d.contato_id ?? '')
     if (!destino) continue
 
-    const empresa = contexto.empresas.get(d.empresa_id ?? '')
+    /*
+     * Os valores saem do MESMO resolvedor do compositor, e não de um punhado de
+     * chaves montado aqui. Enquanto eram quatro, um template com `{qtd_notas}`
+     * — e todos os do funil de NFs têm — saía com a chave literal para a lista
+     * inteira. O resolvedor custa algumas consultas por destinatário; o teto do
+     * `ritmo_por_dia` é o que mantém isso barato.
+     */
+    const valores = await montarValoresVariaveis(supabaseAdmin, {
+      empresaId: d.empresa_id,
+      contatoId: d.contato_id,
+      remetenteNome: contexto.remetente,
+    })
+
     const corpo = renderizarMensagem(
       template.corpo,
-      {
-        contato_nome: primeiroNome(contexto.nomes.get(d.contato_id ?? '') ?? null),
-        empresa_nome: empresa?.razao_social ?? empresa?.nome_fantasia ?? '',
-        empresa_cnpj: empresa?.cnpj ? formatCnpj(empresa.cnpj) : '',
-        remetente_nome: contexto.remetente,
-      },
+      valores,
       {
         canal: c.canal,
         baseLegal: (contexto.basesLegais.get(d.contato_id ?? '') ?? null) as BaseLegal | null,
@@ -288,6 +295,21 @@ async function enfileirarLevaDoDia(c: LinhaCampanha): Promise<number> {
         linkDescadastro: null,
       },
     )
+
+    /*
+     * Uma chave que sobrou NÃO entra na fila. O portão do envio a recusaria de
+     * qualquer jeito, mas aí seria uma falha por destinatário, num lote inteiro,
+     * e ninguém lê duzentas notificações iguais. Aqui é uma linha de log com o
+     * nome da chave — e o template pode ser corrigido antes da próxima leva.
+     */
+    const pendentes = variaveisPendentes(`${template.assunto ?? ''}\n${corpo}`)
+    if (pendentes.length > 0) {
+      logger.warn(
+        { campanha: c.nome, destinatario: d.id, template: variante.template_id, pendentes },
+        'Variável sem valor para este destinatário — não enfileirado.',
+      )
+      continue
+    }
 
     const { error } = await supabaseAdmin.from('mensagens_outbox').insert({
       canal: c.canal,
@@ -362,31 +384,27 @@ async function contextoDeRender(
   fila: readonly { contato_id: string | null; empresa_id: string | null }[],
 ): Promise<{
   templates: Map<string, { assunto: string | null; corpo: string }>
-  empresas: Map<string, { razao_social: string | null; nome_fantasia: string | null; cnpj: string }>
   identificadores: Map<string, string>
-  nomes: Map<string, string | null>
   basesLegais: Map<string, string | null>
   remetente: string
 }> {
   const templateIds = [...new Set(c.variantes.map((v) => v.template_id))]
   const contatoIds = fila.map((d) => d.contato_id).filter((x): x is string => !!x)
-  const empresaIds = fila.map((d) => d.empresa_id).filter((x): x is string => !!x)
 
-  const [templates, empresas, contatos, vendedor] = await Promise.all([
+  // Aqui fica só o que ROTEIA a mensagem — para onde vai e sob qual base legal.
+  // Os VALORES do texto são do resolvedor, por destinatário: batê-los em lote
+  // aqui seria uma segunda cópia do catálogo, e foi a divergência entre as duas
+  // que mandou `{qtd_notas}` para um fornecedor.
+  const [templates, contatos, vendedor] = await Promise.all([
     supabaseAdmin.from('templates_mensagem').select('id, assunto, corpo').in('id', templateIds),
-    supabaseAdmin
-      .from('empresas')
-      .select('id, razao_social, nome_fantasia, cnpj')
-      .in('id', [...new Set(empresaIds)]),
     pool.query<{
       id: string
-      nome: string | null
       email: string | null
       telefone: string | null
       whatsapp: string | null
       base_legal: string | null
     }>(
-      'select id, nome, email, telefone, whatsapp, base_legal from contatos where id = any($1)',
+      'select id, email, telefone, whatsapp, base_legal from contatos where id = any($1)',
       [contatoIds],
     ),
     c.vendedor_id
@@ -395,21 +413,17 @@ async function contextoDeRender(
   ])
 
   const identificadores = new Map<string, string>()
-  const nomes = new Map<string, string | null>()
   const basesLegais = new Map<string, string | null>()
   for (const ct of contatos.rows) {
     const ident =
       c.canal === 'email' ? ct.email : (ct.whatsapp ?? ct.telefone)
     if (ident) identificadores.set(ct.id, ident)
-    nomes.set(ct.id, ct.nome)
     basesLegais.set(ct.id, ct.base_legal)
   }
 
   return {
     templates: new Map((templates.data ?? []).map((t) => [t.id, { assunto: t.assunto, corpo: t.corpo }])),
-    empresas: new Map((empresas.data ?? []).map((e) => [e.id, e])),
     identificadores,
-    nomes,
     basesLegais,
     remetente: (vendedor.data as { nome?: string } | null)?.nome ?? 'ONE OS',
   }

@@ -8,10 +8,9 @@ import {
 } from '../../../../../packages/core/src/campanhas/index.js'
 import {
   exigeDescadastro,
-  primeiroNome,
+  montarValoresVariaveis,
   renderizarMensagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
-import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
 import { avaliarPublico, type CampanhaParaAvaliar } from '../../campanhas/avaliar.js'
 import { lerLimitesCampanhas } from '../../campanhas/config.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
@@ -187,15 +186,16 @@ async function montarPrevias(
       amostra[0]!
 
     const empresa = empresaPorId.get(alvo.empresaId)
+    // O MESMO resolvedor do envio. Uma prévia montada com um punhado de chaves
+    // próprio mostraria um texto que ninguém vai receber — e era isso que fazia
+    // `{qtd_notas}` passar despercebido até chegar ao WhatsApp de alguém.
     const corpo = renderizarMensagem(
       t.corpo,
-      {
-        contato_nome: primeiroNome(alvo.destinatario.contato.nome),
-        contato_cargo: alvo.destinatario.contato.cargo ?? '',
-        empresa_nome: empresa?.razao_social ?? empresa?.nome_fantasia ?? '',
-        empresa_cnpj: empresa?.cnpj ? formatCnpj(empresa.cnpj) : '',
-        remetente_nome: remetente,
-      },
+      await montarValoresVariaveis(supabaseAdmin, {
+        empresaId: alvo.empresaId,
+        contatoId: alvo.destinatario.contato.id,
+        remetenteNome: remetente,
+      }),
       {
         canal: c.canal,
         baseLegal: alvo.destinatario.baseLegal,

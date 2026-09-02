@@ -46,6 +46,20 @@ export function variaveisDoTemplate(texto: string): string[] {
   return [...achadas].sort()
 }
 
+/**
+ * As chaves que SOBREVIVERAM à renderização — o que a pessoa do outro lado leria
+ * como `{qtd_notas}`. É a mesma varredura de `variaveisDoTemplate`, com outro
+ * nome porque a pergunta é outra: lá é "o que este template usa", aqui é "o que
+ * este texto, já renderizado, ainda não sabe".
+ *
+ * O compositor bloqueia o envio por ela, e o worker recusa a linha da fila por
+ * ela. Duas checagens da mesma coisa, de propósito: uma explica antes, a outra
+ * segura o que veio por qualquer outro caminho (régua, campanha, agente).
+ */
+export function variaveisPendentes(texto: string): string[] {
+  return variaveisDoTemplate(texto)
+}
+
 /** As chaves usadas que não existem no catálogo. A tela avisa antes de salvar. */
 export function variaveisDesconhecidasDoTemplate(texto: string): string[] {
   return variaveisDoTemplate(texto).filter((v) => !(v in VARIAVEIS_MENSAGEM))

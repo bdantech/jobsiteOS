@@ -7,6 +7,7 @@ import { AlertTriangle, Mail, MessageCircle, Plus } from 'lucide-react'
 import {
   FUNIL_LABELS,
   VARIAVEIS_MENSAGEM,
+  variavelEhAutomatica,
   variaveisDesconhecidasDoTemplate,
   variaveisDoTemplate,
   type Funil,
@@ -17,17 +18,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
 import { salvarTemplateAction } from '@/actions/comunicacao'
+import { CampoComVariaveis } from './campo-variaveis'
 import { buscarTodosTemplates, type TemplateMensagem } from './queries'
 
 /**
  * Os templates (§5). Config, não código.
  *
- * ── O CATÁLOGO DE VARIÁVEIS FICA À VISTA ───────────────────────────────────
- * E as chaves desconhecidas são apontadas ANTES de salvar. Um `{taxa_do_dia}` que
- * ninguém preenche não some na renderização — ele sai literal na mensagem, para o
- * cliente ver. Avisar aqui é mais barato que descobrir lá.
+ * ── O CATÁLOGO NÃO SE DECORA: DIGITE `/` ───────────────────────────────────
+ * Ele continua listado embaixo, para quem quiser ler tudo de uma vez. Mas a chave
+ * certa se escolhe da lista que `/` abre no meio da frase, porque `{qtd_notas}`
+ * só funciona escrito exatamente assim e ninguém devia ter que lembrar disso.
+ *
+ * As chaves desconhecidas continuam apontadas ANTES de salvar. Um `{taxa_do_dia}`
+ * que ninguém preenche não some na renderização — ele sai literal na mensagem,
+ * para o cliente ver. Avisar aqui é mais barato que descobrir lá.
  */
 export function TemplatesLista() {
   const qc = useQueryClient()
@@ -178,13 +183,16 @@ function Editor({
       {canal === 'email' ? (
         <div className="space-y-1">
           <Label className="text-xs">Assunto</Label>
-          <Input value={assunto} onChange={(e) => setAssunto(e.target.value)} className="h-9" />
+          <CampoComVariaveis value={assunto} onChange={setAssunto} />
         </div>
       ) : null}
 
       <div className="space-y-1">
         <Label className="text-xs">Corpo</Label>
-        <Textarea value={corpo} onChange={(e) => setCorpo(e.target.value)} rows={8} />
+        <CampoComVariaveis value={corpo} onChange={setCorpo} multiline rows={8} />
+        <p className="text-[11px] text-muted-foreground">
+          Digite <code className="rounded bg-muted px-1">/</code> para escolher uma variável.
+        </p>
       </div>
 
       {desconhecidas.length > 0 ? (
@@ -203,6 +211,7 @@ function Editor({
           {Object.entries(VARIAVEIS_MENSAGEM).map(([chave, descricao]) => (
             <li key={chave}>
               <code className="rounded bg-muted px-1">{`{${chave}}`}</code> — {descricao}
+              {!variavelEhAutomatica(chave) ? ' (preenchida à mão)' : ''}
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@ import {
   podeEnviar,
   tetoDiarioDaConta,
   exigeDescadastro,
+  variaveisPendentes,
   MOTIVO_RECUSA_ENVIO_LABELS,
   type BaseLegal,
   type CanalThread,
@@ -160,6 +161,31 @@ async function processar(
   const canal = linha.canal as CanalThread
   if (!linha.destinatario) {
     await marcarFalha(linha, 'Sem destinatário.')
+    return { desfecho: 'falhas' }
+  }
+
+  /*
+   * NENHUM `{placeholder}` ATRAVESSA DAQUI (§5).
+   *
+   * Quem monta o corpo é sempre outro código — compositor, régua, campanha,
+   * agente — e cada um deles conhece só o pedaço do catálogo que o seu contexto
+   * preenche. Uma chave que nenhum deles soube resolver sobrevive à renderização
+   * de propósito, para ser vista; o que faltava era alguém enxergando-a no
+   * último instante. Sem isto, "Aqui é {remetente_nome}, da ONE OS" chegou ao
+   * WhatsApp de um fornecedor.
+   *
+   * Falha PERMANENTE, e não retry: insistir manda o mesmo texto quebrado três
+   * vezes. Quem escreveu recebe a notificação com as chaves pelo nome, corrige o
+   * template e reenvia.
+   */
+  const pendentes = variaveisPendentes(`${linha.assunto ?? ''}\n${linha.corpo ?? ''}`)
+  if (pendentes.length > 0) {
+    await marcarFalha(
+      linha,
+      `A mensagem ainda tem variáveis não preenchidas e não pode sair assim: ${pendentes
+        .map((v) => `{${v}}`)
+        .join(', ')}.`,
+    )
     return { desfecho: 'falhas' }
   }
 

@@ -1,10 +1,19 @@
-import { ACAO_LABELS, primeiroNome, renderizarMensagem, type AcaoAgente, type BaseLegal } from '@jobsiteos/core'
+import {
+  ACAO_LABELS,
+  montarValoresVariaveis,
+  renderizarMensagem,
+  variaveisPendentes,
+  type AcaoAgente,
+  type BaseLegal,
+} from '@jobsiteos/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Bot, Check, Send, X } from 'lucide-react-native'
 import * as React from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { useSession } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import { Badge, Button, Input, Skeleton, Text } from '@/components/ui'
 import {
   aceitarSugestao,
@@ -187,6 +196,7 @@ function Compositor({
 }) {
   const qc = useQueryClient()
   const { colors } = useTheme()
+  const { usuario } = useSession()
   const [canal] = React.useState<'whatsapp' | 'email'>(canalInicial)
   const [corpo, setCorpo] = React.useState('')
   const [erro, setErro] = React.useState<string | null>(null)
@@ -202,6 +212,28 @@ function Compositor({
 
   const contato =
     (contatos.data ?? []).find((c) => c.id === contatoIdInicial) ?? (contatos.data ?? [])[0] ?? null
+
+  /*
+   * Os valores das variáveis, do MESMO resolvedor da web. Antes daqui só
+   * `{contato_nome}` era preenchido, e um template do funil de NFs virava "tem
+   * {qtd_notas} nota(s) de {sacado_principal}" no WhatsApp de um fornecedor.
+   *
+   * O client é o do vendedor, com RLS: o que ele não pode ler não vira valor, a
+   * chave sobrevive no texto e o botão trava. Um valor que ele não enxerga não
+   * pode virar mensagem que ele manda.
+   */
+  const valores = useQuery({
+    queryKey: [...comunicacaoKeys.contatos(empresaId), 'variaveis', contato?.id ?? null],
+    queryFn: () =>
+      montarValoresVariaveis(supabase, {
+        empresaId,
+        contatoId: contato?.id ?? null,
+        remetenteNome: usuario?.nome ?? null,
+      }),
+    enabled: Boolean(contato),
+  })
+
+  const pendentes = variaveisPendentes(corpo)
 
   const enviar = useMutation({
     mutationFn: async () => {
@@ -223,13 +255,13 @@ function Compositor({
           {(templates.data ?? []).map((t) => (
             <Pressable
               key={t.id}
+              disabled={!valores.data}
               onPress={() =>
                 setCorpo(
-                  renderizarMensagem(
-                    t.corpo,
-                    { contato_nome: primeiroNome(contato?.nome) },
-                    { canal, baseLegal: (contato?.base_legal ?? null) as BaseLegal | null },
-                  ),
+                  renderizarMensagem(t.corpo, valores.data ?? {}, {
+                    canal,
+                    baseLegal: (contato?.base_legal ?? null) as BaseLegal | null,
+                  }),
                 )
               }
             >
@@ -257,14 +289,21 @@ function Compositor({
         <Button
           size="sm"
           onPress={() => enviar.mutate()}
-          disabled={!corpo.trim() || !contato || enviar.isPending}
+          disabled={!corpo.trim() || !contato || pendentes.length > 0 || enviar.isPending}
         >
           <Send size={16} color="#fff" />
         </Button>
       </View>
-      <Text variant="muted" className="text-[11px]">
-        A mensagem entra na fila e sai na próxima janela de envio.
-      </Text>
+      {pendentes.length > 0 ? (
+        <Text className="text-[11px] text-destructive">
+          Sem valor para {pendentes.map((v) => `{${v}}`).join(', ')} — sairia assim, literal.
+          Escreva à mão ou escolha outro template.
+        </Text>
+      ) : (
+        <Text variant="muted" className="text-[11px]">
+          A mensagem entra na fila e sai na próxima janela de envio.
+        </Text>
+      )}
     </View>
   )
 }
