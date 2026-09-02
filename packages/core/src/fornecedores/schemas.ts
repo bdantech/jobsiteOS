@@ -211,6 +211,44 @@ export const promoverContatoSchema = z.object({
 })
 export type PromoverContatoInput = z.infer<typeof promoverContatoSchema>
 
+/**
+ * O contato que o originador escreveu à mão, a partir do card da NF.
+ *
+ * ── A BASE LEGAL NÃO TEM DEFAULT AQUI ──────────────────────────────────────
+ * O default mora na TELA (`dado_publico_nfe`, que é como se chegou ao fornecedor
+ * quando ele veio de uma nota). Aqui ela é obrigatória de propósito: um default
+ * no schema atravessaria a chamada de qualquer outro caminho futuro sem ninguém
+ * ter escolhido a base — e `contatos.base_legal` é o campo que decide se a pessoa
+ * pode ser abordada. Quem grava a permissão de falar com alguém diz qual é ela.
+ */
+export const contatoManualFornecedorSchema = z
+  .object({
+    fornecedor_cnpj: cnpj,
+    nome: z.string().trim().max(160).optional().nullable(),
+    cargo: z.string().trim().max(160).optional().nullable(),
+    email: z
+      .string()
+      .trim()
+      .email('E-mail inválido.')
+      .max(200)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => (v === '' || v === undefined ? null : v))
+      .nullable(),
+    telefone: z.string().trim().max(40).optional().nullable(),
+    whatsapp: z.string().trim().max(40).optional().nullable(),
+    /** O mesmo número serve para os dois — pouparia digitá-lo duas vezes. */
+    telefone_e_whatsapp: z.boolean().default(false),
+    base_legal: z.enum(['formulario_aceite', 'relacao_comercial', 'dado_publico_nfe', 'indicacao', 'manual']),
+    base_legal_detalhe: z.string().trim().max(500).optional().nullable(),
+    ponto_focal: z.boolean().default(true),
+  })
+  .refine((v) => Boolean(v.email || v.telefone || v.whatsapp), {
+    message: 'Informe ao menos e-mail, telefone ou WhatsApp — sem canal não há mensagem.',
+    path: ['telefone'],
+  })
+export type ContatoManualFornecedorInput = z.infer<typeof contatoManualFornecedorSchema>
+
 export const pedirApresentacaoSchema = z.object({
   fornecedor_cnpj: cnpj,
   sacado_cnpj: cnpj,

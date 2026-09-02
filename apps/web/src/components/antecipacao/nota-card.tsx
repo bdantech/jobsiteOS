@@ -387,6 +387,11 @@ export function NotaCard({
                   empresaId={nota.fornecedor_empresa_id}
                   funil="nfs"
                   funilCardId={nota.access_key}
+                  // Sem estes dois a aba é um beco para 3.542 dos 3.705
+                  // fornecedores com nota viva: são eles que trazem o agente de
+                  // contato para dentro do card.
+                  fornecedorCnpj={nota.fornecedor_cnpj}
+                  fornecedorNome={nomeFornecedor}
                 />
               ),
             },

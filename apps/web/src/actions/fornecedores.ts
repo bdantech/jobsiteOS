@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import {
+  criarContatoManualFornecedor,
   descartarFornecedor,
   moverFornecedor,
   mudarStatusPedido,
@@ -89,6 +90,29 @@ export async function promoverContatoAction(input: unknown): Promise<ActionResul
     const c = (await promoverContatoDescoberto(supabase, input)) as { id?: string } | null
     revalidatePath(ROTA)
     return { ok: true, data: { id: c?.id ?? '' } }
+  } catch (e) {
+    return falha(e)
+  }
+}
+
+/**
+ * O contato escrito à mão, do card da NF.
+ *
+ * A RPC cria a ficha da empresa quando ela não existe — é o que destrava a aba
+ * "Mensagens" para o fornecedor que só existe como nota. A visibilidade é checada
+ * DENTRO dela (0155), como em todas as outras: repetir aqui daria duas regras.
+ */
+export async function criarContatoManualFornecedorAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string; empresa_id: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const c = (await criarContatoManualFornecedor(supabase, input)) as
+      | { id?: string; empresa_id?: string }
+      | null
+    revalidatePath(ROTA)
+    return { ok: true, data: { id: c?.id ?? '', empresa_id: c?.empresa_id ?? '' } }
   } catch (e) {
     return falha(e)
   }

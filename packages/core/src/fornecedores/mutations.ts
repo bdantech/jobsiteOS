@@ -1,6 +1,7 @@
 import type { Json } from '../types/database.js'
 import type { Supabase } from '../registry/types.js'
 import {
+  contatoManualFornecedorSchema,
   descartarFornecedorSchema,
   moverFornecedorSchema,
   pedirApresentacaoSchema,
@@ -54,6 +55,22 @@ export async function reatribuirFornecedor(supabase: Supabase, input: unknown) {
 export async function promoverContatoDescoberto(supabase: Supabase, input: unknown) {
   const dados = promoverContatoSchema.parse(input)
   const { data, error } = await supabase.rpc('app_promover_contato_descoberto', {
+    p: dados as unknown as Json,
+  })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/**
+ * O contato escrito à mão, a partir do card da NF.
+ *
+ * A RPC cria a ficha da EMPRESA se ela não existir — é o passo que faltava para o
+ * funil de NFs, onde 3.542 dos 3.705 fornecedores com nota viva não têm ficha
+ * nenhuma e a aba "Mensagens" era um beco sem saída.
+ */
+export async function criarContatoManualFornecedor(supabase: Supabase, input: unknown) {
+  const dados = contatoManualFornecedorSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_fornecedor_contato_manual', {
     p: dados as unknown as Json,
   })
   if (error) throw new Error(error.message)

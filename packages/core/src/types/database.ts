@@ -10705,6 +10705,38 @@ export type Database = {
         }
       }
       app_fornecedor_toque: { Args: { p: Json }; Returns: undefined }
+      app_fornecedor_contato_manual: {
+        Args: { p: Json }
+        Returns: {
+          apollo_person_id: string | null
+          base_legal: string | null
+          base_legal_detalhe: string | null
+          base_legal_em: string | null
+          cargo: string | null
+          criado_em: string
+          departamento: string | null
+          email: string | null
+          email_status: string | null
+          empresa_id: string
+          enriquecido_em: string | null
+          id: string
+          linkedin_url: string | null
+          nao_e_o_decisor: boolean
+          nome: string | null
+          origem: string | null
+          ponto_focal: boolean
+          senioridade: string | null
+          telefone: string | null
+          telefone_status: string | null
+          whatsapp: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contatos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_fornecedor_visivel: { Args: { p_cnpj: string }; Returns: boolean }
       app_funil_analise: { Args: { p: Json }; Returns: Json }
       app_gerar_token_ics: { Args: { p: Json }; Returns: string }
