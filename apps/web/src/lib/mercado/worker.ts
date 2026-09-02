@@ -123,6 +123,15 @@ async function postar(
    * falar com o worker" para uma consulta que rodou e foi cobrada.
    */
   timeoutMs: number = TIMEOUT_MS,
+  /*
+   * Cabeçalhos que a ROTA DE DESTINO exige, além do bearer.
+   *
+   * As rotas de webhook do worker são públicas (registradas antes do
+   * `exigirSegredo`) e autenticam pelo segredo DO PROVEDOR, não pelo
+   * `WORKER_SECRET` — o provedor não conhece o nosso. Quem repassa precisa levar
+   * o segredo que acabou de validar, ou o worker devolve 401 para todo mundo.
+   */
+  headersExtra: Record<string, string> = {},
 ): Promise<DispararJobResultado> {
   const baseUrl = process.env.WORKER_URL
   const secret = process.env.WORKER_SECRET
@@ -151,6 +160,7 @@ async function postar(
       headers: {
         authorization: `Bearer ${secret}`,
         'content-type': 'application/json',
+        ...headersExtra,
       },
       body: JSON.stringify(corpoJson),
       cache: 'no-store',
@@ -872,11 +882,29 @@ export async function dispararAgenteAgendados(
  * cru para a rota do worker, que autentica com o WORKER_SECRET. Um salto a mais,
  * uma implementação só.
  */
+/**
+ * Repassa um webhook de comunicação para a implementação única, no worker.
+ *
+ * ── O SEGREDO VAI JUNTO, E ESSA É A LINHA QUE FALTAVA ──────────────────────
+ * A rota do worker é pública e confere o segredo DO PROVEDOR no
+ * `x-webhook-secret`. Sem repassá-lo, o `Bearer WORKER_SECRET` sozinho levava
+ * 401 — em TODO webhook, desde sempre. A rota da web autenticava, respondia 200
+ * ao provedor e jogava a mensagem fora: nenhuma resposta de WhatsApp jamais
+ * chegou ao ledger, e nenhum bounce do Resend jamais suprimiu ninguém.
+ *
+ * O segredo repassado é o que a rota chamadora ACABOU de validar. O worker o
+ * valida de novo, contra a mesma fonte — a dupla checagem não custa nada e
+ * mantém a rota do worker autônoma, que é o que permite ao painel do provedor
+ * apontar direto para ela.
+ */
 export async function repassarWebhookComunicacao(
   provedor: 'wasender' | 'resend',
   corpo: unknown,
+  segredo: string,
 ): Promise<DispararJobResultado> {
-  return postar(`/webhooks/${provedor}`, corpo, `webhook-${provedor}`)
+  return postar(`/webhooks/${provedor}`, corpo, `webhook-${provedor}`, TIMEOUT_MS, {
+    'x-webhook-secret': segredo,
+  })
 }
 
 // ─── Campanhas (05B) ────────────────────────────────────────────────────────

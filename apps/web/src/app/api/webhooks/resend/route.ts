@@ -18,9 +18,9 @@ import { repassarWebhookComunicacao } from '@/lib/mercado/worker'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-function segredoValido(recebido: string | null): boolean {
+function segredoValido(recebido: string): boolean {
   const esperado = process.env.RESEND_WEBHOOK_SECRET
-  if (!esperado || !recebido) return false
+  if (!esperado) return false
   const a = createHash('sha256').update(recebido).digest()
   const b = createHash('sha256').update(esperado).digest()
   return timingSafeEqual(a, b)
@@ -29,7 +29,7 @@ function segredoValido(recebido: string | null): boolean {
 export async function POST(request: Request): Promise<NextResponse> {
   const recebido =
     request.headers.get('x-webhook-secret') ?? request.headers.get('svix-signature')
-  if (!segredoValido(recebido)) {
+  if (!recebido || !segredoValido(recebido)) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
 
@@ -40,7 +40,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ erro: 'Corpo inválido.' }, { status: 400 })
   }
 
-  const r = await repassarWebhookComunicacao('resend', corpo)
-  if (!r.ok) console.error('[comunicacao] falha ao repassar webhook do Resend', { code: r.code })
-  return NextResponse.json({ ok: r.ok })
+  const r = await repassarWebhookComunicacao('resend', corpo, recebido)
+  if (!r.ok) {
+    console.error('[comunicacao] falha ao repassar webhook do Resend', { code: r.code })
+    // 503 para o Resend reentregar: um bounce perdido é um endereço morto que
+    // continua recebendo, e é a supressão que este webhook existe para escrever.
+    return NextResponse.json({ ok: false }, { status: 503 })
+  }
+  return NextResponse.json({ ok: true })
 }

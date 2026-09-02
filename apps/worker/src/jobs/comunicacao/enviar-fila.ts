@@ -338,7 +338,26 @@ async function processar(
    * O texto SAI da fila na mesma escrita que aponta para o ledger. A constraint
    * do banco recusaria os dois juntos, e é essa recusa que impede a outbox de
    * voltar a ser histórico.
+   *
+   * ── MAS SÓ QUANDO O LEDGER RECEBEU DE FATO ────────────────────────────────
+   * `escreverNoLedger` devolve null quando a gravação falha, e este código
+   * apagava o corpo mesmo assim: entregava o texto a um ledger que não o tinha.
+   * Um índice único parcial fazia o upsert falhar em TODA mensagem (42P10,
+   * corrigido na 0154) e onze mensagens saíram com o texto destruído — nem na
+   * fila, nem no histórico, em lugar nenhum.
+   *
+   * O status continua `enviada` de qualquer forma: a mensagem SAIU, e voltá-la
+   * para a fila a mandaria duas vezes. O que muda é que o corpo fica onde está,
+   * com o erro escrito ao lado, até alguém reconciliar.
    */
+  const noLedger = comunicacaoId !== null
+  if (!noLedger) {
+    logger.error(
+      { id: linha.id, conversa: conversaId },
+      'Mensagem ENVIADA mas não gravada no ledger — o corpo fica na fila para não se perder.',
+    )
+  }
+
   await supabaseAdmin
     .from('mensagens_outbox')
     .update({
@@ -348,9 +367,9 @@ async function processar(
       // esquecia em qual thread ela caiu, e o destinatário de campanha ficava sem
       // saber para onde olhar quando a resposta chegasse.
       conversa_id: conversaId,
-      corpo: null,
-      assunto: null,
-      erro: null,
+      ...(noLedger
+        ? { corpo: null, assunto: null, erro: null }
+        : { erro: 'Enviada, mas não gravada no histórico. O texto está preservado nesta linha.' }),
       ultima_tentativa_em: agora.toISOString(),
     })
     .eq('id', linha.id)

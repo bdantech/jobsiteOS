@@ -30,10 +30,12 @@ import { repassarWebhookComunicacao } from '@/lib/mercado/worker'
  * faria os webhooks do segundo número levarem 401, e um 401 em webhook não
  * aparece em tela nenhuma: as respostas daquele número simplesmente sumiriam.
  *
- * ── 200 QUASE SEMPRE ───────────────────────────────────────────────────────
- * O provedor reentrega quando não recebe 200 rápido, e a gravação é idempotente
- * pelo id da mensagem. Responder erro provocaria uma tempestade de reenvio que a
- * idempotência já tornaria inofensiva — e inútil.
+ * ── 200 SÓ QUANDO A MENSAGEM FOI ACEITA ────────────────────────────────────
+ * O provedor reentrega quando não recebe 200, e a gravação é idempotente pelo id
+ * da mensagem — a reentrega é inofensiva. Já o 200 sobre um repasse que falhou é
+ * definitivo: não existe varredura que busque no provedor o que perdemos, então
+ * a mensagem some para sempre. Entre uma bolha duplicada (que a idempotência
+ * impede) e uma resposta de cliente perdida, a escolha não é difícil.
  */
 
 export const dynamic = 'force-dynamic'
@@ -64,10 +66,9 @@ async function bateComAlgumaConta(recebido: string): Promise<boolean> {
   }
 }
 
-async function segredoValido(recebido: string | null): Promise<boolean> {
+async function segredoValido(recebido: string): Promise<boolean> {
   // O efeito de um webhook falso aqui é escrever uma mensagem no ledger em nome
   // de um contato real — por isso nada entra sem casar com alguma das duas.
-  if (!recebido) return false
   if (bateComOGlobal(recebido)) return true
   return bateComAlgumaConta(recebido)
 }
@@ -75,7 +76,7 @@ async function segredoValido(recebido: string | null): Promise<boolean> {
 export async function POST(request: Request): Promise<NextResponse> {
   const url = new URL(request.url)
   const recebido = request.headers.get('x-webhook-secret') ?? url.searchParams.get('secret')
-  if (!(await segredoValido(recebido))) {
+  if (!recebido || !(await segredoValido(recebido))) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
 
@@ -86,12 +87,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ erro: 'Corpo inválido.' }, { status: 400 })
   }
 
-  const r = await repassarWebhookComunicacao('wasender', corpo)
+  const r = await repassarWebhookComunicacao('wasender', corpo, recebido)
   if (!r.ok) {
     console.error('[comunicacao] falha ao repassar webhook do Wasender', { code: r.code })
-    // 200 mesmo assim: o reenvio não resolveria um worker fora do ar, e a
-    // mensagem perdida é recuperada pela varredura do provedor.
-    return NextResponse.json({ ok: false })
+    // 503 para o provedor reentregar. Um worker que voltou em dois minutos
+    // recebe a mensagem na segunda tentativa; um 200 aqui a perderia inteira.
+    return NextResponse.json({ ok: false }, { status: 503 })
   }
   return NextResponse.json({ ok: true })
 }
