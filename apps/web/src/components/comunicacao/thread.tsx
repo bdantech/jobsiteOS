@@ -2,7 +2,17 @@
 
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Bot, Check, CheckCheck, Clock, Mail, MessageCircle, Phone } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  CheckCheck,
+  Clock,
+  Mail,
+  MessageCircle,
+  Phone,
+  Smartphone,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -42,11 +52,21 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
   const Icone = ICONE_CANAL[(m.canal ?? 'whatsapp') as keyof typeof ICONE_CANAL] ?? MessageCircle
   const intencao = intencaoLabel(m.triagem)
 
+  /*
+   * A mensagem digitada no APARELHO não tem autor: o provedor não diz qual das
+   * pessoas com acesso ao número escreveu, e carimbar o dono da carteira seria
+   * atribuir a alguém uma frase que talvez não seja dele. A bolha diz "pelo
+   * celular" e para por aí — é o máximo que sabemos, e inventar o resto faria a
+   * thread mentir num lugar onde ela é prova.
+   */
+  const peloCelular = m.origem === 'celular'
   const quem = entrada
     ? (m.contato_nome ?? 'Contato')
-    : m.por_ia
-      ? `${m.vendedor_nome ?? 'IA'} (IA)`
-      : (m.vendedor_nome ?? m.usuario_nome ?? 'Equipe')
+    : peloCelular
+      ? 'Equipe (pelo celular)'
+      : m.por_ia
+        ? `${m.vendedor_nome ?? 'IA'} (IA)`
+        : (m.vendedor_nome ?? m.usuario_nome ?? 'Equipe')
 
   return (
     <li className={cn('flex', entrada ? 'justify-start' : 'justify-end')}>
@@ -63,6 +83,9 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
           <Icone className="h-3 w-3" aria-hidden />
           <span className="font-medium text-foreground">{quem}</span>
           {m.por_ia ? <Bot className="h-3 w-3" aria-label="Enviada pela IA" /> : null}
+          {peloCelular ? (
+            <Smartphone className="h-3 w-3" aria-label="Enviada pelo aparelho, fora da plataforma" />
+          ) : null}
           <span>·</span>
           <span>{dataHora(m.criado_em)}</span>
           {!entrada ? <IconeStatus status={m.status_envio} /> : null}

@@ -190,6 +190,12 @@ export async function donoDaEmpresa(empresaId: string | null): Promise<string | 
 export async function enfileirarNaoVinculada(args: {
   canal: CanalThread
   identificador: string
+  /**
+   * O identificador de privacidade do WhatsApp, quando o provedor o manda. Fica
+   * gravado ao lado do telefone porque é ele que aparece nos eventos que NÃO
+   * trazem número — sem essa coluna, a mesma pessoa entraria duas vezes na fila.
+   */
+  lid?: string | null
   nomeSugerido: string | null
   contaRecebedora: string | null
   vendedorSugeridoId?: string | null
@@ -214,6 +220,7 @@ export async function enfileirarNaoVinculada(args: {
         qtd_mensagens: (existente.qtd_mensagens ?? 0) + 1,
         ultima_mensagem_em: args.em.toISOString(),
         nome_sugerido: args.nomeSugerido ?? undefined,
+        lid: args.lid ?? undefined,
         ...(existente.status === 'ignorada' ? { status: 'pendente' } : {}),
       })
       .eq('id', existente.id)
@@ -223,6 +230,7 @@ export async function enfileirarNaoVinculada(args: {
   const { error } = await supabaseAdmin.from('conversas_nao_vinculadas').insert({
     canal: args.canal,
     identificador_externo: ident,
+    lid: args.lid ?? null,
     nome_sugerido: args.nomeSugerido,
     conta_recebedora: args.contaRecebedora,
     vendedor_sugerido_id: args.vendedorSugeridoId ?? null,

@@ -2717,6 +2717,7 @@ export type Database = {
           empresa_id: string | null
           id: string
           identificador_externo: string
+          lid: string | null
           modo_agente: string
           nao_lidas: number
           objetivo: string | null
@@ -2735,6 +2736,7 @@ export type Database = {
           empresa_id?: string | null
           id?: string
           identificador_externo: string
+          lid?: string | null
           modo_agente?: string
           nao_lidas?: number
           objetivo?: string | null
@@ -2753,6 +2755,7 @@ export type Database = {
           empresa_id?: string | null
           id?: string
           identificador_externo?: string
+          lid?: string | null
           modo_agente?: string
           nao_lidas?: number
           objetivo?: string | null
@@ -2828,6 +2831,7 @@ export type Database = {
           conta_recebedora: string | null
           id: string
           identificador_externo: string
+          lid: string | null
           nome_sugerido: string | null
           primeira_mensagem_em: string
           qtd_mensagens: number
@@ -2843,6 +2847,7 @@ export type Database = {
           conta_recebedora?: string | null
           id?: string
           identificador_externo: string
+          lid?: string | null
           nome_sugerido?: string | null
           primeira_mensagem_em?: string
           qtd_mensagens?: number
@@ -2858,6 +2863,7 @@ export type Database = {
           conta_recebedora?: string | null
           id?: string
           identificador_externo?: string
+          lid?: string | null
           nome_sugerido?: string | null
           primeira_mensagem_em?: string
           qtd_mensagens?: number
@@ -2888,6 +2894,42 @@ export type Database = {
             columns: ["vinculada_contato_id"]
             isOneToOne: false
             referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversas_ocultas: {
+        Row: {
+          conversa_id: string
+          motivo: string | null
+          ocultada_em: string
+          usuario_id: string
+        }
+        Insert: {
+          conversa_id: string
+          motivo?: string | null
+          ocultada_em?: string
+          usuario_id: string
+        }
+        Update: {
+          conversa_id?: string
+          motivo?: string | null
+          ocultada_em?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversas_ocultas_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_ocultas_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -8929,8 +8971,10 @@ export type Database = {
           empresa_nome: string | null
           id: string | null
           identificador_externo: string | null
+          lid: string | null
           modo_agente: string | null
           nao_lidas: number | null
+          nome_sugerido: string | null
           objetivo: string | null
           playbook_id: string | null
           proxima_acao_em: string | null
@@ -8945,6 +8989,7 @@ export type Database = {
           sugestao_justificativa: string | null
           ultima_direcao: string | null
           ultima_mensagem_em: string | null
+          ultima_origem: string | null
           ultima_por_ia: boolean | null
           ultima_preview: string | null
           ultima_triagem: Json | null
@@ -9543,6 +9588,11 @@ export type Database = {
         }
         Returns: string
       }
+      app__conversa_absorver_lid: {
+        Args: { p_lid: string; p_conversa: string | null }
+        Returns: undefined
+      }
+      app__conversa_por_lid: { Args: { p_lid: string }; Returns: string | null }
       app__identificador_canonico: {
         Args: { p_canal: string; p_valor: string }
         Returns: string
@@ -10263,6 +10313,7 @@ export type Database = {
           empresa_id: string | null
           id: string
           identificador_externo: string
+          lid: string | null
           modo_agente: string
           nao_lidas: number
           objetivo: string | null
@@ -10281,6 +10332,9 @@ export type Database = {
         }
       }
       app_conversa_ignorar: { Args: { p: Json }; Returns: undefined }
+      app_conversa_ocultar: { Args: { p: Json }; Returns: undefined }
+      app_conversa_reexibir: { Args: { p: Json }; Returns: undefined }
+      app_conversas_ocultas: { Args: Record<string, never>; Returns: Json }
       app_conversa_marcar_lida: { Args: { p: Json }; Returns: undefined }
       app_conversa_vincular: {
         Args: { p: Json }
@@ -10292,6 +10346,7 @@ export type Database = {
           empresa_id: string | null
           id: string
           identificador_externo: string
+          lid: string | null
           modo_agente: string
           nao_lidas: number
           objetivo: string | null

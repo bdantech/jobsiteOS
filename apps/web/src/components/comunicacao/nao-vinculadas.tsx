@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Link2, Mail, MessageCircle, Search, X } from 'lucide-react'
+import { EyeOff, Link2, Mail, MessageCircle, Search, X } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
-import { ignorarConversaAction, vincularConversaAction } from '@/actions/comunicacao'
+import {
+  ignorarConversaAction,
+  ocultarConversaAction,
+  vincularConversaAction,
+} from '@/actions/comunicacao'
 import { buscarNaoVinculadas, type NaoVinculada } from './queries'
 import { desde, identificadorLegivel } from './format'
 
@@ -136,6 +140,33 @@ function CartaoVinculacao({ n, onResolvida }: { n: NaoVinculada; onResolvida: ()
     }
   }
 
+  /**
+   * OCULTAR é diferente de IGNORAR, e a diferença é de quem.
+   *
+   * Ignorar resolve a fila para TODO MUNDO — e ela volta se a pessoa escrever de
+   * novo, porque a segunda mensagem é a evidência de que quem ignorou pode ter
+   * errado. Ocultar é só meu: o grupo do condomínio que escreveu no número
+   * comercial não precisa virar decisão coletiva, e o colega que talvez conheça
+   * aquele número continua vendo a linha.
+   *
+   * É por isso que o botão fica aqui, ao lado de "Ignorar", e não escondido nas
+   * configurações: as duas saídas são legítimas e a escolha é sobre alcance.
+   */
+  async function ocultar() {
+    setOcupado(true)
+    try {
+      const r = await ocultarConversaAction({ nao_vinculada_id: n.id })
+      if (!r.ok) {
+        toast.error(r.message)
+        return
+      }
+      toast.success('Some do seu inbox. O time continua vendo.')
+      onResolvida()
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   async function ignorar() {
     setOcupado(true)
     try {
@@ -236,8 +267,13 @@ function CartaoVinculacao({ n, onResolvida }: { n: NaoVinculada; onResolvida: ()
           <X className="mr-1.5 h-3.5 w-3.5" aria-hidden />
           Ignorar
         </Button>
+        <Button size="sm" variant="ghost" onClick={ocultar} disabled={ocupado}>
+          <EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+          Ocultar para mim
+        </Button>
         <p className="self-center text-xs text-muted-foreground">
-          Ignorar tira da fila. Se a pessoa escrever de novo, ela volta.
+          Ignorar tira da fila de todo mundo — e ela volta se a pessoa escrever de novo.
+          Ocultar tira só do seu inbox, e é reversível lá.
         </p>
       </div>
     </div>

@@ -11,6 +11,8 @@ import {
   enviarPedidoApresentacao,
   ignorarConversa,
   marcarConversaLida,
+  ocultarConversa,
+  reexibirConversa,
   salvarComunicacaoConfig,
   salvarPlaybook,
   montarValoresVariaveis,
@@ -159,6 +161,32 @@ export async function ignorarConversaAction(input: unknown): Promise<ActionResul
   if (erro || !supabase) return erro as ActionResult<never>
   try {
     await ignorarConversa(supabase, input)
+    revalidatePath('/comunicacao/nao-vinculadas')
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falha(e)
+  }
+}
+
+export async function ocultarConversaAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await ocultarConversa(supabase, input)
+    revalidatePath(ROTA)
+    revalidatePath('/comunicacao/nao-vinculadas')
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falha(e)
+  }
+}
+
+export async function reexibirConversaAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await reexibirConversa(supabase, input)
+    revalidatePath(ROTA)
     revalidatePath('/comunicacao/nao-vinculadas')
     return { ok: true, data: { ok: true } }
   } catch (e) {

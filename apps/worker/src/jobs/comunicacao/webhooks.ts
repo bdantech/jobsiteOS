@@ -2,11 +2,20 @@ import { identificadorCanonico } from '../../../../../packages/core/src/comunica
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import { notify } from '../../../../../packages/core/src/server/notify.js'
 import {
+  lerEnvioWasender,
   lerStatusWasender,
   lerWebhookResend,
   lerWebhookWasender,
+  type MensagemEnviadaWasender,
 } from '../../../../../packages/core/src/transportes/index.js'
-import { conversaPara, escreverNoLedger, tocarConversa } from '../../comunicacao/ledger.js'
+import {
+  absorverLid,
+  conversaPara,
+  conversaPorLid,
+  escreverNoLedger,
+  jaNoLedger,
+  tocarConversa,
+} from '../../comunicacao/ledger.js'
 import { enfileirarNaoVinculada, resolverRemetente } from '../../comunicacao/resolver.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
@@ -45,19 +54,39 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     return { ok: true, gravada: false, motivo: 'status' }
   }
 
+  // O que SAIU, inclusive pelo aparelho. Vem antes do leitor de entrada porque é
+  // ele quem recusa `fromMe`.
+  const enviada = lerEnvioWasender(payload)
+  if (enviada) return registrarEnvioPeloCelular(enviada, payload)
+
   const m = lerWebhookWasender(payload)
   if (!m) return { ok: true, gravada: false, motivo: 'evento ignorado' }
 
-  const contaRecebedora = await numeroDaConta(m.para)
+  const contaRecebedora = await numeroDaConta(sessaoDoPayload(payload) ?? m.para)
   const r = await resolverRemetente({ canal: 'whatsapp', identificador: m.de, corpo: m.corpo })
 
-  const conversaId = await conversaPara({
-    canal: 'whatsapp',
-    identificador: m.de,
-    empresaId: r.empresaId,
-    contatoId: r.contatoId,
-    vendedorId: r.vendedorId,
-  })
+  /*
+   * A THREAD, e a ordem aqui não é indiferente.
+   *
+   * Quando o telefone veio (`m.de !== m.lid`), ele é a chave — a mesma que o
+   * compositor usa para enviar, e a única que o cooldown e a supressão sabem
+   * procurar. Quando veio SÓ o LID, a thread já conhecida por aquele LID é a
+   * resposta certa; abrir uma nova recriaria a conversa paralela que a absorção
+   * existe para desfazer.
+   */
+  const soLid = m.lid !== null && m.de === m.lid
+  const conversaId =
+    (soLid ? await conversaPorLid(m.lid) : null) ??
+    (await conversaPara({
+      canal: 'whatsapp',
+      identificador: m.de,
+      empresaId: r.empresaId,
+      contatoId: r.contatoId,
+      vendedorId: r.vendedorId,
+    }))
+
+  // Com os dois identificadores na mão, casa a thread que ficou presa ao LID.
+  if (!soLid) await absorverLid(m.lid, conversaId)
 
   const comunicacaoId = await escreverNoLedger({
     conversaId,
@@ -69,7 +98,7 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     corpo: m.corpo,
     provedor: 'wasender',
     idExterno: m.idExterno,
-    contaRemetente: contaRecebedora ?? m.para,
+    contaRemetente: contaRecebedora,
     statusEnvio: 'entregue',
     origem: 'inbox',
     criadoEm: m.recebidaEm,
@@ -85,8 +114,9 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     await enfileirarNaoVinculada({
       canal: 'whatsapp',
       identificador: m.de,
+      lid: m.lid,
       nomeSugerido: m.nomeSugerido,
-      contaRecebedora: contaRecebedora ?? m.para,
+      contaRecebedora,
       vendedorSugeridoId: r.vendedorId,
       em: m.recebidaEm,
     })
@@ -105,7 +135,110 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
   return { ok: true, gravada: true }
 }
 
-/** O apelido/id de sessão que o provedor manda → o número da nossa conta. */
+/**
+ * A mensagem que a EQUIPE mandou, vista pelo webhook (§2).
+ *
+ * ── DUAS PROCEDÊNCIAS, UM SÓ EVENTO ─────────────────────────────────────────
+ * O provedor manda `message.sent` tanto para o que saiu daqui quanto para o que
+ * alguém digitou no aparelho, e o `id_externo` é o que separa as duas: quando ele
+ * já está no ledger, foi o `enviar-fila` que gravou — com autor, vendedor,
+ * template e origem — e não há nada a fazer. Um upsert aqui seria pior que inútil:
+ * substituiria aquela linha por uma cópia anônima, apagando de quem foi a
+ * mensagem.
+ *
+ * ── E POR QUE A DE FORA ENTRA ───────────────────────────────────────────────
+ * Porque o inbox mostrava metade do diálogo. O cliente perguntava, o vendedor
+ * respondia pelo celular, e a tela guardava só a pergunta — de modo que a próxima
+ * pessoa a abrir a conversa concluía que ninguém tinha respondido.
+ *
+ * Ela entra como `origem = 'celular'` e nunca como `compositor`: não passou pelo
+ * portão, e uma auditoria de supressão que não conseguisse distinguir as duas
+ * juraria que passou.
+ */
+async function registrarEnvioPeloCelular(
+  e: MensagemEnviadaWasender,
+  payload: unknown,
+): Promise<ResultadoWebhook> {
+  if (await jaNoLedger('wasender', e.idExterno)) {
+    return { ok: true, gravada: false, motivo: 'envio da plataforma' }
+  }
+
+  const r = await resolverRemetente({ canal: 'whatsapp', identificador: e.para, corpo: e.corpo })
+  const soLid = e.lid !== null && e.para === e.lid
+  const conversaId =
+    (soLid ? await conversaPorLid(e.lid) : null) ??
+    (await conversaPara({
+      canal: 'whatsapp',
+      identificador: e.para,
+      empresaId: r.empresaId,
+      contatoId: r.contatoId,
+      vendedorId: r.vendedorId,
+    }))
+  if (!soLid) await absorverLid(e.lid, conversaId)
+
+  const comunicacaoId = await escreverNoLedger({
+    conversaId,
+    empresaId: r.empresaId,
+    contatoId: r.contatoId,
+    canal: 'whatsapp',
+    direcao: 'saida',
+    // O vendedor dono da carteira, e não quem digitou: o provedor não diz qual
+    // das pessoas com acesso ao aparelho escreveu, e inventar um autor seria
+    // atribuir a alguém uma frase que talvez não seja dele. `usuario_id` fica
+    // nulo de propósito, e é isso que a tela mostra como "pelo celular".
+    vendedorId: r.vendedorId,
+    corpo: e.corpo ?? (e.temMidia ? '(mídia enviada pelo celular)' : null),
+    provedor: 'wasender',
+    idExterno: e.idExterno,
+    contaRemetente: await numeroDaConta(sessaoDoPayload(payload) ?? ''),
+    statusEnvio: 'enviada',
+    origem: 'celular',
+    enviadoEm: e.enviadaEm,
+    criadoEm: e.enviadaEm,
+  })
+
+  if (conversaId) {
+    // Responder é ler: `tocarConversa` com direção de saída zera `nao_lidas`, e é
+    // o que faz o contador do inbox parar de cobrar uma resposta que já foi dada.
+    await tocarConversa({
+      conversaId,
+      direcao: 'saida',
+      em: e.enviadaEm,
+      novoStatus: 'aguardando_resposta',
+    })
+  }
+
+  if (r.empresaId) {
+    await emitirEvento(r.empresaId, EVENTO_TIPOS.COMUNICACAO_ENVIADA, {
+      titulo: 'Mensagem enviada pelo WhatsApp (celular)',
+      resumo: (e.corpo ?? '(mídia)').slice(0, 200),
+      url: conversaId ? `/comunicacao/${conversaId}` : '/comunicacao',
+      canal: 'whatsapp',
+      comunicacao_id: comunicacaoId,
+      conversa_id: conversaId,
+      por_ia: false,
+    })
+  }
+
+  return { ok: true, gravada: true }
+}
+
+/** A sessão/instância que o provedor identifica no topo do payload. */
+function sessaoDoPayload(payload: unknown): string | null {
+  const p = payload as Record<string, unknown> | null
+  const s = p?.sessionId ?? p?.instanceId
+  return s ? String(s) : null
+}
+
+/**
+ * O apelido/id de sessão que o provedor manda → o número da nossa conta.
+ *
+ * O fallback deixou de ser "os dígitos do que veio". `sessionId` é um
+ * identificador de sessão, e devolvê-lo gravava coisas como
+ * `7553307842893651945777...` no lugar do número da conta — 48 dígitos que
+ * nenhuma tela consegue formatar e que o teto diário por número conta como se
+ * fosse mais um telefone.
+ */
 async function numeroDaConta(referencia: string): Promise<string | null> {
   if (!referencia) return null
   const digitos = identificadorCanonico('whatsapp', referencia)
@@ -115,7 +248,8 @@ async function numeroDaConta(referencia: string): Promise<string | null> {
     .or(digitos ? `numero.eq.${digitos},apelido.eq.${referencia}` : `apelido.eq.${referencia}`)
     .limit(1)
     .maybeSingle()
-  return data?.numero ?? digitos
+  if (data?.numero) return data.numero
+  return digitos && digitos.length >= 10 && digitos.length <= 13 ? digitos : null
 }
 
 // ─── Resend ─────────────────────────────────────────────────────────────────

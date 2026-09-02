@@ -142,6 +142,57 @@ export async function conversaPara(args: {
 }
 
 /**
+ * A thread já conhecida por um LID. Chamada quando o provedor manda SÓ o
+ * identificador de privacidade — sem isto, uma reação ou uma mídia sem telefone
+ * recriaria a thread paralela que a absorção acabou de desfazer.
+ */
+export async function conversaPorLid(lid: string | null): Promise<string | null> {
+  if (!lid) return null
+  const { data, error } = await supabaseAdmin.rpc('app__conversa_por_lid', { p_lid: lid })
+  if (error) {
+    logger.error({ erro: error.message, lid }, 'Falha ao procurar a conversa pelo LID.')
+    return null
+  }
+  return (data as string | null) ?? null
+}
+
+/**
+ * Casa a thread presa ao LID com a do telefone, e guarda o LID na sobrevivente.
+ *
+ * Chamada em TODA mensagem que traz os dois identificadores juntos, e não só na
+ * primeira: é barato (uma consulta por índice único quando não há o que fazer) e
+ * é o único momento em que o par LID↔telefone existe. Guardá-lo para depois seria
+ * guardar para nunca — o provedor não devolve esse mapeamento sob demanda.
+ */
+export async function absorverLid(lid: string | null, conversaId: string | null): Promise<void> {
+  if (!lid || !conversaId) return
+  const { error } = await supabaseAdmin.rpc('app__conversa_absorver_lid', {
+    p_lid: lid,
+    p_conversa: conversaId,
+  })
+  if (error) logger.error({ erro: error.message, lid }, 'Falha ao absorver a thread do LID.')
+}
+
+/**
+ * A linha do ledger que já tem este id do provedor — ou null.
+ *
+ * O webhook de saída precisa disto porque NÃO pode usar o upsert de
+ * `escreverNoLedger`: quando a mensagem partiu daqui, a linha já existe com
+ * autor, vendedor, template e origem, e um upsert a substituiria por uma cópia
+ * anônima vinda do provedor. Saber que ela existe é o suficiente — o que falta
+ * atualizar é só o status de entrega.
+ */
+export async function jaNoLedger(provedor: string, idExterno: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('comunicacoes')
+    .select('id')
+    .eq('provedor', provedor)
+    .eq('id_externo', idExterno)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+/**
  * O estado da thread depois de uma mensagem.
  *
  * `nao_lidas` só sobe na ENTRADA, e zera na saída: responder é ler. A alternativa

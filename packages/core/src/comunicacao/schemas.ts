@@ -50,7 +50,26 @@ export const STATUS_ENVIO_LABELS: Record<StatusEnvio, string> = {
   descartada: 'Descartada',
 }
 
-export const ORIGENS = ['compositor', 'outbox', 'agente', 'app_toque', 'inbox', 'sistema'] as const
+/**
+ * De onde a mensagem partiu. Espelha `comunicacoes_origem_check` no banco.
+ *
+ * `campanha` estava no CHECK desde o 05B e nunca chegou aqui — o worker gravava
+ * um valor que o tipo dizia não existir, e só não quebrou porque quem grava
+ * campanha passa por outro caminho. `celular` é a mensagem digitada no APARELHO,
+ * fora da plataforma (0162): ela entra no ledger pelo webhook `message.sent`
+ * para o histórico não mentir, mas NÃO passou pelo portão — e é por isso que
+ * precisa ser distinguível de `compositor` numa auditoria de supressão.
+ */
+export const ORIGENS = [
+  'compositor',
+  'outbox',
+  'agente',
+  'app_toque',
+  'inbox',
+  'sistema',
+  'campanha',
+  'celular',
+] as const
 export type OrigemComunicacao = (typeof ORIGENS)[number]
 
 export const FUNIS = ['nfs', 'fornecedores', 'sdr', 'vendas', 'certificados'] as const
@@ -199,6 +218,27 @@ export const vincularConversaSchema = z.object({
 export type VincularConversaInput = z.infer<typeof vincularConversaSchema>
 
 export const idSchema = z.object({ id: z.string().uuid() })
+
+/**
+ * Ocultar aceita QUALQUER um dos dois lados, e nunca os dois vazios.
+ *
+ * O pedido nasce em dois lugares diferentes: no inbox, olhando para uma conversa
+ * que já existe; e no painel de vinculação, olhando para uma linha da fila cujo
+ * id de conversa a tela nem carrega. Exigir sempre o id da conversa obrigaria a
+ * segunda tela a resolver o problema antes de poder dispensá-lo.
+ */
+export const ocultarConversaSchema = z
+  .object({
+    conversa_id: z.string().uuid().optional().nullable(),
+    nao_vinculada_id: z.string().uuid().optional().nullable(),
+    motivo: z.string().max(120).optional().nullable(),
+  })
+  .refine((v) => Boolean(v.conversa_id ?? v.nao_vinculada_id), {
+    message: 'Informe a conversa a ocultar.',
+  })
+export type OcultarConversaInput = z.infer<typeof ocultarConversaSchema>
+
+export const reexibirConversaSchema = z.object({ conversa_id: z.string().uuid() })
 
 export const definirModoAgenteSchema = z.object({
   id: z.string().uuid(),

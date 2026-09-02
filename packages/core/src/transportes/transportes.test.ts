@@ -10,7 +10,12 @@ import {
   type EmailRecebido,
 } from './gmail.ts'
 import { lerWebhookResend } from './resend.ts'
-import { TransporteWasender, lerStatusWasender, lerWebhookWasender } from './wasender.ts'
+import {
+  TransporteWasender,
+  lerEnvioWasender,
+  lerStatusWasender,
+  lerWebhookWasender,
+} from './wasender.ts'
 
 // ─── Wasender ───────────────────────────────────────────────────────────────
 
@@ -247,4 +252,132 @@ test('o RFC822 leva threading e assunto com acento codificado', () => {
   assert.ok(raw.includes('References: <abc@mail>'))
   assert.ok(raw.includes('Subject: =?UTF-8?B?'))
   assert.ok(raw.includes('From: Ana <ana@oneos.com.br>'))
+})
+
+// ─── Endereçamento por LID (0162) ───────────────────────────────────────────
+
+/*
+ * O defeito que estes testes travam custou caro: TODA conversa recebida entrou na
+ * base chaveada por um número que não existe (`98711384416410`), o que produziu
+ * uma thread para o que entra e outra para o que sai da MESMA pessoa, deixou a
+ * tela sem telefone para formatar e mandou todo mundo para a fila de
+ * identificação.
+ */
+test('LID: o telefone vem de cleanedSenderPn, nunca do remoteJid', () => {
+  const m = lerWebhookWasender({
+    event: 'messages.received',
+    sessionId: 'sessao-1',
+    data: {
+      messages: {
+        key: {
+          id: 'WLID1',
+          fromMe: false,
+          remoteJid: '98711384416410@lid',
+          addressingMode: 'lid',
+          senderPn: '5511999998888@s.whatsapp.net',
+          cleanedSenderPn: '5511999998888',
+          senderLid: '98711384416410@lid',
+        },
+        pushName: 'Prii',
+        message: { conversation: 'oi' },
+      },
+    },
+  })!
+  assert.equal(m.de, '5511999998888')
+  assert.equal(m.lid, '98711384416410')
+  assert.equal(m.nomeSugerido, 'Prii')
+})
+
+test('LID sem telefone: a mensagem entra, chaveada pelo LID, para não se perder', () => {
+  const m = lerWebhookWasender({
+    event: 'messages.received',
+    data: {
+      messages: {
+        key: { id: 'WLID2', fromMe: false, remoteJid: '2222222222222@lid' },
+        message: { conversation: 'ping' },
+      },
+    },
+  })!
+  // `de === lid` é o sinal que o worker usa para procurar a thread pelo LID em
+  // vez de abrir uma nova.
+  assert.equal(m.de, '2222222222222')
+  assert.equal(m.lid, '2222222222222')
+})
+
+test('sem telefone e sem LID não há a quem atribuir a mensagem', () => {
+  assert.equal(
+    lerWebhookWasender({
+      event: 'messages.received',
+      data: { messages: { key: { id: 'W0', fromMe: false, remoteJid: '' } } },
+    }),
+    null,
+  )
+})
+
+// ─── O que sai pelo aparelho (0162) ─────────────────────────────────────────
+
+test('message.sent é lido como SAÍDA — o inbox mostrava só metade do diálogo', () => {
+  const e = lerEnvioWasender({
+    event: 'message.sent',
+    sessionId: 'sessao-1',
+    data: {
+      key: { id: 'WSENT1', fromMe: true, remoteJid: '5511999998888@s.whatsapp.net' },
+      message: { conversation: 'Já respondi, pode deixar' },
+      success: true,
+    },
+  })!
+  assert.equal(e.idExterno, 'WSENT1')
+  assert.equal(e.para, '5511999998888')
+  assert.equal(e.corpo, 'Já respondi, pode deixar')
+})
+
+test('o destino também pode vir como LID, e aí quem vale é remoteJidAlt', () => {
+  const e = lerEnvioWasender({
+    event: 'message.sent',
+    data: {
+      key: {
+        id: 'WSENT2',
+        fromMe: true,
+        remoteJid: '278472945594535@lid',
+        remoteJidAlt: '5511988887777@s.whatsapp.net',
+      },
+      message: { conversation: 'ok' },
+    },
+  })!
+  assert.equal(e.para, '5511988887777')
+  assert.equal(e.lid, '278472945594535')
+})
+
+test('os dois leitores são excludentes: entrada não é saída e vice-versa', () => {
+  const entrada = {
+    event: 'messages.received',
+    data: {
+      messages: {
+        key: { id: 'WX', fromMe: false, remoteJid: '5511999998888@s.whatsapp.net' },
+        message: { conversation: 'oi' },
+      },
+    },
+  }
+  assert.notEqual(lerWebhookWasender(entrada), null)
+  assert.equal(lerEnvioWasender(entrada), null)
+
+  const saida = structuredClone(entrada) as any
+  saida.data.messages.key.fromMe = true
+  assert.equal(lerWebhookWasender(saida), null)
+  assert.notEqual(lerEnvioWasender(saida), null)
+})
+
+test('grupo continua fora, inclusive no que sai', () => {
+  assert.equal(
+    lerEnvioWasender({
+      event: 'message.sent',
+      data: { key: { id: 'WG', fromMe: true, remoteJid: '123456@g.us' }, message: { conversation: 'x' } },
+    }),
+    null,
+  )
+})
+
+test('o status de entrega não é confundido com uma mensagem', () => {
+  const ack = { event: 'messages.update', data: { key: { id: 'WSENT1' }, status: 'read' } }
+  assert.deepEqual(lerStatusWasender(ack), { idExterno: 'WSENT1', status: 'lida' })
 })

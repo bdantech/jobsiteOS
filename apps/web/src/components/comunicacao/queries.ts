@@ -26,7 +26,7 @@ export interface FiltrosInbox {
 }
 
 const COLUNAS_INBOX =
-  'id, canal, identificador_externo, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, nao_lidas, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, contato_base_legal, contato_nao_e_o_decisor, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
+  'id, canal, identificador_externo, lid, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, nao_lidas, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, contato_base_legal, contato_nao_e_o_decisor, nome_sugerido, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_origem, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
 
 export async function buscarConversas(
   filtros: FiltrosInbox,
@@ -95,6 +95,32 @@ export async function buscarThreadDaEmpresa(empresaId: string): Promise<Mensagem
     .limit(300)
   if (error) throw new Error(error.message)
   return (data ?? []) as MensagemThread[]
+}
+
+export interface ConversaOculta {
+  conversa_id: string
+  canal: string
+  identificador_externo: string
+  empresa_nome: string | null
+  contato_nome: string | null
+  motivo: string | null
+  ocultada_em: string
+  ultima_mensagem_em: string | null
+}
+
+/**
+ * O que EU calei.
+ *
+ * Vem por RPC e não por `select`: a policy de `conversas` esconde de verdade o
+ * que foi ocultado, então uma consulta comum devolveria vazio e a pessoa ficaria
+ * sem como desfazer o próprio silêncio — que é a diferença entre uma preferência
+ * e um estrago.
+ */
+export async function buscarOcultas(): Promise<ConversaOculta[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_conversas_ocultas')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as ConversaOculta[]
 }
 
 export async function buscarNaoVinculadas(): Promise<NaoVinculada[]> {

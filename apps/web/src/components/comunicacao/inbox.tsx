@@ -4,25 +4,60 @@ import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Bot, Link2Off, Mail, MessageCircle, Search, User } from 'lucide-react'
+import {
+  Bot,
+  EyeOff,
+  Link2Off,
+  Mail,
+  MessageCircle,
+  Search,
+  Smartphone,
+  Undo2,
+  User,
+} from 'lucide-react'
 import { MODO_AGENTE_LABELS, OBJETIVO_LABELS, type ModoAgente, type ObjetivoConversa } from '@jobsiteos/core'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { marcarLidaAction } from '@/actions/comunicacao'
+import { marcarLidaAction, ocultarConversaAction, reexibirConversaAction } from '@/actions/comunicacao'
 import { Compositor } from './compositor'
 import { ProximoPasso } from './proximo-passo'
 import { Thread } from './thread'
 import {
   buscarConversas,
+  buscarOcultas,
   contarNaoVinculadas,
   type AbaInbox,
   type ConversaInbox,
+  type ConversaOculta,
 } from './queries'
 import { desde, identificadorLegivel, intencaoLabel } from './format'
+
+/**
+ * COMO CHAMAR QUEM ESTÁ DO OUTRO LADO, na ordem em que a certeza cai.
+ *
+ * O contato oficial primeiro, porque foi conferido por gente. Depois o `pushName`
+ * — o nome que a própria pessoa escolheu no WhatsApp, que o inbox tinha guardado
+ * o tempo todo na fila de identificação sem nunca mostrar. Só no fim o
+ * identificador, e mesmo esse formatado.
+ *
+ * A ordem importa mais do que parece: desde que o WhatsApp passou a endereçar por
+ * LID, o último recurso é uma sequência de quinze dígitos que não é telefone de
+ * ninguém — e uma lista de conversas identificadas assim é uma lista que ninguém
+ * consegue ler.
+ */
+function comoChamar(c: ConversaInbox): string {
+  return (
+    c.contato_nome ??
+    c.nome_sugerido ??
+    identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')
+  )
+}
 
 /**
  * O INBOX UNIFICADO (§4).
@@ -82,11 +117,16 @@ export function Inbox({
     const t = busca.trim().toLowerCase()
     if (!t) return linhas
     return linhas.filter((c) =>
-      [c.empresa_nome, c.contato_nome, c.identificador_externo, c.ultima_preview]
+      // `nome_sugerido` entra na busca porque é por ele que a conversa aparece na
+      // lista enquanto ninguém a identificou: procurar por "Marcelo" e não achar o
+      // "Marcelo" que está na tela é o tipo de defeito que faz abandonar a busca.
+      [c.empresa_nome, c.contato_nome, c.nome_sugerido, c.identificador_externo, c.ultima_preview]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(t)),
     )
   }, [conversas.data, busca])
+
+  const ocultas = useQuery({ queryKey: ['comunicacao', 'ocultas'], queryFn: buscarOcultas })
 
   /*
    * A CONVERSA ABERTA SOBREVIVE A SER LIDA.
@@ -178,6 +218,13 @@ export function Inbox({
         </Link>
       ) : null}
 
+      {(ocultas.data?.length ?? 0) > 0 ? (
+        <ListaOcultas
+          linhas={ocultas.data ?? []}
+          onMudou={() => void qc.invalidateQueries({ queryKey: ['comunicacao'] })}
+        />
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <div className="max-h-[70vh] overflow-y-auto rounded-lg border">
           {conversas.isLoading ? (
@@ -211,7 +258,16 @@ export function Inbox({
         </div>
 
         <div className="min-w-0 rounded-lg border p-4">
-          {atual ? <Conversa c={atual} /> : (
+          {atual ? (
+            <Conversa
+              c={atual}
+              onOcultada={() => {
+                setSelecionada(null)
+                ultimaAberta.current = null
+                void qc.invalidateQueries({ queryKey: ['comunicacao'] })
+              }}
+            />
+          ) : (
             <p className="py-16 text-center text-sm text-muted-foreground">
               Escolha uma conversa à esquerda.
             </p>
@@ -230,8 +286,8 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           <Icone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="truncate text-sm font-medium">
-            {c.contato_nome ?? identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')}
+          <span className="truncate text-sm font-medium" title={c.identificador_externo ?? undefined}>
+            {comoChamar(c)}
           </span>
           {c.responsavel_is_ia ? <Bot className="h-3 w-3 shrink-0 text-primary" aria-label="Carteira da IA" /> : null}
         </span>
@@ -239,6 +295,14 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
       </div>
       <p className="truncate text-xs text-muted-foreground">{c.empresa_nome ?? 'Empresa não identificada'}</p>
       <div className="mt-1 flex items-center gap-1.5">
+        {/*
+          A última mensagem saiu do aparelho? Um ícone, e não uma linha a mais: o
+          que a pessoa precisa saber ao varrer a fila é que ALGUÉM já respondeu —
+          por onde foi é detalhe da bolha.
+        */}
+        {c.ultima_origem === 'celular' ? (
+          <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Respondida pelo celular" />
+        ) : null}
         <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {c.ultima_por_ia ? '🤖 ' : ''}
           {c.ultima_preview ?? '—'}
@@ -256,14 +320,40 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
   )
 }
 
-function Conversa({ c }: { c: ConversaInbox }) {
+function Conversa({ c, onOcultada }: { c: ConversaInbox; onOcultada: () => void }) {
+  const [ocultando, setOcultando] = React.useState(false)
+
+  async function ocultar() {
+    if (!c.id) return
+    setOcultando(true)
+    const r = await ocultarConversaAction({ conversa_id: c.id })
+    setOcultando(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success('Conversa ocultada — só para você.', {
+      description: 'Ela continua no inbox do resto do time. Para trazê-la de volta, use "Ocultas" no topo.',
+    })
+    onOcultada()
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b pb-3">
         <div className="min-w-0">
           <p className="truncate font-medium">
-            {c.contato_nome ?? identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')}
+            {comoChamar(c)}
             {c.contato_cargo ? <span className="text-muted-foreground"> — {c.contato_cargo}</span> : null}
+          </p>
+          {/*
+            O identificador embaixo do nome, sempre — é o que a pessoa confere
+            antes de responder, e num inbox de WhatsApp confundir dois "Marcelo"
+            custa caro. Quando o provedor não mandou número, dizer isso é mais
+            honesto que exibir o LID como se fosse um telefone.
+          */}
+          <p className="truncate text-xs text-muted-foreground">
+            {identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')}
           </p>
           <p className="truncate text-sm text-muted-foreground">
             {c.empresa_id ? (
@@ -291,6 +381,21 @@ function Conversa({ c }: { c: ConversaInbox }) {
               {c.responsavel_nome}
             </Badge>
           ) : null}
+          {/*
+            Ocultar fica AQUI e não na linha da lista: é uma decisão sobre uma
+            conversa que a pessoa acabou de ler, não um botão para varrer a fila
+            sem olhar. E é reversível — o bloco "Ocultas" no topo traz de volta.
+          */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            disabled={ocultando}
+            onClick={() => void ocultar()}
+          >
+            <EyeOff className="mr-1 h-3.5 w-3.5" aria-hidden />
+            Ocultar
+          </Button>
         </div>
       </div>
 
@@ -316,6 +421,80 @@ function Conversa({ c }: { c: ConversaInbox }) {
           </Link>
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * O QUE EU CALEI — e como desfazer.
+ *
+ * Existe porque a ocultação é de verdade: a policy do banco esconde a conversa,
+ * e sem esta lista a pessoa não teria caminho de volta. "Ocultar" viraria
+ * "apagar", que é a diferença entre uma preferência e um estrago.
+ *
+ * Fica recolhido por padrão. Uma lista de coisas que alguém pediu para não ver,
+ * aberta no topo do inbox, é a negação do próprio pedido.
+ */
+function ListaOcultas({
+  linhas,
+  onMudou,
+}: {
+  linhas: ConversaOculta[]
+  onMudou: () => void
+}) {
+  const [aberto, setAberto] = React.useState(false)
+
+  return (
+    <div className="rounded-lg border">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50"
+      >
+        <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <span className="font-medium">
+          {linhas.length} conversa{linhas.length === 1 ? '' : 's'} oculta{linhas.length === 1 ? '' : 's'}
+        </span>
+        <span className="text-muted-foreground">
+          — só para você. O time continua vendo.
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">{aberto ? 'recolher' : 'ver'}</span>
+      </button>
+
+      {aberto ? (
+        <ul className="divide-y border-t">
+          {linhas.map((o) => (
+            <li key={o.conversa_id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate">
+                {o.contato_nome ?? identificadorLegivel(o.canal, o.identificador_externo)}
+                {o.empresa_nome ? (
+                  <span className="text-muted-foreground"> — {o.empresa_nome}</span>
+                ) : null}
+                {o.motivo ? <span className="text-muted-foreground"> · {o.motivo}</span> : null}
+              </span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {desde(o.ultima_mensagem_em)}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 shrink-0 px-2 text-xs"
+                onClick={async () => {
+                  const r = await reexibirConversaAction({ conversa_id: o.conversa_id })
+                  if (!r.ok) {
+                    toast.error(r.message)
+                    return
+                  }
+                  onMudou()
+                }}
+              >
+                <Undo2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                Mostrar de novo
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }

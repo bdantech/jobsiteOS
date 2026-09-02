@@ -9,6 +9,8 @@ import {
   idSchema,
   salvarPlaybookSchema,
   salvarTemplateSchema,
+  ocultarConversaSchema,
+  reexibirConversaSchema,
   vincularConversaSchema,
 } from './schemas.js'
 
@@ -57,6 +59,26 @@ export async function vincularConversa(supabase: Supabase, input: unknown) {
 export async function ignorarConversa(supabase: Supabase, input: unknown) {
   const dados = idSchema.parse(input)
   const { error } = await supabase.rpc('app_conversa_ignorar', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * OCULTAR é silêncio pessoal, não resolução.
+ *
+ * A linha continua pendente na fila para o resto do time — quem conhece o número
+ * que esta pessoa não conhece ainda pode identificá-lo. O que muda é só a lista
+ * de quem pediu, e `app_conversas_ocultas` devolve o que foi calado para que
+ * nada fique inalcançável.
+ */
+export async function ocultarConversa(supabase: Supabase, input: unknown) {
+  const dados = ocultarConversaSchema.parse(input)
+  const { error } = await supabase.rpc('app_conversa_ocultar', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+}
+
+export async function reexibirConversa(supabase: Supabase, input: unknown) {
+  const dados = reexibirConversaSchema.parse(input)
+  const { error } = await supabase.rpc('app_conversa_reexibir', { p: dados as unknown as Json })
   if (error) throw new Error(error.message)
 }
 

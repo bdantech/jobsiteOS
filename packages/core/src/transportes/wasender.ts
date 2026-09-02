@@ -102,6 +102,88 @@ function safeJson(texto: string): unknown {
 
 // ─── Webhook de recebimento ─────────────────────────────────────────────────
 
+/**
+ * O JID sem o domínio. `5511999998888@s.whatsapp.net` → `5511999998888`.
+ * Aceita também o número solto com "+" que alguns eventos mandam.
+ */
+function numeroDoJid(jid: string | null | undefined): string | null {
+  if (!jid) return null
+  const antes = String(jid).split('@')[0] ?? ''
+  const d = antes.replace(/\D/g, '')
+  return d === '' ? null : d
+}
+
+/** `@lid` é o endereçamento por identificador de privacidade — nunca um telefone. */
+function ehLid(jid: string | null | undefined): boolean {
+  return typeof jid === 'string' && jid.endsWith('@lid')
+}
+
+/**
+ * O TELEFONE de verdade, quando o provedor endereça por LID.
+ *
+ * Desde que o WhatsApp passou a usar LIDs, `key.remoteJid` chega como
+ * `98711384416410@lid` — quinze dígitos que não são telefone nenhum. O número real
+ * vem AO LADO, e a documentação do Wasender é explícita: use `cleanedSenderPn`, e
+ * não `remoteJid`, para gravar em banco.
+ *
+ * Sem isto o estrago é triplo, e foi exatamente o que aconteceu aqui: a thread do
+ * que ENTRA fica chaveada pelo LID enquanto a do que SAI usa o telefone (duas
+ * conversas para a mesma pessoa), `telefoneLegivel` não tem o que formatar, e a
+ * resolução de remetente não encontra o LID em `contatos.whatsapp` — de modo que
+ * toda conversa recebida cai na fila de identificação.
+ */
+function telefoneDoRemetente(chave: Record<string, any>, dados: Record<string, any>): string | null {
+  return (
+    numeroDoJid(chave.cleanedSenderPn) ??
+    numeroDoJid(chave.senderPn) ??
+    numeroDoJid(chave.cleanedParticipantPn) ??
+    numeroDoJid(chave.participantPn) ??
+    numeroDoJid(chave.remoteJidAlt) ??
+    numeroDoJid(dados.senderPn) ??
+    (ehLid(chave.remoteJid) ? null : numeroDoJid(chave.remoteJid))
+  )
+}
+
+function lidDoRemetente(chave: Record<string, any>): string | null {
+  if (ehLid(chave.remoteJid)) return numeroDoJid(chave.remoteJid)
+  return numeroDoJid(chave.senderLid) ?? numeroDoJid(chave.participantLid)
+}
+
+/** O texto de uma mensagem, onde quer que o provedor o tenha posto. */
+function corpoDaMensagem(dados: Record<string, any>): string | null {
+  const m = dados.message ?? {}
+  const c =
+    m.conversation ??
+    m.extendedTextMessage?.text ??
+    m.imageMessage?.caption ??
+    m.videoMessage?.caption ??
+    m.documentMessage?.caption ??
+    dados.messageBody ??
+    dados.text ??
+    dados.body ??
+    null
+  return c ? String(c) : null
+}
+
+function temMidiaNa(dados: Record<string, any>): boolean {
+  const m = dados.message ?? {}
+  return Boolean(
+    m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage,
+  )
+}
+
+/** O provedor manda segundos; alguns eventos vêm em milissegundos. */
+function instanteDe(dados: Record<string, any>): Date {
+  const ts = Number(dados.messageTimestamp ?? dados.timestamp ?? 0)
+  return ts > 0 ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date()
+}
+
+/** O envelope da mensagem dentro do payload, seja qual for o formato do evento. */
+function dadosDaMensagem(p: Record<string, any>): Record<string, any> | null {
+  const d = p.data?.messages ?? p.data ?? p.message ?? p
+  return d && typeof d === 'object' ? (d as Record<string, any>) : null
+}
+
 export interface MensagemRecebidaWasender {
   idExterno: string
   de: string
@@ -112,18 +194,24 @@ export interface MensagemRecebidaWasender {
   nomeSugerido: string | null
   temMidia: boolean
   recebidaEm: Date
+  /**
+   * O identificador de privacidade do remetente, quando existe. Guardá-lo é o que
+   * permite reencontrar a thread quando um evento futuro trouxer SÓ o LID — e
+   * absorver a thread que já ficou presa a ele.
+   */
+  lid: string | null
 }
 
 /**
- * Normaliza o payload do webhook.
+ * Normaliza o payload do webhook de ENTRADA.
  *
- * O Wasender manda o `remoteJid` no formato `5511999998888@s.whatsapp.net`, e
- * `@g.us` para GRUPO. Mensagem de grupo é descartada aqui, e não mais adiante:
- * uma thread por grupo criaria uma "pessoa" que é dezenas de pessoas, e o portão
- * passaria a raciocinar sobre supressão de um coletivo.
+ * Mensagem de GRUPO é descartada aqui, e não mais adiante: uma thread por grupo
+ * criaria uma "pessoa" que é dezenas de pessoas, e o portão passaria a raciocinar
+ * sobre supressão de um coletivo.
  *
  * Devolve `null` para o que não é mensagem de entrada de uma pessoa — status de
- * entrega, evento de conexão, mensagem que nós mesmos enviamos.
+ * entrega, evento de conexão, e o que nós mesmos enviamos (que tem leitor
+ * próprio, `lerEnvioWasender`).
  */
 export function lerWebhookWasender(payload: unknown): MensagemRecebidaWasender | null {
   const p = payload as Record<string, any> | null
@@ -132,48 +220,100 @@ export function lerWebhookWasender(payload: unknown): MensagemRecebidaWasender |
   const evento = p.event ?? p.type
   if (evento && !String(evento).includes('message')) return null
 
-  const dados = p.data?.messages ?? p.data ?? p.message ?? p
-  if (!dados || typeof dados !== 'object') return null
+  const dados = dadosDaMensagem(p)
+  if (!dados) return null
 
   const chave = dados.key ?? {}
-  // `fromMe` é nossa própria mensagem voltando pelo webhook. Gravá-la duplicaria
-  // a linha que o envio já escreveu no ledger.
+  // `fromMe` é o que SAIU pelo aparelho. Deixou de ser descartado: agora tem
+  // leitor próprio, porque o inbox mostrava só metade do diálogo.
   if (chave.fromMe === true) return null
 
   const jid: string = chave.remoteJid ?? dados.from ?? dados.remoteJid ?? ''
   if (!jid || jid.endsWith('@g.us')) return null
 
-  const de = jid.split('@')[0] ?? ''
-  if (!de) return null
+  const de = telefoneDoRemetente(chave, dados)
+  const lid = lidDoRemetente(chave)
+  // Sem telefone e sem LID não há a quem atribuir a mensagem. Com LID e sem
+  // telefone ainda dá: o LID vira a chave provisória e o worker reencontra a
+  // thread quando o número aparecer.
+  if (!de && !lid) return null
 
   const idExterno: string = chave.id ?? dados.id ?? dados.msgId ?? ''
   if (!idExterno) return null
 
-  const m = dados.message ?? {}
-  const corpo: string | null =
-    m.conversation ??
-    m.extendedTextMessage?.text ??
-    m.imageMessage?.caption ??
-    m.videoMessage?.caption ??
-    m.documentMessage?.caption ??
-    dados.text ??
-    dados.body ??
-    null
-
-  const temMidia = Boolean(
-    m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage,
-  )
-
-  const ts = Number(dados.messageTimestamp ?? dados.timestamp ?? 0)
   return {
     idExterno: String(idExterno),
-    de,
+    de: de ?? lid!,
     para: String(p.sessionId ?? p.instanceId ?? dados.to ?? ''),
-    corpo: corpo ? String(corpo) : null,
+    corpo: corpoDaMensagem(dados),
     nomeSugerido: dados.pushName ? String(dados.pushName) : null,
-    temMidia,
-    // O provedor manda segundos; alguns eventos vêm em milissegundos.
-    recebidaEm: ts > 0 ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(),
+    temMidia: temMidiaNa(dados),
+    recebidaEm: instanteDe(dados),
+    lid,
+  }
+}
+
+export interface MensagemEnviadaWasender {
+  idExterno: string
+  /** O DESTINATÁRIO. Numa mensagem nossa, é ele quem define a thread. */
+  para: string
+  corpo: string | null
+  temMidia: boolean
+  enviadaEm: Date
+  lid: string | null
+}
+
+/**
+ * O que a EQUIPE mandou — inclusive pelo aparelho, fora da plataforma (§2).
+ *
+ * Era descartado duas vezes: `lerWebhookWasender` recusa `fromMe` para não
+ * duplicar o que o envio já gravou, e `lerStatusWasender` só olha eventos de
+ * status. O resultado é que o vendedor que respondia pelo celular via, no inbox,
+ * a pergunta do cliente sem a própria resposta ao lado.
+ *
+ * A duplicata continua impossível, mas por outro caminho: o `(provedor,
+ * id_externo)` é o mesmo que o envio gravou, e quem consome esta função só
+ * INSERE quando aquele par ainda não existe.
+ */
+export function lerEnvioWasender(payload: unknown): MensagemEnviadaWasender | null {
+  const p = payload as Record<string, any> | null
+  if (!p) return null
+
+  const evento = String(p.event ?? p.type ?? '')
+  if (evento && !evento.includes('message')) return null
+
+  const dados = dadosDaMensagem(p)
+  if (!dados) return null
+
+  const chave = dados.key ?? {}
+  if (chave.fromMe !== true) return null
+
+  const jid: string = chave.remoteJid ?? dados.to ?? dados.remoteJid ?? ''
+  if (jid.endsWith('@g.us')) return null
+
+  /*
+   * Aqui o LID e o telefone trocam de papel em relação à entrada: numa mensagem
+   * nossa quem está do outro lado é o DESTINATÁRIO, então é o `remoteJid` que
+   * pode vir como LID — e `senderPn` seria o nosso próprio número, que não serve
+   * para achar a thread.
+   */
+  const para =
+    numeroDoJid(chave.cleanedRemoteJidPn) ??
+    numeroDoJid(chave.remoteJidAlt) ??
+    (ehLid(jid) ? null : numeroDoJid(jid))
+  const lid = ehLid(jid) ? numeroDoJid(jid) : (numeroDoJid(chave.remoteJidLid) ?? null)
+  if (!para && !lid) return null
+
+  const idExterno: string = chave.id ?? dados.id ?? dados.msgId ?? ''
+  if (!idExterno) return null
+
+  return {
+    idExterno: String(idExterno),
+    para: para ?? lid!,
+    corpo: corpoDaMensagem(dados),
+    temMidia: temMidiaNa(dados),
+    enviadaEm: instanteDe(dados),
+    lid,
   }
 }
 
