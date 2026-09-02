@@ -402,10 +402,11 @@ export async function dispararSincronizarCertificados(): Promise<DispararJobResu
 export async function dispararContatosEmpresa(input: {
   empresaId: string
   revelarTelefone?: boolean
+  forcar?: boolean
 }): Promise<DispararJobResultado> {
   return postar(
     '/jobs/radar/contatos-empresa',
-    { empresa_id: input.empresaId, revelar_telefone: input.revelarTelefone },
+    { empresa_id: input.empresaId, revelar_telefone: input.revelarTelefone, forcar: input.forcar },
     'radar-contatos-empresa',
   )
 }

@@ -131,16 +131,31 @@ async function revelar(
 }
 
 /** Já há enriquecimento de contatos para este domínio dentro do TTL? (cobrança por domínio) */
-async function dominioNoTtl(dominio: string, ttlDias: number): Promise<boolean> {
+/**
+ * O domínio está dentro do TTL? Devolve QUANDO foi e ATÉ QUANDO vale, e não só um
+ * booleano: quem foi barrado precisa dessas duas datas para entender por que o
+ * botão não fez nada, e elas já estão na linha que a consulta lê.
+ */
+async function ttlDoDominio(
+  dominio: string,
+  ttlDias: number,
+): Promise<{ quando: string; ate: string } | null> {
   const desde = new Date(Date.now() - ttlDias * 86_400_000).toISOString()
-  const { count } = await supabaseAdmin
+  const { data } = await supabaseAdmin
     .from('enriquecimentos')
-    .select('id', { count: 'exact', head: true })
+    .select('executado_em')
     .eq('tipo', 'contatos')
     .eq('dominio', dominio)
     .in('status', ['sucesso', 'sem_dados'])
     .gte('executado_em', desde)
-  return (count ?? 0) > 0
+    .order('executado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!data?.executado_em) return null
+
+  const em = new Date(data.executado_em)
+  const dia = (d: Date): string => d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  return { quando: dia(em), ate: dia(new Date(em.getTime() + ttlDias * 86_400_000)) }
 }
 
 async function gravarContato(empresaId: string, p: PessoaApollo, pediuTelefone: boolean): Promise<void> {
@@ -207,7 +222,7 @@ async function empresaMae(item: Tables<'lote_itens'>, dominio: string): Promise<
 }
 
 export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): ProcessarItem {
-  const params = (lote.parametros ?? {}) as { revelar_telefone?: boolean }
+  const params = (lote.parametros ?? {}) as { revelar_telefone?: boolean; forcar?: boolean }
   const dominiosFeitos = new Set<string>()
 
   return async (item: Tables<'lote_itens'>): Promise<ResultadoItem> => {
@@ -222,7 +237,30 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
     const cfgApollo = await lerApolloCfg()
     const { contato_apollo } = await lerCustos()
     const ttl = await lerTtl()
-    if (await dominioNoTtl(dominio, ttl.contatos)) return { status: 'pulado', fonte: 'apollo' }
+    /*
+     * O TTL PRECISA DIZER QUE FOI ELE.
+     *
+     * Isto devolvia `pulado` sem `erro` e sem `resultado` — a tela não mostrava
+     * nada, e clicar de novo continuava não mostrando nada. Na MELNICK, uma busca
+     * que voltou `sem_dados` às 18h21 trancou o domínio até 01/03/2027, e os
+     * cliques seguintes eram engolidos em silêncio. "Não custou nada porque já
+     * buscamos" e "buscamos e não achamos" são coisas diferentes, e as duas
+     * apareciam como a mesma tela vazia.
+     *
+     * `forcar` existe porque a régua muda: um `sem_dados` gravado sob a
+     * configuração de ontem não deveria trancar por 180 dias uma busca que hoje
+     * usaria outros cargos-alvo e leria mais páginas.
+     */
+    const bloqueio = params.forcar ? null : await ttlDoDominio(dominio, ttl.contatos)
+    if (bloqueio) {
+      return {
+        status: 'pulado',
+        fonte: 'apollo',
+        erro:
+          `Já buscamos contatos deste domínio em ${bloqueio.quando} e o resultado vale até ` +
+          `${bloqueio.ate} — não gastamos de novo. Use "Buscar de novo" para ignorar o cache.`,
+      }
+    }
 
     const empresaId = await empresaMae(item, dominio)
     if (!empresaId) {
@@ -349,6 +387,8 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
 export async function contatosEmpresa(opts: {
   empresaId: string
   revelarTelefone?: boolean
+  /** Ignora o TTL do domínio. É o "buscar de novo" depois de a régua de cargos mudar. */
+  forcar?: boolean
 }): Promise<{ lote_id: string; itens: number; processados: number; custo: number }> {
   if (!env.APOLLO_API_KEY) throw new Error('APOLLO_API_KEY não configurada.')
 
@@ -364,7 +404,12 @@ export async function contatosEmpresa(opts: {
     throw new Error('Esta empresa não tem domínio resolvido — rode a cascata de domínio antes.')
   }
 
-  const parametros = { motivo: 'sob_demanda', empresa_id: opts.empresaId, revelar_telefone: opts.revelarTelefone }
+  const parametros = {
+    motivo: 'sob_demanda',
+    empresa_id: opts.empresaId,
+    revelar_telefone: opts.revelarTelefone,
+    forcar: opts.forcar ?? false,
+  }
 
   const { data: lote, error } = await supabaseAdmin
     .from('lotes_enriquecimento')

@@ -179,6 +179,8 @@ export async function rodarProtestosEmpresaAction(input: {
 export async function rodarContatosEmpresaAction(input: {
   empresaId: string
   revelarTelefone?: boolean
+  /** Ignora o TTL de 180 dias do domínio. A tela só oferece quando foi ele que barrou. */
+  forcar?: boolean
 }): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
   const { erro } = await autorizar()
   if (erro) return erro

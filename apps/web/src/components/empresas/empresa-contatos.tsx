@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Phone,
   Plus,
+  RefreshCw,
   Sparkles,
   Star,
   Trash2,
@@ -226,7 +227,7 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
     void qc.invalidateQueries({ queryKey: empresasKeys.eventos(acompanhando) })
   }, [acompanhando, desfecho.data, qc])
 
-  async function enriquecerApollo() {
+  async function enriquecerApollo(forcar = false) {
     setEnriquecendo(true)
     const id = await resolverEmpresaId()
     if (!id) {
@@ -234,7 +235,7 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
       toast.error('Não foi possível preparar a empresa para o enriquecimento.')
       return
     }
-    const r = await rodarContatosEmpresaAction({ empresaId: id })
+    const r = await rodarContatosEmpresaAction({ empresaId: id, forcar })
     setEnriquecendo(false)
     if (!r.ok) {
       toast.error(r.message)
@@ -365,6 +366,26 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
               <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
               {enriquecendo ? 'Disparando…' : acompanhando ? 'Buscando…' : 'Buscar no Apollo'}
             </Button>
+            {/*
+              "Buscar de novo" só aparece quando foi o CACHE que barrou. O TTL do
+              domínio é de 180 dias e vale para o acerto e para o "não achei" — então
+              um `sem_dados` gravado sob a régua de cargos de ontem tranca até o ano
+              que vem uma busca que hoje leria outros cargos e mais páginas. Ignorar
+              o cache é uma decisão de quem sabe que a régua mudou, e por isso é um
+              segundo botão e não o comportamento do primeiro.
+            */}
+            {desfecho.data?.status === 'pulado' && desfecho.data.motivo ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={enriquecendo || Boolean(acompanhando)}
+                onClick={() => void enriquecerApollo(true)}
+                title="Ignora o cache de 180 dias e busca de novo. Volta a cobrar por contato revelado."
+              >
+                <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden />
+                Buscar de novo
+              </Button>
+            ) : null}
           </div>
         </div>
         {desfecho.data ? <DesfechoApollo d={desfecho.data} /> : null}

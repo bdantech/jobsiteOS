@@ -560,7 +560,11 @@ export function dispararProtestosEmpresa(opts: {
  * Contatos sob demanda de uma empresa, do botão na ficha. Mesmo desenho do
  * `dispararProtestosEmpresa`: avulso, service role, single-flight por tipo.
  */
-export function dispararContatosEmpresa(opts: { empresaId: string; revelarTelefone?: boolean }): string {
+export function dispararContatosEmpresa(opts: {
+  empresaId: string
+  revelarTelefone?: boolean
+  forcar?: boolean
+}): string {
   return dispararAvulso('contatos-empresa', async () => {
     logger.info({ empresaId: opts.empresaId }, 'Contatos sob demanda.')
     return contatosEmpresa(opts)

@@ -640,13 +640,19 @@ app.post('/jobs/radar/certificados', async (_req: Request, res: Response, next: 
 const contatosEmpresaSchema = z.object({
   empresa_id: z.string().uuid(),
   revelar_telefone: z.boolean().optional(),
+  /** Ignora o TTL do domínio — o "buscar de novo" depois de a régua de cargos mudar. */
+  forcar: z.boolean().optional(),
 })
 
 /** Contatos (Apollo) sob demanda de UMA empresa — o botão na ficha. Ação PAGA. */
 app.post('/jobs/radar/contatos-empresa', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { empresa_id, revelar_telefone } = contatosEmpresaSchema.parse(req.body ?? {})
-    const id = dispararContatosEmpresa({ empresaId: empresa_id, revelarTelefone: revelar_telefone })
+    const { empresa_id, revelar_telefone, forcar } = contatosEmpresaSchema.parse(req.body ?? {})
+    const id = dispararContatosEmpresa({
+      empresaId: empresa_id,
+      revelarTelefone: revelar_telefone,
+      forcar,
+    })
     res.status(202).json({ job_id: id, status: 'executando' })
   } catch (erro) {
     next(erro)
