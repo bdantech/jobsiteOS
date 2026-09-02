@@ -158,18 +158,29 @@ export function NotaCard({
               </div>
             </header>
 
-            {/* Identificação da nota + valor, numa linha só. */}
+            {/*
+              Identificação da nota + valor, numa linha só.
+
+              O VALOR É O QUE NÃO PODE CEDER. Sem `min-w-0` a identificação nunca
+              encolhe (um flex item tem largura mínima de conteúdo por padrão) e um
+              número de NF longo — sete, oito dígitos, mais a série — empurrava o
+              valor para fora do card, cortando justamente o número pelo qual a
+              pessoa varre a coluna. Agora quem trunca é o número, e o valor tem
+              `shrink-0`.
+            */}
             <div className="mt-3 flex items-baseline justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-medium">
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-medium">
                   {nota.tipo_nf ?? 'NFe'}
                 </Badge>
-                <span className="tabular-nums">
+                <span className="truncate tabular-nums">
                   nº {nota.numero ?? '—'}
                   {nota.serie ? `/${nota.serie}` : ''}
                 </span>
               </span>
-              <span className="font-medium tabular-nums">{formatarMoedaExata(nota.valor)}</span>
+              <span className="shrink-0 font-medium tabular-nums">
+                {formatarMoedaExata(nota.valor)}
+              </span>
             </div>
 
             {/* O dono, quando a lista não está recortada por vendedor. Fora do modal:
@@ -266,9 +277,24 @@ export function NotaCard({
               <dt className="sr-only">Fornecedor</dt>
               <dd className="font-semibold leading-snug">{nomeFornecedor}</dd>
             </div>
+            {/* O número INTEIRO: no card ele trunca para não empurrar o valor. */}
+            <div className="flex justify-between gap-4">
+              <dt className="opacity-70">Nota</dt>
+              <dd className="tabular-nums">
+                {nota.tipo_nf ?? 'NFe'} nº {nota.numero ?? '—'}
+                {nota.serie ? `/${nota.serie}` : ''}
+              </dd>
+            </div>
             <div className="flex justify-between gap-4">
               <dt className="opacity-70">Valor da nota</dt>
               <dd className="tabular-nums">{formatarMoedaExata(nota.valor)}</dd>
+            </div>
+            {/* Emissão entrou aqui quando virou critério de ordenação e de filtro:
+                ordenar por uma data que não se vê em lugar nenhum é ordenar às
+                cegas. */}
+            <div className="flex justify-between gap-4">
+              <dt className="opacity-70">Emissão</dt>
+              <dd className="tabular-nums">{formatarData(nota.emitida_em)}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="opacity-70">Vencimento</dt>

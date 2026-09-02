@@ -39,6 +39,14 @@ export default async function Pagina() {
 
   // Gestor sem cadastro de vendedor vê o funil inteiro: para ele a pergunta é "onde está
   // a receita", não "onde está a minha".
+  //
+  // Para o gestor QUE TEM carteira, `vendedorId` é o ponto de partida e não uma trava: a
+  // tela abre na carteira dele e o seletor de originador troca de carteira sem sair
+  // daqui. Antes ele ficava preso à própria fila, e responder "quantas notas o fulano
+  // tem parado em análise" exigia ir para /antecipacao e olhar card a card.
+  //
+  // Para quem NÃO é gestor o recorte continua sendo trava: trocar de carteira ali seria
+  // ver a fila de outra pessoa, que é decisão de distribuição, não de visualização.
   // Gestor sem recorte enxerga o dono em cada card e pode trocar ali mesmo; o
   // originador vê a própria carteira, onde o nome seria constante e inútil.
   // `padraoComercial`: aqui o funil é um entre quatro irmãos, e a moldura tem de ser a

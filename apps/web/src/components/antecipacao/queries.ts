@@ -46,11 +46,39 @@ export const antecipacaoKeys = {
   filaLookup: () => [...antecipacaoKeys.all, 'fila-lookup'] as const,
 }
 
+/**
+ * Por que se ordena o funil, e o que cada opção responde.
+ *
+ * `receita` é o DEFAULT e continua sendo: trabalhar onde há ROI é a única
+ * ordenação que o Prompt fixa (§5). As outras três existem porque a pergunta nem
+ * sempre é essa — "qual a maior nota da carteira" (valor), "o que chegou agora"
+ * (emissão) e "o que vence primeiro" (vencimento) são perguntas de dias
+ * diferentes, e responder a elas rolando 4 mil cards não é responder.
+ *
+ * A COLUNA é escolhida daqui, nunca montada com o texto que veio da tela: o
+ * `order()` do PostgREST recebe um identificador, e um identificador que vem de
+ * input é injeção com outro nome.
+ */
+export const ORDENS_FUNIL = {
+  receita: { label: 'Receita esperada', coluna: 'receita_esperada' },
+  valor: { label: 'Valor da nota', coluna: 'valor' },
+  emissao: { label: 'Emissão', coluna: 'emitida_em' },
+  vencimento: { label: 'Vencimento', coluna: 'vencimento' },
+} as const
+
+export type OrdemFunil = keyof typeof ORDENS_FUNIL
+
 export interface FiltrosFunil {
   faixa?: Faixa
   tipagem?: Tipagem
   termo?: string
   valorMin?: number
+  valorMax?: number
+  /** `YYYY-MM-DD`, inclusivos nas duas pontas. */
+  emissaoDe?: string
+  emissaoAte?: string
+  vencimentoDe?: string
+  vencimentoAte?: string
   /** Uma coluna do Kanban por vez: cada coluna faz sua própria leitura paginada. */
   estagio?: EstagioFunil | 'encerradas'
   /** Traz de volta o que a regra de natureza ocultou. Para auditoria, não para o dia a dia. */
@@ -60,6 +88,11 @@ export interface FiltrosFunil {
    * originador" da fila inteira, que é a tela do gestor.
    */
   vendedorId?: string
+  /** As notas que não foram roteadas para ninguém. É a fila de distribuição do gestor. */
+  semDono?: boolean
+  ordem?: OrdemFunil
+  /** Padrão: decrescente nas quatro ordenações. */
+  ordemAsc?: boolean
 }
 
 /**
@@ -79,7 +112,7 @@ export interface FiltrosFunil {
 // dono". Mesmo defeito do card de protesto — a lista de colunas é a única fonte de
 // verdade do que existe no objeto, e esquecer uma falha em silêncio.
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem'
+  'access_key, numero, serie, valor, emitida_em, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem'
 
 export const PAGINA_FUNIL = 40
 
@@ -94,12 +127,35 @@ export async function buscarFunil(
   limite = PAGINA_FUNIL,
 ): Promise<PaginaFunil> {
   const supabase = createClient()
+  const coluna = ORDENS_FUNIL[filtros.ordem ?? 'receita'].coluna
+  const asc = filtros.ordemAsc === true
+
   let query = supabase
     .from('notas_funil')
-    .select(COLUNAS_CARD, { count: 'exact' })
+    /*
+     * A CONTAGEM só na primeira página.
+     *
+     * `count: 'exact'` é um segundo plano de execução sobre o filtro inteiro, e a
+     * coluna "A prospectar" tem milhares de linhas. Pagando-a a cada página, rolar
+     * até o fim de uma coluna grande custaria dezenas de contagens completas para
+     * reconfirmar um número que não mudou. O total vem da página 0 e é ele que
+     * decide se há próxima.
+     */
+    .select(COLUNAS_CARD, pagina === 0 ? { count: 'exact' } : {})
     // Ordenação default: receita esperada decrescente. Trabalhar onde há ROI é a
-    // única ordenação que o Prompt fixa (§5) — e não é por acaso.
-    .order('receita_esperada', { ascending: false, nullsFirst: false })
+    // única ordenação que o Prompt fixa (§5) — e não é por acaso. As outras vêm
+    // da tela, sempre de `ORDENS_FUNIL`, nunca como texto livre.
+    .order(coluna, { ascending: asc, nullsFirst: false })
+    /*
+     * O DESEMPATE, e ele não é enfeite.
+     *
+     * Paginação por `range` é OFFSET: sem uma última chave única, duas notas de
+     * mesmo valor podem trocar de lugar entre a página 1 e a 2, e o efeito é um
+     * card aparecer duas vezes enquanto outro nunca aparece. Com milhares de notas
+     * e valores repetidos (muita NF sai com o mesmo montante), isso deixa de ser
+     * hipótese.
+     */
+    .order('access_key', { ascending: true })
     .range(pagina * limite, pagina * limite + limite - 1)
 
   // Notas não operáveis (remessa, devolução, retorno, transferência, comodato) ficam
@@ -121,9 +177,23 @@ export async function buscarFunil(
   else query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
 
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+  else if (filtros.semDono) query = query.is('vendedor_id', null)
   if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
   if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
   if (typeof filtros.valorMin === 'number') query = query.gte('valor', filtros.valorMin)
+  if (typeof filtros.valorMax === 'number') query = query.lte('valor', filtros.valorMax)
+
+  /*
+   * `emitida_em` é TIMESTAMP e `vencimento` é DATE, e por isso o "até" de cada um
+   * é escrito diferente. Um `lte('emitida_em', '2026-09-01')` compara com a
+   * meia-noite daquele dia e perde as notas emitidas ao longo dele — o dia final
+   * que a pessoa digitou some do resultado sem nenhum aviso. Por isso o limite
+   * superior da emissão é EXCLUSIVO, no dia seguinte.
+   */
+  if (filtros.emissaoDe) query = query.gte('emitida_em', filtros.emissaoDe)
+  if (filtros.emissaoAte) query = query.lt('emitida_em', diaSeguinte(filtros.emissaoAte))
+  if (filtros.vencimentoDe) query = query.gte('vencimento', filtros.vencimentoDe)
+  if (filtros.vencimentoAte) query = query.lte('vencimento', filtros.vencimentoAte)
   if (filtros.termo?.trim()) {
     const t = `*${filtros.termo.trim()}*`
     query = query.or(
@@ -134,6 +204,13 @@ export async function buscarFunil(
   const { data, error, count } = await query
   if (error) throw error
   return { notas: (data ?? []) as NotaFunil[], total: count ?? 0 }
+}
+
+/** `2026-09-01` → `2026-09-02`. Em UTC, que é como a data do input chega. */
+function diaSeguinte(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
 }
 
 /**
