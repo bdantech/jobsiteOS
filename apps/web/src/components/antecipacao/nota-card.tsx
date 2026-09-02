@@ -7,6 +7,7 @@ import {
   FAIXA_LABELS,
   TIPAGEM_LABELS,
   urgenciaDe,
+  valorLiquidoEstimado,
   type Faixa,
   type Tipagem,
 } from '@jobsiteos/core'
@@ -66,6 +67,7 @@ export function NotaCard({
   const [notaAberta, setNotaAberta] = React.useState(false)
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
+  const liquido = valorLiquidoEstimado(nota.valor, nota.receita_esperada)
   const nomeFornecedor = nota.fornecedor_nome ?? nota.fornecedor_cnpj ?? '—'
 
   return (
@@ -182,6 +184,25 @@ export function NotaCard({
                 {formatarMoedaExata(nota.valor)}
               </span>
             </div>
+
+            {/*
+             * O LÍQUIDO ESTIMADO, debaixo do valor de face.
+             *
+             * É o número que o originador fala em voz alta: "cai R$ 98.010 na sua
+             * conta", e não "sua nota vale R$ 100.000" — isso o fornecedor já sabe.
+             * Fica menor e apagado de propósito: quem varre a coluna varre pelo
+             * valor de face, e o líquido é o que ele lê quando parou num card.
+             *
+             * Ele MUDA TODO DIA, e é isso que o "hoje" promete: um dia a menos de
+             * prazo é um deságio menor. Sem a palavra, o número parece uma proposta
+             * fechada — e amanhã estaria diferente sem explicação.
+             */}
+            {liquido !== null ? (
+              <div className="mt-0.5 flex items-baseline justify-end gap-1.5 text-[11px] text-muted-foreground">
+                <span>líquido hoje</span>
+                <span className="tabular-nums">{formatarMoedaExata(liquido)}</span>
+              </div>
+            ) : null}
 
             {/* O dono, quando a lista não está recortada por vendedor. Fora do modal:
                 o clique abre o dropdown, não a nota. */}
@@ -322,6 +343,15 @@ export function NotaCard({
                     a {Number(nota.taxa_usada).toLocaleString('pt-BR')}% a.m.
                   </span>
                 )}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="opacity-70">Líquido estimado</dt>
+              <dd className="text-right tabular-nums">
+                {formatarMoedaExata(liquido)}
+                <span className="block text-[11px] opacity-70">
+                  o que o fornecedor recebe se antecipar hoje
+                </span>
               </dd>
             </div>
             {nota.vencimento_origem === 'estimado' ? (

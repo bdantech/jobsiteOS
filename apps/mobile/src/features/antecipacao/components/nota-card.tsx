@@ -4,6 +4,7 @@ import {
   FAIXA_LABELS,
   TIPAGEM_LABELS,
   urgenciaDe,
+  valorLiquidoEstimado,
   type EstagioFunil,
   type Faixa,
   type Tipagem,
@@ -108,6 +109,7 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
   const valorAgrupado = fornecedor?.valor_total ?? nota.valor
+  const liquido = valorLiquidoEstimado(nota.valor, nota.receita_esperada)
 
   const fechar = useCallback(() => swipeRef.current?.close(), [])
 
@@ -222,6 +224,20 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
               <Text className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
                 {formatarMoeda(nota.receita_esperada)}
               </Text>
+              {/*
+                O líquido é sempre DESTA nota, mesmo quando o valor à esquerda é o
+                total do fornecedor: ele fica colado na receita esperada, que também
+                é da nota, e as duas somam o valor de face dela. Derivar do total
+                agrupado daria um número que não fecha com nada na tela.
+
+                É o que o originador fala na ligação — e muda todo dia, porque um
+                dia a menos de prazo é um deságio menor.
+              */}
+              {liquido !== null ? (
+                <Text variant="muted" className="text-[11px] tabular-nums">
+                  líquido hoje {formatarMoeda(liquido)}
+                </Text>
+              ) : null}
             </View>
           </View>
 

@@ -7,7 +7,13 @@ import {
   compileFaixaToSql,
   descreverFaixa,
 } from './faixas.ts'
-import { calcularReceitaEsperada, calcularTipagem, renderizarTemplate, urgenciaDe } from './economia.ts'
+import {
+  calcularReceitaEsperada,
+  calcularTipagem,
+  renderizarTemplate,
+  urgenciaDe,
+  valorLiquidoEstimado,
+} from './economia.ts'
 
 /**
  * O engine das faixas é uma SEGUNDA instância do engine de filtros, sobre outro
@@ -200,4 +206,23 @@ test('template: chave desconhecida fica visível em vez de sumir', () => {
     qtd_notas: '3',
   })
   assert.equal(texto, 'Olá ACME, 3 notas. {inexistente}')
+})
+
+test('o líquido é o valor menos o deságio, e fecha com a receita', () => {
+  assert.equal(valorLiquidoEstimado(100_000, 1_990), 98_010)
+  // A propriedade que justifica derivar em vez de recalcular.
+  const valor = 43_210.55
+  const receita = calcularReceitaEsperada({ valor, diasParaVencimento: 47, taxaMensal: 2.3 }).receita!
+  assert.equal(Math.round((receita + valorLiquidoEstimado(valor, receita)!) * 100) / 100, valor)
+})
+
+test('nota vencida não tem deságio, então o líquido é o valor cheio', () => {
+  const { receita } = calcularReceitaEsperada({ valor: 5_000, diasParaVencimento: -3 })
+  assert.equal(receita, 0)
+  assert.equal(valorLiquidoEstimado(5_000, receita), 5_000)
+})
+
+test('sem receita não há líquido — um traço é melhor que o valor cheio', () => {
+  assert.equal(valorLiquidoEstimado(1_000, null), null)
+  assert.equal(valorLiquidoEstimado(null, 10), null)
 })

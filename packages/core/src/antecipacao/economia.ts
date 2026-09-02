@@ -52,6 +52,38 @@ export function calcularReceitaEsperada(input: {
 }
 
 /**
+ * O que o FORNECEDOR recebe se antecipar hoje: `valor − receita_esperada`.
+ *
+ * A receita esperada é o deságio — é a mesma conta, vista do outro lado da mesa.
+ * O card mostra os dois porque eles respondem perguntas diferentes: a receita diz
+ * se vale o meu tempo, o líquido é o número que eu falo em voz alta na ligação.
+ *
+ * ── ELE ANDA SOZINHO, TODO DIA ─────────────────────────────────────────────
+ * `dias_para_vencimento` é calculado ao vivo na view (`vencimento - CURRENT_DATE`)
+ * e a `receita_esperada` é regravada pela reclassificação encadeada ao sync
+ * diário de NFs. Um dia a menos de prazo é um deságio menor e um líquido maior,
+ * sem ninguém tocar em nada.
+ *
+ * ── POR QUE DERIVAR, E NÃO RECALCULAR ──────────────────────────────────────
+ * Daria para refazer a conta aqui a partir de valor, taxa e dias. Não se faz: o
+ * card mostra "Receita esperada" e "Líquido estimado" um ao lado do outro, e duas
+ * contas independentes discordam no dia em que o job não roda — apresentando ao
+ * comercial dois números que não fecham. Derivar de `receita_esperada` garante
+ * que `valor = receita + líquido` sempre, mesmo com o dado velho.
+ *
+ * Sem receita não há líquido: `null` é "não sei", e um card que mostra o valor
+ * cheio como se fosse líquido é pior que um traço.
+ */
+export function valorLiquidoEstimado(
+  valor: number | null | undefined,
+  receitaEsperada: number | null | undefined,
+): number | null {
+  if (typeof valor !== 'number' || !Number.isFinite(valor)) return null
+  if (typeof receitaEsperada !== 'number' || !Number.isFinite(receitaEsperada)) return null
+  return Math.round((valor - receitaEsperada) * 100) / 100
+}
+
+/**
  * A tipagem comercial do fornecedor (§1). É o que decide o TOM da abordagem, e
  * por isso é do fornecedor e não da nota:
  *   aquisicao   → nem conhece a plataforma;
