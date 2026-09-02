@@ -15,6 +15,7 @@ import {
   type Tables,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   dispararBackfillFuncionarios,
@@ -183,6 +184,61 @@ export async function rodarContatosEmpresaAction(input: {
   if (erro) return erro
   const r = await dispararContatosEmpresa(input)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * O DESFECHO da última busca de contatos desta empresa.
+ *
+ * O job é assíncrono (202) e a tela dizia "recarregue em alguns instantes" — e
+ * quando não vinha contato nenhum, não vinha explicação nenhuma junto. O caso real
+ * foi a MELNICK HERCULES: o Apollo devolveu 300 pessoas e nenhuma casou os
+ * cargos-alvo, o que ficou gravado em `lote_itens.resultado` e não chegou a
+ * ninguém. "Não veio nada" e "vieram 300 e nenhuma serve" pedem ações opostas.
+ *
+ * Service role porque `lote_itens` exige o módulo Radar, que o comercial não tem —
+ * e a ficha da empresa é dele. A escalação é escopada à empresa que a pessoa já
+ * enxerga: a leitura de `empresas` abaixo usa o client do USUÁRIO e é ela que
+ * autoriza. Só sai daqui o desfecho, nunca o conteúdo do lote.
+ */
+export interface DesfechoContatos {
+  status: string
+  motivo: string | null
+  encontradas: number | null
+  criados: number | null
+  quando: string
+}
+
+export async function ultimoEnriquecimentoContatosAction(
+  empresaId: string,
+): Promise<ActionResult<DesfechoContatos | null>> {
+  const context = await getSessionContext()
+  if (!context) return { ok: false, message: 'Sessão expirada.', code: 'auth' }
+
+  const supabase = await createClient()
+  const { data: visivel } = await supabase.from('empresas').select('id').eq('id', empresaId).maybeSingle()
+  if (!visivel) return { ok: false, message: 'Empresa não encontrada.', code: 'forbidden' }
+
+  const { data } = await createAdminClient()
+    .from('lote_itens')
+    .select('status, resultado, erro, atualizado_em, lotes_enriquecimento!inner(tipo)')
+    .eq('empresa_id', empresaId)
+    .eq('lotes_enriquecimento.tipo', 'contatos')
+    .order('atualizado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!data) return { ok: true, data: null }
+  const r = (data.resultado ?? {}) as Record<string, unknown>
+  return {
+    ok: true,
+    data: {
+      status: data.status,
+      motivo: (r.motivo as string | null) ?? data.erro ?? null,
+      encontradas: typeof r.encontradas === 'number' ? r.encontradas : null,
+      criados: typeof r.criados === 'number' ? r.criados : null,
+      quando: data.atualizado_em,
+    },
+  }
 }
 
 /**

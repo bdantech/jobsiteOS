@@ -35,7 +35,11 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { definirPontoFocalAction } from '@/actions/antecipacao'
 import { criarContatoAction, excluirContatoAction } from '@/actions/empresas'
-import { rodarContatosEmpresaAction } from '@/actions/radar'
+import {
+  rodarContatosEmpresaAction,
+  ultimoEnriquecimentoContatosAction,
+  type DesfechoContatos,
+} from '@/actions/radar'
 import { cn } from '@/lib/utils'
 import { buscarContatos, empresasKeys } from './queries'
 
@@ -187,6 +191,41 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
    * Por isso a mensagem fala em "alguns instantes" e não promete contato na tela —
    * prometer resultado imediato aqui produziria "clicou e não veio nada".
    */
+  /*
+   * O DESFECHO DA BUSCA, e não só o disparo.
+   *
+   * O job é assíncrono e a tela dizia "recarregue em alguns instantes". Quando o
+   * Apollo achava 300 pessoas e nenhuma casava os cargos-alvo, o motivo ficava
+   * gravado no lote e ninguém via — a pessoa recarregava, não via contato e não
+   * tinha o que fazer com isso. "Não achou ninguém" e "achou 300 e nenhuma serve"
+   * pedem ações diferentes: a primeira é um problema de domínio, a segunda é de
+   * filtro de cargo.
+   */
+  const [acompanhando, setAcompanhando] = React.useState<string | null>(null)
+  const desfecho = useQuery({
+    queryKey: ['empresa', 'contatos-desfecho', empresaId ?? acompanhando],
+    queryFn: async () => {
+      const r = await ultimoEnriquecimentoContatosAction((empresaId ?? acompanhando)!)
+      if (!r.ok) throw new Error(r.message)
+      return r.data
+    },
+    enabled: Boolean(empresaId ?? acompanhando),
+    // Só enquanto está rodando. Um polling permanente numa ficha aberta o dia
+    // inteiro seria uma consulta a cada 4s para ver um resultado que não muda.
+    refetchInterval: (q) =>
+      acompanhando && (q.state.data?.status === 'processando' || !q.state.data) ? 4000 : false,
+  })
+
+  React.useEffect(() => {
+    if (!acompanhando || !desfecho.data || desfecho.data.status === 'processando') return
+    setAcompanhando(null)
+    // Invalida direto, sem passar por `recarregar`: aquela função é recriada a cada
+    // render (ela lê `empresaId` da prop) e como dependência faria este efeito
+    // rodar sempre. `qc` e o id são estáveis, que é tudo de que ele precisa.
+    void qc.invalidateQueries({ queryKey: empresasKeys.contatos(acompanhando) })
+    void qc.invalidateQueries({ queryKey: empresasKeys.eventos(acompanhando) })
+  }, [acompanhando, desfecho.data, qc])
+
   async function enriquecerApollo() {
     setEnriquecendo(true)
     const id = await resolverEmpresaId()
@@ -205,7 +244,9 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
       toast.error(r.data.aviso ?? 'Não foi possível disparar o enriquecimento.')
       return
     }
-    toast.success('Buscando contatos no Apollo. Recarregue em alguns instantes.')
+    toast.success('Buscando contatos no Apollo — o resultado aparece aqui em alguns segundos.')
+    // Acorda o acompanhamento: daqui a diante ele repete até o item sair de "processando".
+    setAcompanhando(id)
   }
 
   async function excluir(id: string) {
@@ -322,10 +363,11 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
               title="Busca contatos no Apollo. Ação paga, por contato revelado."
             >
               <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
-              {enriquecendo ? 'Disparando…' : 'Buscar no Apollo'}
+              {enriquecendo ? 'Disparando…' : acompanhando ? 'Buscando…' : 'Buscar no Apollo'}
             </Button>
           </div>
         </div>
+        {desfecho.data ? <DesfechoApollo d={desfecho.data} /> : null}
       </CardHeader>
 
       <NovoContatoDialog
@@ -513,5 +555,38 @@ export function EmpresaContatos({ empresaId, aoPrecisarDeEmpresa }: EmpresaConta
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * O que a última busca no Apollo devolveu, em uma linha.
+ *
+ * `sem_dados` com `encontradas` é o caso que mais confundia: a busca funcionou, o
+ * Apollo tinha gente, e o filtro de cargos-alvo não deixou ninguém passar. Dizer
+ * o número é o que transforma "não veio nada" numa informação acionável — o
+ * problema não é a empresa, é a régua de cargos.
+ */
+function DesfechoApollo({ d }: { d: DesfechoContatos }) {
+  const quando = new Date(d.quando).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const texto =
+    d.status === 'processando'
+      ? 'Buscando no Apollo…'
+      : d.status === 'sucesso'
+        ? `${d.criados ?? 0} contato(s) trazido(s) do Apollo.`
+        : d.status === 'sem_dados' && d.encontradas
+          ? `${d.encontradas} pessoas na empresa e nenhuma nos cargos-alvo — ninguém foi revelado, ` +
+            `e nada foi cobrado. A régua de cargos vive na configuração do Radar.`
+          : (d.motivo ?? 'A busca não trouxe contatos.')
+
+  return (
+    <p className="mt-2 text-[11px] text-muted-foreground">
+      Última busca ({quando}): {texto}
+    </p>
   )
 }
