@@ -50,6 +50,8 @@ export function NotaModal({
   onOpenChange,
   abasExtras = [],
   acoes,
+  aba,
+  onAbaChange,
 }: NotaModalProps & {
   /**
    * Abas do funil (fornecedor, mensagens), NO MESMO NÍVEL de Documento e XML.
@@ -61,6 +63,17 @@ export function NotaModal({
   abasExtras?: { id: string; label: string; conteudo: React.ReactNode }[]
   /** As ações da nota, que antes ficavam no card. */
   acoes?: React.ReactNode
+  /**
+   * A aba aberta, quando quem chamou precisa mandar nela.
+   *
+   * Ela era só `defaultValue`, e isso bastava enquanto ninguém navegava entre as
+   * abas por dentro. Escolher o contato na aba "Fornecedor" e cair no compositor
+   * com ele selecionado é exatamente isso: a decisão de qual aba mostrar passou a
+   * ser do conteúdo, não só do clique na barra. Omitir os dois mantém o
+   * comportamento não-controlado de antes.
+   */
+  aba?: string
+  onAbaChange?: (aba: string) => void
 }) {
   const [copiado, setCopiado] = React.useState(false)
 
@@ -144,7 +157,7 @@ export function NotaModal({
               </Button>
             </div>
           ) : !documento ? null : (
-            <Tabs defaultValue="documento">
+            <Tabs value={aba} onValueChange={onAbaChange} defaultValue="documento">
               <TabsList className="mb-3 print:hidden">
                 <TabsTrigger value="documento">
                   <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden />

@@ -433,11 +433,17 @@ export function FichaFornecedor({
                         {buscar.isPending ? 'Buscando…' : 'Buscar contatos'}
                       </Button>
                       {/*
-                        A SEGUNDA passada só aparece depois da primeira ter rodado E
-                        quando há lacuna. Um botão sempre visível que responde "não
-                        acrescentaria" ensina a ignorá-lo.
+                        A SEGUNDA passada aparece quando HÁ O QUE APROFUNDAR: contato
+                        já achado e lacuna a preencher. Um botão sempre visível que
+                        responde "não acrescentaria" ensina a ignorá-lo.
+
+                        Condicionava a `card.ultima_busca_em`, e essa coluna só é
+                        gravada pela camada sob demanda — 515 dos 520 fornecedores com
+                        contato descoberto a tinham nula, porque quem os achou foi a
+                        varredura noturna de graça. O botão sumia para quase todo mundo
+                        que tinha material, que é o oposto da intenção.
                       */}
-                      {card.ultima_busca_em && lacunas.vale_aprofundar ? (
+                      {(contatos.data ?? []).length > 0 && lacunas.vale_aprofundar ? (
                         <Button
                           size="sm"
                           variant="outline"

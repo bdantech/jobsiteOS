@@ -9,12 +9,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useQuery } from '@tanstack/react-query'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Compositor } from '@/components/comunicacao/compositor'
 import { ProximoPasso } from '@/components/comunicacao/proximo-passo'
 import { Thread } from '@/components/comunicacao/thread'
 import { buscarContatos } from '@/components/comunicacao/queries'
-import { ContatosDoFornecedor } from './fornecedores/contatos-do-fornecedor'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -177,18 +177,22 @@ export function AbaMensagens({
   funil,
   funilCardId,
   fornecedorCnpj,
-  fornecedorNome,
+  contatoIdInicial,
+  onIrParaFornecedor,
 }: {
   empresaId?: string | null
   funil?: 'nfs' | 'fornecedores' | 'sdr' | 'vendas' | 'certificados'
   funilCardId?: string | null
   /**
-   * O CNPJ do fornecedor, quando o card veio do funil de NFs. Com ele a aba deixa
-   * de ser um beco para quem não tem ficha de empresa: o agente de contato entra
-   * no lugar do aviso, e a ficha nasce do primeiro contato promovido ou escrito.
+   * O CNPJ do fornecedor, quando o card veio do funil de NFs. Serve para resolver
+   * a empresa que acabou de nascer na aba "Fornecedor" — o agente de contato mora
+   * lá, que é onde se responde "com quem falar".
    */
   fornecedorCnpj?: string | null
-  fornecedorNome?: string | null
+  /** O contato escolhido na aba "Fornecedor". O compositor abre já nele. */
+  contatoIdInicial?: string | null
+  /** Leva de volta à aba onde se escolhe com quem falar. */
+  onIrParaFornecedor?: () => void
 }) {
   /*
    * A empresa é resolvida PELO CNPJ quando o card não a conhece.
@@ -220,43 +224,40 @@ export function AbaMensagens({
     enabled: Boolean(empresa),
   })
 
-  if (!empresa && !fornecedorCnpj) {
-    return (
-      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">Este card não está ligado a uma empresa.</p>
-        <p className="mt-1">Sem empresa não há contato, e sem contato não há conversa.</p>
-      </div>
-    )
-  }
-
   /*
-   * Empresa sem contato nenhum é o MESMO beco de empresa nenhuma: o compositor
-   * abre com o seletor vazio e um "Escolha um contato" que não tem o que escolher.
-   * Nos dois casos o que a pessoa precisa é do agente, não do compositor.
+   * Sem contato não há o que escrever — e a saída é a aba "Fornecedor", onde
+   * moram a lista, a descoberta e o cadastro à mão. Antes o agente vinha para cá,
+   * o que misturava duas perguntas: "com quem falar" é sobre o fornecedor, "o que
+   * dizer" é sobre a mensagem. Aqui fica só o caminho de volta.
    */
   const semContato = Boolean(empresa) && !contatos.isPending && (contatos.data ?? []).length === 0
 
-  if (fornecedorCnpj && (!empresa || semContato)) {
+  if (!empresa || semContato) {
     return (
-      <div className="space-y-4">
-        <ContatosDoFornecedor
-          cnpj={fornecedorCnpj}
-          nomeFornecedor={fornecedorNome ?? 'este fornecedor'}
-        />
-        {empresa ? (
-          <Thread empresaId={empresa} funilCardId={funilCardId} alturaClasse="max-h-[28vh]" />
+      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">
+          {empresa ? 'Esta empresa ainda não tem contato.' : 'Este card não está ligado a uma empresa.'}
+        </p>
+        <p className="mt-1">Sem contato não há para quem mandar.</p>
+        {onIrParaFornecedor ? (
+          <Button size="sm" variant="outline" className="mt-3" onClick={onIrParaFornecedor}>
+            Achar um contato na aba Fornecedor
+          </Button>
         ) : null}
       </div>
     )
   }
 
-  if (!empresa) return null
-
   return (
     <div className="space-y-4">
       <SugestaoDaEmpresa empresaId={empresa} />
       <Thread empresaId={empresa} funilCardId={funilCardId} alturaClasse="max-h-[38vh]" />
-      <Compositor empresaId={empresa} funil={funil} funilCardId={funilCardId} />
+      <Compositor
+        empresaId={empresa}
+        funil={funil}
+        funilCardId={funilCardId}
+        contatoIdInicial={contatoIdInicial}
+      />
     </div>
   )
 }

@@ -3,8 +3,8 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Search, Star, UserPlus } from 'lucide-react'
-import { BASE_LEGAL_LABELS, BASES_LEGAIS, CUSTOS_PADRAO, type BaseLegal } from '@jobsiteos/core'
+import { Search, Sparkles, Star, UserPlus } from 'lucide-react'
+import { CUSTOS_PADRAO, lacunasDeContato, type Confianca } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  buscaAprofundadaAction,
   buscarContatosAction,
   criarContatoManualFornecedorAction,
   promoverContatoAction,
@@ -68,11 +68,17 @@ export function ContatosDoFornecedor({
   })
   const config = useQuery({ queryKey: fornecedoresKeys.config(), queryFn: buscarConfigFornecedores })
 
+  const lista = contatos.data ?? []
   const custos = { ...CUSTOS_PADRAO, ...((config.data?.custos as Record<string, number>) ?? {}) }
   const teto = custos.google_places + custos.novavida + custos.apollo + custos.claude_busca
 
   const invalidar = (): void => {
     void qc.invalidateQueries({ queryKey: fornecedoresKeys.todos })
+    // `comercial` é a lista de contatos oficiais logo acima deste bloco na aba
+    // Fornecedor, e a empresa resolvida pelo CNPJ — as duas mudam no instante em
+    // que um contato é promovido ou escrito. `comunicacao` é o compositor da aba
+    // ao lado, que passa a ter para quem mandar.
+    void qc.invalidateQueries({ queryKey: ['comercial'] })
     void qc.invalidateQueries({ queryKey: ['comunicacao'] })
     onMudou?.()
   }
@@ -99,6 +105,56 @@ export function ContatosDoFornecedor({
     onError: (e: Error) => toast.error(e.message),
   })
 
+  /*
+   * A segunda busca, e ela só aparece quando tem o que procurar. `lacunasDeContato`
+   * é a MESMA função que o worker usa para decidir — se a tela dissesse "vale" e o
+   * worker recusasse, o clique devolveria "não acrescentaria", que é a pior forma
+   * de aprender uma regra.
+   *
+   * O portão é TER CONTATO, e não ter havido um clique pago antes. A ficha do funil
+   * condicionava a `ultima_busca_em`, coluna que só a camada sob demanda grava —
+   * 515 dos 520 fornecedores com contato descoberto a tinham nula, porque quem os
+   * achou foi a varredura noturna. O botão ficava escondido justamente para quem já
+   * tinha material para aprofundar.
+   */
+  const lacunas = React.useMemo(
+    () =>
+      lacunasDeContato(
+        (contatos.data ?? []).map((c) => ({
+          tipo: c.tipo,
+          valor: c.valor,
+          confianca: c.confianca as Confianca,
+          nome_pessoa: c.nome_pessoa,
+          valido:
+            typeof c.validado === 'object' && c.validado !== null
+              ? ((c.validado as Record<string, unknown>).valido as boolean | undefined) ?? null
+              : null,
+        })),
+      ),
+    [contatos.data],
+  )
+
+  const aprofundar = useMutation({
+    mutationFn: async () => {
+      const r = await buscaAprofundadaAction({ cnpj })
+      if (!r.ok) throw new Error(r.message)
+      return r.data
+    },
+    onSuccess: (d) => {
+      if (!d.ok) {
+        toast.warning(d.motivo ?? 'A busca aprofundada não rodou.')
+        return
+      }
+      toast.success(
+        d.contatosNovos > 0
+          ? `${d.contatosNovos} contato(s) novo(s) na busca aprofundada. Custou ${brlExato(d.custo)}.`
+          : `A busca aprofundada não achou nada novo. Custou ${brlExato(d.custo)}.`,
+      )
+      invalidar()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const promover = useMutation({
     mutationFn: async (id: string) => {
       const r = await promoverContatoAction({ contato_descoberto_id: id, ponto_focal: true })
@@ -110,8 +166,6 @@ export function ContatosDoFornecedor({
     },
     onError: (e: Error) => toast.error(e.message),
   })
-
-  const lista = contatos.data ?? []
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
@@ -131,12 +185,28 @@ export function ContatosDoFornecedor({
           <Button
             size="sm"
             variant="outline"
-            disabled={buscar.isPending}
+            disabled={buscar.isPending || aprofundar.isPending}
             onClick={() => setConfirmandoBusca(true)}
           >
             <Search className="mr-1 h-3.5 w-3.5" aria-hidden />
             {buscar.isPending ? 'Buscando…' : 'Buscar contatos'}
           </Button>
+          {lista.length > 0 && lacunas.vale_aprofundar ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={buscar.isPending || aprofundar.isPending}
+              onClick={() => aprofundar.mutate()}
+              title={
+                `Segunda busca, mais funda: manda o que já achamos e o que não ` +
+                `funciona, e procura ${lacunas.faltam.join(', ')} em sindicato, ` +
+                `junta comercial, notícia local e perfil de sócio.`
+              }
+            >
+              <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
+              {aprofundar.isPending ? 'Buscando…' : 'Buscar Mais'}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -255,11 +325,18 @@ export function ContatosDoFornecedor({
 /**
  * O que o originador anotou no papel depois de ligar para a obra.
  *
- * A BASE LEGAL É CAMPO DO FORMULÁRIO, e não um default escondido: `contatos`
- * criado sem ela nasce mudo — o compositor recusa com "contato sem base legal" —
- * e um contato cadastrado que não pode receber mensagem é pior que nenhum,
- * porque parece que funcionou. O default é `dado_publico_nfe`, que é a verdade
- * de como se chegou a um fornecedor que veio de uma nota.
+ * A BASE LEGAL É FIXA em `manual`, e não uma escolha.
+ *
+ * Ela era um dropdown, e isso estava errado por dois motivos. O primeiro é que a
+ * resposta é sempre a mesma: quem digita um contato neste formulário o obteve à
+ * mão, e "cadastro manual" é a descrição literal disso — as outras opções
+ * descrevem procedências que este caminho não tem. O segundo é que um campo de
+ * conformidade oferecido como preferência convida a escolher a etiqueta mais
+ * conveniente, e a base legal não é etiqueta: é o registro de COMO chegamos ao
+ * número, que é o que se defende depois.
+ *
+ * Continua obrigatória no banco (0155) — contato sem base legal nasce mudo,
+ * porque o compositor o recusa. Ela só deixou de ser pergunta.
  */
 function FormularioContatoManual({
   cnpj,
@@ -279,7 +356,6 @@ function FormularioContatoManual({
   const [telefone, setTelefone] = React.useState('')
   const [ehWhatsapp, setEhWhatsapp] = React.useState(true)
   const [email, setEmail] = React.useState('')
-  const [baseLegal, setBaseLegal] = React.useState<BaseLegal>('dado_publico_nfe')
 
   const criar = useMutation({
     mutationFn: async () => {
@@ -290,7 +366,7 @@ function FormularioContatoManual({
         telefone: telefone || null,
         telefone_e_whatsapp: ehWhatsapp,
         email: email || null,
-        base_legal: baseLegal,
+        base_legal: 'manual',
         ponto_focal: true,
       })
       if (!r.ok) throw new Error(r.message)
@@ -355,25 +431,10 @@ function FormularioContatoManual({
           </div>
         </div>
 
-        <div className="space-y-1">
-          <Label className="text-xs">Base legal</Label>
-          <Select value={baseLegal} onValueChange={(v) => setBaseLegal(v as BaseLegal)}>
-            <SelectTrigger className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {BASES_LEGAIS.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {BASE_LEGAL_LABELS[b]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[11px] text-muted-foreground">
-            É ela que autoriza a abordagem — sem base legal o compositor recusa o envio.
-            &ldquo;Dado público (NF-e)&rdquo; é a verdade quando o fornecedor veio de uma nota.
-          </p>
-        </div>
+        <p className="rounded-md border border-dashed p-2 text-[11px] text-muted-foreground">
+          Entra como <strong>cadastro manual</strong> — é a base legal que descreve um contato
+          obtido à mão, e é ela que autoriza a abordagem.
+        </p>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onFechar}>

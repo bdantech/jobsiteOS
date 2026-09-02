@@ -2,12 +2,14 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Mail, MessageCircle } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { telefoneLegivel } from '@/components/comunicacao/format'
+import { ContatosDoFornecedor } from './fornecedores/contatos-do-fornecedor'
 
 /**
  * A aba "Empresa" — a mesma nos quatro funis.
@@ -36,10 +38,12 @@ interface EmpresaResumo {
 }
 
 interface ContatoResumo {
+  id: string
   nome: string | null
   cargo: string | null
   email: string | null
   telefone: string | null
+  whatsapp: string | null
   ponto_focal: boolean | null
 }
 
@@ -60,12 +64,15 @@ async function buscarResumo(empresaId: string) {
       .maybeSingle(),
     supabase
       .from('contatos')
-      .select('nome, cargo, email, telefone, ponto_focal')
+      .select('id, nome, cargo, email, telefone, whatsapp, ponto_focal')
       .eq('empresa_id', empresaId)
       // Ponto focal primeiro: numa lista de dez contatos enriquecidos, é o único que
       // alguém curou, e é para ele que se liga.
       .order('ponto_focal', { ascending: false })
-      .limit(5),
+      // Era 5. Virou 20 porque a lista deixou de ser um resumo: é daqui que se
+      // escolhe para quem mandar, e um contato escondido no corte é um contato
+      // que não recebe mensagem.
+      .limit(20),
   ])
   return {
     empresa: (empresa as EmpresaResumo | null) ?? null,
@@ -82,18 +89,64 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   )
 }
 
-export function AbaEmpresa({ empresaId }: { empresaId: string | null }) {
-  const q = useQuery({
-    queryKey: ['comercial', 'empresa-resumo', empresaId],
-    queryFn: () => buscarResumo(empresaId!),
-    enabled: !!empresaId,
+export function AbaEmpresa({
+  empresaId,
+  fornecedorCnpj,
+  fornecedorNome,
+  onMandarMensagem,
+}: {
+  empresaId: string | null
+  /**
+   * O CNPJ do fornecedor, quando o card veio do funil de NFs. É ele que traz o
+   * agente de contato para esta aba — que é onde ele deveria estar desde o
+   * começo: "com quem falar" é uma pergunta sobre o FORNECEDOR, e o compositor
+   * é onde se escreve depois de já saber a resposta.
+   */
+  fornecedorCnpj?: string | null
+  fornecedorNome?: string | null
+  /** Quando dado, cada contato ganha o botão que abre o compositor já nele. */
+  onMandarMensagem?: (contatoId: string) => void
+}) {
+  /*
+   * A empresa resolvida PELO CNPJ quando o card ainda não a conhece: ela passa a
+   * existir no instante em que alguém promove ou cadastra um contato, e o prop
+   * continuaria nulo até o Kanban inteiro recarregar.
+   */
+  const resolvida = useQuery({
+    queryKey: ['comercial', 'empresa-do-cnpj', fornecedorCnpj],
+    queryFn: async () => {
+      const { data } = await createClient()
+        .from('empresas')
+        .select('id')
+        .eq('cnpj', fornecedorCnpj!)
+        .maybeSingle()
+      return data?.id ?? null
+    },
+    enabled: !empresaId && Boolean(fornecedorCnpj),
   })
 
-  if (!empresaId) {
+  const id = empresaId ?? resolvida.data ?? null
+
+  const q = useQuery({
+    queryKey: ['comercial', 'empresa-resumo', id],
+    queryFn: () => buscarResumo(id!),
+    enabled: !!id,
+  })
+
+  const agente = fornecedorCnpj ? (
+    <ContatosDoFornecedor
+      cnpj={fornecedorCnpj}
+      nomeFornecedor={fornecedorNome ?? 'este fornecedor'}
+    />
+  ) : null
+
+  if (!id) {
     return (
-      <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Este item ainda não está ligado a uma empresa na base.
-      </p>
+      agente ?? (
+        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Este item ainda não está ligado a uma empresa na base.
+        </p>
+      )
     )
   }
   if (q.isPending) return <Skeleton className="h-56 w-full" />
@@ -101,9 +154,11 @@ export function AbaEmpresa({ empresaId }: { empresaId: string | null }) {
   const e = q.data?.empresa
   if (!e) {
     return (
-      <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Empresa não encontrada.
-      </p>
+      agente ?? (
+        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Empresa não encontrada.
+        </p>
+      )
     )
   }
 
@@ -143,25 +198,65 @@ export function AbaEmpresa({ empresaId }: { empresaId: string | null }) {
           </p>
         ) : (
           <ul className="space-y-1">
-            {contatos.map((c, i) => (
-              <li key={`${c.email ?? c.telefone ?? i}`} className="rounded-md border p-2 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{c.nome ?? '—'}</span>
-                  {c.ponto_focal ? (
-                    <Badge variant="outline" className="text-[10px]">
-                      ponto focal
-                    </Badge>
-                  ) : null}
-                  {c.cargo ? <span className="text-xs text-muted-foreground">{c.cargo}</span> : null}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {[c.email, c.telefone].filter(Boolean).join(' · ') || 'sem canal'}
-                </p>
-              </li>
-            ))}
+            {contatos.map((c) => {
+              const fone = c.whatsapp ?? c.telefone
+              return (
+                <li key={c.id} className="rounded-md border p-2 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{c.nome ?? '—'}</span>
+                        {c.ponto_focal ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            ponto focal
+                          </Badge>
+                        ) : null}
+                        {c.cargo ? (
+                          <span className="text-xs text-muted-foreground">{c.cargo}</span>
+                        ) : null}
+                      </div>
+                      {/* O número como se lê em voz alta, e não como o provedor o
+                          guarda: quem confere um contato antes de ligar não deveria
+                          precisar contar dígitos. */}
+                      <p className="text-xs text-muted-foreground">
+                        {[c.email, fone ? telefoneLegivel(fone) : null]
+                          .filter(Boolean)
+                          .join(' · ') || 'sem canal'}
+                      </p>
+                    </div>
+                    {/*
+                      ESCOLHER AQUI, ESCREVER LÁ.
+                      
+                      A aba "Mensagens" abria sempre no primeiro contato da lista e
+                      deixava a troca para um seletor dentro do compositor — o que
+                      obriga a decidir para quem falar numa tela que já está pedindo
+                      o que falar. A decisão é desta aba, onde os contatos estão com
+                      cargo e procedência à vista.
+                    */}
+                    {onMandarMensagem && (c.email || fone) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 px-2 text-xs"
+                        onClick={() => onMandarMensagem(c.id)}
+                      >
+                        {fone ? (
+                          <MessageCircle className="mr-1 h-3.5 w-3.5" aria-hidden />
+                        ) : (
+                          <Mail className="mr-1 h-3.5 w-3.5" aria-hidden />
+                        )}
+                        Mensagem
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
+
+      {agente}
 
       <Button variant="outline" size="sm" asChild className="w-full">
         <Link href={`/empresas/${e.id}`}>

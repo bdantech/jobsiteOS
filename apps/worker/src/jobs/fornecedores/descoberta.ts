@@ -379,17 +379,13 @@ export async function gravarCadastralDescoberto(
 ): Promise<void> {
   if (cad.funcionarios === null && cad.faturamento_presumido === null) return
 
-  const { data: mu } = await supabaseAdmin
-    .from('mercado_universo')
-    .select('empresa_id')
-    .eq('cnpj', cnpj)
-    .maybeSingle()
-  if (!mu?.empresa_id) return
+  const empresaId = await fichaParaGravar(cnpj)
+  if (!empresaId) return
 
   const { data: emp } = await supabaseAdmin
     .from('empresas')
     .select('funcionarios, faturamento_anual')
-    .eq('id', mu.empresa_id)
+    .eq('id', empresaId)
     .maybeSingle()
 
   const campos: Record<string, unknown> = {}
@@ -406,6 +402,50 @@ export async function gravarCadastralDescoberto(
   }
   if (Object.keys(campos).length === 0) return
 
-  await supabaseAdmin.from('empresas').update(campos).eq('id', mu.empresa_id)
+  await supabaseAdmin.from('empresas').update(campos).eq('id', empresaId)
   logger.info({ cnpj, campos: Object.keys(campos) }, 'Cadastral da Nova Vida gravado na ficha.')
+}
+
+/**
+ * A ficha onde o cadastral descoberto vai morar — CRIANDO-A se preciso.
+ *
+ * Antes esta função desistia quando o fornecedor não tinha ficha (`if
+ * (!mu?.empresa_id) return`), e é aí que estava o desperdício: o fornecedor SEM
+ * cadastro é a definição deste funil, e era exatamente nele que o headcount e o
+ * faturamento pagos à Nova Vida eram jogados fora. Junto com eles ia todo o resto
+ * do cadastral, porque `app__promover_fornecedor_para_empresa` traz razão social,
+ * fantasia, UF, município, CNAE, porte, camada e grupo do universo de mercado — o
+ * "trazer os demais dados" acontece por criar a ficha, não por copiar campo a
+ * campo.
+ *
+ * ── POR QUE CRIAR AQUI É SEGURO ────────────────────────────────────────────
+ * Esta função só é chamada pela descoberta SOB DEMANDA — o clique pago de uma
+ * pessoa naquele fornecedor específico. A varredura noturna não passa por aqui, e
+ * é isso que impede a promoção em massa de milhares de CNPJs que ninguém pediu.
+ *
+ * Falhar em criar não pode derrubar a descoberta: o CNPJ pode ainda não estar no
+ * universo de mercado (a RPC recusa, e com razão — sem ele não há cadastral para
+ * copiar). Os contatos achados valem por si.
+ */
+async function fichaParaGravar(cnpj: string): Promise<string | null> {
+  const { data: mu } = await supabaseAdmin
+    .from('mercado_universo')
+    .select('empresa_id')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+  if (mu?.empresa_id) return mu.empresa_id
+
+  const { data, error } = await supabaseAdmin.rpc('app__promover_fornecedor_para_empresa', {
+    p_cnpj: cnpj,
+    p_ator: null,
+    p_origem: 'antecipacao',
+  })
+  if (error) {
+    logger.info(
+      { cnpj, erro: error.message },
+      'Sem ficha de empresa para o cadastral descoberto — seguindo só com os contatos.',
+    )
+    return null
+  }
+  return (data as { id?: string } | null)?.id ?? null
 }

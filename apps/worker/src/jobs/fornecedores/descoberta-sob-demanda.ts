@@ -410,7 +410,7 @@ export async function descobertaAprofundada(
 
   const { data: funil } = await supabaseAdmin
     .from('fornecedores_funil')
-    .select('originador_id, sacados_principais, ultima_busca_em')
+    .select('originador_id, sacados_principais')
     .eq('fornecedor_cnpj', cnpj)
     .maybeSingle()
 
@@ -424,21 +424,35 @@ export async function descobertaAprofundada(
     apollo_depende_da_busca: false,
   }
 
-  if (!funil?.ultima_busca_em) {
+  const { data: existentes } = await supabaseAdmin
+    .from('contatos_descobertos')
+    .select('tipo, valor, confianca, nome_pessoa, validado')
+    .eq('fornecedor_cnpj', cnpj)
+
+  /*
+   * O portão é TER O QUE APROFUNDAR, e não ter havido um clique pago antes.
+   *
+   * Ele checava `fornecedores_funil.ultima_busca_em`, que só é gravado pela camada
+   * sob demanda — 515 dos 520 fornecedores com contato descoberto tinham a coluna
+   * nula, porque quem os achou foi a varredura noturna de graça. O botão "Buscar
+   * Mais" ficava escondido, e a rota respondia "rode a busca normal primeiro" para
+   * quem já tinha uma tela cheia de contatos.
+   *
+   * O que a busca aprofundada precisa é do material que ela lê — o que já foi
+   * achado e o que falhou. A pergunta certa é sobre os CONTATOS, e ela vale igual
+   * para o fornecedor que nem linha no funil de cadastro tem, que é o caso de
+   * quem chegou pelo card da NF.
+   */
+  if ((existentes ?? []).length === 0) {
     return {
       ok: false,
-      motivo: 'Rode a busca normal primeiro — a aprofundada parte do que ela achou.',
+      motivo: 'Ainda não há nada achado para aprofundar — rode a busca normal primeiro.',
       plano: planoVazio,
       contatosNovos: 0,
       custo: 0,
       orcamento: orcResumo,
     }
   }
-
-  const { data: existentes } = await supabaseAdmin
-    .from('contatos_descobertos')
-    .select('tipo, valor, confianca, nome_pessoa, validado')
-    .eq('fornecedor_cnpj', cnpj)
 
   const lacunas: LacunasDeContato = lacunasDeContato(
     (existentes ?? []).map((c) => ({
@@ -489,7 +503,10 @@ export async function descobertaAprofundada(
   }
 
   const cadastral = await cadastralDoFornecedor(cnpj)
-  const sacados = Array.isArray(funil.sacados_principais)
+  // `funil` pode ser nulo: quem chegou pelo card da NF não tem linha no funil de
+  // cadastro. Os sacados só enriquecem o prompt da busca — a ausência deles a
+  // deixa mais pobre, nunca inválida.
+  const sacados = Array.isArray(funil?.sacados_principais)
     ? (funil.sacados_principais as { nome: string | null }[])
     : []
 

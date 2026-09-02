@@ -9338,7 +9338,7 @@ export type Database = {
         Returns: string
       }
       app__promover_fornecedor_para_empresa: {
-        Args: { p_ator: string; p_cnpj: string; p_origem: string }
+        Args: { p_ator: string | null; p_cnpj: string; p_origem: string }
         Returns: {
           atualizado_em: string
           camada: string | null

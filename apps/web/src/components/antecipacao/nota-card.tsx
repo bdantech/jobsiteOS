@@ -65,6 +65,15 @@ export function NotaCard({
   dono?: React.ReactNode
 }) {
   const [notaAberta, setNotaAberta] = React.useState(false)
+  /*
+   * A aba e o contato escolhido, no card e não no modal: quem escolhe "mandar
+   * mensagem" para alguém na aba Fornecedor precisa aterrissar no compositor JÁ
+   * naquela pessoa. Sem este estado a escolha morreria na barra de abas, e o
+   * compositor abriria no primeiro contato da lista — que é raramente o que se
+   * acabou de escolher.
+   */
+  const [aba, setAba] = React.useState('documento')
+  const [contatoEscolhido, setContatoEscolhido] = React.useState<string | null>(null)
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
   const liquido = valorLiquidoEstimado(nota.valor, nota.receita_esperada)
@@ -80,7 +89,10 @@ export function NotaCard({
             role="button"
             tabIndex={0}
             aria-label={`Abrir a nota ${nota.numero ?? nota.access_key} de ${nomeFornecedor}`}
-            onClick={() => setNotaAberta(true)}
+            onClick={() => {
+              setAba('documento')
+              setNotaAberta(true)
+            }}
             onKeyDown={(e) => {
               /*
                * SÓ quando o card é o próprio alvo.
@@ -100,6 +112,7 @@ export function NotaCard({
               if (e.target !== e.currentTarget) return
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
+                setAba('documento')
                 setNotaAberta(true)
               }
             }}
@@ -371,13 +384,27 @@ export function NotaCard({
           subtitulo={`${nomeFornecedor} → ${nota.sacado_nome ?? nota.sacado_cnpj ?? '—'}`}
           aberto={notaAberta}
           onOpenChange={setNotaAberta}
+          aba={aba}
+          onAbaChange={setAba}
           abasExtras={[
             {
               id: 'fornecedor',
               label: 'Fornecedor',
               // Aqui a "empresa" do card é o FORNECEDOR: é com ele que se fala sobre
-              // antecipar esta nota, não com o sacado.
-              conteudo: <AbaEmpresa empresaId={nota.fornecedor_empresa_id} />,
+              // antecipar esta nota, não com o sacado. E é aqui que mora o agente de
+              // contato — sem o CNPJ, esta aba não alcança os 3.542 dos 3.705
+              // fornecedores com nota viva que não têm ficha de empresa.
+              conteudo: (
+                <AbaEmpresa
+                  empresaId={nota.fornecedor_empresa_id}
+                  fornecedorCnpj={nota.fornecedor_cnpj}
+                  fornecedorNome={nomeFornecedor}
+                  onMandarMensagem={(id) => {
+                    setContatoEscolhido(id)
+                    setAba('mensagens')
+                  }}
+                />
+              ),
             },
             {
               id: 'mensagens',
@@ -387,11 +414,9 @@ export function NotaCard({
                   empresaId={nota.fornecedor_empresa_id}
                   funil="nfs"
                   funilCardId={nota.access_key}
-                  // Sem estes dois a aba é um beco para 3.542 dos 3.705
-                  // fornecedores com nota viva: são eles que trazem o agente de
-                  // contato para dentro do card.
                   fornecedorCnpj={nota.fornecedor_cnpj}
-                  fornecedorNome={nomeFornecedor}
+                  contatoIdInicial={contatoEscolhido}
+                  onIrParaFornecedor={() => setAba('fornecedor')}
                 />
               ),
             },
