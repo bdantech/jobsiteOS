@@ -249,7 +249,9 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
      *
      * `forcar` existe porque a régua muda: um `sem_dados` gravado sob a
      * configuração de ontem não deveria trancar por 180 dias uma busca que hoje
-     * usaria outros cargos-alvo e leria mais páginas.
+     * usaria outros cargos-alvo e leria mais páginas. O botão da ficha sempre o
+     * manda; o LOTE não, e é lá que o cache ganha o dinheiro dele — milhares de
+     * domínios numa passada, onde repetir é desperdício em escala.
      */
     const bloqueio = params.forcar ? null : await ttlDoDominio(dominio, ttl.contatos)
     if (bloqueio) {
@@ -381,8 +383,11 @@ export function criarProcessadorContatos(lote: Tables<'lotes_enriquecimento'>): 
  * orçamento e grava `enriquecimentos` — um caminho paralelo gastaria crédito do
  * Apollo sem aparecer em nenhuma dessas contas.
  *
- * O TTL vale aqui também, de propósito: clicar duas vezes no botão não cobra duas
- * vezes pelo mesmo domínio. O retorno diz `pulado` quando foi isso.
+ * O TTL do domínio vale conforme quem chama: o botão da ficha manda `forcar` e
+ * ignora o cache (quem clica numa empresa específica está pedindo para buscar
+ * AGORA, e a régua de cargos muda debaixo do cache de 180 dias); a cascata de
+ * fornecedores chama sem `forcar` e continua respeitando, porque ela tem
+ * contabilidade de custo própria e roda em sequência.
  */
 export async function contatosEmpresa(opts: {
   empresaId: string

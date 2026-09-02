@@ -176,15 +176,28 @@ export async function rodarProtestosEmpresaAction(input: {
  * `pulado` e nada é cobrado. Por isso o botão não precisa de confirmação de custo a
  * cada clique, ao contrário de protestos.
  */
+/**
+ * O botão "Buscar contatos" da ficha da empresa. SEMPRE ignora o TTL do domínio.
+ *
+ * Houve um segundo botão para isso, e era pior: o TTL de 180 dias vale para o
+ * acerto E para o "não achei", então um `sem_dados` gravado sob a régua de cargos
+ * de ontem trancava até 2027 uma busca que hoje leria outros cargos e mais
+ * páginas. Quem clica num botão de uma empresa específica está pedindo para buscar
+ * AGORA — oferecer o clique e depois não fazer nada, em silêncio, foi o defeito
+ * original; explicar o silêncio num segundo botão foi um remendo em cima dele.
+ *
+ * O cache continua valendo onde ele foi feito para valer: nos LOTES, que processam
+ * milhares de domínios e onde repetir é desperdício em escala, e na cascata de
+ * fornecedores, que tem contabilidade de custo própria. Os dois passam pelo mesmo
+ * processador com `forcar` desligado.
+ */
 export async function rodarContatosEmpresaAction(input: {
   empresaId: string
   revelarTelefone?: boolean
-  /** Ignora o TTL de 180 dias do domínio. A tela só oferece quando foi ele que barrou. */
-  forcar?: boolean
 }): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
   const { erro } = await autorizar()
   if (erro) return erro
-  const r = await dispararContatosEmpresa(input)
+  const r = await dispararContatosEmpresa({ ...input, forcar: true })
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 
