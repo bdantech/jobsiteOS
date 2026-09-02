@@ -2,12 +2,15 @@ import { identificadorCanonico } from '../../../../../packages/core/src/comunica
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import { notify } from '../../../../../packages/core/src/server/notify.js'
 import {
-  lerEnvioWasender,
+  lerEntradasWasender,
+  lerEnviosWasender,
   lerStatusWasender,
   lerWebhookResend,
-  lerWebhookWasender,
   type MensagemEnviadaWasender,
+  type MensagemRecebidaWasender,
 } from '../../../../../packages/core/src/transportes/index.js'
+import type { ContaDoWebhook } from '../../comunicacao/webhook-auth.js'
+import { anexarNoLedger, baixarEGuardarMidia, legendaDaMidia } from '../../comunicacao/midia.js'
 import {
   absorverLid,
   conversaPara,
@@ -42,7 +45,16 @@ export interface ResultadoWebhook {
 
 // ─── WhatsApp ───────────────────────────────────────────────────────────────
 
-export async function processarWebhookWasender(payload: unknown): Promise<ResultadoWebhook> {
+export async function processarWebhookWasender(
+  payload: unknown,
+  /**
+   * A conta por cujo segredo o webhook entrou (0152). É o NÚMERO que recebeu, e o
+   * payload não o informa: `sessionId` é um identificador de sessão, e gravá-lo
+   * como `conta_remetente` pôs 48 dígitos na coluna do telefone em 158 mensagens.
+   * Sem ele não há como dizer de quem é a conversa não vinculada.
+   */
+  conta: ContaDoWebhook | null = null,
+): Promise<ResultadoWebhook> {
   const status = lerStatusWasender(payload)
   if (status) {
     const { error } = await supabaseAdmin
@@ -54,15 +66,37 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     return { ok: true, gravada: false, motivo: 'status' }
   }
 
-  // O que SAIU, inclusive pelo aparelho. Vem antes do leitor de entrada porque é
-  // ele quem recusa `fromMe`.
-  const enviada = lerEnvioWasender(payload)
-  if (enviada) return registrarEnvioPeloCelular(enviada, payload)
+  /*
+   * UM PAYLOAD PODE TRAZER VÁRIAS MENSAGENS, e por muito tempo trouxe uma só
+   * porque o leitor não sabia ler a outra forma: `messages.received` manda um
+   * objeto em `data.messages` e `messages.upsert` manda um ARRAY. Com o array,
+   * `dados.key` era `undefined` e a mensagem sumia em silêncio — justamente no
+   * evento que cobre o que a equipe digita no aparelho.
+   */
+  const entradas = lerEntradasWasender(payload)
+  const envios = lerEnviosWasender(payload)
+  if (entradas.length === 0 && envios.length === 0) {
+    return { ok: true, gravada: false, motivo: 'evento ignorado' }
+  }
 
-  const m = lerWebhookWasender(payload)
-  if (!m) return { ok: true, gravada: false, motivo: 'evento ignorado' }
+  let gravadas = 0
+  for (const e of envios) {
+    const r = await registrarEnvioPeloCelular(e, conta)
+    if (r.gravada) gravadas += 1
+  }
+  for (const m of entradas) {
+    const r = await registrarEntrada(m, conta)
+    if (r.gravada) gravadas += 1
+  }
 
-  const contaRecebedora = await numeroDaConta(sessaoDoPayload(payload) ?? m.para)
+  return { ok: true, gravada: gravadas > 0, motivo: `${gravadas} gravada(s)` }
+}
+
+async function registrarEntrada(
+  m: MensagemRecebidaWasender,
+  conta: ContaDoWebhook | null,
+): Promise<ResultadoWebhook> {
+  const contaRecebedora = conta?.numero ?? (await numeroDaConta(m.para))
   const r = await resolverRemetente({ canal: 'whatsapp', identificador: m.de, corpo: m.corpo })
 
   /*
@@ -95,7 +129,7 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     canal: 'whatsapp',
     direcao: 'entrada',
     vendedorId: r.vendedorId,
-    corpo: m.corpo,
+    corpo: m.midia ? legendaDaMidia(m.midia, m.corpo) : m.corpo,
     provedor: 'wasender',
     idExterno: m.idExterno,
     contaRemetente: contaRecebedora,
@@ -103,6 +137,13 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
     origem: 'inbox',
     criadoEm: m.recebidaEm,
   })
+
+  // A mídia vem DEPOIS da linha do ledger, sempre: se o download falhar, a bolha
+  // existe com "(áudio)" escrito e um erro no log — e não some junto do arquivo.
+  if (m.midia && comunicacaoId) {
+    const anexo = await baixarEGuardarMidia({ midia: m.midia, conversaId, comunicacaoId })
+    if (anexo) await anexarNoLedger(comunicacaoId, anexo)
+  }
 
   if (conversaId) {
     await tocarConversa({ conversaId, direcao: 'entrada', em: m.recebidaEm, novoStatus: 'ativa' })
@@ -136,13 +177,13 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
 }
 
 /**
- * A mensagem que a EQUIPE mandou, vista pelo webhook (§2).
+ * A mensagem que a EQUIPE mandou, vista pelo webhook.
  *
  * ── DUAS PROCEDÊNCIAS, UM SÓ EVENTO ─────────────────────────────────────────
- * O provedor manda `message.sent` tanto para o que saiu daqui quanto para o que
- * alguém digitou no aparelho, e o `id_externo` é o que separa as duas: quando ele
- * já está no ledger, foi o `enviar-fila` que gravou — com autor, vendedor,
- * template e origem — e não há nada a fazer. Um upsert aqui seria pior que inútil:
+ * O provedor manda o mesmo evento para o que saiu daqui e para o que alguém
+ * digitou no aparelho, e o `id_externo` é o que separa as duas: quando ele já
+ * está no ledger, foi o `enviar-fila` que gravou — com autor, vendedor, template
+ * e origem — e não há nada a fazer. Um upsert aqui seria pior que inútil:
  * substituiria aquela linha por uma cópia anônima, apagando de quem foi a
  * mensagem.
  *
@@ -157,7 +198,7 @@ export async function processarWebhookWasender(payload: unknown): Promise<Result
  */
 async function registrarEnvioPeloCelular(
   e: MensagemEnviadaWasender,
-  payload: unknown,
+  conta: ContaDoWebhook | null,
 ): Promise<ResultadoWebhook> {
   if (await jaNoLedger('wasender', e.idExterno)) {
     return { ok: true, gravada: false, motivo: 'envio da plataforma' }
@@ -182,20 +223,32 @@ async function registrarEnvioPeloCelular(
     contatoId: r.contatoId,
     canal: 'whatsapp',
     direcao: 'saida',
-    // O vendedor dono da carteira, e não quem digitou: o provedor não diz qual
-    // das pessoas com acesso ao aparelho escreveu, e inventar um autor seria
-    // atribuir a alguém uma frase que talvez não seja dele. `usuario_id` fica
-    // nulo de propósito, e é isso que a tela mostra como "pelo celular".
+    /*
+     * O DONO DO NÚMERO é quem responde por esta mensagem.
+     *
+     * O provedor não diz qual das pessoas com acesso ao aparelho digitou, mas o
+     * aparelho tem dono — e é ele quem atende aquele fornecedor. Sem isto a
+     * mensagem ficaria órfã, e a conversa dela também: é esta atribuição que faz
+     * a regra de carteira funcionar para quem responde pelo celular.
+     */
+    usuarioId: conta?.id ? await donoDaConta(conta.id) : null,
     vendedorId: r.vendedorId,
-    corpo: e.corpo ?? (e.temMidia ? '(mídia enviada pelo celular)' : null),
+    corpo: e.midia
+      ? legendaDaMidia(e.midia, e.corpo)
+      : (e.corpo ?? (e.temMidia ? '(mídia enviada pelo celular)' : null)),
     provedor: 'wasender',
     idExterno: e.idExterno,
-    contaRemetente: await numeroDaConta(sessaoDoPayload(payload) ?? ''),
+    contaRemetente: conta?.numero ?? null,
     statusEnvio: 'enviada',
     origem: 'celular',
     enviadoEm: e.enviadaEm,
     criadoEm: e.enviadaEm,
   })
+
+  if (e.midia && comunicacaoId) {
+    const anexo = await baixarEGuardarMidia({ midia: e.midia, conversaId, comunicacaoId })
+    if (anexo) await anexarNoLedger(comunicacaoId, anexo)
+  }
 
   if (conversaId) {
     // Responder é ler: `tocarConversa` com direção de saída zera `nao_lidas`, e é
@@ -223,21 +276,24 @@ async function registrarEnvioPeloCelular(
   return { ok: true, gravada: true }
 }
 
-/** A sessão/instância que o provedor identifica no topo do payload. */
-function sessaoDoPayload(payload: unknown): string | null {
-  const p = payload as Record<string, unknown> | null
-  const s = p?.sessionId ?? p?.instanceId
-  return s ? String(s) : null
+/** O usuário responsável por um número. É ele quem "falou" pelo aparelho. */
+async function donoDaConta(contaId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('whatsapp_contas')
+    .select('usuario_responsavel')
+    .eq('id', contaId)
+    .maybeSingle()
+  return data?.usuario_responsavel ?? null
 }
 
 /**
  * O apelido/id de sessão que o provedor manda → o número da nossa conta.
  *
- * O fallback deixou de ser "os dígitos do que veio". `sessionId` é um
+ * Só é usado quando o webhook entrou pelo fallback global, que não distingue
+ * número. O fallback deixou de ser "os dígitos do que veio": `sessionId` é um
  * identificador de sessão, e devolvê-lo gravava coisas como
- * `7553307842893651945777...` no lugar do número da conta — 48 dígitos que
- * nenhuma tela consegue formatar e que o teto diário por número conta como se
- * fosse mais um telefone.
+ * `7553307842893651945777...` no lugar do número — 48 dígitos que nenhuma tela
+ * formata e que o teto diário por número conta como se fosse mais um telefone.
  */
 async function numeroDaConta(referencia: string): Promise<string | null> {
   if (!referencia) return null

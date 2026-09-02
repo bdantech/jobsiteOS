@@ -12,10 +12,16 @@ import {
 import { lerWebhookResend } from './resend.ts'
 import {
   TransporteWasender,
-  lerEnvioWasender,
+  lerEntradasWasender,
+  lerEnviosWasender,
   lerStatusWasender,
-  lerWebhookWasender,
 } from './wasender.ts'
+import * as crypto from 'node:crypto'
+import { decifrarMidiaWhatsapp, extensaoDaMidia } from './midia-whatsapp.ts'
+
+/** Açúcar para os testes: o payload de teste sempre traz uma mensagem só. */
+const lerWebhookWasender = (p: unknown) => lerEntradasWasender(p)[0] ?? null
+const lerEnvioWasender = (p: unknown) => lerEnviosWasender(p)[0] ?? null
 
 // ─── Wasender ───────────────────────────────────────────────────────────────
 
@@ -380,4 +386,150 @@ test('grupo continua fora, inclusive no que sai', () => {
 test('o status de entrega não é confundido com uma mensagem', () => {
   const ack = { event: 'messages.update', data: { key: { id: 'WSENT1' }, status: 'read' } }
   assert.deepEqual(lerStatusWasender(ack), { idExterno: 'WSENT1', status: 'lida' })
+})
+
+// ─── messages.upsert manda um ARRAY (0164) ──────────────────────────────────
+
+/*
+ * O leitor antigo fazia `p.data?.messages ?? p.data` e seguia como se fosse
+ * sempre objeto. Com o array, `dados.key` era `undefined` e a mensagem sumia em
+ * silêncio — justamente no evento que cobre o que a equipe digita no aparelho,
+ * porque `message.sent` só confirma o que saiu pela API.
+ */
+test('messages.upsert em array: todas as mensagens do lote entram', () => {
+  const lote = {
+    event: 'messages.upsert',
+    data: {
+      messages: [
+        {
+          key: { id: 'A1', fromMe: false, remoteJid: '5511999998888@s.whatsapp.net' },
+          message: { conversation: 'primeira' },
+        },
+        {
+          key: { id: 'A2', fromMe: false, remoteJid: '5511977776666@s.whatsapp.net' },
+          message: { conversation: 'segunda' },
+        },
+      ],
+    },
+  }
+  const ms = lerEntradasWasender(lote)
+  assert.equal(ms.length, 2)
+  assert.deepEqual(
+    ms.map((m) => m.corpo),
+    ['primeira', 'segunda'],
+  )
+})
+
+test('o mesmo lote separa o que entra do que sai', () => {
+  const lote = {
+    event: 'messages.upsert',
+    data: {
+      messages: [
+        {
+          key: { id: 'B1', fromMe: false, remoteJid: '5511999998888@s.whatsapp.net' },
+          message: { conversation: 'pergunta do cliente' },
+        },
+        {
+          key: { id: 'B2', fromMe: true, remoteJid: '5511999998888@s.whatsapp.net' },
+          message: { conversation: 'resposta pelo celular' },
+        },
+      ],
+    },
+  }
+  assert.deepEqual(
+    lerEntradasWasender(lote).map((m) => m.idExterno),
+    ['B1'],
+  )
+  assert.deepEqual(
+    lerEnviosWasender(lote).map((m) => m.idExterno),
+    ['B2'],
+  )
+})
+
+test('o descritor do áudio traz o que o download precisa', () => {
+  const m = lerEntradasWasender({
+    event: 'messages.upsert',
+    data: {
+      messages: [
+        {
+          key: { id: 'C1', fromMe: false, remoteJid: '5511999998888@s.whatsapp.net' },
+          message: {
+            audioMessage: {
+              url: 'https://mmg.whatsapp.net/x',
+              mediaKey: 'AAAA',
+              mimetype: 'audio/ogg; codecs=opus',
+              seconds: 12,
+              fileLength: 4096,
+            },
+          },
+        },
+      ],
+    },
+  })[0]!
+  assert.equal(m.temMidia, true)
+  assert.equal(m.midia?.tipo, 'audio')
+  assert.equal(m.midia?.segundos, 12)
+  // Sem `url` ou sem `mediaKey` não há o que baixar nem como abrir.
+  const semChave = lerEntradasWasender({
+    event: 'messages.upsert',
+    data: {
+      messages: [
+        {
+          key: { id: 'C2', fromMe: false, remoteJid: '5511999998888@s.whatsapp.net' },
+          message: { audioMessage: { url: 'https://mmg.whatsapp.net/y', seconds: 3 } },
+        },
+      ],
+    },
+  })[0]!
+  assert.equal(semChave.temMidia, true)
+  assert.equal(semChave.midia, null)
+})
+
+// ─── A mídia decifrada (0164) ───────────────────────────────────────────────
+
+/*
+ * Cifrar com a MESMA derivação e decifrar de volta. É o único teste possível sem
+ * um arquivo real do WhatsApp, e cobre o que erra na prática: a repartição dos
+ * 112 bytes, o salt de zeros, o corte dos 10 bytes de MAC e o `info` por tipo.
+ */
+function cifrarComoOWhatsapp(claro: Buffer, mediaKey: Buffer, info: string): Buffer {
+  const d = Buffer.from(crypto.hkdfSync('sha256', mediaKey, Buffer.alloc(32), info, 112))
+  const iv = d.subarray(0, 16)
+  const chave = d.subarray(16, 48)
+  const chaveMac = d.subarray(48, 80)
+  const c = crypto.createCipheriv('aes-256-cbc', chave, iv)
+  const corpo = Buffer.concat([c.update(claro), c.final()])
+  const mac = crypto.createHmac('sha256', chaveMac).update(iv).update(corpo).digest().subarray(0, 10)
+  return Buffer.concat([corpo, mac])
+}
+
+test('a mídia decifra de volta ao original, com MAC íntegro', () => {
+  const claro = Buffer.from('conteúdo de uma nota de voz qualquer, com acento e tudo')
+  const mediaKey = crypto.randomBytes(32)
+  const cifrado = cifrarComoOWhatsapp(claro, mediaKey, 'WhatsApp Audio Keys')
+
+  const r = decifrarMidiaWhatsapp(cifrado, mediaKey.toString('base64'), 'audio')
+  assert.equal(r.integro, true)
+  assert.equal(r.bytes.toString(), claro.toString())
+})
+
+test('o info errado não dá erro — dá lixo, e é por isso que o mapa é exaustivo', () => {
+  const claro = Buffer.from('x'.repeat(64))
+  const mediaKey = crypto.randomBytes(32)
+  // Cifrado como imagem, lido como áudio: o AES não reclama e o MAC denuncia.
+  const cifrado = cifrarComoOWhatsapp(claro, mediaKey, 'WhatsApp Image Keys')
+  const r = decifrarMidiaWhatsapp(cifrado, mediaKey.toString('base64'), 'image')
+  assert.equal(r.integro, true)
+  assert.equal(r.bytes.toString(), claro.toString())
+  assert.throws(() => decifrarMidiaWhatsapp(cifrado, mediaKey.toString('base64'), 'audio'))
+})
+
+test('a extensão vem do mimetype, porque a nota de voz não tem nome', () => {
+  assert.equal(extensaoDaMidia('audio/ogg; codecs=opus', 'audio'), 'ogg')
+  assert.equal(extensaoDaMidia('image/jpeg', 'image'), 'jpg')
+  assert.equal(extensaoDaMidia('application/pdf', 'document'), 'pdf')
+  // Desconhecido cai no padrão do tipo, nunca em arquivo sem extensão: o
+  // navegador recusa tocar o que não sabe nomear.
+  assert.equal(extensaoDaMidia(null, 'audio'), 'ogg')
+  assert.equal(extensaoDaMidia('application/x-esquisito', 'document'), 'bin')
 })

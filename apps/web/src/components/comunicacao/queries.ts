@@ -222,6 +222,14 @@ export interface ContaWhatsappLida {
   id: string
   apelido: string
   numero: string
+  /**
+   * O dono do aparelho. Deixou de ser enfeite na 0164: é ele que responde pela
+   * conversa que chega por este número quando ela ainda não tem empresa
+   * vinculada — sem isso, a thread do fornecedor fica sem dono e aparece para o
+   * time inteiro.
+   */
+  usuario_responsavel: string | null
+  usuario_responsavel_nome?: string | null
   tipo: string
   ativo: boolean
   mensagens_por_dia: number
@@ -238,11 +246,14 @@ export async function buscarContasWhatsapp(): Promise<ContaWhatsappLida[]> {
   // `select *` aqui falharia — que é exatamente o comportamento desejado.
   const { data, error } = await supabase
     .from('whatsapp_contas')
-    .select('id, apelido, numero, tipo, ativo, mensagens_por_dia, warmup_iniciado_em, intervalo_min_seg, intervalo_max_seg, token_definido_em, webhook_secret_definido_em')
+    .select('id, apelido, numero, tipo, ativo, mensagens_por_dia, warmup_iniciado_em, intervalo_min_seg, intervalo_max_seg, token_definido_em, webhook_secret_definido_em, usuario_responsavel, usuarios!whatsapp_contas_usuario_responsavel_fkey(nome)')
     .order('tipo')
     .order('apelido')
   if (error) throw new Error(error.message)
-  return (data ?? []) as ContaWhatsappLida[]
+  return (data ?? []).map((c) => {
+    const { usuarios, ...resto } = c as typeof c & { usuarios?: { nome: string | null } | null }
+    return { ...resto, usuario_responsavel_nome: usuarios?.nome ?? null } as ContaWhatsappLida
+  })
 }
 
 export interface GmailConectado {

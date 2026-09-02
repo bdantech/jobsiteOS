@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { createClient } from '@/lib/supabase/client'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -66,6 +67,7 @@ function ContaDialog({
 }) {
   const qc = useQueryClient()
   const [apelido, setApelido] = React.useState(conta?.apelido ?? '')
+  const [dono, setDono] = React.useState<string>(conta?.usuario_responsavel ?? '')
   const [numero, setNumero] = React.useState(conta?.numero ?? '')
   const [token, setToken] = React.useState('')
   const [webhookSecret, setWebhookSecret] = React.useState('')
@@ -83,6 +85,20 @@ function ContaDialog({
   )
   const [warmupEm, setWarmupEm] = React.useState(conta?.warmup_iniciado_em ?? hojeISO())
   const [salvando, setSalvando] = React.useState(false)
+
+  const usuarios = useQuery<{ id: string; nome: string }[]>({
+    queryKey: ['usuarios', 'ativos'],
+    queryFn: async () => {
+      const { data, error } = await createClient()
+        .from('usuarios')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome')
+      if (error) throw new Error(error.message)
+      return data ?? []
+    },
+    staleTime: 10 * 60_000,
+  })
 
   const digitos = numero.replace(/\D/g, '')
   const numeroValido = digitos.length >= 10 && digitos.length <= 15
@@ -105,6 +121,7 @@ function ContaDialog({
       id: conta?.id,
       apelido: apelido.trim(),
       numero: digitos,
+      usuario_responsavel: dono === '' ? null : dono,
       token: token.trim() === '' ? undefined : token.trim(),
       webhook_secret: webhookSecret.trim() === '' ? undefined : webhookSecret.trim(),
       ativo,
@@ -167,6 +184,34 @@ function ContaDialog({
             {numeroValido && (
               <p className="text-xs text-muted-foreground">{telefoneLegivel(digitos)}</p>
             )}
+          </div>
+
+          {/*
+            O DONO DO APARELHO decide quem enxerga a conversa que chega por aqui.
+            Deixou de ser um campo administrativo na 0164: quando o fornecedor
+            escreve para este número e ainda não há empresa vinculada, é este
+            usuário — e só ele — que responde por aquela thread. Em branco, a
+            conversa não tem dono e aparece para o time inteiro.
+          */}
+          <div className="space-y-2">
+            <Label htmlFor="dono">Responsável pelo número</Label>
+            <Select value={dono === '' ? 'nenhum' : dono} onValueChange={(v) => setDono(v === 'nenhum' ? '' : v)}>
+              <SelectTrigger id="dono">
+                <SelectValue placeholder="Ninguém" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nenhum">Ninguém (conversas ficam visíveis ao time)</SelectItem>
+                {(usuarios.data ?? []).map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              É o celular de quem? Quem chegar por este número entra na carteira dessa pessoa
+              enquanto a conversa não estiver vinculada a uma empresa.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -433,7 +478,17 @@ export function ContasWhatsapp() {
                   )}
                   {contas.map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.apelido}</TableCell>
+                      <TableCell className="font-medium">
+                        {c.apelido}
+                        {/*
+                          Sem responsável, toda conversa que entra por este número
+                          fica sem dono e aparece para o time inteiro (0164). É um
+                          aviso e não um erro: pode ser o número da casa.
+                        */}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {c.usuario_responsavel_nome ?? 'sem responsável — conversas visíveis ao time'}
+                        </span>
+                      </TableCell>
                       <TableCell className="font-mono tabular-nums">
                         {telefoneLegivel(c.numero)}
                       </TableCell>

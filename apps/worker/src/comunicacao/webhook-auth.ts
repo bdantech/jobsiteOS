@@ -42,13 +42,46 @@ export function segredoWasenderValido(recebido: string | undefined): boolean {
  * tem um número só, e sem ele ligar o primeiro exigiria cadastrar a conta antes
  * de o webhook existir.
  */
-export async function webhookWasenderAutorizado(recebido: string | undefined): Promise<boolean> {
-  if (!recebido) return false
-  if (segredoWasenderValido(recebido)) return true
+export interface ContaDoWebhook {
+  id: string
+  numero: string
+  apelido: string
+}
+
+export interface AutorizacaoWasender {
+  autorizado: boolean
+  /**
+   * A conta por cujo segredo o webhook entrou — e portanto o NÚMERO que recebeu a
+   * mensagem.
+   *
+   * Devolvê-la deixou de ser opcional. O payload identifica a sessão por um
+   * `sessionId` do provedor que não é telefone nenhum: gravá-lo como
+   * `conta_remetente` pôs 48 dígitos na coluna do número em 158 mensagens, e sem
+   * o número não há como saber de quem é a conversa — que é justamente a regra da
+   * 0164, onde o dono do celular é o dono da thread não vinculada.
+   *
+   * Nula quando o webhook entrou pelo fallback global (`WASENDER_WEBHOOK_SECRET`),
+   * que não distingue número: quem tem duas contas precisa do segredo por conta
+   * para a atribuição funcionar.
+   */
+  conta: ContaDoWebhook | null
+}
+
+export async function autorizarWebhookWasender(
+  recebido: string | undefined,
+): Promise<AutorizacaoWasender> {
+  if (!recebido) return { autorizado: false, conta: null }
   const { data, error } = await supabaseAdmin.rpc('app__conta_do_webhook', { p_segredo: recebido })
+  if (!error) {
+    const linha = (Array.isArray(data) ? data[0] : data) as ContaDoWebhook | null | undefined
+    if (linha?.id) return { autorizado: true, conta: linha }
+  }
   // Erro de banco não vira "autorizado": falha fechada, como o resto do módulo.
-  if (error) return false
-  return Array.isArray(data) ? data.length > 0 : data !== null
+  return { autorizado: segredoWasenderValido(recebido), conta: null }
+}
+
+export async function webhookWasenderAutorizado(recebido: string | undefined): Promise<boolean> {
+  return (await autorizarWebhookWasender(recebido)).autorizado
 }
 
 /**

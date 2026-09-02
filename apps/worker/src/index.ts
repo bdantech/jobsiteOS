@@ -98,7 +98,7 @@ import {
   processarWebhookResend,
   processarWebhookWasender,
 } from './jobs/comunicacao/webhooks.js'
-import { webhookWasenderAutorizado, segredoResendValido } from './comunicacao/webhook-auth.js'
+import { autorizarWebhookWasender, segredoResendValido } from './comunicacao/webhook-auth.js'
 
 /**
  * The worker's HTTP surface. Small on purpose: it starts jobs and reports health.
@@ -282,12 +282,15 @@ app.post('/webhooks/wasender', async (req: Request, res: Response) => {
     (typeof req.headers['x-webhook-secret'] === 'string'
       ? (req.headers['x-webhook-secret'] as string)
       : undefined)
-  if (!(await webhookWasenderAutorizado(recebido))) {
+  // A autorização devolve QUAL conta — o segredo é por número (0152), e é ele que
+  // diz por qual celular a mensagem entrou. O payload não diz.
+  const auth = await autorizarWebhookWasender(recebido)
+  if (!auth.autorizado) {
     res.status(401).json({ erro: 'Não autorizado.' })
     return
   }
   try {
-    const r = await processarWebhookWasender(req.body)
+    const r = await processarWebhookWasender(req.body, auth.conta)
     res.status(200).json(r)
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Webhook do Wasender falhou ao processar.')

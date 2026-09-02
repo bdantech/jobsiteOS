@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import {
   BarChart3,
   Bot,
@@ -14,6 +15,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { contarNaoVinculadas } from './queries'
 
 /**
  * Navegação interna da Comunicação. Mesmo padrão do Jurídico, do Crédito e do Radar.
@@ -30,11 +32,18 @@ interface ItemNav {
   label: string
   icon: typeof Inbox
   somenteAdmin?: boolean
+  /** Item que carrega contador próprio. Hoje só a fila de identificação tem um. */
+  contador?: 'nao_vinculadas'
 }
 
 const ITENS: readonly ItemNav[] = [
   { href: '/comunicacao', label: 'Inbox', icon: Inbox },
-  { href: '/comunicacao/nao-vinculadas', label: 'Não vinculadas', icon: Link2Off },
+  {
+    href: '/comunicacao/nao-vinculadas',
+    label: 'Não vinculadas',
+    icon: Link2Off,
+    contador: 'nao_vinculadas',
+  },
   { href: '/comunicacao/outbox', label: 'Outbox', icon: MailCheck },
   { href: '/comunicacao/templates', label: 'Templates', icon: FileText },
   { href: '/comunicacao/playbooks', label: 'Playbooks', icon: Bot },
@@ -47,6 +56,21 @@ const ITENS: readonly ItemNav[] = [
 export function ComunicacaoNav({ ehAdmin }: { ehAdmin: boolean }) {
   const pathname = usePathname()
   const itens = ITENS.filter((i) => !i.somenteAdmin || ehAdmin)
+
+  /*
+   * O CONTADOR VIVE COLADO NO DESTINO.
+   *
+   * Ele estava na barra do topo, ao lado do sino, e competia com as notificações
+   * sem ser uma delas — dois números diferentes lado a lado é como se ensina a
+   * não olhar nenhum. Aqui o número e o clique são a mesma coisa: quem vê "3"
+   * sabe exatamente onde estão os três.
+   */
+  const naoVinculadas = useQuery({
+    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem'],
+    queryFn: contarNaoVinculadas,
+    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+  })
 
   return (
     <nav
@@ -75,6 +99,16 @@ export function ComunicacaoNav({ ehAdmin }: { ehAdmin: boolean }) {
           >
             <Icon className="h-4 w-4" />
             {item.label}
+            {item.contador === 'nao_vinculadas' && (naoVinculadas.data ?? 0) > 0 ? (
+              <span
+                className={cn(
+                  'flex h-4 min-w-4 items-center justify-center rounded-full px-1',
+                  'bg-amber-500 text-[10px] font-medium leading-none text-white',
+                )}
+              >
+                {(naoVinculadas.data ?? 0) > 99 ? '99+' : naoVinculadas.data}
+              </span>
+            ) : null}
           </Link>
         )
       })}

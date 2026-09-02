@@ -1,4 +1,5 @@
 import { paraE164Brasil } from '../comunicacao/identificador.js'
+import type { TipoMidiaWhatsapp } from './midia-whatsapp.js'
 import { statusRetryavel, type MensagemParaEnviar, type ResultadoEnvio, type Transporte } from './tipos.js'
 
 /**
@@ -165,11 +166,56 @@ function corpoDaMensagem(dados: Record<string, any>): string | null {
   return c ? String(c) : null
 }
 
+/**
+ * O descritor da mídia: o bastante para baixá-la e decifrá-la depois.
+ *
+ * A `url` é de um CDN do WhatsApp e EXPIRA. Guardá-la no ledger no lugar do
+ * arquivo faria a thread perder os áudios em algumas semanas — por isso este tipo
+ * é insumo de um download imediato, e não o que fica gravado.
+ */
+export interface MidiaDoWebhook {
+  tipo: TipoMidiaWhatsapp
+  url: string
+  mediaKey: string
+  mimetype: string | null
+  nome: string | null
+  segundos: number | null
+  bytes: number | null
+}
+
+const CAMPOS_MIDIA: ReadonlyArray<[string, TipoMidiaWhatsapp]> = [
+  ['audioMessage', 'audio'],
+  ['imageMessage', 'image'],
+  ['videoMessage', 'video'],
+  ['documentMessage', 'document'],
+  ['stickerMessage', 'sticker'],
+]
+
+function midiaDaMensagem(dados: Record<string, any>): MidiaDoWebhook | null {
+  const m = dados.message ?? {}
+  for (const [campo, tipo] of CAMPOS_MIDIA) {
+    const n = m[campo]
+    // Sem `url` ou sem `mediaKey` não há o que baixar nem como abrir: um
+    // descritor pela metade viraria uma tentativa de download por mensagem, para
+    // sempre.
+    if (n?.url && n?.mediaKey) {
+      return {
+        tipo,
+        url: String(n.url),
+        mediaKey: String(n.mediaKey),
+        mimetype: n.mimetype ? String(n.mimetype) : null,
+        nome: n.fileName ? String(n.fileName) : null,
+        segundos: Number.isFinite(Number(n.seconds)) ? Number(n.seconds) : null,
+        bytes: Number.isFinite(Number(n.fileLength)) ? Number(n.fileLength) : null,
+      }
+    }
+  }
+  return null
+}
+
 function temMidiaNa(dados: Record<string, any>): boolean {
   const m = dados.message ?? {}
-  return Boolean(
-    m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage,
-  )
+  return CAMPOS_MIDIA.some(([campo]) => Boolean(m[campo]))
 }
 
 /** O provedor manda segundos; alguns eventos vêm em milissegundos. */
@@ -178,10 +224,32 @@ function instanteDe(dados: Record<string, any>): Date {
   return ts > 0 ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date()
 }
 
-/** O envelope da mensagem dentro do payload, seja qual for o formato do evento. */
-function dadosDaMensagem(p: Record<string, any>): Record<string, any> | null {
-  const d = p.data?.messages ?? p.data ?? p.message ?? p
-  return d && typeof d === 'object' ? (d as Record<string, any>) : null
+/**
+ * AS MENSAGENS DO PAYLOAD — no plural, e essa é a correção que faltava.
+ *
+ * `messages.received` manda UM objeto em `data.messages`; `messages.upsert` manda
+ * um ARRAY. O leitor antigo fazia `p.data?.messages ?? p.data` e seguia como se
+ * fosse sempre objeto: com o array, `dados.key` era `undefined` e a mensagem era
+ * descartada em silêncio.
+ *
+ * Isso importa mais do que parece, porque `messages.upsert` é o único evento que
+ * cobre o que a equipe digita NO APARELHO — `message.sent` só confirma o que saiu
+ * pela API. Ligar o evento certo no painel e continuar perdendo tudo por causa da
+ * forma do payload seria o pior dos dois mundos.
+ */
+function mensagensDoPayload(p: Record<string, any>): Record<string, any>[] {
+  // `data.message` NÃO entra nesta cadeia: em `message.sent` esse campo é o
+  // CONTEÚDO (`{conversation: "..."}`), não o envelope, e pegá-lo faria o leitor
+  // procurar `key` dentro do texto da mensagem.
+  const bruto = p.data?.messages ?? p.data ?? p.message ?? p
+  const lista = Array.isArray(bruto) ? bruto : [bruto]
+  return lista.filter((d): d is Record<string, any> => Boolean(d) && typeof d === 'object')
+}
+
+/** Eventos que carregam mensagem. `chats.*`, `session.*` e afins não entram. */
+function ehEventoDeMensagem(p: Record<string, any>): boolean {
+  const evento = p.event ?? p.type
+  return !evento || String(evento).includes('message')
 }
 
 export interface MensagemRecebidaWasender {
@@ -193,6 +261,7 @@ export interface MensagemRecebidaWasender {
   /** pushName: pré-preenche o nome na tela de vinculação (§4). */
   nomeSugerido: string | null
   temMidia: boolean
+  midia: MidiaDoWebhook | null
   recebidaEm: Date
   /**
    * O identificador de privacidade do remetente, quando existe. Guardá-lo é o que
@@ -202,33 +271,15 @@ export interface MensagemRecebidaWasender {
   lid: string | null
 }
 
-/**
- * Normaliza o payload do webhook de ENTRADA.
- *
- * Mensagem de GRUPO é descartada aqui, e não mais adiante: uma thread por grupo
- * criaria uma "pessoa" que é dezenas de pessoas, e o portão passaria a raciocinar
- * sobre supressão de um coletivo.
- *
- * Devolve `null` para o que não é mensagem de entrada de uma pessoa — status de
- * entrega, evento de conexão, e o que nós mesmos enviamos (que tem leitor
- * próprio, `lerEnvioWasender`).
- */
-export function lerWebhookWasender(payload: unknown): MensagemRecebidaWasender | null {
-  const p = payload as Record<string, any> | null
-  if (!p) return null
-
-  const evento = p.event ?? p.type
-  if (evento && !String(evento).includes('message')) return null
-
-  const dados = dadosDaMensagem(p)
-  if (!dados) return null
-
+function lerEntrada(p: Record<string, any>, dados: Record<string, any>): MensagemRecebidaWasender | null {
   const chave = dados.key ?? {}
-  // `fromMe` é o que SAIU pelo aparelho. Deixou de ser descartado: agora tem
-  // leitor próprio, porque o inbox mostrava só metade do diálogo.
+  // `fromMe` é o que SAIU pelo aparelho. Tem leitor próprio, `lerEnviosWasender`.
   if (chave.fromMe === true) return null
 
   const jid: string = chave.remoteJid ?? dados.from ?? dados.remoteJid ?? ''
+  // Mensagem de GRUPO é descartada aqui, e não mais adiante: uma thread por grupo
+  // criaria uma "pessoa" que é dezenas de pessoas, e o portão passaria a
+  // raciocinar sobre supressão de um coletivo.
   if (!jid || jid.endsWith('@g.us')) return null
 
   const de = telefoneDoRemetente(chave, dados)
@@ -248,9 +299,24 @@ export function lerWebhookWasender(payload: unknown): MensagemRecebidaWasender |
     corpo: corpoDaMensagem(dados),
     nomeSugerido: dados.pushName ? String(dados.pushName) : null,
     temMidia: temMidiaNa(dados),
+    midia: midiaDaMensagem(dados),
     recebidaEm: instanteDe(dados),
     lid,
   }
+}
+
+/**
+ * Normaliza o payload de ENTRADA. Devolve TODAS as mensagens dele.
+ *
+ * Devolve lista vazia para o que não é mensagem de entrada de uma pessoa — status
+ * de entrega, evento de conexão, e o que nós mesmos enviamos.
+ */
+export function lerEntradasWasender(payload: unknown): MensagemRecebidaWasender[] {
+  const p = payload as Record<string, any> | null
+  if (!p || !ehEventoDeMensagem(p)) return []
+  return mensagensDoPayload(p)
+    .map((d) => lerEntrada(p, d))
+    .filter((m): m is MensagemRecebidaWasender => m !== null)
 }
 
 export interface MensagemEnviadaWasender {
@@ -259,32 +325,12 @@ export interface MensagemEnviadaWasender {
   para: string
   corpo: string | null
   temMidia: boolean
+  midia: MidiaDoWebhook | null
   enviadaEm: Date
   lid: string | null
 }
 
-/**
- * O que a EQUIPE mandou — inclusive pelo aparelho, fora da plataforma (§2).
- *
- * Era descartado duas vezes: `lerWebhookWasender` recusa `fromMe` para não
- * duplicar o que o envio já gravou, e `lerStatusWasender` só olha eventos de
- * status. O resultado é que o vendedor que respondia pelo celular via, no inbox,
- * a pergunta do cliente sem a própria resposta ao lado.
- *
- * A duplicata continua impossível, mas por outro caminho: o `(provedor,
- * id_externo)` é o mesmo que o envio gravou, e quem consome esta função só
- * INSERE quando aquele par ainda não existe.
- */
-export function lerEnvioWasender(payload: unknown): MensagemEnviadaWasender | null {
-  const p = payload as Record<string, any> | null
-  if (!p) return null
-
-  const evento = String(p.event ?? p.type ?? '')
-  if (evento && !evento.includes('message')) return null
-
-  const dados = dadosDaMensagem(p)
-  if (!dados) return null
-
+function lerEnvio(dados: Record<string, any>): MensagemEnviadaWasender | null {
   const chave = dados.key ?? {}
   if (chave.fromMe !== true) return null
 
@@ -312,9 +358,33 @@ export function lerEnvioWasender(payload: unknown): MensagemEnviadaWasender | nu
     para: para ?? lid!,
     corpo: corpoDaMensagem(dados),
     temMidia: temMidiaNa(dados),
+    midia: midiaDaMensagem(dados),
     enviadaEm: instanteDe(dados),
     lid,
   }
+}
+
+/**
+ * O que a EQUIPE mandou — inclusive pelo aparelho, fora da plataforma.
+ *
+ * ── O EVENTO CERTO É `messages.upsert`, NÃO `message.sent` ──────────────────
+ * `message.sent` confirma o que saiu pela API: ele NÃO cobre a mensagem que o
+ * vendedor digita no celular, que é justamente a que faltava. Quem cobre as duas
+ * é `messages.upsert` — "all messages in your session, both incoming and
+ * outgoing". Esta função aceita os dois formatos porque a diferença é do painel
+ * do provedor, e um leitor que só entendesse um deles quebraria no dia em que
+ * alguém trocasse a configuração.
+ *
+ * A duplicata continua impossível: o `(provedor, id_externo)` é o mesmo que o
+ * envio gravou, e quem consome esta função só INSERE quando aquele par ainda não
+ * existe.
+ */
+export function lerEnviosWasender(payload: unknown): MensagemEnviadaWasender[] {
+  const p = payload as Record<string, any> | null
+  if (!p || !ehEventoDeMensagem(p)) return []
+  return mensagensDoPayload(p)
+    .map((d) => lerEnvio(d))
+    .filter((m): m is MensagemEnviadaWasender => m !== null)
 }
 
 /** Status de entrega/leitura, quando o provedor os manda. */

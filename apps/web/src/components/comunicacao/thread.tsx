@@ -12,10 +12,13 @@ import {
   MessageCircle,
   Phone,
   Smartphone,
+  Download,
+  FileText,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import { buscarThread, buscarThreadDaEmpresa, type MensagemThread } from './queries'
 import { dataHora, intencaoLabel } from './format'
 
@@ -105,6 +108,8 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
           {m.corpo ?? m.preview ?? <span className="italic text-muted-foreground">(sem texto)</span>}
         </p>
 
+        <Anexos m={m} />
+
         {m.origem === 'app_toque' ? (
           <p className="mt-1 text-[11px] italic text-muted-foreground">
             Registro de que o app foi aberto — não sabemos se a mensagem saiu.
@@ -113,6 +118,109 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
         {m.erro ? <p className="mt-1 text-[11px] text-destructive">{m.erro}</p> : null}
       </div>
     </li>
+  )
+}
+
+/**
+ * O ÁUDIO TOCA AQUI — e o arquivo não é o que o WhatsApp mandou.
+ *
+ * O provedor entrega uma URL de CDN cifrada e temporária. O worker baixa,
+ * decifra e guarda no nosso Storage (0164); a bolha lê de lá, por URL assinada de
+ * curta validade. É o que faz o áudio continuar existindo daqui a seis meses,
+ * quando for a única prova do que foi combinado.
+ *
+ * A URL é assinada sob demanda e não gravada: a policy do bucket é a mesma da
+ * conversa, então quem não pode ler a thread também não consegue assinar o
+ * arquivo dela — a permissão não vaza por um link.
+ */
+const BUCKET_MIDIA = 'comunicacao-midia'
+
+interface AnexoLido {
+  tipo?: string
+  caminho?: string
+  mimetype?: string | null
+  nome?: string | null
+  segundos?: number | null
+  integro?: boolean
+}
+
+function Anexos({ m }: { m: MensagemThread }) {
+  const lista = React.useMemo(() => {
+    const bruto = m.anexos
+    return Array.isArray(bruto) ? (bruto as AnexoLido[]).filter((a) => a?.caminho) : []
+  }, [m.anexos])
+
+  const urls = useQuery({
+    queryKey: ['comunicacao', 'midia', m.id, lista.length],
+    enabled: lista.length > 0,
+    // Uma hora de validade, e o cache expira antes: um link morto na tela é pior
+    // que um instante de espera ao reabrir a conversa.
+    staleTime: 45 * 60_000,
+    queryFn: async () => {
+      const supabase = createClient()
+      const saida: Record<string, string> = {}
+      for (const a of lista) {
+        const { data } = await supabase.storage
+          .from(BUCKET_MIDIA)
+          .createSignedUrl(a.caminho!, 3600)
+        if (data?.signedUrl) saida[a.caminho!] = data.signedUrl
+      }
+      return saida
+    },
+  })
+
+  if (lista.length === 0) return null
+
+  return (
+    <div className="mt-2 space-y-2">
+      {lista.map((a) => {
+        const url = urls.data?.[a.caminho!]
+        if (!url) {
+          return (
+            <p key={a.caminho} className="text-[11px] italic text-muted-foreground">
+              {urls.isPending ? 'Carregando anexo…' : 'Anexo indisponível.'}
+            </p>
+          )
+        }
+        return (
+          <div key={a.caminho} className="space-y-1">
+            {a.tipo === 'audio' ? (
+              // `controls` nativo de propósito: um player próprio significaria
+              // reimplementar velocidade, busca e acessibilidade que o navegador
+              // já dá de graça — e que a pessoa já sabe usar.
+              <audio controls preload="metadata" className="w-full max-w-xs" src={url}>
+                <a href={url}>Baixar áudio</a>
+              </audio>
+            ) : a.tipo === 'image' || a.tipo === 'sticker' ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={url}
+                alt={a.nome ?? 'Imagem recebida'}
+                className="max-h-64 rounded border object-contain"
+              />
+            ) : a.tipo === 'video' ? (
+              <video controls preload="metadata" className="max-h-64 w-full max-w-sm rounded border" src={url} />
+            ) : (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs hover:bg-muted"
+              >
+                <FileText className="h-3.5 w-3.5" aria-hidden />
+                {a.nome ?? 'Documento'}
+                <Download className="h-3 w-3" aria-hidden />
+              </a>
+            )}
+            {a.integro === false ? (
+              <p className="text-[11px] text-amber-600">
+                O arquivo chegou com a assinatura quebrada — pode estar incompleto.
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
