@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { enviarMensagemAction, valoresVariaveisAction } from '@/actions/comunicacao'
+import { identificadorLegivel } from './format'
 import { buscarContatos, buscarTemplates, type ContatoDaEmpresa } from './queries'
 
 /**
@@ -85,6 +86,9 @@ export function Compositor({
 
   const contato = lista.find((c) => c.id === contatoId) ?? null
   const destino = contato ? (canal === 'email' ? contato.email : (contato.whatsapp ?? contato.telefone)) : null
+  // O número como se lê em voz alta. `5511986287911` na tela é o formato do
+  // provedor vazando para quem só quer conferir se vai falar com a pessoa certa.
+  const destinoLegivel = destino ? identificadorLegivel(canal, destino) : null
 
   // Tudo que o catálogo sabe preencher para ESTA empresa e ESTE contato. Uma
   // consulta só: as chaves atravessam quatro módulos, e quinze idas ao banco
@@ -213,7 +217,7 @@ export function Compositor({
 
       {contato ? (
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{destino ?? 'sem canal'}</span>
+          <span>{destinoLegivel ?? 'sem canal'}</span>
           {contato.base_legal ? (
             <Badge variant="outline" className="h-5 text-[10px]">
               {BASE_LEGAL_LABELS[contato.base_legal as BaseLegal] ?? contato.base_legal}

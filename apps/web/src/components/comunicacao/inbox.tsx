@@ -88,7 +88,32 @@ export function Inbox({
     )
   }, [conversas.data, busca])
 
-  const atual = lista.find((c) => c.id === selecionada) ?? null
+  /*
+   * A CONVERSA ABERTA SOBREVIVE A SER LIDA.
+   *
+   * `atual` saía de `lista.find(...)`, e na aba "Não lidas" isso se autodestruía:
+   * abrir marcava como lida, a consulta era invalidada, a linha deixava de casar
+   * com `nao_lidas > 0` e sumia da lista — levando junto o painel de leitura. A
+   * pessoa clicava numa mensagem e a mensagem fechava na cara dela.
+   *
+   * Guardar a última encontrada resolve sem mexer no filtro do servidor: a aba
+   * continua sendo "o que falta ler", e o que está aberto continua aberto até
+   * alguém escolher outra coisa.
+   */
+  const ultimaAberta = React.useRef<ConversaInbox | null>(null)
+  const encontrada = lista.find((c) => c.id === selecionada) ?? null
+  if (encontrada) ultimaAberta.current = encontrada
+  const atual = encontrada ?? (ultimaAberta.current?.id === selecionada ? ultimaAberta.current : null)
+
+  /*
+   * E a LINHA dela também fica. Um painel aberto cuja linha sumiu da lista deixa a
+   * seleção sem lugar na tela — a pessoa lê uma conversa que a lista jura não
+   * existir. Ela volta a sumir sozinha assim que outra for escolhida.
+   */
+  const listaExibida = React.useMemo(
+    () => (atual && !encontrada ? [atual, ...lista] : lista),
+    [atual, encontrada, lista],
+  )
 
   // Abrir uma conversa é lê-la. Deixar o contador aceso depois de a pessoa ter
   // lido faria o inbox mentir sobre o que falta.
@@ -161,13 +186,13 @@ export function Inbox({
               <Skeleton className="h-14" />
               <Skeleton className="h-14" />
             </div>
-          ) : lista.length === 0 ? (
+          ) : listaExibida.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
               {aba === 'nao_lidas' ? 'Nada por ler.' : 'Nenhuma conversa aqui.'}
             </p>
           ) : (
             <ul className="divide-y">
-              {lista.map((c) => (
+              {listaExibida.map((c) => (
                 <li key={c.id}>
                   <button
                     type="button"
