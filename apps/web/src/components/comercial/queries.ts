@@ -16,7 +16,8 @@ export const comercialKeys = {
   vendas: (vendedorId?: string | null) => ['comercial', 'vendas', vendedorId ?? 'todos'] as const,
   fila: () => ['comercial', 'fila'] as const,
   comissoes: (competencia: string) => ['comercial', 'comissoes', competencia] as const,
-  agenda: (vendedorId?: string | null) => ['comercial', 'agenda', vendedorId ?? 'eu'] as const,
+  agenda: (vendedorId?: string | null, janela?: string) =>
+    ['comercial', 'agenda', vendedorId ?? 'eu', janela ?? 'padrao'] as const,
   motivos: (contexto: string) => ['comercial', 'motivos', contexto] as const,
   territorios: () => ['comercial', 'territorios'] as const,
   config: () => ['comercial', 'config'] as const,
@@ -332,15 +333,24 @@ export interface EventoAgenda extends Tables<'vendedor_eventos'> {
   empresas: { id: string; razao_social: string | null } | null
 }
 
-export async function buscarAgenda(vendedorId?: string | null): Promise<EventoAgenda[]> {
+/**
+ * `desde` existe por causa da vista de MÊS: a lista só precisa de "da semana
+ * passada em diante", mas quem navega para março quer ver março. Sem o parâmetro,
+ * voltar um mês mostrava um calendário vazio que parecia quebrado.
+ */
+export async function buscarAgenda(
+  vendedorId?: string | null,
+  janela?: { desde: string; ate: string },
+): Promise<EventoAgenda[]> {
   const supabase = createClient()
   let q = supabase
     .from('vendedor_eventos')
     .select('*, empresas(id, razao_social)')
     .is('cancelado_em', null)
-    .gte('inicio_em', new Date(Date.now() - 7 * 86_400_000).toISOString())
+    .gte('inicio_em', janela?.desde ?? new Date(Date.now() - 7 * 86_400_000).toISOString())
     .order('inicio_em')
     .limit(300)
+  if (janela) q = q.lte('inicio_em', janela.ate)
   if (vendedorId) q = q.eq('vendedor_id', vendedorId)
   const { data, error } = await q
   if (error) throw new Error(error.message)

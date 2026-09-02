@@ -4,13 +4,14 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarDays, Link2 } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Link2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { gerarTokenIcsAction } from '@/actions/comercial'
 import { buscarAgenda, buscarVendedoresVisiveis, comercialKeys } from './queries'
 import { buscarAgendaJuridica, juridicoKeys } from '@/components/juridico/queries'
@@ -41,17 +42,64 @@ interface ItemCalendario {
   detalhe: string | null
 }
 
+/** Domingo a sábado, como o Google Calendar em pt-BR. */
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+
+const chaveDoDia = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * As 6 semanas que a grade do mês mostra, começando no domingo anterior ao dia 1.
+ *
+ * Seis e não "as que couberem": uma grade que muda de altura conforme o mês faz o
+ * conteúdo abaixo dançar a cada navegação. O Google faz o mesmo.
+ */
+function gradeDoMes(mes: Date): Date[] {
+  const primeiro = new Date(mes.getFullYear(), mes.getMonth(), 1)
+  const inicio = new Date(primeiro)
+  inicio.setDate(1 - primeiro.getDay())
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(inicio)
+    d.setDate(inicio.getDate() + i)
+    return d
+  })
+}
+
 export function Calendario({ ehGestor }: { ehGestor: boolean }) {
   const [vendedorId, setVendedorId] = React.useState<string | null>(null)
   const [link, setLink] = React.useState<string | null>(null)
   const [gerando, setGerando] = React.useState(false)
+  const [vista, setVista] = React.useState<'mes' | 'lista'>('mes')
+  /** O primeiro dia do mês exibido. Só a vista de mês navega. */
+  const [mes, setMes] = React.useState(() => {
+    const h = new Date()
+    return new Date(h.getFullYear(), h.getMonth(), 1)
+  })
+
+  /*
+   * A JANELA DA CONSULTA ACOMPANHA A GRADE, e não o mês.
+   *
+   * A grade mostra os dias vizinhos das pontas — 30 de abril aparece na primeira
+   * linha de maio. Buscar só o mês deixaria esses dias sempre vazios, o que parece
+   * um bug e é pior que não mostrá-los.
+   *
+   * Na vista de lista não há janela: ela continua sendo "da semana passada em
+   * diante", que é o que uma fila de trabalho precisa ser.
+   */
+  const janela = React.useMemo(() => {
+    if (vista !== 'mes') return undefined
+    const dias = gradeDoMes(mes)
+    const fim = new Date(dias[41]!)
+    fim.setHours(23, 59, 59, 999)
+    return { desde: dias[0]!.toISOString(), ate: fim.toISOString() }
+  }, [vista, mes])
 
   // Quem eu posso ABRIR, não quem existe: um nome no seletor cuja agenda a RLS devolve
   // vazia ensina que a tela está quebrada.
   const vendedores = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const agenda = useQuery({
-    queryKey: comercialKeys.agenda(vendedorId),
-    queryFn: () => buscarAgenda(vendedorId),
+    queryKey: comercialKeys.agenda(vendedorId, janela?.desde),
+    queryFn: () => buscarAgenda(vendedorId, janela),
   })
 
   /*
@@ -67,8 +115,8 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
    * de vendedor filtrando prazos de advogado esconderia audiências de quem as tem.
    */
   const agendaJuridica = useQuery({
-    queryKey: juridicoKeys.agenda(),
-    queryFn: buscarAgendaJuridica,
+    queryKey: juridicoKeys.agenda(janela?.desde),
+    queryFn: () => buscarAgendaJuridica(janela),
     // A RLS devolve vazio para quem não tem o módulo; um erro aqui não pode derrubar
     // o calendário comercial de quem nunca vai ver um prazo.
     retry: false,
@@ -121,7 +169,30 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
             Reuniões dos funis e prazos do Jurídico, da semana passada em diante.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* A vista de MÊS é a padrão porque a pergunta mais comum de uma agenda é
+              "como está minha semana que vem", e ela se responde olhando, não
+              rolando. A lista continua para quem quer a fila em ordem. */}
+          <div className="flex rounded-md border p-0.5">
+            <Button
+              size="sm"
+              variant={vista === 'mes' ? 'secondary' : 'ghost'}
+              className="h-7 px-2"
+              onClick={() => setVista('mes')}
+            >
+              <LayoutGrid className="mr-1 h-3.5 w-3.5" aria-hidden />
+              Mês
+            </Button>
+            <Button
+              size="sm"
+              variant={vista === 'lista' ? 'secondary' : 'ghost'}
+              className="h-7 px-2"
+              onClick={() => setVista('lista')}
+            >
+              <List className="mr-1 h-3.5 w-3.5" aria-hidden />
+              Lista
+            </Button>
+          </div>
           {(ehGestor || (vendedores.data ?? []).length > 1) && (
             <Select value={vendedorId ?? 'eu'} onValueChange={(v) => setVendedorId(v === 'eu' ? null : v)}>
               <SelectTrigger className="w-52"><SelectValue placeholder="Minha agenda" /></SelectTrigger>
@@ -155,7 +226,18 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
         </Card>
       )}
 
-      {agenda.isPending ? (
+      {vista === 'mes' ? (
+        <GradeDoMes
+          mes={mes}
+          porDia={porDia}
+          carregando={agenda.isPending}
+          onMes={(delta) => setMes(new Date(mes.getFullYear(), mes.getMonth() + delta, 1))}
+          onHoje={() => {
+            const h = new Date()
+            setMes(new Date(h.getFullYear(), h.getMonth(), 1))
+          }}
+        />
+      ) : agenda.isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : porDia.size === 0 ? (
         <Card>
@@ -200,5 +282,133 @@ export function Calendario({ ehGestor }: { ehGestor: boolean }) {
         ))
       )}
     </div>
+  )
+}
+
+/**
+ * A grade do mês, no formato que todo mundo já sabe ler.
+ *
+ * A lista por dia responde "o que vem primeiro"; ela não responde "como está a
+ * semana que vem", que é a pergunta que se faz olhando para um mês inteiro — e
+ * era a única vista que existia aqui.
+ *
+ * ── O QUE CABE NUMA CÉLULA ─────────────────────────────────────────────────
+ * Três eventos e um "+N". Uma célula que cresce com o conteúdo faz a linha inteira
+ * crescer junto, e um dia cheio empurraria a semana seguinte para fora da tela. O
+ * "+N" leva à lista, que é onde tudo cabe — em vez de um popover que seria uma
+ * terceira forma de mostrar a mesma agenda.
+ */
+function GradeDoMes({
+  mes,
+  porDia,
+  carregando,
+  onMes,
+  onHoje,
+}: {
+  mes: Date
+  porDia: Map<string, ItemCalendario[]>
+  carregando: boolean
+  onMes: (delta: number) => void
+  onHoje: () => void
+}) {
+  const dias = gradeDoMes(mes)
+  const hoje = chaveDoDia(new Date())
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-2 space-y-0 pb-3">
+        <CardTitle className="text-base capitalize">
+          {mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+        </CardTitle>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onMes(-1)} aria-label="Mês anterior">
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={onHoje}>
+            Hoje
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onMes(1)} aria-label="Próximo mês">
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {carregando ? (
+          <Skeleton className="m-3 h-[28rem]" />
+        ) : (
+          <div className="grid grid-cols-7 border-t">
+            {DIAS_SEMANA.map((d) => (
+              <div
+                key={d}
+                className="border-b border-r px-2 py-1.5 text-center text-[11px] font-medium uppercase text-muted-foreground last:border-r-0"
+              >
+                {d}
+              </div>
+            ))}
+            {dias.map((d) => {
+              const chave = chaveDoDia(d)
+              const eventos = porDia.get(chave) ?? []
+              const doMes = d.getMonth() === mes.getMonth()
+              return (
+                <div
+                  key={chave}
+                  className={cn(
+                    'min-h-24 border-b border-r p-1 last-of-type:border-r-0 [&:nth-child(7n+7)]:border-r-0',
+                    !doMes && 'bg-muted/30',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] tabular-nums',
+                      !doMes && 'text-muted-foreground',
+                      chave === hoje && 'bg-primary font-semibold text-primary-foreground',
+                    )}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {eventos.slice(0, 3).map((e) => {
+                      const hora = new Date(e.inicio_em).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                      const conteudo = (
+                        <span
+                          className={cn(
+                            'block truncate rounded px-1 py-0.5 text-[11px] leading-tight',
+                            e.origem === 'juridico'
+                              ? 'bg-amber-500/15 text-amber-900 dark:text-amber-200'
+                              : 'bg-primary/10 text-foreground',
+                          )}
+                          title={`${hora} · ${e.titulo}`}
+                        >
+                          <span className="tabular-nums opacity-70">{hora}</span> {e.titulo}
+                        </span>
+                      )
+                      return (
+                        <li key={`${e.origem}-${e.id}`}>
+                          {e.href ? (
+                            <Link href={e.href} className="block hover:opacity-80">
+                              {conteudo}
+                            </Link>
+                          ) : (
+                            conteudo
+                          )}
+                        </li>
+                      )
+                    })}
+                    {eventos.length > 3 ? (
+                      <li className="px-1 text-[11px] text-muted-foreground">
+                        +{eventos.length - 3} — veja na lista
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

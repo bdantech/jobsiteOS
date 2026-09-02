@@ -20,7 +20,7 @@ export const juridicoKeys = {
   indices: (indice: string) => [...juridicoKeys.all, 'indices', indice] as const,
   syncLog: () => [...juridicoKeys.all, 'sync-log'] as const,
   daEmpresa: (empresaId: string) => [...juridicoKeys.all, 'empresa', empresaId] as const,
-  agenda: () => [...juridicoKeys.all, 'agenda'] as const,
+  agenda: (janela?: string) => [...juridicoKeys.all, 'agenda', janela ?? 'padrao'] as const,
 }
 
 export type LinhaCarteira = Views<'juridico_carteira'>
@@ -275,15 +275,21 @@ export type EventoAgendaJuridica = Views<'juridico_agenda'>
  * A janela começa 7 dias atrás, igual à do comercial: um prazo de ontem que ninguém
  * marcou como concluído é justamente o que precisa aparecer.
  */
-export async function buscarAgendaJuridica(): Promise<EventoAgendaJuridica[]> {
+export async function buscarAgendaJuridica(
+  /** A janela que a vista de mês está mostrando. Sem ela, "da semana passada em diante". */
+  janela?: { desde: string; ate: string },
+): Promise<EventoAgendaJuridica[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
+  let q = supabase
     .from('juridico_agenda')
     .select('*')
     .eq('concluido', false)
-    .gte('inicio_em', new Date(Date.now() - 7 * 86_400_000).toISOString())
+    .gte('inicio_em', janela?.desde ?? new Date(Date.now() - 7 * 86_400_000).toISOString())
     .order('inicio_em')
     .limit(300)
+  if (janela) q = q.lte('inicio_em', janela.ate)
+
+  const { data, error } = await q
   if (error) throw new Error(error.message)
   return (data ?? []) as EventoAgendaJuridica[]
 }

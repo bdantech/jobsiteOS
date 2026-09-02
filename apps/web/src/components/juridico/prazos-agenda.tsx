@@ -32,7 +32,7 @@ function diaLegivel(iso: string): string {
 
 export function PrazosAgenda() {
   const qc = useQueryClient()
-  const agenda = useQuery({ queryKey: juridicoKeys.agenda(), queryFn: buscarAgendaJuridica })
+  const agenda = useQuery({ queryKey: juridicoKeys.agenda(), queryFn: () => buscarAgendaJuridica() })
 
   if (agenda.isLoading) {
     return (
