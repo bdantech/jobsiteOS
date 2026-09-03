@@ -89,7 +89,7 @@ export type Intencao = (typeof INTENCOES)[number]
 
 export const INTENCAO_LABELS: Record<Intencao, string> = {
   cedente: 'Antecipar as notas que eu emito',
-  sacado: 'Deixar meus fornecedores antecipar',
+  sacado: 'Deixar meus fornecedores anteciparem e/ou alongar meus prazos de pagamento',
 }
 
 /**
