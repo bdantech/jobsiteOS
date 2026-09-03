@@ -3,12 +3,13 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ExternalLink, Eye, Pencil, Plus, ShieldAlert } from 'lucide-react'
-import { formatCnpj, INTENCAO_LABELS, type Intencao } from '@jobsiteos/core'
+import { AlertTriangle, CopyPlus, ExternalLink, Eye, Pencil, Plus, ShieldAlert } from 'lucide-react'
+import { duplicarFormulario, formatCnpj, INTENCAO_LABELS, type Intencao } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Construtor } from './construtor'
 import {
@@ -64,6 +65,32 @@ export function LeadsTela({ ehGestor }: { ehGestor: boolean }) {
     if (f) setEditando(f)
   }
 
+  /**
+   * DUPLICAR abre o construtor com a cópia pronta — e não grava nada ainda.
+   *
+   * A tentação é criar a linha no clique e mandar a pessoa editar depois. Mas o
+   * slug é único, vira a URL pública e vira o nome do script colado na landing
+   * page do cliente: gravar antes de alguém olhar cria um endereço que ninguém
+   * escolheu, e trocá-lo em seguida é a operação que o próprio construtor avisa
+   * que quebra o que já está colado.
+   *
+   * Então a cópia nasce na tela, com slug e nome derivados e sem colidir com os
+   * existentes, e passa a existir no banco quando a pessoa salvar. `ativo: false`
+   * vem de `duplicarFormulario`: publicar é expor uma URL ao público, e isso não
+   * pode ser efeito colateral de um clique em "Duplicar".
+   */
+  async function abrirDuplicata(id: string) {
+    const f = await buscarFormulario(id)
+    if (!f) {
+      toast.error('Não foi possível ler este formulário.')
+      return
+    }
+    setEditando(duplicarFormulario(f, lista.data ?? []))
+    toast.success('Cópia pronta — revise o endereço e salve.', {
+      description: 'Ela nasce inativa: nada vai ao ar antes de você publicar.',
+    })
+  }
+
   if (editando !== undefined) {
     return <Construtor inicial={editando} onFechar={() => setEditando(undefined)} />
   }
@@ -117,6 +144,7 @@ export function LeadsTela({ ehGestor }: { ehGestor: boolean }) {
             linhas={lista.data ?? []}
             ehGestor={ehGestor}
             onEditar={(id) => void abrirEdicao(id)}
+            onDuplicar={(id) => void abrirDuplicata(id)}
           />
         )
       ) : (
@@ -130,10 +158,12 @@ function ListaFormularios({
   linhas,
   ehGestor,
   onEditar,
+  onDuplicar,
 }: {
   linhas: FormularioLinha[]
   ehGestor: boolean
   onEditar: (id: string) => void
+  onDuplicar: (id: string) => void
 }) {
   return (
     <div className="space-y-3">
@@ -165,10 +195,27 @@ function ListaFormularios({
                   </Link>
                 </Button>
                 {ehGestor && (
-                  <Button variant="outline" size="sm" onClick={() => onEditar(f.id)}>
-                    <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden />
-                    Editar
-                  </Button>
+                  <>
+                    {/*
+                      Duplicar é gestor-only pela mesma razão que Editar: quem salva o
+                      formulário é `app_salvar_formulario`, e ele exige
+                      `app_gestor_comercial()`. Oferecer o botão a quem levaria um 42501
+                      no fim ensina que o sistema erra.
+                    */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDuplicar(f.id)}
+                      title="Criar uma nova LP com a mesma estrutura"
+                    >
+                      <CopyPlus className="mr-1 h-3.5 w-3.5" aria-hidden />
+                      Duplicar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => onEditar(f.id)}>
+                      <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden />
+                      Editar
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

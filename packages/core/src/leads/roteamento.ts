@@ -35,7 +35,7 @@ export function inferirPapel(cnaePrincipal: string | null | undefined): PapelInf
   return 'prestador'
 }
 
-/** O papel que a INTENÇÃO declarada implica. `erp` não fala de papel nenhum. */
+/** O papel que a INTENÇÃO declarada implica. */
 export function papelDaIntencao(intencao: Intencao | null | undefined): PapelInferido {
   if (intencao === 'sacado') return 'contratante'
   if (intencao === 'cedente') return 'prestador'
@@ -80,8 +80,6 @@ export function rotuloDaIntencao(intencao: Intencao | null | undefined): RotuloI
       return { tag: 'oportunidade de fornecedor', tipagemAntecipacao: 'aquisicao' }
     case 'sacado':
       return { tag: 'antecipação', tipagemAntecipacao: null }
-    case 'erp':
-      return { tag: 'produto Brik', tipagemAntecipacao: null }
     default:
       return { tag: 'inbound', tipagemAntecipacao: null }
   }

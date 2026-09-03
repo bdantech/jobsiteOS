@@ -84,24 +84,65 @@ export type Campo = z.infer<typeof campoSchema>
 
 // ─── Pergunta de intenção ───────────────────────────────────────────────────
 
-export const INTENCOES = ['cedente', 'sacado', 'erp'] as const
+export const INTENCOES = ['cedente', 'sacado'] as const
 export type Intencao = (typeof INTENCOES)[number]
 
 export const INTENCAO_LABELS: Record<Intencao, string> = {
-  cedente: 'Antecipar notas que emito para meus clientes',
-  sacado: 'Oferecer antecipação aos meus fornecedores / gerenciar pagamentos',
-  erp: 'Sistema de gestão para minha empresa',
+  cedente: 'Antecipar as notas que eu emito',
+  sacado: 'Deixar meus fornecedores antecipar',
 }
 
-/** O default seedado. A LP do Brik pode omitir a pergunta inteira (`pergunta_intencao = null`). */
+/**
+ * A TAG ao lado de cada opção, e ela não é decoração.
+ *
+ * "Antecipar" e "deixar meus fornecedores antecipar" descrevem a mesma operação
+ * vista dos dois lados da nota, e quem chega pela primeira vez não sabe de qual
+ * lado está. A tag responde antes de a pessoa errar: quem emite a nota é
+ * fornecedor, quem a recebe é construtora ou incorporadora.
+ *
+ * Errar aqui não é um detalhe de formulário — a intenção declarada alimenta
+ * `papelDaIntencao`, que decide a tipagem da empresa na Antecipação e dispara o
+ * alerta de divergência de papel quando bate contra o CNAE. Um lead que se marcou
+ * do lado errado chega ao SDR com o pitch invertido.
+ */
+export const INTENCAO_TAGS: Record<Intencao, string> = {
+  cedente: 'Fornecedor',
+  sacado: 'Construtora / Incorporadora',
+}
+
+/*
+ * `erp` — "Sistema de gestão para minha empresa" — saiu daqui, e não só da lista
+ * de opções: sair do tipo é o que garante que nenhuma tela volte a oferecê-la.
+ *
+ * Era a terceira opção desde a 0120 e nunca recebeu uma submissão (as oito
+ * existentes são todas `sacado`), de modo que remover não deixa dado
+ * inexprimível. O CHECK do banco foi estreitado na mesma migração, e o formulário
+ * público lê as opções do banco a cada requisição — não há script colado em
+ * landing page que continue oferecendo a opção antiga.
+ */
+
+/** O default seedado. A LP pode omitir a pergunta inteira (`pergunta_intencao = null`). */
 export const PERGUNTA_INTENCAO_DEFAULT = {
   titulo: 'O que você procura?',
-  opcoes: INTENCOES.map((v) => ({ valor: v, label: INTENCAO_LABELS[v] })),
+  opcoes: INTENCOES.map((v) => ({ valor: v, label: INTENCAO_LABELS[v], tag: INTENCAO_TAGS[v] })),
 }
 
 export const perguntaIntencaoSchema = z.object({
   titulo: z.string().min(1),
-  opcoes: z.array(z.object({ valor: z.enum(INTENCOES), label: z.string().min(1) })).min(2),
+  opcoes: z
+    .array(
+      z.object({
+        valor: z.enum(INTENCOES),
+        label: z.string().min(1),
+        /**
+         * Opcional porque os formulários gravados antes desta versão não a têm — e
+         * um schema que a exigisse recusaria salvar uma LP existente sem que
+         * ninguém tivesse mexido nela.
+         */
+        tag: z.string().max(48).nullable().optional(),
+      }),
+    )
+    .min(2),
 })
 export type PerguntaIntencao = z.infer<typeof perguntaIntencaoSchema>
 

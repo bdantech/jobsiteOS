@@ -510,8 +510,19 @@ function Preview({ f }: { f: FormularioCompleto }) {
           <fieldset className="space-y-1">
             <legend className="text-xs font-medium">{f.pergunta_intencao.titulo}</legend>
             {f.pergunta_intencao.opcoes.map((o) => (
-              <div key={o.valor} className="rounded-md border p-2 text-xs text-muted-foreground">
+              <div
+                key={o.valor}
+                className="flex flex-wrap items-center gap-1.5 rounded-md border p-2 text-xs text-muted-foreground"
+              >
                 {o.label}
+                {/* A prévia mostra a tag porque é ela que a pessoa lê antes de escolher
+                    o lado da nota — uma prévia sem ela testa um formulário diferente do
+                    que vai ao ar. */}
+                {o.tag ? (
+                  <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                    {o.tag}
+                  </span>
+                ) : null}
               </div>
             ))}
           </fieldset>

@@ -2,3 +2,4 @@
 // motor de roteamento inbound.
 export * from './schemas.js'
 export * from './roteamento.js'
+export * from './duplicar.js'

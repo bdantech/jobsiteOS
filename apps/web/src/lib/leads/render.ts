@@ -104,6 +104,16 @@ const CSS = `
 }
 .jos-opcao:hover { border-color: var(--jos-accent); }
 .jos-opcao input { margin: 2px 0 0; accent-color: var(--jos-accent); }
+.jos-opcao-texto { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* A tag é legenda, não botão: não tem hover nem cursor próprio para ninguém tentar
+   clicar nela em vez de no rádio. */
+.jos-tag {
+  padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  line-height: 1.6; white-space: nowrap;
+  color: var(--jos-accent);
+  background: color-mix(in srgb, var(--jos-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jos-accent) 30%, transparent);
+}
 .jos-consent { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 14px; font-size: 13px; color: var(--jos-muted); }
 .jos-consent input { margin: 3px 0 0; accent-color: var(--jos-accent); }
 .jos-botao {
@@ -172,7 +182,13 @@ export function htmlDoFormulario(f: FormularioPublico): string {
   ${f.pergunta_intencao.opcoes
     .map(
       (o) =>
-        `<label class="jos-opcao"><input type="radio" name="intencao" value="${esc(o.valor)}" /><span>${esc(o.label)}</span></label>`,
+        // A TAG diz de qual lado da nota a pessoa está. "Antecipar" e "deixar meus
+        // fornecedores antecipar" são a mesma operação vista dos dois lados, e quem
+        // chega pela primeira vez não sabe qual é o seu — a tag responde antes de
+        // ela errar, e errar aqui manda o lead ao SDR com o pitch invertido.
+        `<label class="jos-opcao"><input type="radio" name="intencao" value="${esc(o.valor)}" /><span class="jos-opcao-texto">${esc(o.label)}${
+          o.tag ? `<span class="jos-tag">${esc(o.tag)}</span>` : ''
+        }</span></label>`,
     )
     .join('\n  ')}
 </fieldset>`

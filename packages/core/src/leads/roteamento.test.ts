@@ -10,6 +10,7 @@ import {
   type CandidatoInbound,
   type SdrCandidato,
 } from './roteamento.ts'
+import { duplicarFormulario, slugDaCopia, slugValido } from './duplicar.ts'
 import { normalizarCampos, normalizarUtm, utmDaUrl, validarSubmissao, type Campo } from './schemas.ts'
 
 // ─── Diagnóstico e divergência de papel ─────────────────────────────────────
@@ -45,16 +46,22 @@ test('quando concordam, não diverge', () => {
   assert.equal(haDivergenciaDePapel('cedente', '4321-5/00'), false)
 })
 
-/** `erp` não fala de papel: quem quer sistema de gestão pode ser qualquer um dos dois. */
-test('intenção de ERP nunca diverge', () => {
-  assert.equal(haDivergenciaDePapel('erp', '4120-4/00'), false)
-  assert.equal(haDivergenciaDePapel('erp', '4321-5/00'), false)
+/**
+ * `erp` — "Sistema de gestão para minha empresa" — foi removido das intenções
+ * (0165). Os testes que o cobriam saíram junto: ele era a única intenção que não
+ * falava de papel, e agora as duas que existem falam, o que torna a asserção
+ * "nunca diverge" inexprimível em vez de apenas falsa.
+ *
+ * Sem intenção declarada continua sem divergir, e é isso que o caso abaixo trava.
+ */
+test('sem intenção declarada nada diverge — não há o que contradizer o CNAE', () => {
+  assert.equal(haDivergenciaDePapel(null, '4120-4/00'), false)
+  assert.equal(haDivergenciaDePapel(undefined, '4321-5/00'), false)
 })
 
 test('cedente marca a empresa como alvo de aquisição; os outros não', () => {
   assert.equal(rotuloDaIntencao('cedente').tipagemAntecipacao, 'aquisicao')
   assert.equal(rotuloDaIntencao('sacado').tipagemAntecipacao, null)
-  assert.equal(rotuloDaIntencao('erp').tipagemAntecipacao, null)
   assert.equal(rotuloDaIntencao(null).tag, 'inbound')
 })
 
@@ -299,4 +306,53 @@ test('UTM sai da URL da página hospedeira, e URL quebrada não derruba nada', (
   assert.equal(u.utm_campaign, 'abril')
   assert.deepEqual(utmDaUrl('não é url'), {})
   assert.deepEqual(utmDaUrl(null), {})
+})
+
+// ─── Duplicar uma LP (04i) ──────────────────────────────────────────────────
+
+test('a cópia ganha slug e nome derivados, e nasce inativa', () => {
+  const original = { slug: 'lp-antecipacao-sp', nome: 'LP Antecipação SP', ativo: true, campos: [1, 2] }
+  const copia = duplicarFormulario(original, [original])
+  assert.equal(copia.slug, 'lp-antecipacao-sp-copia')
+  assert.equal(copia.nome, 'LP Antecipação SP (cópia)')
+  // Publicar é expor uma URL ao público: nunca por efeito colateral de um clique.
+  assert.equal(copia.ativo, false)
+  // `id` vazio é o que faz o construtor mostrar "Novo" e o RPC inserir.
+  assert.equal(copia.id, '')
+  // A ESTRUTURA vem junto — é o motivo do botão existir.
+  assert.deepEqual(copia.campos, [1, 2])
+})
+
+test('duplicar a cópia não empilha sufixo', () => {
+  const existentes = [
+    { slug: 'lp-x', nome: 'LP X', ativo: true },
+    { slug: 'lp-x-copia', nome: 'LP X (cópia)', ativo: false },
+  ]
+  const c = duplicarFormulario(existentes[1]!, existentes)
+  assert.equal(c.slug, 'lp-x-copia-2')
+  assert.equal(c.nome, 'LP X (cópia 2)')
+  // E a terceira continua contando, em vez de virar `lp-x-copia-copia-copia`.
+  const c3 = duplicarFormulario(c, [...existentes, c])
+  assert.equal(c3.slug, 'lp-x-copia-3')
+})
+
+test('o slug derivado nunca estoura os 64 caracteres nem termina em hífen', () => {
+  const longo = 'a'.repeat(60) + '-bcd'
+  assert.equal(longo.length, 64)
+  const s1 = slugDaCopia(longo, [])
+  assert.ok(s1.length <= 64, `passou de 64: ${s1.length}`)
+  assert.ok(slugValido(s1), `slug inválido: ${s1}`)
+
+  // E com colisão, onde a truncagem tem de abrir espaço para `-copia-N`.
+  const s2 = slugDaCopia(longo, [s1])
+  assert.ok(s2.length <= 64)
+  assert.ok(slugValido(s2))
+  assert.notEqual(s2, s1)
+})
+
+test('slug que termina em hífen depois do corte não é gerado', () => {
+  // 58 caracteres + '-copia' (6) = 64 exatos; o hífen do meio não pode sobrar solto.
+  const s = slugDaCopia(`${'ab-'.repeat(21)}c`, [])
+  assert.ok(slugValido(s), `slug inválido: ${s}`)
+  assert.ok(!s.endsWith('-'))
 })
