@@ -17,7 +17,8 @@ import {
   lerStatusWasender,
 } from './wasender.ts'
 import * as crypto from 'node:crypto'
-import { decifrarMidiaWhatsapp, extensaoDaMidia } from './midia-whatsapp.ts'
+import { extensaoDaMidia } from './midia-tipos.ts'
+import { decifrarMidiaWhatsapp } from '../server/midia-whatsapp.ts'
 
 /** Açúcar para os testes: o payload de teste sempre traz uma mensagem só. */
 const lerWebhookWasender = (p: unknown) => lerEntradasWasender(p)[0] ?? null

@@ -13,7 +13,7 @@
     "./server/*": "./src/server/*.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/checar-barril.mjs && tsc --noEmit",
     "test": "node --experimental-strip-types --import ./test/register.mjs --test src/**/*.test.ts"
   },
   "dependencies": {

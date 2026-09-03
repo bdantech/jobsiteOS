@@ -1,5 +1,5 @@
 import { paraE164Brasil } from '../comunicacao/identificador.js'
-import type { TipoMidiaWhatsapp } from './midia-whatsapp.js'
+import type { TipoMidiaWhatsapp } from './midia-tipos.js'
 import { statusRetryavel, type MensagemParaEnviar, type ResultadoEnvio, type Transporte } from './tipos.js'
 
 /**

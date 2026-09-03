@@ -1,5 +1,5 @@
 export * from './gmail.js'
 export * from './resend.js'
 export * from './tipos.js'
+export * from './midia-tipos.js'
 export * from './wasender.js'
-export * from './midia-whatsapp.js'

@@ -1,9 +1,12 @@
 import {
-  decifrarMidiaWhatsapp,
   extensaoDaMidia,
   type AnexoComunicacao,
   type MidiaDoWebhook,
 } from '../../../../packages/core/src/transportes/index.js'
+// A decifragem vive em `server/` porque importa `node:crypto`: o barril do core é
+// importado por componente de cliente, e um builtin do Node ali dentro quebra o
+// build da web com typecheck limpo.
+import { decifrarMidiaWhatsapp } from '../../../../packages/core/src/server/midia-whatsapp.js'
 import { supabaseAdmin } from '../db.js'
 import { logger } from '../logger.js'
 
