@@ -4,11 +4,19 @@ import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Lock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { createClient } from '@/lib/supabase/client'
 import type { PainelAtividade } from '@jobsiteos/core'
+import {
+  CartaoGrafico,
+  GraficoEmpresasPorDia,
+  MapaDeCalorPorHora,
+  type PontoDia,
+  type PontoHora,
+} from './atividade-graficos'
 
 /**
  * PAINEL DE ATIVIDADE (§8). Restrito, e a restrição é a decisão de produto.
@@ -25,9 +33,30 @@ import type { PainelAtividade } from '@jobsiteos/core'
  * componente: a view não tem grant para `authenticated`, então não há consulta
  * direta possível.
  */
+/**
+ * Os canais são os quatro tipos de comunicação do ledger — o pedido é explícito
+ * em valer "para qualquer tipo (msg, ligação, reunião)". `interno` fica fora
+ * sempre: alerta de plantão não é trabalho comercial de ninguém.
+ */
+const CANAIS: { valor: string; label: string }[] = [
+  { valor: 'todos', label: 'Todos os canais' },
+  { valor: 'whatsapp', label: 'WhatsApp' },
+  { valor: 'email', label: 'E-mail' },
+  { valor: 'ligacao', label: 'Ligações' },
+  { valor: 'reuniao', label: 'Reuniões' },
+]
+
+interface SeriesAtividade {
+  tem_acesso: boolean
+  por_dia: PontoDia[]
+  por_hora: PontoHora[]
+}
+
 export function PainelDeAtividade() {
   const [dias, setDias] = React.useState('30')
   const [canal, setCanal] = React.useState('todos')
+  const [direcao, setDirecao] = React.useState('todas')
+  const [metrica, setMetrica] = React.useState<'empresas' | 'mensagens'>('empresas')
 
   const consulta = useQuery({
     queryKey: ['comunicacao', 'atividade', dias, canal],
@@ -39,6 +68,27 @@ export function PainelDeAtividade() {
       if (error) throw new Error(error.message)
       const corpo = (data ?? {}) as Partial<PainelAtividade>
       return { tem_acesso: corpo.tem_acesso ?? false, de: corpo.de, ate: corpo.ate, linhas: corpo.linhas ?? [] }
+    },
+  })
+
+  const series = useQuery({
+    queryKey: ['comunicacao', 'atividade', 'series', dias, canal, direcao],
+    queryFn: async (): Promise<SeriesAtividade> => {
+      const de = new Date(Date.now() - Number(dias) * 86_400_000).toISOString().slice(0, 10)
+      const { data, error } = await createClient().rpc('app_comunicacao_atividade_series', {
+        p: {
+          de,
+          canal: canal === 'todos' ? null : canal,
+          direcao: direcao === 'todas' ? null : direcao,
+        } as never,
+      })
+      if (error) throw new Error(error.message)
+      const corpo = (data ?? {}) as Partial<SeriesAtividade>
+      return {
+        tem_acesso: corpo.tem_acesso ?? false,
+        por_dia: corpo.por_dia ?? [],
+        por_hora: corpo.por_hora ?? [],
+      }
     },
   })
 
@@ -78,19 +128,81 @@ export function PainelDeAtividade() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos os canais</SelectItem>
-            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-            <SelectItem value="email">E-mail</SelectItem>
+            {CANAIS.map((c) => (
+              <SelectItem key={c.valor} value={c.valor}>
+                {c.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/*
+          Direção separada do canal, e não "WhatsApp enviadas" numa lista só: são
+          duas perguntas independentes, e cruzá-las numa lista daria dez opções
+          para responder o que dois seletores respondem com sete.
+        */}
+        <Select value={direcao} onValueChange={setDirecao}>
+          <SelectTrigger className="h-9 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Enviadas e recebidas</SelectItem>
+            <SelectItem value="saida">Só enviadas</SelectItem>
+            <SelectItem value="entrada">Só recebidas</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {/* ── Os dois desenhos, antes da tabela ────────────────────────────────
+        Eles vêm primeiro porque respondem à pergunta de forma ("como o dia da
+        equipe se distribui?"), e a tabela responde à de volume. Quem abre esta
+        aba está olhando a operação, não conferindo um número.
+      */}
+      <CartaoGrafico
+        titulo={metrica === 'empresas' ? 'Empresas tocadas por dia' : 'Mensagens por dia'}
+        descricao={
+          metrica === 'empresas'
+            ? 'Empresas distintas por dia, empilhadas por vendedor. Conversa ainda não identificada conta como uma — é trabalho feito.'
+            : 'Volume de mensagens por dia, empilhado por vendedor.'
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex gap-1.5">
+            {(['empresas', 'mensagens'] as const).map((m) => (
+              <Button
+                key={m}
+                size="sm"
+                variant={metrica === m ? 'default' : 'outline'}
+                onClick={() => setMetrica(m)}
+              >
+                {m === 'empresas' ? 'Empresas' : 'Mensagens'}
+              </Button>
+            ))}
+          </div>
+          {series.isLoading ? (
+            <Skeleton className="h-52" />
+          ) : (
+            <GraficoEmpresasPorDia pontos={series.data?.por_dia ?? []} metrica={metrica} />
+          )}
+        </div>
+      </CartaoGrafico>
+
+      <CartaoGrafico
+        titulo="Em que horas o trabalho acontece"
+        descricao="Mensagens por hora do dia, uma linha por pessoa. Vale para qualquer canal — use os filtros acima."
+      >
+        {series.isLoading ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <MapaDeCalorPorHora pontos={series.data?.por_hora ?? []} />
+        )}
+      </CartaoGrafico>
 
       {linhas.length === 0 ? (
         <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
           Nenhuma atividade no período.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

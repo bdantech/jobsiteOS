@@ -39,8 +39,7 @@ import { SecaoComercial } from '@/components/comercial/secao-comercial'
 import { SecaoJuridico } from '@/components/juridico/secao-juridico'
 import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
-import { Compositor } from '@/components/comunicacao/compositor'
-import { Thread } from '@/components/comunicacao/thread'
+import { AbaConversas } from './aba-conversas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
 
@@ -353,10 +352,10 @@ export function EmpresaDetalhe({
               </TabsContent>
 
               <TabsContent value="conversas" className="mt-0">
-                <div className="space-y-4">
-                  <Thread empresaId={data.id} alturaClasse="max-h-[45vh]" />
-                  <Compositor empresaId={data.id} />
-                </div>
+                <AbaConversas
+                  empresaId={data.id}
+                  ultimaConversaEm={data.ultima_conversa_em ?? null}
+                />
               </TabsContent>
 
               {/*

@@ -188,7 +188,7 @@ export function OutboxLista() {
       </div>
 
       {pendentes.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
           <p className="text-sm">
             <span className="font-medium">
               {pendentes.length} mensagem{pendentes.length === 1 ? '' : 's'}

@@ -182,7 +182,7 @@ function CartaoVinculacao({ n, onResolvida }: { n: NaoVinculada; onResolvida: ()
   }
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="rounded-lg border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Icone className="h-4 w-4 text-muted-foreground" aria-hidden />

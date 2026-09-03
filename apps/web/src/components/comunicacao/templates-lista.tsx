@@ -69,7 +69,7 @@ export function TemplatesLista() {
             <button
               type="button"
               onClick={() => setEditando(t)}
-              className="w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted/50"
+              className="w-full rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/50"
             >
               <div className="flex flex-wrap items-center gap-2">
                 {t.canal === 'email' ? (
@@ -144,7 +144,7 @@ function Editor({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 rounded-lg border bg-card p-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1 sm:col-span-2">
           <Label className="text-xs">Nome</Label>

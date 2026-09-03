@@ -128,7 +128,10 @@ async function registrarEntrada(
     contatoId: r.contatoId,
     canal: 'whatsapp',
     direcao: 'entrada',
-    vendedorId: r.vendedorId,
+    // Carteira primeiro, dono do número depois: quem já é dono da conta continua
+    // sendo, e o que a segunda fonte cobre é a conversa ainda não identificada —
+    // que é a maioria delas, e era 100% do que ficava sem dono.
+    vendedorId: r.vendedorId ?? (await vendedorDaConta(conta?.id)),
     corpo: m.midia ? legendaDaMidia(m.midia, m.corpo) : m.corpo,
     provedor: 'wasender',
     idExterno: m.idExterno,
@@ -232,7 +235,15 @@ async function registrarEnvioPeloCelular(
      * a regra de carteira funcionar para quem responde pelo celular.
      */
     usuarioId: conta?.id ? await donoDaConta(conta.id) : null,
-    vendedorId: r.vendedorId,
+    /*
+     * Aqui o dono do número vem ANTES da carteira, ao contrário da entrada.
+     *
+     * Esta mensagem saiu fisicamente de um aparelho, e o aparelho tem dono. Se a
+     * empresa é da carteira do Fabio e quem digitou foi o Rodrigo, creditar o
+     * Fabio no painel de atividade seria contar o trabalho de um como do outro —
+     * e o painel existe justamente para responder quem trabalhou.
+     */
+    vendedorId: (await vendedorDaConta(conta?.id)) ?? r.vendedorId,
     corpo: e.midia
       ? legendaDaMidia(e.midia, e.corpo)
       : (e.corpo ?? (e.temMidia ? '(mídia enviada pelo celular)' : null)),
@@ -284,6 +295,31 @@ async function donoDaConta(contaId: string): Promise<string | null> {
     .eq('id', contaId)
     .maybeSingle()
   return data?.usuario_responsavel ?? null
+}
+
+/**
+ * O VENDEDOR dono do número — a segunda fonte de atribuição, e a que faltava.
+ *
+ * `resolverRemetente` só sabe atribuir pela CARTEIRA: acha a empresa pelo contato
+ * e devolve o dono dela. Enquanto ninguém identificou o contato — o estado normal
+ * de uma conversa nova — não há empresa, logo não há dono, e a mensagem ficava
+ * órfã. O painel de atividade lê exatamente essa coluna, então a equipe aparecia
+ * quase parada enquanto o WhatsApp dela não parava: 12 mensagens com dono em 426.
+ *
+ * O número resolve porque ele é de uma pessoa (`usuario_responsavel`). É o mesmo
+ * argumento da posse da conversa: quem atendeu o número foi quem falou.
+ */
+async function vendedorDaConta(contaId: string | null | undefined): Promise<string | null> {
+  if (!contaId) return null
+  const usuario = await donoDaConta(contaId)
+  if (!usuario) return null
+  const { data } = await supabaseAdmin
+    .from('vendedores')
+    .select('id')
+    .eq('usuario_id', usuario)
+    .eq('ativo', true)
+    .maybeSingle()
+  return data?.id ?? null
 }
 
 /**

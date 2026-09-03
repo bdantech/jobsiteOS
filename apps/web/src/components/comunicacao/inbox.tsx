@@ -31,6 +31,7 @@ import { Thread } from './thread'
 import {
   buscarConversas,
   buscarOcultas,
+  buscarResponsaveisInbox,
   contarNaoVinculadas,
   type AbaInbox,
   type ConversaInbox,
@@ -56,6 +57,72 @@ function comoChamar(c: ConversaInbox): string {
     c.contato_nome ??
     c.nome_sugerido ??
     identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')
+  )
+}
+
+/**
+ * A INICIAL DE QUEM ATENDE, na lateral de cada linha.
+ *
+ * Num inbox onde todas as conversas se parecem, a pergunta que se faz varrendo a
+ * fila é "isso é meu?". Ela estava respondida só no painel da direita, ou seja,
+ * depois de abrir — e abrir marca como lida. A inicial responde antes do clique.
+ *
+ * A cor sai do NOME e não de uma sequência: o mesmo vendedor tem a mesma cor em
+ * qualquer filtro, em qualquer ordem, hoje e amanhã. Uma paleta atribuída por
+ * posição na lista trocaria de cor a cada reordenação, que é pior que não ter cor.
+ */
+const CORES_DONO = [
+  'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-200',
+  'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
+  'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  'bg-violet-100 text-violet-900 dark:bg-violet-500/20 dark:text-violet-200',
+  'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-200',
+  'bg-teal-100 text-teal-900 dark:bg-teal-500/20 dark:text-teal-200',
+] as const
+
+/** Duas letras: a primeira do primeiro nome e a do último. "Rodrigo Alves" → RA. */
+function iniciaisDe(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean)
+  if (partes.length === 0) return '?'
+  const primeira = partes[0]![0] ?? ''
+  const ultima = partes.length > 1 ? (partes[partes.length - 1]![0] ?? '') : ''
+  return (primeira + ultima).toUpperCase()
+}
+
+function corDoNome(nome: string): string {
+  let soma = 0
+  for (let i = 0; i < nome.length; i++) soma = (soma + nome.charCodeAt(i)) % 997
+  return CORES_DONO[soma % CORES_DONO.length]!
+}
+
+function InicialDoDono({ nome, isIa }: { nome: string | null; isIa: boolean }) {
+  /*
+   * Sem dono é um ESTADO, não um espaço vazio: é a conversa que ninguém atende, e
+   * ela some numa lista onde a ausência é representada por nada. Traço em círculo
+   * pontilhado — presente na varredura, e claramente diferente de uma inicial.
+   */
+  if (!nome) {
+    return (
+      <span
+        title="Sem responsável — ninguém atende esta conversa"
+        aria-label="Sem responsável"
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed text-[11px] text-muted-foreground"
+      >
+        —
+      </span>
+    )
+  }
+  return (
+    <span
+      title={isIa ? `${nome} (IA)` : nome}
+      aria-label={`Responsável: ${nome}`}
+      className={cn(
+        'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium',
+        corDoNome(nome),
+      )}
+    >
+      {isIa ? <Bot className="h-3.5 w-3.5" aria-hidden /> : iniciaisDe(nome)}
+    </span>
   )
 }
 
@@ -93,18 +160,30 @@ export function Inbox({
     conversaInicial ? 'todas' : meuVendedorId ? 'minhas' : 'nao_lidas',
   )
   const [canal, setCanal] = React.useState<string>('todos')
+  const [dono, setDono] = React.useState<string>('todos')
   const [busca, setBusca] = React.useState('')
   const [selecionada, setSelecionada] = React.useState<string | null>(
     conversaInicial ?? params.get('conversa'),
   )
 
   const conversas = useQuery({
-    queryKey: ['comunicacao', 'inbox', aba, canal, meuVendedorId],
+    queryKey: ['comunicacao', 'inbox', aba, canal, dono, meuVendedorId],
     queryFn: () =>
       buscarConversas(
-        { aba, canal: canal === 'todos' ? undefined : (canal as 'whatsapp' | 'email') },
+        {
+          aba,
+          canal: canal === 'todos' ? undefined : (canal as 'whatsapp' | 'email'),
+          vendedorId: dono === 'todos' ? undefined : dono,
+        },
         meuVendedorId,
       ),
+  })
+
+  // Os donos que existem no inbox. Fora da chave do filtro de propósito: a lista
+  // de opções não pode encolher porque alguém escolheu uma delas.
+  const donos = useQuery({
+    queryKey: ['comunicacao', 'inbox', 'responsaveis'],
+    queryFn: buscarResponsaveisInbox,
   })
 
   const pendentes = useQuery({
@@ -197,6 +276,25 @@ export function Inbox({
               <SelectItem value="email">E-mail</SelectItem>
             </SelectContent>
           </Select>
+          {/*
+            O filtro por dono convive com a aba "Minhas" em vez de substituí-la:
+            "Minhas" é um clique para a pergunta que se faz o dia inteiro, e este
+            select é para a de quem coordena — "como está a fila do Fabio?".
+          */}
+          <Select value={dono} onValueChange={setDono}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os vendedores</SelectItem>
+              {(donos.data ?? []).map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.nome}
+                </SelectItem>
+              ))}
+              <SelectItem value="sem_dono">Sem responsável</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -226,7 +324,7 @@ export function Inbox({
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
-        <div className="max-h-[70vh] overflow-y-auto rounded-lg border">
+        <div className="max-h-[70vh] overflow-y-auto rounded-lg border bg-card">
           {conversas.isLoading ? (
             <div className="space-y-2 p-3">
               <Skeleton className="h-14" />
@@ -257,7 +355,7 @@ export function Inbox({
           )}
         </div>
 
-        <div className="min-w-0 rounded-lg border p-4">
+        <div className="min-w-0 rounded-lg border bg-card p-4">
           {atual ? (
             <Conversa
               c={atual}
@@ -282,14 +380,15 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
   const Icone = c.canal === 'email' ? Mail : MessageCircle
   const intencao = intencaoLabel(c.ultima_triagem)
   return (
-    <>
+    <div className="flex gap-2">
+      <InicialDoDono nome={c.responsavel_nome} isIa={c.responsavel_is_ia === true} />
+      <div className="min-w-0 flex-1">
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           <Icone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="truncate text-sm font-medium" title={c.identificador_externo ?? undefined}>
             {comoChamar(c)}
           </span>
-          {c.responsavel_is_ia ? <Bot className="h-3 w-3 shrink-0 text-primary" aria-label="Carteira da IA" /> : null}
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground">{desde(c.ultima_mensagem_em)}</span>
       </div>
@@ -316,7 +415,8 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
           {intencao}
         </Badge>
       ) : null}
-    </>
+      </div>
+    </div>
   )
 }
 
@@ -445,7 +545,7 @@ function ListaOcultas({
   const [aberto, setAberto] = React.useState(false)
 
   return (
-    <div className="rounded-lg border">
+    <div className="rounded-lg border bg-card">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}

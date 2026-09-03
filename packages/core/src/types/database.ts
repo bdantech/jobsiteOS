@@ -3432,6 +3432,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         Insert: {
@@ -3497,6 +3498,7 @@ export type Database = {
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
+          ultima_conversa_em?: string | null
           valor_esperado_mensal?: number | null
         }
         Update: {
@@ -3562,6 +3564,7 @@ export type Database = {
           tipo?: string
           uf?: string | null
           ultima_antecipacao?: string | null
+          ultima_conversa_em?: string | null
           valor_esperado_mensal?: number | null
         }
         Relationships: [
@@ -9732,6 +9735,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -10105,6 +10109,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -10327,6 +10332,7 @@ export type Database = {
       }
       app_competencia_fechada: { Args: { p_data: string }; Returns: boolean }
       app_comunicacao_atividade: { Args: { p: Json }; Returns: Json }
+      app_comunicacao_atividade_series: { Args: { p: Json }; Returns: Json }
       app_comunicacao_enfileirar: {
         Args: { p: Json }
         Returns: {
@@ -10499,6 +10505,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -10718,6 +10725,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -10792,6 +10800,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -11806,6 +11815,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {
@@ -11880,6 +11890,7 @@ export type Database = {
           tipo: string
           uf: string | null
           ultima_antecipacao: string | null
+          ultima_conversa_em: string | null
           valor_esperado_mensal: number | null
         }
         SetofOptions: {

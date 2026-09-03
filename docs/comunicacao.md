@@ -294,6 +294,53 @@ mesmo nome — a forma mais silenciosa de aprender errado.
 escalou) é apurado uma vez por dia. Sem ele, a tabela diria quantas vezes o agente decidiu e
 nunca quantas vezes ele acertou.
 
+## De qual número sai cada mensagem
+
+`escolherConta` nunca perguntou de quem era a mensagem: pegava a conta de
+`tipo = 'relacionamento'` menos usada no dia. As contas da base são **celulares de
+pessoas** (`whatsapp_contas.usuario_responsavel`), então uma mensagem assinada
+"Aqui é Rodrigo" saía pelo número do Fabio — não aparecia no WhatsApp de quem
+escreveu, a resposta do cliente caía no celular do colega, e o destinatário via um
+número desconhecido assinando com outro nome.
+
+A ordem passou a ser: **a conta que a linha escolheu → o número de quem escreveu →
+o round-robin**. A IA continua no round-robin, porque a persona não é de ninguém.
+
+**O que a pessoa digita no próprio celular não entra em duas contas.** Desde que
+`origem = 'celular'` passou a ser ingerido, o número de quem trabalha no WhatsApp
+o dia inteiro virava todo dia "o mais usado" e o round-robin apontava sempre para
+o outro; e o teto diário do warmup era consumido pela conversa humana, de modo que
+a plataforma parava de mandar pelo número de quem mais trabalha. Nos dois lugares
+o filtro é `origem <> 'celular'` — escrito como `or(origem.is.null,...)`, porque
+`null <> 'celular'` é nulo e as linhas legadas sumiriam da conta.
+
+O que a rampa de warmup limita é o **disparo frio**, que é o que faz um número ser
+marcado. Conversa humana respondida do outro lado é o que aquece o número.
+
+## De quem é cada mensagem
+
+`comunicacoes.vendedor_id` estava preenchido em 12 das 426 linhas, e o painel de
+atividade lê exatamente essa coluna: a equipe aparecia parada enquanto o WhatsApp
+dela não parava.
+
+`resolverRemetente` só sabe atribuir pela **carteira** — acha a empresa pelo
+contato e devolve o dono dela. Enquanto ninguém identificou o contato (o estado
+normal de uma conversa nova) não há empresa, logo não há dono. A segunda fonte é o
+**número**, que é de uma pessoa: mesmo argumento da posse da conversa.
+
+A precedência muda com a direção, e a diferença é deliberada:
+
+| | primeiro | depois |
+| --- | --- | --- |
+| entrada | carteira | dono do número |
+| saída pelo celular | **dono do número** | carteira |
+
+Uma mensagem que saiu de um aparelho foi digitada por quem tem o aparelho. Se a
+empresa é da carteira de outro, creditar o outro contaria o trabalho de um como do
+outro — e o painel existe para responder quem trabalhou. Ao identificar a conversa,
+`app_conversa_vincular` reescreve empresa e contato de toda a thread, mas carimba
+`vendedor_id` com `coalesce`: quem já falou continua tendo falado.
+
 ## O painel de atividade e o que ele recusa mostrar
 
 Visível **apenas a gestores e a quem tem `vendedor_acessos`** — e nunca ao próprio vendedor
@@ -308,6 +355,46 @@ A regra não cabe numa policy — ela não diz quais LINHAS alguém vê, diz QUE
 Por isso a view `atividade_comunicacao` **não tem grant** para `authenticated` e o acesso é
 decidido dentro de `app_comunicacao_atividade`. Uma view legível por todos deixaria a regra
 na tela, onde ela é uma sugestão.
+
+### Os dois desenhos (0169)
+
+A tabela responde "quanto cada um fez". As duas séries respondem à forma:
+
+- **empresas tocadas por dia**, empilhadas por vendedor — a altura da coluna é o
+  dia do time e cada faixa é uma pessoa. Linhas sobrepostas responderiam bem a
+  "quanto fulano fez" e mal a "como está o time", que é a primeira leitura;
+- **mapa de calor por hora**, uma linha por pessoa, 24 colunas, escala compartilhada
+  pela grade inteira. Escala por linha faria quem mandou 3 mensagens parecer tão
+  quente quanto quem mandou 300.
+
+Empresa distinta e não mensagem: vinte mensagens para o mesmo fornecedor são uma
+conversa. Conversa ainda não identificada conta como uma — é trabalho feito, e é
+justamente o dia que o gestor quer ver. Os filtros valem para os quatro canais
+(WhatsApp, e-mail, ligação, reunião) e para a direção; `interno` nunca entra.
+
+`app_comunicacao_atividade_series` copia a régua de acesso do painel em vez de
+generalizá-la: uma função "genérica de atividade" com parâmetro de modo é onde
+essa regra um dia deixaria de valer para um dos chamadores sem ninguém notar.
+
+## A ficha da empresa
+
+A aba **Conversas** da Company 360 mostra a thread inteira da empresa e um botão
+que abre o compositor em modal. O compositor ficava aberto embaixo da thread,
+empurrando a conversa para cima e disputando rolagem com ela: quem abre a aba
+quase sempre vem LER, e escrever é uma decisão que cabe num clique.
+
+`empresas.ultima_conversa_em` (0170) responde "faz quanto tempo que ninguém fala
+com eles?" sem varrer o ledger. É mantida por **trigger** sobre `comunicacoes`,
+porque o ledger é escrito de cinco lugares e atualizar a coluna em cada um seria
+cinco lugares para esquecer — e a coluna esquecida não quebra nada, só passa a
+mentir devagar.
+
+O gatilho pega **insert e update de `empresa_id`**: uma conversa nova chega sem
+empresa e só ganha uma quando alguém a identifica no inbox. Sem o update, a
+empresa recém-identificada nasceria "sem conversa nenhuma" — justamente aquela com
+quem acabamos de falar. E a atualização é `greatest`: a ingestão do Gmail traz
+mensagem antiga depois das novas, e uma atribuição direta faria uma empresa que
+falou hoje parecer parada há três semanas.
 
 ## Os seis relógios
 

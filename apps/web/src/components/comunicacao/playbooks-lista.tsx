@@ -52,7 +52,7 @@ export function PlaybooksLista({ ehAdmin }: { ehAdmin: boolean }) {
 
       <ul className="space-y-3">
         {ativos.map((p) => (
-          <li key={p.id} className="rounded-lg border p-4">
+          <li key={p.id} className="rounded-lg border bg-card p-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Bot className="h-4 w-4 text-primary" aria-hidden />
               <span className="font-medium">{p.nome}</span>
@@ -140,7 +140,7 @@ function Editor({ pb, onFechar, onSalvo }: { pb: Playbook; onFechar: () => void;
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-primary/40 p-4">
+    <div className="space-y-3 rounded-lg border border-primary/40 bg-card p-4">
       <p className="text-sm font-medium">
         {pb.nome} — nova versão (v{pb.versao + 1})
       </p>

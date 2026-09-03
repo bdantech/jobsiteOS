@@ -21,8 +21,45 @@ export interface FiltrosInbox {
   aba: AbaInbox
   canal?: 'whatsapp' | 'email'
   empresaId?: string
+  /** Um vendedor, ou `sem_dono` para as conversas que ninguém atende. */
   vendedorId?: string
   busca?: string
+}
+
+/** Quem aparece como dono no filtro do inbox. */
+export interface ResponsavelInbox {
+  id: string
+  nome: string
+  is_ia: boolean
+}
+
+/**
+ * Os donos que EXISTEM no inbox — não a lista de vendedores.
+ *
+ * A diferença importa: um filtro montado a partir de `vendedores` ofereceria
+ * dezenas de nomes que devolveriam lista vazia (quem nunca falou por aqui), e o
+ * primeiro clique numa opção vazia é o que ensina que o filtro não funciona.
+ * Aqui o que se oferece é o que a RLS já deixa esta pessoa ver.
+ *
+ * `sem_dono` não entra nesta lista: ele é uma opção fixa da tela, e a ausência de
+ * dono não é um dono.
+ */
+export async function buscarResponsaveisInbox(): Promise<ResponsavelInbox[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('inbox_conversas')
+    .select('responsavel_vendedor_id, responsavel_nome, responsavel_is_ia')
+    .not('responsavel_vendedor_id', 'is', null)
+    .limit(500)
+  if (error) throw new Error(error.message)
+
+  const porId = new Map<string, ResponsavelInbox>()
+  for (const l of data ?? []) {
+    const id = l.responsavel_vendedor_id
+    if (!id || porId.has(id)) continue
+    porId.set(id, { id, nome: l.responsavel_nome ?? 'Sem nome', is_ia: l.responsavel_is_ia === true })
+  }
+  return [...porId.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 const COLUNAS_INBOX =
@@ -47,7 +84,10 @@ export async function buscarConversas(
 
   if (filtros.canal) q = q.eq('canal', filtros.canal)
   if (filtros.empresaId) q = q.eq('empresa_id', filtros.empresaId)
-  if (filtros.vendedorId) q = q.eq('responsavel_vendedor_id', filtros.vendedorId)
+  // `sem_dono` é uma pergunta de verdade, e não o vazio do filtro: conversa sem
+  // responsável é fila de ninguém, e é ela que apodrece.
+  if (filtros.vendedorId === 'sem_dono') q = q.is('responsavel_vendedor_id', null)
+  else if (filtros.vendedorId) q = q.eq('responsavel_vendedor_id', filtros.vendedorId)
 
   const { data, error } = await q
   if (error) throw new Error(error.message)
