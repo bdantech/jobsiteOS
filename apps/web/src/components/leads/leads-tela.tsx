@@ -174,7 +174,21 @@ function ListaFormularios({
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-base">{f.nome}</CardTitle>
-                  {!f.ativo && <Badge variant="outline">inativo</Badge>}
+                  {/*
+                    Destaque, e não uma badge de contorno igual às outras: "inativo"
+                    aqui não é um atributo a mais da linha, é a resposta de "por que
+                    esta LP não aparece no site?" — a pergunta que traz alguém a esta
+                    tela. Cópias nascem inativas, e essa era a linha que ninguém via.
+                  */}
+                  {!f.ativo && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/50 text-amber-700 dark:text-amber-400"
+                      title={`Desativado: o script na landing page não renderiza nada e /f/${f.slug} devolve 404.`}
+                    >
+                      inativo — fora do ar
+                    </Badge>
+                  )}
                   {f.enriquecimento_pago && (
                     <Badge variant="outline" className="text-amber-700 dark:text-amber-400">
                       enriquecimento pago

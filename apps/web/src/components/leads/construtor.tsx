@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, Check, Copy, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, EyeOff, Plus, Trash2, X } from 'lucide-react'
 import {
   AJUDA_CNPJ_DEFAULT,
   CATALOGO_CONTATO,
@@ -125,15 +125,37 @@ export function Construtor({
     }))
   }
 
-  async function salvar() {
+  /**
+   * `sobrescrever` existe para o botão "Ativar e publicar": `set('ativo', true)`
+   * seguido de `salvar()` gravaria o valor ANTIGO — o estado só chega atualizado no
+   * próximo render, e o que a action leva é o `f` deste. Passar o campo por cima é a
+   * diferença entre publicar e achar que publicou.
+   */
+  async function salvar(sobrescrever: Partial<FormularioCompleto> = {}) {
+    const dados = { ...f, ...sobrescrever }
     setSalvando(true)
-    const r = await salvarFormularioAction({ ...f, id: f.id || null, campos })
+    const r = await salvarFormularioAction({ ...dados, id: dados.id || null, campos })
     setSalvando(false)
     if (!r.ok) {
       toast.error(r.message)
       return
     }
-    toast.success('Formulário salvo.')
+    /*
+     * Salvar desativado é o caminho normal de uma CÓPIA, e o silêncio de "Formulário
+     * salvo." era metade do problema: a pessoa fechava o construtor, colava o snippet
+     * na landing page e não via nada aparecer — sem nenhuma frase, em lugar nenhum,
+     * ligando as duas coisas.
+     */
+    if (dados.ativo) {
+      toast.success('Formulário salvo e no ar.')
+    } else {
+      toast.warning('Salvo, mas DESATIVADO.', {
+        description:
+          'Enquanto estiver assim, o script na landing page não renderiza nada e /f/' +
+          `${dados.slug} devolve 404. Ligue "Ativo" para publicar.`,
+        duration: 10_000,
+      })
+    }
     void qc.invalidateQueries({ queryKey: leadsKeys.all })
     onFechar()
   }
@@ -156,6 +178,41 @@ export function Construtor({
           </Button>
         </div>
       </div>
+
+      {/*
+        ─── O AVISO QUE FALTAVA ───────────────────────────────────────────────
+        Uma cópia nasce desativada de propósito (`duplicarFormulario`): publicar é
+        expor uma URL ao público, e isso não pode ser efeito colateral de um clique
+        em "Duplicar". O que faltava era DIZER isso. O único sinal de que a página
+        estava fora do ar era um `Switch` no fim do último cartão de configuração e
+        uma badge discreta na lista — e do outro lado o silêncio é total: o script
+        colado na landing page simplesmente não renderiza nada, sem erro no console,
+        porque `formulario_publico` filtra por `ativo` e devolve nulo.
+
+        Quem duplicou, renomeou, salvou e colou o snippet passou por três telas sem
+        nada avisando, e concluiu (com razão) que a duplicação estava quebrada.
+      */}
+      {!f.ativo ? (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+          <p className="flex items-start gap-2 text-sm">
+            <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+            <span>
+              <strong>Esta página está desativada e não aparece em lugar nenhum.</strong>{' '}
+              O script na landing page não renderiza nada e{' '}
+              <code className="rounded bg-muted px-1">/f/{f.slug || 'seu-slug'}</code> devolve 404.
+              {f.id ? null : ' Toda cópia nasce assim — publicar é uma decisão separada.'}
+            </span>
+          </p>
+          <Button
+            size="sm"
+            disabled={salvando || !f.nome || !f.slug}
+            onClick={() => void salvar({ ativo: true })}
+          >
+            <Check className="mr-1 h-3.5 w-3.5" aria-hidden />
+            Ativar e publicar
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_400px]">
         <div className="space-y-4">
@@ -438,6 +495,17 @@ export function Construtor({
                 <li>Cole o snippet abaixo dentro dele.</li>
                 <li>Funciona no preview e no publicado — não precisa de mais nada.</li>
               </ol>
+              {/*
+                O aviso repete aqui porque ESTE é o momento do erro: a pessoa copia o
+                snippet, sai da plataforma e só descobre o problema olhando uma landing
+                page vazia — longe de qualquer tela que pudesse explicar.
+              */}
+              {!f.ativo ? (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-amber-800 dark:text-amber-300">
+                  Este snippet <strong>não vai renderizar nada</strong> enquanto o formulário
+                  estiver desativado.
+                </p>
+              ) : null}
               <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-foreground">
                 {snippet}
               </pre>
