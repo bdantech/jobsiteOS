@@ -620,10 +620,18 @@ pessoa na semana seguinte — o custo do lead descartado é pago de novo, indefi
 
 `antecipacao_fornecedor_sem_interesse` (CNPJ como PK) guarda a marcação com **motivo
 enumerado**: `nao_utiliza_antecipacao`, `ja_opera_com_outro`, `caixa_confortavel`,
-`nao_quer_plataforma`, `sem_contato`, `porte_incompativel`, `outro` (este exige
-observação). Enumerado e não texto livre porque a resposta é **contável**: "quantos leads
-perdemos para outra financeira?" só tem resposta se ninguém puder escrever a mesma razão
-de sete formas.
+`nao_quer_plataforma`, `sem_contato`, `porte_incompativel`, `funcionario_pj`, `outro`
+(este exige observação). Enumerado e não texto livre porque a resposta é **contável**:
+"quantos leads perdemos para outra financeira?" só tem resposta se ninguém puder escrever
+a mesma razão de sete formas.
+
+`funcionario_pj` (0167) é o descarte mais comum da prospecção e não tinha onde ser
+gravado: metade das MEs que emitem contra uma construtora não é fornecedor nenhum — é
+pedreiro, mestre de obra e engenheiro contratados como PJ, e a nota é o salário do mês.
+Antes ele caía em `outro` ou, pior, em `porte_incompativel` — que afirma outra coisa e
+mais cara: "a régua de porte está trazendo empresa pequena demais". A régua não está
+errada; a empresa é que não é fornecedora, e contar os dois juntos calibra a descoberta
+contra um problema que ela não tem.
 
 **Por que não é `supressao`.** As duas coisas parecem a mesma e não são:
 
@@ -631,7 +639,7 @@ de sete formas.
 |---|---|---|
 | O que é | supressão de **canal** | qualificação do **lead** |
 | Efeito | nenhum canal toca o CNPJ; as notas vivas perdem a faixa | some da lista a prospectar; as notas somem dos funis |
-| Motivo | `nao_abordar` / `solicitacao_lgpd`, detalhe em texto livre | lista fechada de sete motivos comerciais |
+| Motivo | `nao_abordar` / `solicitacao_lgpd`, detalhe em texto livre | lista fechada de oito motivos comerciais |
 | Desfazer | expira sozinha, ou some do Radar inteiro | um clique em **Reverter** |
 
 Alargar o CHECK de `supressao` com motivos comerciais faria "não usa antecipação" e "pediu

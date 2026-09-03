@@ -7343,6 +7343,76 @@ export type Database = {
           },
         ]
       }
+      sdr_lead_pitches: {
+        Row: {
+          abertura: string
+          angulo: string
+          contexto: string
+          empresa_id: string
+          fatos: Json
+          gerado_em: string
+          gerado_por: string | null
+          jargoes: Json
+          lead_id: string
+          modelo: string | null
+          persona: string | null
+          pontos: Json
+          tokens: number | null
+        }
+        Insert: {
+          abertura: string
+          angulo: string
+          contexto: string
+          empresa_id: string
+          fatos?: Json
+          gerado_em?: string
+          gerado_por?: string | null
+          jargoes?: Json
+          lead_id: string
+          modelo?: string | null
+          persona?: string | null
+          pontos?: Json
+          tokens?: number | null
+        }
+        Update: {
+          abertura?: string
+          angulo?: string
+          contexto?: string
+          empresa_id?: string
+          fatos?: Json
+          gerado_em?: string
+          gerado_por?: string | null
+          jargoes?: Json
+          lead_id?: string
+          modelo?: string | null
+          persona?: string | null
+          pontos?: Json
+          tokens?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sdr_lead_pitches_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_lead_pitches_gerado_por_fkey"
+            columns: ["gerado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sdr_lead_pitches_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "sdr_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sdr_leads: {
         Row: {
           atualizado_em: string

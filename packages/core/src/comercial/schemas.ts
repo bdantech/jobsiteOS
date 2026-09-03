@@ -111,6 +111,44 @@ export const ESTAGIO_SDR_LABELS: Record<EstagioSdr, string> = {
   qualificada: 'Qualificada',
 }
 
+/*
+ * Por qual PORTA o lead entrou. As três existem no banco desde a 0091, e são três
+ * conversas diferentes: quem preencheu o formulário já sabe quem somos e escreveu
+ * por vontade própria; quem veio da distribuição semanal não faz ideia de que a
+ * ligação vem; e quem foi posto à mão foi escolhido por alguém que sabia de algo
+ * que a régua não sabe. Ler isso ANTES de discar muda a primeira frase.
+ *
+ * A ordem é a do volume, não a do alfabeto.
+ */
+export const ORIGENS_LEAD_SDR = ['distribuicao', 'inbound', 'manual'] as const
+export type OrigemLeadSdr = (typeof ORIGENS_LEAD_SDR)[number]
+
+/*
+ * `inbound` vira "Formulário" na tela de propósito: o valor no banco descreve a
+ * NATUREZA do lead (ele veio até nós), e o rótulo descreve o CAMINHO que o SDR
+ * precisa lembrar (ele preencheu a LP). Quem lê o card quer saber o caminho.
+ */
+export const ORIGEM_LEAD_SDR_LABELS: Record<OrigemLeadSdr, string> = {
+  distribuicao: 'Outbound',
+  inbound: 'Formulário',
+  manual: 'Manual',
+}
+
+export const ORIGEM_LEAD_SDR_DESCRICOES: Record<OrigemLeadSdr, string> = {
+  distribuicao: 'A distribuição semanal escolheu esta empresa — ela não sabe que vamos ligar.',
+  inbound: 'A empresa preencheu o formulário de uma landing page. Ela veio até nós.',
+  manual: 'Alguém colocou esta empresa na fila à mão, fora da distribuição.',
+}
+
+/**
+ * O rótulo de origem de um lead. Aceita `string` porque a coluna é `text` e o
+ * valor desconhecido tem de aparecer no card em vez de sumir: um card sem tag é
+ * indistinguível de um card que ninguém classificou.
+ */
+export function rotuloOrigemLead(origem: string): string {
+  return ORIGEM_LEAD_SDR_LABELS[origem as OrigemLeadSdr] ?? origem
+}
+
 /** O julgamento sobre a empresa. `null` é um estado real: ainda não se falou com ela. */
 export type Fit = boolean | null
 

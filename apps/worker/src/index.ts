@@ -65,6 +65,7 @@ import {
   dispararSincronizarJuridico,
   executarParecerJuridico,
   executarBriefingJuridico,
+  executarPitchLead,
   dispararBriefingsJuridico,
   dispararEnriquecerLeads,
   dispararSugerirReanalises,
@@ -426,6 +427,25 @@ app.post('/jobs/comercial/distribuir-sdr', (_req: Request, res: Response, next: 
 app.post('/jobs/comercial/sla-leads', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararSlaComercial(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * O pitch de um lead. SÍNCRONO e devolve o corpo, como o briefing jurídico: quem
+ * abriu o card está esperando o texto para discar.
+ */
+const pitchLeadSchema = z.object({
+  leadId: z.string().uuid(),
+  forcar: z.boolean().optional(),
+  geradoPor: z.string().uuid().nullable().optional(),
+})
+
+app.post('/jobs/comercial/pitch-lead', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { leadId, forcar, geradoPor } = pitchLeadSchema.parse(req.body ?? {})
+    res.json(await executarPitchLead(leadId, forcar ?? false, geradoPor ?? null))
   } catch (erro) {
     next(erro)
   }

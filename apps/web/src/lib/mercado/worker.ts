@@ -258,6 +258,21 @@ export async function dispararDistribuirSdr(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/distribuir-sdr', {}, 'comercial-distribuir')
 }
 
+/**
+ * O pitch do SDR para um lead. SÍNCRONO e devolve o corpo, como o briefing do
+ * Jurídico: quem abriu o card está com a tela aberta esperando o texto para discar.
+ *
+ * O teto é o do briefing e não o do parecer — o dossiê tem sete consultas curtas e
+ * o modelo escreve quatro parágrafos, não seis seções.
+ */
+export async function dispararPitchLead(input: {
+  leadId: string
+  forcar?: boolean
+  geradoPor?: string | null
+}): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/pitch-lead', input, 'comercial-pitch', 90_000)
+}
+
 /** Diário: SLA dos leads parados + vendedores sem movimento. */
 export async function dispararSlaComercial(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/sla-leads', {}, 'comercial-sla')

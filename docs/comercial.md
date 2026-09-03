@@ -509,6 +509,19 @@ Agendar cria, na mesma transação, o card no funil do closer e o evento de cale
 dois. Uma reunião agendada que não aparece no funil de quem vai atendê-la é uma reunião
 que ninguém preparou.
 
+**A porta de entrada é tag no card** (`sdr_leads.origem`, três valores desde a 0091):
+`distribuicao` aparece como **Outbound**, `inbound` como **Formulário** e `manual` como
+**Manual**. `inbound` vira "Formulário" na tela de propósito — o valor no banco descreve
+a natureza do lead (ele veio até nós) e o rótulo descreve o caminho que o SDR precisa
+lembrar (alguém preencheu a LP).
+
+A tag estava só no modal, ou seja, aparecia depois de a pessoa já ter escolhido para quem
+ligar. É a informação que muda a PRIMEIRA FRASE: quem preencheu o formulário está
+esperando o telefone tocar, quem a distribuição escolheu não faz ideia de quem somos, e
+quem entrou à mão foi escolhido por alguém que sabia algo que a régua não sabe. Abrir os
+três com a mesma abertura queima o primeiro. Rótulos em `ORIGEM_LEAD_SDR_LABELS`
+(`packages/core`), usados na web e no mobile.
+
 **Closer** (`vendas`): reunião agendada → reagendada → aguardando documentação → em
 análise de crédito → proposta enviada → preparação do MOU → MOU assinado → onboarding.
 
@@ -795,6 +808,48 @@ três camadas fixas em abas:
 | a primeira | o ITEM: a nota (documento + XML), o lead, o negócio, os certificados |
 | Empresa / Fornecedor | o resumo compartilhado (`AbaEmpresa`) + contatos + link para a Company 360 |
 | Mensagens | **vazia de propósito** — o histórico de e-mail/WhatsApp é do Prompt 05 |
+
+No funil de reuniões há uma aba antes de todas: **Pitch** (ver abaixo). Ela vem primeiro
+porque o card do SDR é aberto para ligar, e "o que eu digo para esta empresa?" é a
+pergunta de quem abre.
+
+### O pitch do SDR (0168)
+
+O card dava um nome, uma UF e um valor esperado. Com isso o SDR abre a ligação
+perguntando o que a nossa base já responde. `sdr_lead_pitches` (PK `lead_id`) guarda o
+texto gerado por IA a partir de um dossiê montado de sete leituras: `empresas` +
+`mercado_universo` (região, porte, idade), `mercado_metricas` (SPEs abertas em 24 meses,
+obras ativas, m² em execução), `mercado_obras` (as obras recentes, com bairro),
+`notas_fiscais` dos dois lados (quem emite contra ela — com prazo médio ponderado por
+valor — e o que ela emite), `protestos_atual` dos principais fornecedores, `contatos`
+(persona) e a submissão do formulário, quando houve.
+
+O texto tem cinco partes: **abertura** (a única que se lê em voz alta), **contexto**
+(quem é a empresa), **ângulo** (por que interessa a ela: alongar prazo ou destravar a
+cadeia), **persona** (com quem falar) e **pontos** a levantar durante a ligação, mais
+jargões da região quando o modelo tem certeza deles.
+
+**Gera na primeira abertura do card, não na criação do lead.** A distribuição semanal
+cria dezenas de leads de uma vez e boa parte nunca é trabalhada: gerar na criação é pagar
+token para escrever o que ninguém abre. A geração mora dentro da `queryFn` do React
+Query, que deduplica chamadas concorrentes da mesma chave — é isso que impede o
+StrictMode de disparar (e cobrar) dois pitches. Lead encerrado não gera sozinho.
+
+**Protesto é leitura interna.** O dossiê leva apenas QUANTOS dos principais fornecedores
+têm protesto, agregado e sem nome, e o prompt proíbe citar isso na ligação: uma cadeia
+apertada é o melhor motivo para a construtora ouvir sobre antecipação, mas dizer "seu
+fornecedor X tem protesto" numa ligação fria é expor um terceiro para vender. O modelo
+também não pode prometer taxa, limite nem prazo de aprovação — não é o SDR que aprova.
+
+`fatos` guarda o dossiê exato que gerou o texto. Quando alguém disser "isso está errado",
+a pergunta seguinte é "o modelo inventou ou a base está errada?", e sem o dossiê as duas
+respostas são igualmente plausíveis.
+
+Quem escreve é o worker (`/jobs/comercial/pitch-lead`, síncrono como o briefing do
+Jurídico: quem clicou está esperando o texto para discar), com `service_role`. Como o
+service role passa por cima de toda policy, a autorização é a leitura do lead com o
+client do USUÁRIO dentro de `gerarPitchLeadAction`: se `sdr_leads_select` não devolve a
+linha, não há pitch a gerar. A tabela só tem `select` para `authenticated`.
 
 A aba de mensagens existe vazia para que o lugar dela já seja conhecido. Uma aba que
 aparece depois muda o mapa da tela; uma aba vazia e honesta não.

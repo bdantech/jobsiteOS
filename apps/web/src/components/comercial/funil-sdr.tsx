@@ -16,11 +16,14 @@ import {
 import {
   ESTAGIOS_SDR,
   ESTAGIO_SDR_LABELS,
+  ORIGEM_LEAD_SDR_DESCRICOES,
   TIPO_VENDEDOR_LABELS,
   closerParaConta,
   rotuloFit,
+  rotuloOrigemLead,
   type CloserComTerritorio,
   type EstagioSdr,
+  type OrigemLeadSdr,
   type TipoVendedorId,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +40,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
+import { AbaPitch } from './aba-pitch'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
@@ -77,6 +81,31 @@ function classeDoLead(l: LeadComEmpresa): string {
   if (l.encerrado_em) return 'border-muted-foreground/30 bg-muted/40'
   if (l.fit === true) return 'border-emerald-500/40 bg-emerald-500/5'
   return ''
+}
+
+/**
+ * A porta pela qual o lead entrou, no próprio card.
+ *
+ * É a informação que muda a PRIMEIRA FRASE da ligação, e ela estava só no modal —
+ * ou seja, aparecia depois de o SDR já ter decidido para quem ligar. Quem preencheu
+ * o formulário está esperando o telefone tocar; quem a distribuição escolheu não faz
+ * ideia de quem somos. Abrir os dois com a mesma abertura queima o primeiro.
+ *
+ * Vale para as TRÊS origens, e não só para `inbound`: distinguir "a régua me deu"
+ * de "alguém escolheu à mão" é o que diz se há um motivo humano por trás do card.
+ */
+function TagOrigem({ origem, compacto = true }: { origem: string; compacto?: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      // Miúda no card e na tabela, onde divide a linha com outras quatro; do tamanho
+      // normal no cabeçalho do modal, onde as vizinhas são as badges grandes.
+      className={cn('font-normal', compacto && 'text-[10px]')}
+      title={ORIGEM_LEAD_SDR_DESCRICOES[origem as OrigemLeadSdr] ?? undefined}
+    >
+      {rotuloOrigemLead(origem)}
+    </Badge>
+  )
 }
 
 export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
@@ -375,6 +404,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                           </p>
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                             {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
+                            <TagOrigem origem={l.origem} />
                             {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
                             {l.fit === true ? (
                               <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
@@ -425,6 +455,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Empresa</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Estágio</TableHead>
                     <TableHead>Fit</TableHead>
                     <TableHead className="text-right">Esperado/mês</TableHead>
@@ -443,6 +474,9 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                           {l.empresas?.razao_social ?? 'Empresa'}
                         </Link>
                         <p className="text-xs text-muted-foreground">{l.empresas?.uf ?? '—'}</p>
+                      </TableCell>
+                      <TableCell>
+                        <TagOrigem origem={l.origem} />
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="whitespace-nowrap text-[11px]">
@@ -492,7 +526,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               ) : aberto.fit === false ? (
                 <Badge variant="destructive">Sem fit</Badge>
               ) : null}
-              {aberto.origem === 'inbound' ? <Badge variant="secondary">inbound</Badge> : null}
+              <TagOrigem origem={aberto.origem} compacto={false} />
               <DonoDoCard
                 nome={nomeDoVendedor(aberto.sdr_id)}
                 tipos={['sdr']}
@@ -515,6 +549,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
             />
           }
           abas={[
+            /*
+              O pitch vem PRIMEIRO: o card do funil de reuniões é aberto para ligar, e
+              "o que eu digo para esta empresa?" é a pergunta de quem abre. As outras
+              três abas respondem perguntas que só aparecem depois dessa.
+            */
+            {
+              id: 'pitch',
+              label: 'Pitch',
+              conteudo: <AbaPitch leadId={aberto.id} vivo={!aberto.encerrado_em} />,
+            },
             {
               id: 'lead',
               label: 'Lead',

@@ -33,6 +33,7 @@ import {
   titularidadesJob,
 } from './comercial/comissoes-v2.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
+import { gerarPitchLead } from './comercial/pitch.js'
 import {
   atualizarFunilFornecedores,
   descobertaAprofundada,
@@ -1168,6 +1169,22 @@ export function dispararSlaComercial(): string {
     const operando = await detectarPrimeiraOperacaoJob()
     return { sla, inativos, operando }
   })
+}
+
+/**
+ * O pitch do SDR, SÍNCRONO — como o briefing jurídico, e pela mesma razão: quem
+ * abriu o card está com a tela aberta esperando o texto para discar. Um 202 com id
+ * o obrigaria a recarregar até o pitch aparecer, e nesse intervalo ele liga sem.
+ *
+ * Não entra em `dispararAvulso`: single-flight por TIPO barraria o segundo SDR que
+ * abrisse outro card no mesmo minuto — e os dois pitches são de leads diferentes.
+ */
+export async function executarPitchLead(
+  leadId: string,
+  forcar: boolean,
+  geradoPor: string | null,
+): Promise<unknown> {
+  return gerarPitchLead(leadId, forcar, geradoPor)
 }
 
 /** Mensal: quem parece ser conta passiva. Sugere e notifica — nunca muda sozinho. */

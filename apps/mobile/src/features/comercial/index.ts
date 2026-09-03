@@ -4,6 +4,7 @@ import {
   ESTAGIOS_VENDA,
   ESTAGIO_SDR_LABELS,
   ESTAGIO_VENDA_LABELS,
+  rotuloOrigemLead,
   type EstagioSdr,
   type EstagioVenda,
 } from '@jobsiteos/core'
@@ -76,6 +77,8 @@ export interface LeadMobile {
   reuniao_em: string | null
   fit: boolean | null
   encerrado_em: string | null
+  /** Por qual porta o lead entrou: 'distribuicao' | 'inbound' | 'manual'. */
+  origem: string
   empresas: { id: string; razao_social: string | null; uf: string | null } | null
 }
 
@@ -85,7 +88,7 @@ export function useLeads() {
     queryFn: async (): Promise<LeadMobile[]> => {
       const { data, error } = await supabase
         .from('sdr_leads')
-        .select('id, estagio, reuniao_em, fit, encerrado_em, empresas(id, razao_social, uf)')
+        .select('id, estagio, reuniao_em, fit, encerrado_em, origem, empresas(id, razao_social, uf)')
         // Só o que pede trabalho: no celular ninguém rola cem cards, e lead encerrado
         // não pede nada.
         .is('encerrado_em', null)
@@ -182,4 +185,4 @@ export function useMover() {
   return { moverLead, marcarComFit, moverVenda }
 }
 
-export { ESTAGIOS_SDR, ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS }
+export { ESTAGIOS_SDR, ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS, rotuloOrigemLead }

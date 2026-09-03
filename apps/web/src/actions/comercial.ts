@@ -26,7 +26,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararAceitesSdr, dispararRotearNotas } from '@/lib/mercado/worker'
+import { dispararAceitesSdr, dispararPitchLead, dispararRotearNotas } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -267,6 +267,43 @@ export async function rotearNotasAction(): Promise<ActionResult<{ enfileirado: b
   return r.ok
     ? { ok: true, data: { enfileirado: true } }
     : { ok: true, data: { enfileirado: false, aviso: r.message } }
+}
+
+/**
+ * O pitch do SDR para um lead — gerado sob demanda, na primeira abertura do card.
+ *
+ * ─── A RLS É A AUTORIZAÇÃO, E ELA PRECISA DE UMA LEITURA ────────────────────
+ * Quem grava o pitch é o worker, com service_role, que passa por cima de toda
+ * policy. Então a pergunta "esta pessoa pode ver este lead?" tem de ser respondida
+ * AQUI, e a única forma honesta de respondê-la é lendo o lead com o client DELA:
+ * se `sdr_leads_select` não devolver a linha, não há pitch a gerar. Sem isso,
+ * qualquer pessoa com o módulo Comercial mandaria o worker escrever (e cobrar) um
+ * dossiê sobre a carteira de outro SDR.
+ *
+ * `forcar` é o botão "regerar": o SDR falou com a empresa e o texto não bate com o
+ * que ele ouviu. Sem ele, um pitch já gravado volta na hora e não custa nada.
+ */
+export async function gerarPitchLeadAction(
+  leadId: string,
+  forcar = false,
+): Promise<ActionResult<{ gerado: boolean; motivo?: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+
+  const { data: lead, error } = await supabase
+    .from('sdr_leads')
+    .select('id')
+    .eq('id', leadId)
+    .maybeSingle()
+  if (error) return { ok: false, message: error.message, code: 'unknown' }
+  if (!lead) return { ok: false, message: 'Lead não encontrado no seu alcance.', code: 'forbidden' }
+
+  const context = await getSessionContext()
+  const r = await dispararPitchLead({ leadId, forcar, geradoPor: context?.usuario.id ?? null })
+  if (!r.ok) return { ok: false, message: r.message, code: r.code }
+
+  const corpo = (r.corpo ?? {}) as { gerado?: boolean; motivo?: string }
+  return { ok: true, data: { gerado: corpo.gerado === true, motivo: corpo.motivo } }
 }
 
 export async function salvarTerritorioAction(input: unknown): Promise<ActionResult<{ ok: true }>> {

@@ -23,7 +23,14 @@ export const comercialKeys = {
   config: () => ['comercial', 'config'] as const,
   carteira: (vendedorId?: string | null) => ['comercial', 'carteira', vendedorId ?? 'eu'] as const,
   visiveis: () => ['comercial', 'visiveis'] as const,
+  pitch: (leadId: string) => ['comercial', 'pitch', leadId] as const,
 }
+
+/**
+ * O pitch de um lead. `pontos` e `jargoes` são `jsonb` — o gerador os tipa como
+ * `Json`, e quem lê tem de estreitar para lista de string na tela.
+ */
+export type PitchDoLeadRow = Tables<'sdr_lead_pitches'>
 
 export interface ResumoComercial {
   tem_acesso: boolean

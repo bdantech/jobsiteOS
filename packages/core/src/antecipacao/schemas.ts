@@ -224,6 +224,7 @@ export const MOTIVOS_SEM_INTERESSE = [
   'nao_quer_plataforma',
   'sem_contato',
   'porte_incompativel',
+  'funcionario_pj',
   'outro',
 ] as const
 export const motivoSemInteresseSchema = z.enum(MOTIVOS_SEM_INTERESSE)
@@ -236,6 +237,7 @@ export const MOTIVO_SEM_INTERESSE_LABELS: Record<MotivoSemInteresse, string> = {
   nao_quer_plataforma: 'Não quer se cadastrar na plataforma',
   sem_contato: 'Não conseguimos contato',
   porte_incompativel: 'Porte ou perfil incompatível',
+  funcionario_pj: 'Fornecedor é funcionário (PJ)',
   outro: 'Outro',
 }
 
@@ -246,6 +248,9 @@ export const MOTIVO_SEM_INTERESSE_DESCRICOES: Record<MotivoSemInteresse, string>
   nao_quer_plataforma: 'Antecipa, mas não quer se cadastrar aqui.',
   sem_contato: 'Não conseguimos falar com quem decide.',
   porte_incompativel: 'Porte ou perfil fora do que a operação atende.',
+  funcionario_pj:
+    'Não é fornecedor: é mão de obra contratada como PJ, e a nota é o salário do mês. ' +
+    'Não há recebível a antecipar — não conta como falha da régua de porte.',
   outro: 'Qualquer outro caso — a observação passa a ser obrigatória.',
 }
 

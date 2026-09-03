@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
-import { ESTAGIO_SDR_LABELS, proximoEstagioSdr, useLeads, useMover } from '@/features/comercial'
+import {
+  ESTAGIO_SDR_LABELS,
+  proximoEstagioSdr,
+  rotuloOrigemLead,
+  useLeads,
+  useMover,
+} from '@/features/comercial'
 
 /**
  * Funil de reuniões no celular: lista, não kanban.
@@ -65,6 +71,10 @@ export default function FunilSdrScreen() {
               {item.empresas?.uf ? (
                 <Badge variant="outline"><Text className="text-[10px]">{item.empresas.uf}</Text></Badge>
               ) : null}
+              {/* A porta pela qual o lead entrou: muda a primeira frase da ligação. */}
+              <Badge variant="outline">
+                <Text className="text-[10px]">{rotuloOrigemLead(item.origem)}</Text>
+              </Badge>
               {item.fit === true ? (
                 <Badge variant="outline"><Text className="text-[10px]">Com fit</Text></Badge>
               ) : null}
