@@ -23,6 +23,7 @@ import {
 } from '../../comunicacao/ledger.js'
 import {
   buscarConta,
+  contaDoUsuario,
   contaGmailDoUsuario,
   escolherConta,
   transporteGmail,
@@ -203,11 +204,25 @@ async function processar(
     }))
 
   // ── A conta que envia ────────────────────────────────────────────────────
+  /*
+   * A ORDEM É: a conta que a linha escolheu → o NÚMERO DE QUEM ESCREVEU → o
+   * round-robin.
+   *
+   * O meio faltava, e sem ele a mensagem que o vendedor escreveu na plataforma
+   * saía pelo número de outra pessoa: ela não aparecia no WhatsApp dele, a
+   * resposta do cliente ia para o celular do colega, e o destinatário via um
+   * número desconhecido assinando com um nome que não era o dono do número.
+   *
+   * A IA continua no round-robin: a persona não é de ninguém, e um número de IA
+   * atrelado a uma pessoa é exatamente a mistura que `tipo` existe para impedir.
+   */
   let conta: ContaWhatsapp | null = null
   if (canal === 'whatsapp') {
+    const tipo = linha.por_ia ? 'ia' : 'relacionamento'
     conta = linha.whatsapp_conta_id
       ? await buscarConta(linha.whatsapp_conta_id)
-      : await escolherConta(linha.por_ia ? 'ia' : 'relacionamento')
+      : ((!linha.por_ia ? await contaDoUsuario(linha.criada_por, tipo) : null) ??
+        (await escolherConta(tipo)))
     if (!conta || !conta.ativo) {
       await marcarFalha(linha, 'Nenhuma conta de WhatsApp ativa para este tipo de envio.')
       return { desfecho: 'falhas' }

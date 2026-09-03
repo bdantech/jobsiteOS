@@ -43,7 +43,36 @@ export async function buscarConta(id: string): Promise<ContaWhatsapp | null> {
 }
 
 /**
- * A conta que envia quando a linha da fila não escolheu uma.
+ * O NÚMERO DE QUEM ESCREVEU. É a primeira pergunta, e não havia quem a fizesse.
+ *
+ * `whatsapp_contas.usuario_responsavel` sempre disse de quem é cada número — as
+ * duas contas da base chamam-se "Rodrigo Alves" e "Fabio Pagliarani", são os
+ * celulares de duas pessoas. Mas o envio nunca consultou isso: caía direto no
+ * round-robin, e uma mensagem assinada "Aqui é Rodrigo Alves" saía pelo número do
+ * Fabio.
+ *
+ * O estrago é maior que o constrangimento. A mensagem não aparece no WhatsApp de
+ * quem a escreveu (ela nunca passou pelo aparelho dele), a resposta do cliente
+ * chega no celular do colega, e o destinatário vê um número desconhecido dizendo
+ * ser outra pessoa — que é como um contato marca a gente como spam.
+ */
+export async function contaDoUsuario(
+  usuarioId: string | null,
+  tipo: 'relacionamento' | 'ia' | 'plantao',
+): Promise<ContaWhatsapp | null> {
+  if (!usuarioId) return null
+  const { data } = await supabaseAdmin
+    .from('whatsapp_contas')
+    .select(COLUNAS_CONTA)
+    .eq('usuario_responsavel', usuarioId)
+    .eq('tipo', tipo)
+    .eq('ativo', true)
+    .maybeSingle()
+  return (data as ContaWhatsapp | null) ?? null
+}
+
+/**
+ * A conta que envia quando ninguém escolheu uma e quem escreveu não tem número.
  *
  * `tipo` decide, e é aqui que o §1.3 vira código: mensagem de IA sai por conta de
  * IA, mensagem de gente sai por conta de relacionamento. Nunca o contrário — o
@@ -53,6 +82,13 @@ export async function buscarConta(id: string): Promise<ContaWhatsapp | null> {
  * Entre as contas do tipo certo, a menos usada hoje. É o round-robin do §3.1,
  * feito pela realidade (quantas saíram) e não por um contador em memória que
  * zera a cada deploy.
+ *
+ * ─── O QUE A PESSOA DIGITA NO CELULAR NÃO ENTRA NA CONTA ────────────────────
+ * `origem = 'celular'` é o que a equipe manda pelo próprio aparelho, e isso passou
+ * a entrar no ledger em 02/09/2026. A partir dali o número de quem trabalha no
+ * WhatsApp o dia inteiro virava, todo dia, "o mais usado" — e o round-robin
+ * empurrava 100% dos envios da plataforma para o número do colega, para sempre.
+ * O que se equilibra aqui é a carga QUE NÓS geramos.
  */
 export async function escolherConta(tipo: 'relacionamento' | 'ia' | 'plantao'): Promise<ContaWhatsapp | null> {
   const { data } = await supabaseAdmin
@@ -73,6 +109,9 @@ export async function escolherConta(tipo: 'relacionamento' | 'ia' | 'plantao'): 
         .select('id', { count: 'exact', head: true })
         .eq('conta_remetente', c.numero)
         .eq('direcao', 'saida')
+        // Ver a nota em `enviadasPelaContaHoje`: `.neq` sozinho descartaria as
+        // linhas com `origem` nula.
+        .or('origem.is.null,origem.neq.celular')
         .gte('criado_em', inicio.toISOString())
       return { conta: c, usos: count ?? 0 }
     }),

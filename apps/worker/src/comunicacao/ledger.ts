@@ -241,6 +241,21 @@ export async function enviadasNaThreadHoje(conversaId: string, agora: Date): Pro
 }
 
 /** Saídas por uma conta de WhatsApp hoje. Insumo do teto/warmup (§3.1). */
+/**
+ * Quantas a PLATAFORMA mandou hoje por este número. Insumo do teto e do warmup.
+ *
+ * ─── A CONVERSA DA PESSOA NÃO GASTA A COTA DA PLATAFORMA ────────────────────
+ * Desde 02/09/2026 o que a equipe digita no próprio celular entra no ledger com
+ * `origem = 'celular'` — e isso é ótimo para a thread. Mas contá-lo aqui inverte
+ * o sentido do teto: um vendedor que troca 140 mensagens por dia no WhatsApp
+ * estoura sozinho a rampa de warmup, e a plataforma para de conseguir mandar
+ * qualquer coisa pelo número DELE, em silêncio, adiando tudo para o dia seguinte.
+ *
+ * A rampa existe para limitar o que NÓS disparamos a frio, que é o que faz um
+ * número novo ser marcado. Conversa humana, respondida do outro lado, é o oposto
+ * disso: é o que aquece o número. Por isso o filtro — e por isso ele está aqui, e
+ * não no chamador: o teto é uma pergunta só, e ela tem uma resposta só.
+ */
 export async function enviadasPelaContaHoje(numero: string, agora: Date): Promise<number> {
   const inicio = new Date(agora)
   inicio.setUTCHours(0, 0, 0, 0)
@@ -249,6 +264,10 @@ export async function enviadasPelaContaHoje(numero: string, agora: Date): Promis
     .select('id', { count: 'exact', head: true })
     .eq('conta_remetente', numero)
     .eq('direcao', 'saida')
+    // `.neq` sozinho descartaria as linhas com `origem` nula — em SQL,
+    // `null <> 'celular'` é nulo, e nulo não passa no filtro. A coluna é
+    // anulável (linhas legadas), e sumir com elas subestimaria o teto.
+    .or('origem.is.null,origem.neq.celular')
     .gte('criado_em', inicio.toISOString())
   return count ?? 0
 }
