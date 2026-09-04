@@ -189,6 +189,27 @@ test('antes da primeira mudança registrada, vale o valor anterior dela', () => 
   assert.equal(gestaoNaData('passivo', historico, '2026-02-01'), 'prospeccao_ativa')
 })
 
+/*
+ * Registrar pela primeira vez não é reclassificar. O §8 protege a taxa sob a qual alguém
+ * trabalhou; quando não havia taxa, o que ele estaria protegendo é o zero.
+ */
+test('a PRIMEIRA classificação vale desde sempre, não a partir do dia seguinte', () => {
+  const historico = [
+    { valor_anterior: null, valor_novo: 'passivo', alterado_em: '2026-06-01T09:00:00Z' },
+  ]
+  assert.equal(gestaoNaData('passivo', historico, '2026-02-01'), 'passivo')
+  assert.equal(gestaoNaData('passivo', historico, '2026-06-01'), 'passivo')
+})
+
+test('mas a reclassificação SEGUINTE continua valendo só do dia seguinte', () => {
+  const historico = [
+    { valor_anterior: null, valor_novo: 'passivo', alterado_em: '2026-06-01T09:00:00Z' },
+    { valor_anterior: 'passivo', valor_novo: 'prospeccao_ativa', alterado_em: '2026-08-10T09:00:00Z' },
+  ]
+  assert.equal(gestaoNaData('prospeccao_ativa', historico, '2026-08-10'), 'passivo')
+  assert.equal(gestaoNaData('prospeccao_ativa', historico, '2026-08-11'), 'prospeccao_ativa')
+})
+
 // ─── O motor ────────────────────────────────────────────────────────────────
 
 test('uma cessão convertida gera vendedor + originador, cada um com seu snapshot', () => {

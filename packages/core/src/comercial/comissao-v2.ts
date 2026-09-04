@@ -407,6 +407,17 @@ export interface MudancaGestao {
  * Sem essa véspera, uma conta reclassificada de manhã precificaria pela taxa nova as
  * cessões que converteram à tarde do MESMO dia, e a pessoa que trabalhou o mês inteiro
  * sob a régua antiga descobriria a mudança na folha.
+ *
+ * A EXCEÇÃO é a PRIMEIRA classificação, e ela não enfraquece a regra — mostra o que a
+ * regra protege. O §8 existe para que ninguém seja reprecificado pelo passado: a taxa
+ * sob a qual a pessoa trabalhou é a que vale. Quando `valor_anterior` é nulo não há taxa
+ * anterior a proteger; a alternativa não é "a régua antiga", é NENHUMA régua — e conta
+ * sem classificação não gera lançamento nenhum.
+ *
+ * Registrar pela primeira vez não é reclassificar. Uma conta que sempre operou como
+ * passiva e que alguém finalmente marcou hoje sempre foi passiva; tratar isso como uma
+ * mudança faria o mês inteiro de trabalho valer zero, e a conta cair na folha só a partir
+ * de amanhã — punindo exatamente quem organizou a carteira.
  */
 export function gestaoNaData(
   atual: GestaoOperacao | null,
@@ -422,11 +433,15 @@ export function gestaoNaData(
     .sort((a, b) => dia(b.alterado_em).localeCompare(dia(a.alterado_em)))
   if (jaVigentes.length > 0) return normalizar(jaVigentes[0]!.valor_novo)
 
-  // Nenhuma mudança vige ainda: o valor é o que existia ANTES da primeira registrada.
+  // Nenhuma mudança vige ainda: o valor é o que existia ANTES da primeira registrada —
+  // salvo quando não existia valor nenhum, e aí a primeira classificação vale desde sempre.
   const futuras = historico
     .filter((h) => dia(h.alterado_em) >= d)
     .sort((a, b) => dia(a.alterado_em).localeCompare(dia(b.alterado_em)))
-  if (futuras.length > 0) return normalizar(futuras[0]!.valor_anterior)
+  if (futuras.length > 0) {
+    const primeira = futuras[0]!
+    return normalizar(primeira.valor_anterior ?? primeira.valor_novo)
+  }
 
   return atual
 }
