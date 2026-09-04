@@ -68,14 +68,31 @@ returns jsonb language sql stable security definer set search_path = '' as $func
        left join com on com.empresa_id = e.id
        left join tit on tit.empresa_id = e.id
        left join aj  on aj.empresa_id  = e.id
-       where e.estagio in ('cliente', 'ex_cliente')
+       where e.estagio = 'cliente'
+          or (e.estagio = 'ex_cliente'
+              and (vol.empresa_id is not null or com.empresa_id is not null))
      ) x),
     '[]'::jsonb) end;
 $function$;
 
 comment on function public.comercial_contas_fase is
-  'Todo cliente e ex-cliente com o relógio dele: data de início, fase fixada, titular, '
-  'volume e comissão do mês corrente. As agregações vêm de CTEs, e não de subconsultas '
-  'correlacionadas: `app_holding_do_sacado` é uma função POR LINHA, e uma subconsulta por '
-  'empresa varre `antecipacoes` inteira para cada uma das ~200 contas — 35 segundos contra '
-  'os 8 do timeout do PostgREST, e a tela recebia lista vazia sem erro nenhum.';
+  'O relógio de cada cliente ATUAL, mais o ex-cliente que operou no mês corrente. As '
+  'agregações vêm de CTEs, e não de subconsultas correlacionadas: `app_holding_do_sacado` é '
+  'uma função POR LINHA, e uma subconsulta por empresa varre `antecipacoes` inteira para '
+  'cada conta — 35 segundos contra os 8 do timeout do PostgREST, e a tela recebia lista '
+  'vazia sem erro nenhum.';
+
+-- ─── §2 A lista é de CLIENTES, não de tudo o que já foi cliente ─────────────
+--
+-- `estagio in (cliente, ex_cliente)` é a régua do `app_holding_do_sacado`, e eu a copiei
+-- sem perguntar se ela servia AQUI. Ela serve lá porque a pergunta é "de quem é esta
+-- cessão?", e uma cessão pode ser de quem saiu no mês passado. Aqui a pergunta é outra:
+-- "quais contas eu gerencio?" — e a resposta são 55 linhas, não 196.
+--
+-- Os 141 ex-clientes eram história: sem operação, sem comissão, sem relógio para ajustar.
+-- Enterravam as 55 que importam numa lista quatro vezes maior.
+--
+-- O ex-cliente que operou NO MÊS continua entrando, e não é exceção de conveniência: são
+-- três contas com 10 cessões e R$ 226 mil em setembro, gerando comissão agora. Escondê-las
+-- trocaria uma lista poluída por um ponto cego — e ponto cego é o defeito que este módulo
+-- passou a semana inteira consertando.
