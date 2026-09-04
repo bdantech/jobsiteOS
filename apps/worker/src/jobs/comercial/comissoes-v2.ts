@@ -100,18 +100,45 @@ async function historicoGestao(empresaId: string | null): Promise<MudancaGestao[
 /**
  * `ignoreDuplicates`, e não "delete e reinsere": reinserir apagaria o status de
  * aprovação já dado, que é a única coisa neste sistema que uma pessoa fez à mão.
+ *
+ * Competência FECHADA é imutável (§6), e a trava mora aqui porque é aqui que passam os
+ * três caminhos que criam linha: o handler live, o backfill e a fila do SDR. Um lançamento
+ * que chega tarde para um mês já fechado não é descartado em silêncio — ele sai no log com
+ * pessoa, competência e valor, porque a saída certa para ele é um ajuste manual no mês
+ * corrente (`app_ajuste_manual_comissao`), e essa é uma decisão de gestor, não de job.
  */
 async function gravar(lancamentos: readonly LancamentoV2[]): Promise<number> {
   if (lancamentos.length === 0) return 0
+
+  const { data: fechadas } = await supabaseAdmin
+    .from('comissao_competencias')
+    .select('competencia')
+    .in('competencia', [...new Set(lancamentos.map((l) => l.competencia))])
+  const bloqueadas = new Set((fechadas ?? []).map((c) => c.competencia))
+  const abertos = lancamentos.filter((l) => !bloqueadas.has(l.competencia))
+  for (const l of lancamentos.filter((l) => bloqueadas.has(l.competencia))) {
+    logger.warn(
+      {
+        vendedor: l.vendedor_id,
+        papel: l.papel,
+        competencia: l.competencia,
+        origem: `${l.origem_tipo}:${l.origem_id}`,
+        valor: l.valor,
+      },
+      'Lançamento recusado: a competência dele já foi fechada. Cabe ajuste manual no mês corrente.',
+    )
+  }
+  if (abertos.length === 0) return 0
+
   const { error, count } = await supabaseAdmin
     .from('comissao_lancamentos_v2')
-    .upsert(lancamentos as never, {
+    .upsert(abertos as never, {
       onConflict: 'papel,origem_tipo,origem_id,vendedor_id',
       ignoreDuplicates: true,
       count: 'exact',
     })
   if (error) throw new Error(`Falha ao gravar lançamentos: ${error.message}`)
-  return count ?? lancamentos.length
+  return count ?? abertos.length
 }
 
 // ─── Titularidade automática (§4) ───────────────────────────────────────────
@@ -120,6 +147,17 @@ async function abrirTitularidade(input: {
   vendedorId: string
   empresaId: string
   papel: 'vendedor' | 'originador' | 'sdr'
+  /*
+   * O instante do FATO que abriu o vínculo — a conversão, a venda ganha —, não o instante
+   * em que o job rodou.
+   *
+   * Sem isto o vínculo nascia depois do próprio fato que o criou, e `titularesNaData`
+   * (`desde <= evento`) não o encontrava: a cessão que deu o cedente ao originador era
+   * exatamente a única que nunca o pagava. Pelo relógio não passava de um segundo; para o
+   * backfill, de dias — e como ele reprocessa com o mesmo `convertida_em`, o buraco não se
+   * fechava nunca.
+   */
+  desde: string
   motivo: string
 }): Promise<boolean> {
   /*
@@ -131,14 +169,14 @@ async function abrirTitularidade(input: {
    * derrubaria o processamento dos aceites seguintes.
    */
   const { rows } = await pool.query<{ id: string }>(
-    `insert into vendedor_carteira (vendedor_id, empresa_id, papel, origem)
-     select $1::uuid, $2::uuid, $3::text, 'automatica'
+    `insert into vendedor_carteira (vendedor_id, empresa_id, papel, desde, origem)
+     select $1::uuid, $2::uuid, $3::text, least($4::timestamptz, now()), 'automatica'
      where not exists (
        select 1 from vendedor_carteira c
        where c.empresa_id = $2::uuid and c.papel = $3::text and c.ate is null
      )
      returning id`,
-    [input.vendedorId, input.empresaId, input.papel],
+    [input.vendedorId, input.empresaId, input.papel, input.desde],
   )
   if (rows.length === 0) return false
 
@@ -187,6 +225,8 @@ async function garantirOriginadorDoCedente(
     vendedorId: dono.vendedor_id,
     empresaId: cedenteEmpresaId,
     papel: 'originador',
+    // A titularidade vale desde a CESSÃO que a criou, e é ela mesma a primeira a pagar.
+    desde: quando,
     motivo: `${dono.nome} passa a titularizar este cedente: primeira NF convertida contra um sacado da carteira dele.`,
   })
 }
@@ -584,6 +624,8 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
         vendedorId: a.sdr_id,
         empresaId: a.empresa_id,
         papel: 'sdr',
+        // O aceite é o fato. A janela de atribuição conta dele, não da hora do job.
+        desde: aceitaEm,
         motivo: 'Reunião aceita: o SDR passa a titularizar este sacado enquanto a janela durar.',
       })
     }
@@ -623,9 +665,11 @@ export async function titularidadesJob(): Promise<ResultadoTitularidades> {
     vendedor_id: string
     nome: string
     empresa: string | null
+    ganho_em: string
   }>(
     `select distinct on (v.empresa_id)
-            v.empresa_id, v.vendedor_id, vd.nome, e.razao_social as empresa
+            v.empresa_id, v.vendedor_id, vd.nome, e.razao_social as empresa,
+            coalesce(v.ganho_em, v.atualizada_em) as ganho_em
      from vendas v
      join vendedores vd on vd.id = v.vendedor_id
      join empresas e on e.id = v.empresa_id
@@ -641,6 +685,9 @@ export async function titularidadesJob(): Promise<ResultadoTitularidades> {
       vendedorId: g.vendedor_id,
       empresaId: g.empresa_id,
       papel: 'vendedor',
+      // O dia em que a venda foi GANHA. O job roda de madrugada; datar por ele faria a
+      // conta que fechou na terça só passar a pagar na quarta.
+      desde: g.ganho_em,
       motivo: `${g.nome} fechou ${g.empresa ?? 'esta conta'} e passa a titularizá-la.`,
     })
     if (criou) acc.vendedores_vinculados++
@@ -938,9 +985,15 @@ export interface ResultadoBackfill {
  * handler live existir — e, de quebra, é a rede que pega qualquer conversão em que a
  * chamada live tenha falhado.
  *
- * Não retroage para antes do primeiro parâmetro publicado: uma cessão anterior a isso não
- * encontra taxa e não gera lançamento, que é o comportamento certo (o modelo v2 não
- * existia naquele dia).
+ * Dois pisos, e cada um evita um trabalho que nunca daria em nada:
+ *
+ *   o primeiro parâmetro publicado   Uma cessão anterior a ele não encontra taxa e não
+ *                                    gera lançamento — o modelo v2 não existia naquele dia.
+ *
+ *   a última competência fechada     Um mês fechado é imutável, e `gravar` recusa. Sem o
+ *                                    piso, o job reofereceria as mesmas cessões todo dia,
+ *                                    para sempre, e cada corrida encheria o log da recusa
+ *                                    que a corrida anterior já tinha registrado.
  */
 export async function backfillCessoesJob(limite = 500): Promise<ResultadoBackfill> {
   const { rows } = await pool.query<{ id_externo: number }>(
@@ -948,7 +1001,11 @@ export async function backfillCessoesJob(limite = 500): Promise<ResultadoBackfil
      from antecipacoes a
      where a.convertida_em is not null and a.regrediu_em is null
        and a.access_key_casada is not null
-       and a.convertida_em >= (select min(vigente_de) from commission_params)
+       and a.convertida_em >= greatest(
+             (select min(vigente_de) from commission_params),
+             coalesce((select (max(competencia) + interval '1 month')::date
+                       from comissao_competencias), '-infinity'::date)
+           )
        and not exists (
          select 1 from comissao_lancamentos_v2 l
          where l.origem_tipo = 'nf_convertida' and l.origem_id = a.access_key_casada

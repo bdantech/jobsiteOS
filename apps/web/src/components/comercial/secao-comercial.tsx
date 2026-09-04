@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { criarLeadSdrAction, definirGestaoAction } from '@/actions/comercial'
+import { criarLeadSdrAction, definirCarteiraAction, definirGestaoAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 
 /**
@@ -95,6 +95,7 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   // existe naquele papel — e concluía, com razão, que a tela estava quebrada.
   const [escolha, setEscolha] = React.useState<'' | GestaoOperacao>('')
   const [pondoNoFunil, setPondoNoFunil] = React.useState(false)
+  const [definindoTitular, setDefinindoTitular] = React.useState(false)
 
   const chave = ['comercial', 'empresa', empresaId] as const
   const { data } = useQuery({ queryKey: chave, queryFn: () => buscarComercialDaEmpresa(empresaId) })
@@ -115,6 +116,9 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   const originadores = ativos.filter((v) => v.tipo === 'originador')
   const closers = ativos.filter((v) => v.tipo === 'vendedor')
   const sdrs = ativos.filter((v) => v.tipo === 'sdr')
+  // Titular do sacado é closer ou originador. SDR fica de fora: a titularidade dele é a
+  // do §4, temporária e sobre a conta que ele trouxe — não a que responde pela conta.
+  const titulaveis = ativos.filter((v) => v.tipo === 'vendedor' || v.tipo === 'originador')
 
   // ─── Pôr no funil de reuniões ─────────────────────────────────────────────
   // As três condições são as mesmas do RPC. Repeti-las aqui não é duplicar a
@@ -161,6 +165,36 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   function abrir() {
     setEscolha(gestao ?? '')
     setEditando(true)
+  }
+
+  /**
+   * O titular do SACADO, à mão.
+   *
+   * Em conta passiva ele espelha o closer que a gere e não se toca aqui. Em prospecção
+   * ativa não há de onde deduzi-lo: a carteira de originação diz quem trouxe os CEDENTES,
+   * não quem responde pela conta, e usá-la para as duas coisas faria a mesma pessoa somar
+   * as duas parcelas da mesma cessão. Enquanto ninguém for escolhido, a parcela do
+   * vendedor simplesmente não é paga — ela não é redistribuída ao originador.
+   */
+  async function salvarTitular(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const escolhido = String(fd.get('titular') ?? '')
+    setSalvando(true)
+    const r = await definirCarteiraAction({
+      empresa_id: empresaId,
+      papel: 'vendedor',
+      vendedor_id: escolhido === '' ? null : escolhido,
+    })
+    setSalvando(false)
+    if (!r.ok) return toast.error(r.message)
+    toast.success(
+      escolhido === ''
+        ? 'Conta sem titular do sacado. A parcela do vendedor deixa de ser paga a partir de agora.'
+        : 'Titular do sacado definido. As cessões desta conta a partir de agora pagam a parcela do vendedor.',
+    )
+    setDefinindoTitular(false)
+    void qc.invalidateQueries({ queryKey: chave })
   }
 
   async function salvar(e: React.FormEvent<HTMLFormElement>) {
@@ -219,6 +253,16 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
             {podeDefinirGestao ? (
               <Button size="sm" variant="outline" onClick={abrir}>
                 Definir gestão
+              </Button>
+            ) : null}
+            {/*
+              Só em conta ATIVA: na passiva o titular do sacado espelha o closer que a
+              gere, e um botão que oferece mudar o que a outra tela decide é um botão que
+              cria duas verdades.
+            */}
+            {ehGestor && gestao === 'prospeccao_ativa' ? (
+              <Button size="sm" variant="outline" onClick={() => setDefinindoTitular(true)}>
+                Titular do sacado
               </Button>
             ) : null}
           </div>
@@ -470,6 +514,55 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditando(false)}>Cancelar</Button>
+              <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={definindoTitular} onOpenChange={setDefinindoTitular}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={salvarTitular}>
+            <DialogHeader>
+              <DialogTitle>Titular do sacado</DialogTitle>
+              <DialogDescription>
+                Quem responde por esta conta. É dele a parcela do VENDEDOR de toda cessão
+                convertida contra ela — separada da parcela do originador, que é de quem
+                trouxe o cedente.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="titular">Titular</Label>
+                <select
+                  id="titular"
+                  name="titular"
+                  defaultValue={donoAtual('vendedor') ?? ''}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Deixar sem titular</option>
+                  {titulaveis.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.nome} · {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Vale a partir de agora — o que já converteu guarda o titular do dia em que
+                  converteu. Sem titular, a parcela do vendedor não é paga a ninguém: ela não
+                  vai para o originador.
+                </p>
+              </div>
+              {donoAtual('originacao') && donoAtual('originacao') === donoAtual('vendedor') ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  Esta pessoa também tem a carteira de originação desta conta. Ela vai receber
+                  as DUAS parcelas de cada cessão — a do sacado e a do cedente.
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDefinindoTitular(false)}>
+                Cancelar
+              </Button>
               <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
             </DialogFooter>
           </form>
