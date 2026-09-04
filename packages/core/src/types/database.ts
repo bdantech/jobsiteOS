@@ -10729,6 +10729,8 @@ export type Database = {
         }
       }
       app_definir_fase_conta: { Args: { p: Json }; Returns: Json }
+      app_vincular_cnpj_conta: { Args: { p: Json }; Returns: Json }
+      app_desvincular_cnpj_conta: { Args: { p: Json }; Returns: Json }
       app_vincular_sacado: {
         Args: { p: Json }
         Returns: {
@@ -12864,6 +12866,7 @@ export type Database = {
         Returns: Json
       }
       comercial_contas_fase: { Args: never; Returns: Json }
+      comercial_vinculos_da_conta: { Args: { p_empresa_id: string }; Returns: Json }
       comercial_sacados_sem_conta: { Args: never; Returns: Json }
       comissao_reclassificacao: {
         Args: { p_janela_dias?: number }

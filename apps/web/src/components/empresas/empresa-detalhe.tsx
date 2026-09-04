@@ -24,6 +24,7 @@ import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import { Skeleton } from '@/components/ui/skeleton'
 import { GrupoSecao } from '@/components/mercado/grupos/grupo-secao'
+import { CnpjsVinculados } from './cnpjs-vinculados'
 import { EstagioBadge, labelTipo } from './estagio-badge'
 import { formatData } from './format'
 import { AnaliseFinanceira } from './analise-financeira'
@@ -171,6 +172,9 @@ export function EmpresaDetalhe({
   }
 
   const local = [data.municipio, data.uf].filter(Boolean).join(' / ')
+  // Cliente e ex-cliente são CONTAS: só elas recebem vínculo manual, e é a mesma régua
+  // do RPC. Repeti-la aqui evita oferecer uma aba que só existiria para dar erro.
+  const ehConta = data.estagio === 'cliente' || data.estagio === 'ex_cliente'
 
   return (
     <div className="space-y-4">
@@ -208,7 +212,12 @@ export function EmpresaDetalhe({
           <TabsTrigger value="notas">Notas</TabsTrigger>
           <TabsTrigger value="financeiro">Análise financeira</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
-          {data.grupo_id ? <TabsTrigger value="grupo">Grupo econômico</TabsTrigger> : null}
+          {/*
+            A aba aparece também para conta SEM grupo derivado. Metade dos nossos clientes
+            tem `grupo_id` nulo — e é justamente a conta sem grupo que mais precisa do
+            vínculo manual, porque nela o grafo não resolveu nada.
+          */}
+          {data.grupo_id || ehConta ? <TabsTrigger value="grupo">Grupo econômico</TabsTrigger> : null}
         </TabsList>
 
         <FichaGrade
@@ -380,11 +389,12 @@ export function EmpresaDetalhe({
               </TabsContent>
 
               {/* Módulo Mercado (§5.4) + curadoria de monitoramento de protesto (Radar). */}
-              {data.grupo_id ? (
+              {data.grupo_id || ehConta ? (
                 <TabsContent value="grupo" className="mt-0">
                   <div className="space-y-4">
-                    <GrupoSecao grupoId={data.grupo_id} />
-                    <MonitoramentoProtesto grupoId={data.grupo_id} />
+                    {data.grupo_id ? <GrupoSecao grupoId={data.grupo_id} /> : null}
+                    <CnpjsVinculados empresaId={data.id} estagio={data.estagio} />
+                    {data.grupo_id ? <MonitoramentoProtesto grupoId={data.grupo_id} /> : null}
                   </div>
                 </TabsContent>
               ) : null}

@@ -347,6 +347,28 @@ export const definirFaseContaSchema = z.object({
 export type DefinirFaseContaInput = z.infer<typeof definirFaseContaSchema>
 
 /**
+ * Pendurar um CNPJ numa conta pela aba do grupo econômico.
+ *
+ * `monitorar` default TRUE: "afiançada" quer dizer que a casa garante aquele CNPJ, e a
+ * garantia é justamente o que faz a rotina mensal de protesto valer a consulta paga. A
+ * tela diz o custo antes do clique; o parâmetro existe para que um vínculo feito por
+ * outro caminho não gaste sozinho.
+ */
+export const vincularCnpjContaSchema = z.object({
+  empresa_id: uuid,
+  cnpj: z.string().min(14),
+  motivo: z.string().trim().min(3),
+  monitorar: z.boolean().default(true),
+})
+export type VincularCnpjContaInput = z.infer<typeof vincularCnpjContaSchema>
+
+export const desvincularCnpjContaSchema = z.object({
+  cnpj: z.string().min(14),
+  desmonitorar: z.boolean().default(true),
+})
+export type DesvincularCnpjContaInput = z.infer<typeof desvincularCnpjContaSchema>
+
+/**
  * Mover de estágio, julgar o fit, ou os dois na mesma chamada.
  *
  * `estagio` e `fit` são ambos opcionais porque são coisas independentes: marcar sem fit

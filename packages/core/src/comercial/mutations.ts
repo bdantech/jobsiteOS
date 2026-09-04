@@ -15,6 +15,8 @@ import {
   definirCarteiraSchema,
   definirFaseContaSchema,
   vincularSacadoSchema,
+  vincularCnpjContaSchema,
+  desvincularCnpjContaSchema,
   definirGestaoSchema,
   moverLeadSchema,
   moverVendaSchema,
@@ -66,6 +68,25 @@ export async function definirCarteira(supabase: Supabase, input: unknown) {
 export async function definirFaseConta(supabase: Supabase, input: unknown) {
   const dados = definirFaseContaSchema.parse(input)
   const { data, error } = await supabase.rpc('app_definir_fase_conta', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/**
+ * O CNPJ pendurado na conta, com a empresa criada e o monitoramento ligado na mesma
+ * transação. É o mesmo fato de `vincularSacado`, por outra porta: aquele nasce da lista de
+ * quem opera sem conta, este da ficha da empresa que já se sabe ser a dona.
+ */
+export async function vincularCnpjConta(supabase: Supabase, input: unknown) {
+  const dados = vincularCnpjContaSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_vincular_cnpj_conta', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function desvincularCnpjConta(supabase: Supabase, input: unknown) {
+  const dados = desvincularCnpjContaSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_desvincular_cnpj_conta', { p: dados as unknown as Json })
   if (error) throw new Error(error.message)
   return data
 }

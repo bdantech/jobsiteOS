@@ -9,6 +9,8 @@ import {
   definirCarteira,
   definirCarteiraPassiva,
   definirFaseConta,
+  vincularCnpjConta,
+  desvincularCnpjConta,
   vincularSacado,
   definirGestaoOperacao,
   gerarTokenIcs,
@@ -128,6 +130,65 @@ export async function ajustarFaseContaAction(
         ...(corpo.motivo ? { aviso: `Ajuste salvo, sem recálculo: ${corpo.motivo}.` } : {}),
       },
     }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Pendurar um CNPJ numa conta pela aba do grupo econômico.
+ *
+ * Recalcula a competência aberta da CONTA logo em seguida, pelo mesmo motivo do ajuste de
+ * fase: o vínculo muda de quem é a cessão, e o número na tela tem de refletir isso sem
+ * esperar o diário. Falha de recálculo não desfaz o vínculo — ele é a decisão, e o
+ * backfill recolhe o número.
+ */
+export async function vincularCnpjContaAction(
+  input: unknown,
+): Promise<ActionResult<{ razao_social: string | null; criada: boolean; monitorada: boolean; total: number }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await vincularCnpjConta(supabase, input)) as {
+      razao_social?: string | null
+      criada?: boolean
+      monitorada?: boolean
+    } | null
+    const contaId = (input as { empresa_id?: string }).empresa_id ?? ''
+    if (contaId) revalidatePath(`/empresas/${contaId}`)
+    revalidatePath('/comercial/comissoes')
+
+    const rec = contaId ? await recalcularConta(contaId) : null
+    const corpo = (rec?.ok ? rec.corpo : null) as { total?: number } | null
+    return {
+      ok: true,
+      data: {
+        razao_social: r?.razao_social ?? null,
+        criada: r?.criada ?? false,
+        monitorada: r?.monitorada ?? false,
+        total: Number(corpo?.total ?? 0),
+      },
+    }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+export async function desvincularCnpjContaAction(
+  input: unknown,
+): Promise<ActionResult<{ removido: boolean }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await desvincularCnpjConta(supabase, input)) as
+      | { removido?: boolean; empresa_id?: string }
+      | null
+    if (r?.empresa_id) {
+      revalidatePath(`/empresas/${r.empresa_id}`)
+      await recalcularConta(r.empresa_id)
+    }
+    revalidatePath('/comercial/comissoes')
+    return { ok: true, data: { removido: r?.removido ?? false } }
   } catch (error) {
     return falha(error)
   }
