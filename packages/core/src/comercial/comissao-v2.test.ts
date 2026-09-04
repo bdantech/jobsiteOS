@@ -178,6 +178,41 @@ test('§8 — conversão NA DATA da mudança vale a classificação ANTERIOR', (
   assert.equal(gestaoNaData('passivo', historico, '2026-03-11'), 'passivo')
 })
 
+/*
+ * A tag existe para o caso em que o relógio está certo e o julgamento é outro. O sunset
+ * não: passar dele é o FIM do direito do vendedor, não uma fase mais barata.
+ */
+test('a tag manual decide entre crescimento e manutenção', () => {
+  const base = { gestaoOperacao: 'prospeccao_ativa' as const, mesesCrescimento: 6, mesesSunset: 24 }
+  // 2 meses de idade: o relógio diria crescimento; a tag diz manutenção.
+  assert.equal(
+    determinarFase({ ...base, marcoAtivacao: '2026-01-01', data: '2026-03-01', faseManual: 'MANUTENCAO' }),
+    'MANUTENCAO',
+  )
+  // 12 meses: o relógio diria manutenção; a tag diz crescimento.
+  assert.equal(
+    determinarFase({ ...base, marcoAtivacao: '2025-01-01', data: '2026-01-01', faseManual: 'CRESCIMENTO' }),
+    'CRESCIMENTO',
+  )
+})
+
+test('o sunset vence a tag — e é a única coisa que vence', () => {
+  const base = { gestaoOperacao: 'prospeccao_ativa' as const, mesesCrescimento: 6, mesesSunset: 24 }
+  assert.equal(
+    determinarFase({ ...base, marcoAtivacao: '2023-01-01', data: '2026-01-01', faseManual: 'CRESCIMENTO' }),
+    'RESIDUAL',
+  )
+})
+
+test('sem marco, a tag ainda decide — a cessão é o próprio marco', () => {
+  const base = { gestaoOperacao: 'passivo' as const, mesesCrescimento: 6, mesesSunset: 18 }
+  assert.equal(determinarFase({ ...base, marcoAtivacao: null, data: '2026-01-01' }), 'CRESCIMENTO')
+  assert.equal(
+    determinarFase({ ...base, marcoAtivacao: null, data: '2026-01-01', faseManual: 'MANUTENCAO' }),
+    'MANUTENCAO',
+  )
+})
+
 test('sem histórico, a classificação é a atual', () => {
   assert.equal(gestaoNaData('passivo', [], '2026-03-10'), 'passivo')
 })

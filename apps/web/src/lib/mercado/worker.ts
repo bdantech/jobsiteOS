@@ -310,6 +310,21 @@ export async function dispararAceitesSdr(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/aceites-sdr', {}, 'comercial-sdr-aceites')
 }
 
+/**
+ * Reprecificar o mês corrente de UMA conta, depois de mexer no relógio dela.
+ *
+ * SÍNCRONO e com teto próprio: são segundos por cessão, e uma conta com cem cessões no
+ * mês passa do teto padrão. `corpo` carrega o de/para que a tela mostra.
+ */
+export async function recalcularConta(empresaId: string): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/comercial/recalcular-conta',
+    { empresa_id: empresaId },
+    'comercial-recalcular-conta',
+    120_000,
+  )
+}
+
 /** Só a etapa de titularidade do diário — para rodar depois de mexer em carteira. */
 export async function dispararLiberarDormentes(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/liberar-dormentes', {}, 'comercial-comissoes-v2')

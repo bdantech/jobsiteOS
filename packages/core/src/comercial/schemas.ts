@@ -329,6 +329,24 @@ export const vincularSacadoSchema = z.object({
 export type VincularSacadoInput = z.infer<typeof vincularSacadoSchema>
 
 /**
+ * O relógio da conta: a data de início e a fase fixada.
+ *
+ * `marco_ativacao` é OPCIONAL e nullable ao mesmo tempo, e a diferença importa: ausente
+ * significa "não mexa nesta data", nulo significa "apague a data". A tela precisa dos dois
+ * — ela edita os dois campos de forma independente.
+ *
+ * `fase_manual` nulo devolve a conta ao relógio. Não existe 'RESIDUAL' aqui: residual é o
+ * sunset, e fixá-lo à mão seria desligar o vendedor por um caminho que não é o dele.
+ */
+export const definirFaseContaSchema = z.object({
+  empresa_id: uuid,
+  marco_ativacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  fase_manual: z.enum(['CRESCIMENTO', 'MANUTENCAO']).nullable().optional(),
+  motivo: z.string().trim().min(3),
+})
+export type DefinirFaseContaInput = z.infer<typeof definirFaseContaSchema>
+
+/**
  * Mover de estágio, julgar o fit, ou os dois na mesma chamada.
  *
  * `estagio` e `fit` são ambos opcionais porque são coisas independentes: marcar sem fit

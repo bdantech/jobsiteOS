@@ -8,6 +8,7 @@ import {
   atribuirVenda,
   definirCarteira,
   definirCarteiraPassiva,
+  definirFaseConta,
   vincularSacado,
   definirGestaoOperacao,
   gerarTokenIcs,
@@ -27,7 +28,7 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararAceitesSdr, dispararPitchLead, dispararRotearNotas } from '@/lib/mercado/worker'
+import { dispararAceitesSdr, dispararPitchLead, dispararRotearNotas, recalcularConta } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -85,6 +86,53 @@ export async function definirCarteiraAction(input: unknown): Promise<ActionResul
  * frequentemente não tem ficha nenhuma — é justamente por não estar cadastrado como
  * empresa que ele caiu na lista.
  */
+/**
+ * Ajustar o relógio de uma conta e reprecificar o mês na mesma ação.
+ *
+ * Os dois passos são deliberadamente sequenciais e NÃO transacionais: o primeiro é uma
+ * escrita no banco, o segundo é o motor rodando no worker. Se o recálculo falhar, o ajuste
+ * FICA — ele é a decisão da pessoa, e desfazê-lo por causa de uma falha de rede seria
+ * perder a decisão. O backfill diário recolhe o número; a mensagem diz isso em vez de
+ * mentir que deu tudo certo.
+ */
+export async function ajustarFaseContaAction(
+  input: unknown,
+): Promise<ActionResult<{ recalculado: boolean; total: number; lancamentos: number; aviso?: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await definirFaseConta(supabase, input)
+    const empresaId = (input as { empresa_id?: string }).empresa_id ?? ''
+    if (empresaId) revalidatePath(`/empresas/${empresaId}`)
+    revalidatePath('/comercial/comissoes')
+
+    const r = await recalcularConta(empresaId)
+    if (!r.ok) {
+      return {
+        ok: true,
+        data: {
+          recalculado: false,
+          total: 0,
+          lancamentos: 0,
+          aviso: `Ajuste salvo, mas o recálculo não rodou: ${r.message}. O diário recolhe.`,
+        },
+      }
+    }
+    const corpo = (r.corpo ?? {}) as { total?: number; lancamentos?: number; motivo?: string }
+    return {
+      ok: true,
+      data: {
+        recalculado: corpo.motivo === undefined,
+        total: Number(corpo.total ?? 0),
+        lancamentos: Number(corpo.lancamentos ?? 0),
+        ...(corpo.motivo ? { aviso: `Ajuste salvo, sem recálculo: ${corpo.motivo}.` } : {}),
+      },
+    }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
 export async function vincularSacadoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
   const { erro, supabase } = await autorizar()
   if (erro || !supabase) return erro as ActionResult<never>

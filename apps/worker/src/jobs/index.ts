@@ -28,6 +28,7 @@ import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/c
 import {
   alertaReclassificacaoJob,
   comissoesDiarioJob,
+  recalcularContaJob,
   fecharCompetenciaJob,
   processarAceitesSdrJob,
   titularidadesJob,
@@ -1295,6 +1296,23 @@ export function dispararValidarContatos(): string {
  */
 export function dispararLiberarDormentes(): string {
   return dispararAvulso('comercial-comissoes-v2', async () => titularidadesJob())
+}
+
+/**
+ * Recalcular a competência aberta de UMA conta, SÍNCRONO.
+ *
+ * Como o clique de descoberta e pelo mesmo motivo: quem acabou de mudar a data de início
+ * de uma conta está olhando a tela para ver o número novo. Um 202 com id o obrigaria a
+ * recarregar até descobrir se a taxa que ele escolheu deu no que ele esperava — e a
+ * resposta inteira leva segundos, não minutos.
+ *
+ * Fora de `dispararAvulso` também de propósito: single-flight por TIPO barraria o segundo
+ * ajuste do dia, e os dois são de contas diferentes.
+ */
+export async function executarRecalculoConta(
+  empresaId: string,
+): Promise<Awaited<ReturnType<typeof recalcularContaJob>>> {
+  return recalcularContaJob(empresaId)
 }
 
 /** Roteia as NFs vivas para os originadores. Encadeado no diário da Antecipação. */

@@ -496,16 +496,33 @@ export function determinarFase(input: {
   data: Date | string
   mesesCrescimento: number | null
   mesesSunset: number | null
+  /**
+   * A fase fixada por um gestor. Decide entre CRESCIMENTO e MANUTENÇÃO — nunca RESIDUAL.
+   *
+   * Existe para o caso em que o relógio está certo e o julgamento é outro: a conta é nova
+   * no nosso CNPJ e madura na relação, ou o contrário. A alternativa seria mentir na data
+   * de ativação para conseguir a taxa, e aí o marco deixaria de significar o que diz.
+   */
+  faseManual?: FaseConta | null
 }): FaseConta {
   // Sem marco, a conta está ativando AGORA — esta cessão é o próprio marco.
-  if (!input.marcoAtivacao) return 'CRESCIMENTO'
+  if (!input.marcoAtivacao) return input.faseManual ?? 'CRESCIMENTO'
   const idade = idadeEmMeses(input.marcoAtivacao, input.data)
   const crescimento = input.mesesCrescimento
   const sunset = input.mesesSunset
 
+  /*
+   * O SUNSET VENCE A TAG, e é a única coisa que vence.
+   *
+   * Passar do sunset não é uma fase mais barata: é o fim do direito do vendedor sobre
+   * aquela conta (§3). Deixar a tag sobrepor isso criaria uma exceção permanente e
+   * invisível — alguém marca "manutenção" numa terça e a conta segue pagando por anos,
+   * sem alerta nenhum, porque não existe alerta para uma tag antiga.
+   */
+  if (sunset !== null && idade > sunset) return 'RESIDUAL'
+  if (input.faseManual) return input.faseManual
   if (crescimento !== null && idade <= crescimento) return 'CRESCIMENTO'
-  if (sunset === null || idade <= sunset) return 'MANUTENCAO'
-  return 'RESIDUAL'
+  return 'MANUTENCAO'
 }
 
 // ─── VOP e arredondamento ───────────────────────────────────────────────────
@@ -610,6 +627,8 @@ export interface CessaoConvertida {
   /** A classificação VIGENTE NA DATA da conversão — já resolvida por `gestaoNaData`. */
   gestaoOperacao: GestaoOperacao | null
   marcoAtivacao: string | null
+  /** Fase fixada por um gestor na conta. Vence o relógio, menos o sunset. */
+  faseManual?: FaseConta | null
 }
 
 export interface TitularesDaCessao {
@@ -650,6 +669,7 @@ export function lancamentosDaCessao(
     data: quando,
     mesesCrescimento,
     mesesSunset,
+    faseManual: cessao.faseManual ?? null,
   })
   const idade = cessao.marcoAtivacao ? idadeEmMeses(cessao.marcoAtivacao, quando) : 0
   const vop = calcularVOP(cessao.valorCedido, cessao.anticipationDays, diasRef)
@@ -676,6 +696,9 @@ export function lancamentosDaCessao(
     marco_ativacao: cessao.marcoAtivacao,
     idade_meses: idade,
     fase,
+    // Registrado mesmo quando nulo: "a fase saiu do relógio" e "a fase foi fixada por
+    // alguém" são respostas diferentes para a mesma pergunta na contestação da folha.
+    fase_manual: cessao.faseManual ?? null,
     gestao_operacao: gestao,
     antecipacao_id: cessao.antecipacaoId,
     fase_crescimento_meses: mesesCrescimento,

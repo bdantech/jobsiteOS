@@ -13,6 +13,7 @@ import {
   salvarVendedorSchema,
   definirCarteiraPassivaSchema,
   definirCarteiraSchema,
+  definirFaseContaSchema,
   vincularSacadoSchema,
   definirGestaoSchema,
   moverLeadSchema,
@@ -55,6 +56,20 @@ export async function definirCarteira(supabase: Supabase, input: unknown) {
  * público não diz. Um sacado sem conta não gera comissão para ninguém, e não emite
  * sintoma nenhum ao não gerar.
  */
+/**
+ * A data de início e a fase da conta.
+ *
+ * Escreve só; o RECÁLCULO da competência aberta é do worker, e a tela encadeia os dois.
+ * Fazer o recálculo aqui dentro obrigaria o RPC a reimplementar o motor em SQL — uma
+ * segunda régua para a mesma taxa, que é o erro que este módulo inteiro evita.
+ */
+export async function definirFaseConta(supabase: Supabase, input: unknown) {
+  const dados = definirFaseContaSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_definir_fase_conta', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
 export async function vincularSacado(supabase: Supabase, input: unknown) {
   const dados = vincularSacadoSchema.parse(input)
   const { data, error } = await supabase.rpc('app_vincular_sacado', { p: dados as unknown as Json })

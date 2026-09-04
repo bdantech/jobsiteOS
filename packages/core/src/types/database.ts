@@ -3410,6 +3410,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -3476,6 +3477,7 @@ export type Database = {
           is_spe?: boolean
           limite_confianca?: string | null
           limite_potencial?: number | null
+          fase_manual?: string | null
           marco_ativacao?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
@@ -3542,6 +3544,7 @@ export type Database = {
           is_spe?: boolean
           limite_confianca?: string | null
           limite_potencial?: number | null
+          fase_manual?: string | null
           marco_ativacao?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
@@ -7231,6 +7234,50 @@ export type Database = {
           },
         ]
       }
+      conta_fase_historico: {
+        Row: {
+          alterado_em: string
+          alterado_por: string | null
+          empresa_id: string
+          fase_anterior: string | null
+          fase_nova: string | null
+          id: string
+          marco_anterior: string | null
+          marco_novo: string | null
+          motivo: string
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por?: string | null
+          empresa_id: string
+          fase_anterior?: string | null
+          fase_nova?: string | null
+          id?: string
+          marco_anterior?: string | null
+          marco_novo?: string | null
+          motivo: string
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por?: string | null
+          empresa_id?: string
+          fase_anterior?: string | null
+          fase_nova?: string | null
+          id?: string
+          marco_anterior?: string | null
+          marco_novo?: string | null
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conta_fase_historico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sacado_vinculo: {
         Row: {
           atualizado_em: string
@@ -9748,6 +9795,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -10122,6 +10170,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -10518,6 +10567,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -10678,6 +10728,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_definir_fase_conta: { Args: { p: Json }; Returns: Json }
       app_vincular_sacado: {
         Args: { p: Json }
         Returns: {
@@ -10755,6 +10806,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -10830,6 +10882,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -11845,6 +11898,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -11920,6 +11974,7 @@ export type Database = {
           is_spe: boolean
           limite_confianca: string | null
           limite_potencial: number | null
+          fase_manual: string | null
           marco_ativacao: string | null
           municipio: string | null
           nome_fantasia: string | null
@@ -12808,6 +12863,7 @@ export type Database = {
         Args: { p_meses?: number; p_vendedor_id?: string }
         Returns: Json
       }
+      comercial_contas_fase: { Args: never; Returns: Json }
       comercial_sacados_sem_conta: { Args: never; Returns: Json }
       comissao_reclassificacao: {
         Args: { p_janela_dias?: number }

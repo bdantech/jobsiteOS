@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
+import { CalendarClock, Plus } from 'lucide-react'
 import {
   FONTES_DISTRIBUICAO, FONTE_DISTRIBUICAO_LABELS,
   TIPO_VENDEDOR_LABELS, type FonteDistribuicao, type TipoVendedorId, type Tables,
@@ -347,6 +348,30 @@ export function ConfigComercial() {
         alguém a mexer no lugar errado.
       */}
       <Parametros vendedores={vendedores.data ?? []} />
+
+      {/*
+        O relógio mora em tela própria, e não aqui dentro, porque ele é uma LISTA — uma
+        linha por cliente, com edição — e os parâmetros são um catálogo de vinte e três
+        números. Empilhar as duas coisas faria a tela de regras abrir rolando.
+      */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarClock className="h-4 w-4" aria-hidden />
+            Relógio das contas
+          </CardTitle>
+          <CardDescription>
+            Os parâmetros acima dizem quantos meses dura cada fase. Esta lista diz quando o
+            relógio de cada conta começou a contar — e deixa corrigir a data ou fixar a fase à
+            mão, recalculando a comissão do mês aberto.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/comercial/admin/contas">Abrir lista de contas</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">

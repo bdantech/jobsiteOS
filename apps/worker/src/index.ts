@@ -28,6 +28,7 @@ import {
   dispararApurarComissoes,
   dispararComissoesDiario,
   dispararFecharCompetencia,
+  executarRecalculoConta,
   dispararAceitesSdr,
   dispararLiberarDormentes,
   dispararAlertaReclassificacao,
@@ -507,6 +508,22 @@ app.post('/jobs/comercial/fechar-competencia', (req: Request, res: Response, nex
   } catch (erro) {
     next(erro)
   }
+})
+
+/*
+ * SÍNCRONO, ao contrário das outras rotas do módulo: a tela mudou a data de início de uma
+ * conta e está esperando o número novo do mês. Um 202 mandaria a pessoa recarregar até
+ * descobrir se a taxa que ela escolheu deu no que ela esperava.
+ */
+app.post('/jobs/comercial/recalcular-conta', (req: Request, res: Response, next: NextFunction) => {
+  const { empresa_id: empresaId } = (req.body ?? {}) as { empresa_id?: string }
+  if (typeof empresaId !== 'string' || empresaId.length === 0) {
+    res.status(400).json({ erro: 'empresa_id é obrigatório.' })
+    return
+  }
+  executarRecalculoConta(empresaId)
+    .then((r) => res.status(200).json(r))
+    .catch(next)
 })
 
 app.post('/jobs/comercial/liberar-dormentes', (_req: Request, res: Response, next: NextFunction) => {

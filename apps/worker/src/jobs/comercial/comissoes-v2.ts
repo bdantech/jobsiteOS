@@ -11,6 +11,7 @@ import {
   valorParametro,
   type CessaoConvertida,
   type CommissionParam,
+  type FaseConta,
   type LancamentoOriginal,
   type LancamentoV2,
   type MudancaGestao,
@@ -252,6 +253,7 @@ interface LinhaCessao {
   sacado_nome: string | null
   sacado_gestao: string | null
   sacado_marco: string | null
+  sacado_fase_manual: string | null
   cedente_empresa_id: string | null
   cedente_nome: string | null
 }
@@ -280,6 +282,7 @@ export async function lancarCessaoConvertida(
             sac.razao_social as sacado_nome,
             sac.gestao_operacao as sacado_gestao,
             sac.marco_ativacao::text as sacado_marco,
+            sac.fase_manual as sacado_fase_manual,
             ced.id as cedente_empresa_id,
             ced.razao_social as cedente_nome
      from antecipacoes a
@@ -349,6 +352,7 @@ export async function lancarCessaoConvertida(
     nfNumero: c.nf_numero,
     gestaoOperacao: gestao,
     marcoAtivacao: marco,
+    faseManual: (c.sacado_fase_manual ?? null) as FaseConta | null,
   }
 
   const [tVendedor, tOriginador] = await Promise.all([
@@ -426,6 +430,110 @@ async function bonusContaFechada(
     },
     params,
   )
+}
+
+// ─── Recálculo de uma conta na competência aberta ───────────────────────────
+
+export interface ResultadoRecalculo {
+  empresa_id: string
+  competencia: string | null
+  removidos: number
+  lancamentos: number
+  total: number
+  motivo?: string
+}
+
+/**
+ * Reprecificar o mês corrente de UMA conta, depois que alguém mexeu no relógio dela.
+ *
+ * É a única operação do motor que APAGA lançamento, e por isso ela é estreita de
+ * propósito. Três cercas, e cada uma responde a um jeito diferente de estragar uma folha:
+ *
+ *   SÓ A COMPETÊNCIA ABERTA. Mês fechado é imutável (§6) — um ajuste descoberto depois
+ *   entra como linha nova no mês corrente, nunca como reescrita do passado.
+ *
+ *   SÓ `provisionado`. Aprovado e pago são decisões que uma pessoa tomou; recalcular por
+ *   cima delas apagaria a única coisa neste sistema que não é derivada.
+ *
+ *   SÓ AS CESSÕES. Ajuste manual e evento de SDR não dependem da fase da conta, e
+ *   varrê-los junto faria "corrigi a data de início" apagar o bônus de quem trouxe a conta.
+ *
+ * Apaga e refaz em vez de dar update: o lançamento carrega o SNAPSHOT do que decidiu o
+ * valor, e um update parcial deixaria a linha com valor novo e snapshot velho — o pior
+ * estado possível para quem for conferir depois.
+ */
+export async function recalcularContaJob(empresaId: string): Promise<ResultadoRecalculo> {
+  const competencia = competenciaSp(new Date())
+
+  const { data: fechada } = await supabaseAdmin
+    .from('comissao_competencias')
+    .select('competencia')
+    .eq('competencia', competencia)
+    .maybeSingle()
+  if (fechada) {
+    return {
+      empresa_id: empresaId,
+      competencia,
+      removidos: 0,
+      lancamentos: 0,
+      total: 0,
+      motivo: 'a competência corrente já foi fechada',
+    }
+  }
+
+  const { data: apagaveis } = await supabaseAdmin
+    .from('comissao_lancamentos_v2')
+    .select('id, origem_id')
+    .eq('empresa_id', empresaId)
+    .eq('competencia', competencia)
+    .eq('origem_tipo', 'nf_convertida')
+    .eq('status', 'provisionado')
+
+  const ids = (apagaveis ?? []).map((l) => l.id)
+  if (ids.length > 0) {
+    const { error } = await supabaseAdmin.from('comissao_lancamentos_v2').delete().in('id', ids)
+    if (error) throw new Error(`Falha ao limpar os lançamentos da conta: ${error.message}`)
+  }
+
+  /*
+   * As cessões vêm da competência, não dos lançamentos apagados: a conta pode ter cessões
+   * que NÃO geraram lançamento nenhum (era o caso antes do ajuste), e são justamente elas
+   * que o recálculo existe para trazer.
+   */
+  const { rows } = await pool.query<{ id_externo: number }>(
+    `select a.id_externo
+     from antecipacoes a
+     where a.convertida_em is not null and a.regrediu_em is null
+       and public.app_holding_do_sacado(a.sacado_cnpj) = $1
+       and (a.convertida_em at time zone 'America/Sao_Paulo')::date >= $2::date
+       and (a.convertida_em at time zone 'America/Sao_Paulo')::date
+             < ($2::date + interval '1 month')
+     order by a.convertida_em`,
+    [empresaId, competencia],
+  )
+
+  let lancamentos = 0
+  for (const r of rows) {
+    try {
+      const res = await lancarCessaoConvertida(r.id_externo)
+      lancamentos += res.lancamentos
+    } catch (e) {
+      logger.error({ antecipacao: r.id_externo, erro: String(e) }, 'Recálculo de cessão falhou.')
+    }
+  }
+
+  const { data: novos } = await supabaseAdmin
+    .from('comissao_lancamentos_v2')
+    .select('valor')
+    .eq('empresa_id', empresaId)
+    .eq('competencia', competencia)
+  const total = (novos ?? []).reduce((s, l) => s + Number(l.valor ?? 0), 0)
+
+  logger.info(
+    { empresa: empresaId, competencia, removidos: ids.length, cessoes: rows.length, lancamentos, total },
+    'Conta recalculada na competência aberta.',
+  )
+  return { empresa_id: empresaId, competencia, removidos: ids.length, lancamentos, total }
 }
 
 // ─── Estorno (§1) ───────────────────────────────────────────────────────────

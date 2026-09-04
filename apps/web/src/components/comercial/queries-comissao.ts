@@ -32,6 +32,7 @@ export const comissaoKeys = {
   reclassificacao: (janela: number) => ['comercial', 'comissao-v2', 'reclassificacao', janela] as const,
   semConta: () => ['comercial', 'comissao-v2', 'sacados-sem-conta'] as const,
   contasCliente: () => ['comercial', 'comissao-v2', 'contas-cliente'] as const,
+  contasFase: () => ['comercial', 'comissao-v2', 'contas-fase'] as const,
 }
 
 // ─── Painel ─────────────────────────────────────────────────────────────────
@@ -343,4 +344,56 @@ export async function buscarContasCliente(): Promise<ContaCliente[]> {
     .order('razao_social')
   if (error) throw new Error(error.message)
   return (data ?? []) as ContaCliente[]
+}
+
+// ─── O relógio de cada conta ────────────────────────────────────────────────
+
+export interface ContaFase {
+  empresa_id: string
+  razao_social: string | null
+  cnpj: string
+  estagio: string
+  gestao_operacao: string | null
+  /** A data da primeira cessão convertida. É o zero do relógio que decide a taxa. */
+  marco_ativacao: string | null
+  /** Fase fixada por um gestor. Nula = a fase sai do relógio. */
+  fase_manual: 'CRESCIMENTO' | 'MANUTENCAO' | null
+  titular: string | null
+  volume_mes: number
+  comissao_mes: number
+  ajustes: number
+}
+
+export async function buscarContasFase(): Promise<ContaFase[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_contas_fase')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((c) => ({
+    ...(c as unknown as ContaFase),
+    volume_mes: Number(c.volume_mes ?? 0),
+    comissao_mes: Number(c.comissao_mes ?? 0),
+    ajustes: Number(c.ajustes ?? 0),
+  }))
+}
+
+export interface AjusteFase {
+  id: string
+  marco_anterior: string | null
+  marco_novo: string | null
+  fase_anterior: string | null
+  fase_nova: string | null
+  motivo: string
+  alterado_em: string
+  usuarios: { id: string; nome: string | null } | null
+}
+
+export async function buscarHistoricoFase(empresaId: string): Promise<AjusteFase[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('conta_fase_historico')
+    .select('id, marco_anterior, marco_novo, fase_anterior, fase_nova, motivo, alterado_em, usuarios:alterado_por(id, nome)')
+    .eq('empresa_id', empresaId)
+    .order('alterado_em', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as AjusteFase[]
 }
