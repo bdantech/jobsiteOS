@@ -154,18 +154,36 @@ export async function sincronizarUsuario(
   return { vistas: ids.length, ingeridas, descartadas }
 }
 
+/**
+ * O vendedor dono da CAIXA que recebeu o e-mail.
+ *
+ * Mesma ideia do número de WhatsApp: enquanto a carteira não sabe responder
+ * (contato não identificado), quem atendeu é quem tem a caixa. Aqui é ainda mais
+ * direto que no WhatsApp — a caixa é de uma pessoa só, por construção do OAuth.
+ */
+async function vendedorDaCaixa(usuarioId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('vendedores')
+    .select('id')
+    .eq('usuario_id', usuarioId)
+    .eq('ativo', true)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
 async function ingerir(email: EmailRecebido, conta: ContaGmail): Promise<void> {
   // A citação sai ANTES da triagem: sem isso o classificador lê a nossa própria
   // mensagem de volta e classifica o que nós dissemos.
   const corpo = semCitacao(email.corpo)
 
   const r = await resolverRemetente({ canal: 'email', identificador: email.de, corpo })
+  const donoDaCaixa = await vendedorDaCaixa(conta.usuario_id)
   const conversaId = await conversaPara({
     canal: 'email',
     identificador: email.de,
     empresaId: r.empresaId,
     contatoId: r.contatoId,
-    vendedorId: r.vendedorId,
+    vendedorId: r.vendedorId ?? donoDaCaixa,
   })
 
   await escreverNoLedger({
@@ -174,7 +192,7 @@ async function ingerir(email: EmailRecebido, conta: ContaGmail): Promise<void> {
     contatoId: r.contatoId,
     canal: 'email',
     direcao: 'entrada',
-    vendedorId: r.vendedorId,
+    vendedorId: r.vendedorId ?? donoDaCaixa,
     assunto: email.assunto,
     corpo,
     provedor: 'gmail',
@@ -196,7 +214,7 @@ async function ingerir(email: EmailRecebido, conta: ContaGmail): Promise<void> {
       identificador: email.de,
       nomeSugerido: email.nomeSugerido,
       contaRecebedora: conta.endereco,
-      vendedorSugeridoId: r.vendedorId,
+      vendedorSugeridoId: r.vendedorId ?? donoDaCaixa,
       em: email.recebidoEm,
     })
   }

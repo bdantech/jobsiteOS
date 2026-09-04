@@ -328,6 +328,15 @@ contato e devolve o dono dela. Enquanto ninguém identificou o contato (o estado
 normal de uma conversa nova) não há empresa, logo não há dono. A segunda fonte é o
 **número**, que é de uma pessoa: mesmo argumento da posse da conversa.
 
+A mesma fonte resolve a posse da **conversa**, e não só a autoria da mensagem —
+que era o buraco que sobrou: 54 das 72 threads apareciam como "sem responsável" no
+inbox, e todas tinham mensagens que passaram por um número com dono. `conversaPara`
+passa a receber o dono do número como fallback, e `app__conversa_para` grava com
+`coalesce`: a thread que já tem dono não troca de dono, e a que não tem passa a ter
+na próxima mensagem. A fila de identificação recebe a mesma sugestão, então quem
+for identificar já encontra o dono preenchido. No Gmail o equivalente é a caixa,
+que por construção do OAuth é de uma pessoa só.
+
 A precedência muda com a direção, e a diferença é deliberada:
 
 | | primeiro | depois |
@@ -340,6 +349,31 @@ empresa é da carteira de outro, creditar o outro contaria o trabalho de um como
 outro — e o painel existe para responder quem trabalhou. Ao identificar a conversa,
 `app_conversa_vincular` reescreve empresa e contato de toda a thread, mas carimba
 `vendedor_id` com `coalesce`: quem já falou continua tendo falado.
+
+### Duas grafias do mesmo número, e um número que não era nosso
+
+Duas correções de dado que valem como aviso sobre a coluna `conta_remetente` — ela
+significa **a nossa conta por onde isto passou**, e hoje decide de quem é a
+mensagem, de quem é a conversa, quanto cada número já mandou hoje e qual está mais
+carregado.
+
+Até 02/09 o webhook gravava ali o `sessionId` do provedor (49 dígitos) em vez do
+número, então todo join por `whatsapp_contas.numero` perdia essas linhas. A
+equivalência foi **deduzida, não escolhida**: onze threads têm mensagens com o
+`sessionId` e com um número de conta, e uma thread é a conversa com uma pessoa só —
+se as duas gravações aparecem nela, vieram da mesma sessão. A migração 0172 só age
+quando a dedução é única (`having count(distinct ...) = 1`); com duas candidatas
+ela não faz nada, e a conversa continua sem dono, que é o estado honesto.
+
+E `app__registrar_toque` gravava ali o telefone do **destinatário** (0174). Passou
+despercebido porque a coluna nunca era lida — o toque não é enviado por ninguém, a
+pessoa clica em `tel:` e fala pelo próprio aparelho. Um número de terceiro numa
+coluna que descreve nossas contas é pior que um nulo: nulo é "não sabemos", e o
+outro é uma afirmação falsa que qualquer join futuro acredita. Agora vai o número
+de quem clicou, ou nulo.
+
+Sobra o que é genuinamente desconhecido: um toque feito pelo **Admin**, que não é
+vendedor, e três mensagens antigas cujo webhook não disse por qual conta entraram.
 
 ## O painel de atividade e o que ele recusa mostrar
 

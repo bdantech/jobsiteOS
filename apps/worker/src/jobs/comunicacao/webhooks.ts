@@ -100,6 +100,18 @@ async function registrarEntrada(
   const r = await resolverRemetente({ canal: 'whatsapp', identificador: m.de, corpo: m.corpo })
 
   /*
+   * O DONO DO NÚMERO QUE ATENDEU — resolvido uma vez e usado em três lugares: a
+   * conversa, a linha do ledger e a fila de identificação.
+   *
+   * A carteira só sabe responder depois que alguém identificou o contato, e até
+   * lá a conversa ficava sem responsável: 54 das 72 threads da base, todas com
+   * mensagens de um número que tem dono. O inbox mostrava "sem responsável" para
+   * conversa que chegou no celular de uma pessoa específica, e o filtro por
+   * vendedor não as alcançava.
+   */
+  const donoDoNumero = await vendedorDaConta(conta?.id, contaRecebedora)
+
+  /*
    * A THREAD, e a ordem aqui não é indiferente.
    *
    * Quando o telefone veio (`m.de !== m.lid`), ele é a chave — a mesma que o
@@ -116,7 +128,9 @@ async function registrarEntrada(
       identificador: m.de,
       empresaId: r.empresaId,
       contatoId: r.contatoId,
-      vendedorId: r.vendedorId,
+      // `app__conversa_para` grava com coalesce: a thread que já tem dono não
+      // troca de dono, e a que não tem passa a ter na próxima mensagem.
+      vendedorId: r.vendedorId ?? donoDoNumero,
     }))
 
   // Com os dois identificadores na mão, casa a thread que ficou presa ao LID.
@@ -131,7 +145,7 @@ async function registrarEntrada(
     // Carteira primeiro, dono do número depois: quem já é dono da conta continua
     // sendo, e o que a segunda fonte cobre é a conversa ainda não identificada —
     // que é a maioria delas, e era 100% do que ficava sem dono.
-    vendedorId: r.vendedorId ?? (await vendedorDaConta(conta?.id)),
+    vendedorId: r.vendedorId ?? donoDoNumero,
     corpo: m.midia ? legendaDaMidia(m.midia, m.corpo) : m.corpo,
     provedor: 'wasender',
     idExterno: m.idExterno,
@@ -161,7 +175,9 @@ async function registrarEntrada(
       lid: m.lid,
       nomeSugerido: m.nomeSugerido,
       contaRecebedora,
-      vendedorSugeridoId: r.vendedorId,
+      // A fila de identificação também: quem for identificar essa conversa já
+      // encontra a sugestão de dono preenchida com quem de fato atendeu.
+      vendedorSugeridoId: r.vendedorId ?? donoDoNumero,
       em: m.recebidaEm,
     })
   }
@@ -208,6 +224,8 @@ async function registrarEnvioPeloCelular(
   }
 
   const r = await resolverRemetente({ canal: 'whatsapp', identificador: e.para, corpo: e.corpo })
+  // Aqui o dono do número é ainda mais direto: a mensagem SAIU deste aparelho.
+  const donoDoNumero = await vendedorDaConta(conta?.id, conta?.numero ?? null)
   const soLid = e.lid !== null && e.para === e.lid
   const conversaId =
     (soLid ? await conversaPorLid(e.lid) : null) ??
@@ -216,7 +234,7 @@ async function registrarEnvioPeloCelular(
       identificador: e.para,
       empresaId: r.empresaId,
       contatoId: r.contatoId,
-      vendedorId: r.vendedorId,
+      vendedorId: donoDoNumero ?? r.vendedorId,
     }))
   if (!soLid) await absorverLid(e.lid, conversaId)
 
@@ -243,7 +261,7 @@ async function registrarEnvioPeloCelular(
      * Fabio no painel de atividade seria contar o trabalho de um como do outro —
      * e o painel existe justamente para responder quem trabalhou.
      */
-    vendedorId: (await vendedorDaConta(conta?.id)) ?? r.vendedorId,
+    vendedorId: donoDoNumero ?? r.vendedorId,
     corpo: e.midia
       ? legendaDaMidia(e.midia, e.corpo)
       : (e.corpo ?? (e.temMidia ? '(mídia enviada pelo celular)' : null)),
@@ -309,9 +327,19 @@ async function donoDaConta(contaId: string): Promise<string | null> {
  * O número resolve porque ele é de uma pessoa (`usuario_responsavel`). É o mesmo
  * argumento da posse da conversa: quem atendeu o número foi quem falou.
  */
-async function vendedorDaConta(contaId: string | null | undefined): Promise<string | null> {
-  if (!contaId) return null
-  const usuario = await donoDaConta(contaId)
+async function vendedorDaConta(
+  contaId: string | null | undefined,
+  /**
+   * O NÚMERO, para quando o webhook entrou pela rota global e não trouxe a conta.
+   * Sem ele, metade das mensagens continuaria sem dono por um detalhe de rota —
+   * e é a mesma conta dos dois jeitos.
+   */
+  numero?: string | null,
+): Promise<string | null> {
+  if (!contaId && !numero) return null
+  const q = supabaseAdmin.from('whatsapp_contas').select('usuario_responsavel')
+  const { data: conta } = await (contaId ? q.eq('id', contaId) : q.eq('numero', numero!)).maybeSingle()
+  const usuario = conta?.usuario_responsavel
   if (!usuario) return null
   const { data } = await supabaseAdmin
     .from('vendedores')
