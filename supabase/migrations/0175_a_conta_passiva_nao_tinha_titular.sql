@@ -435,3 +435,32 @@ update public.vendedor_carteira c
  where c.empresa_id = i.empresa_id
    and c.papel = 'vendedor' and c.origem = 'automatica' and c.ate is null
    and i.desde < c.desde;
+
+-- ─── §6 Competência fechada, agora no BANCO ─────────────────────────────────
+--
+-- "Uma competência fechada é imutável" era doutrina em três comentários e uma checagem
+-- dentro de `app_ajuste_manual_comissao`. Todo o resto — handler live, backfill, fila do
+-- SDR — inseria por service role, sem nada no caminho. A invariante mais cara do módulo
+-- dependia de cada chamador lembrar dela.
+--
+-- Vale a pena aqui e não só no job porque o job é UM dos caminhos, e porque o banco é o
+-- único lugar onde a regra continua valendo enquanto a versão do worker em produção não
+-- é a mesma do repositório. `app_ajuste_manual_comissao` já recusa antes, com mensagem
+-- melhor; este é o piso.
+
+create or replace function public.comissao_lancamento_competencia_aberta()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if public.app_competencia_fechada(new.competencia) then
+    raise exception
+      'A competência de % já foi fechada — um lançamento novo dela entra como ajuste manual no mês corrente.',
+      to_char(new.competencia, 'MM/YYYY') using errcode = '22023';
+  end if;
+  return new;
+end $$;
+
+revoke execute on function public.comissao_lancamento_competencia_aberta() from public, anon, authenticated;
+
+create trigger comissao_lancamentos_v2_competencia_aberta_trg
+  before insert on public.comissao_lancamentos_v2
+  for each row execute function public.comissao_lancamento_competencia_aberta();
