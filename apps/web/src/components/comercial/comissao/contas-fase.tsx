@@ -363,7 +363,14 @@ export function ContasFase() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{brlCurto(c.volume_mes)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {brlCurto(c.volume_mes)}
+                        {c.cessoes_mes > 0 ? (
+                          <div className="text-[10px] text-muted-foreground">
+                            {c.cessoes_mes} cessão(ões)
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-2 text-right tabular-nums font-medium">
                         {brlCurto(c.comissao_mes)}
                       </td>

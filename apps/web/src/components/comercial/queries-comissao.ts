@@ -360,6 +360,7 @@ export interface ContaFase {
   fase_manual: 'CRESCIMENTO' | 'MANUTENCAO' | null
   titular: string | null
   volume_mes: number
+  cessoes_mes: number
   comissao_mes: number
   ajustes: number
 }
@@ -371,6 +372,7 @@ export async function buscarContasFase(): Promise<ContaFase[]> {
   return ((data ?? []) as Record<string, unknown>[]).map((c) => ({
     ...(c as unknown as ContaFase),
     volume_mes: Number(c.volume_mes ?? 0),
+    cessoes_mes: Number(c.cessoes_mes ?? 0),
     comissao_mes: Number(c.comissao_mes ?? 0),
     ajustes: Number(c.ajustes ?? 0),
   }))
