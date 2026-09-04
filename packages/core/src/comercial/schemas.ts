@@ -314,6 +314,21 @@ export const definirCarteiraSchema = z.object({
 export type DefinirCarteiraInput = z.infer<typeof definirCarteiraSchema>
 
 /**
+ * Dizer que um CNPJ que opera pertence a uma conta cliente.
+ *
+ * `empresa_id` nulo DESVINCULA — e é por isso que `motivo` não é obrigatório aqui, mas é
+ * no banco: desfazer um vínculo não precisa de explicação, criar um precisa. O CNPJ chega
+ * como o usuário digitou e é normalizado no RPC; validar o formato aqui obrigaria a tela a
+ * limpar a máscara antes de mandar, e a máscara é da tela.
+ */
+export const vincularSacadoSchema = z.object({
+  cnpj: z.string().min(14),
+  empresa_id: uuid.nullable(),
+  motivo: z.string().trim().min(3).optional(),
+})
+export type VincularSacadoInput = z.infer<typeof vincularSacadoSchema>
+
+/**
  * Mover de estágio, julgar o fit, ou os dois na mesma chamada.
  *
  * `estagio` e `fit` são ambos opcionais porque são coisas independentes: marcar sem fit

@@ -8,6 +8,7 @@ import {
   atribuirVenda,
   definirCarteira,
   definirCarteiraPassiva,
+  vincularSacado,
   definirGestaoOperacao,
   gerarTokenIcs,
   moverLeadSdr,
@@ -71,6 +72,27 @@ export async function definirCarteiraAction(input: unknown): Promise<ActionResul
   if (erro || !supabase) return erro as ActionResult<never>
   try {
     await definirCarteira(supabase, input)
+    return { ok: true, data: { ok: true } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * Dizer de quem é um CNPJ que está operando sem conta.
+ *
+ * `revalidatePath` da ficha da empresa DESTINO, não da origem: o CNPJ vinculado
+ * frequentemente não tem ficha nenhuma — é justamente por não estar cadastrado como
+ * empresa que ele caiu na lista.
+ */
+export async function vincularSacadoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    await vincularSacado(supabase, input)
+    const alvo = (input as { empresa_id?: string | null } | null)?.empresa_id
+    if (alvo) revalidatePath(`/empresas/${alvo}`)
+    revalidatePath('/comercial/comissoes')
     return { ok: true, data: { ok: true } }
   } catch (error) {
     return falha(error)

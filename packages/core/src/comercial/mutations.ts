@@ -13,6 +13,7 @@ import {
   salvarVendedorSchema,
   definirCarteiraPassivaSchema,
   definirCarteiraSchema,
+  vincularSacadoSchema,
   definirGestaoSchema,
   moverLeadSchema,
   moverVendaSchema,
@@ -42,6 +43,21 @@ export async function definirGestaoOperacao(supabase: Supabase, input: unknown) 
 export async function definirCarteira(supabase: Supabase, input: unknown) {
   const dados = definirCarteiraSchema.parse(input)
   const { data, error } = await supabase.rpc('app_definir_carteira', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/**
+ * O CNPJ que opera por baixo de um cliente.
+ *
+ * Existe porque as três deduções de `app_holding_do_sacado` — CNPJ, raiz e grupo
+ * econômico — não alcançam o caso em que a gestão SABE de quem é a operação e o dado
+ * público não diz. Um sacado sem conta não gera comissão para ninguém, e não emite
+ * sintoma nenhum ao não gerar.
+ */
+export async function vincularSacado(supabase: Supabase, input: unknown) {
+  const dados = vincularSacadoSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_vincular_sacado', { p: dados as unknown as Json })
   if (error) throw new Error(error.message)
   return data
 }

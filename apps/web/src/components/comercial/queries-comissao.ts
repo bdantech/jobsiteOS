@@ -30,6 +30,8 @@ export const comissaoKeys = {
   competencias: () => ['comercial', 'comissao-v2', 'competencias'] as const,
   aceites: () => ['comercial', 'comissao-v2', 'aceites'] as const,
   reclassificacao: (janela: number) => ['comercial', 'comissao-v2', 'reclassificacao', janela] as const,
+  semConta: () => ['comercial', 'comissao-v2', 'sacados-sem-conta'] as const,
+  contasCliente: () => ['comercial', 'comissao-v2', 'contas-cliente'] as const,
 }
 
 // ─── Painel ─────────────────────────────────────────────────────────────────
@@ -289,4 +291,56 @@ export async function buscarHistoricoGestao(empresaId: string): Promise<MudancaC
     .order('alterado_em', { ascending: false })
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as MudancaClassificacao[]
+}
+
+// ─── Sacados que operam sem conta ───────────────────────────────────────────
+
+export interface SacadoSemConta {
+  cnpj: string
+  nome: string | null
+  cessoes: number
+  volume: number
+  primeira: string
+  ultima: string
+  cedentes: number
+  /** Quando o CNPJ existe em `empresas` mas fora de cliente/ex-cliente — o caso mais comum. */
+  cadastro_nome: string | null
+  cadastro_estagio: string | null
+}
+
+/**
+ * O volume que não paga comissão a ninguém.
+ *
+ * Vem de RPC e não da tabela porque a pergunta é "quem NÃO resolve para conta" — uma
+ * negativa sobre o resultado de `app_holding_do_sacado`, que só o banco sabe calcular.
+ */
+export async function buscarSacadosSemConta(): Promise<SacadoSemConta[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_sacados_sem_conta')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((s) => ({
+    ...(s as unknown as SacadoSemConta),
+    volume: Number(s.volume ?? 0),
+    cessoes: Number(s.cessoes ?? 0),
+    cedentes: Number(s.cedentes ?? 0),
+  }))
+}
+
+export interface ContaCliente {
+  id: string
+  razao_social: string | null
+  cnpj: string
+  estagio: string
+}
+
+/** As contas que podem receber um vínculo — a mesma régua do RPC, para não oferecer erro. */
+export async function buscarContasCliente(): Promise<ContaCliente[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('id, razao_social, cnpj, estagio')
+    .in('estagio', ['cliente', 'ex_cliente'])
+    .order('razao_social')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ContaCliente[]
 }

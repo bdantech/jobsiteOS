@@ -7231,6 +7231,41 @@ export type Database = {
           },
         ]
       }
+      sacado_vinculo: {
+        Row: {
+          atualizado_em: string
+          cnpj: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          motivo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cnpj: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          motivo: string
+        }
+        Update: {
+          atualizado_em?: string
+          cnpj?: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sacado_vinculo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sdr_aceites: {
         Row: {
           aceite_automatico: boolean
@@ -10643,6 +10678,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_vincular_sacado: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          cnpj: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          motivo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sacado_vinculo"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_definir_carteira_passiva: { Args: { p: Json }; Returns: Json }
       app_definir_config: {
         Args: { p: Json }
@@ -12756,6 +12808,7 @@ export type Database = {
         Args: { p_meses?: number; p_vendedor_id?: string }
         Returns: Json
       }
+      comercial_sacados_sem_conta: { Args: never; Returns: Json }
       comissao_reclassificacao: {
         Args: { p_janela_dias?: number }
         Returns: Json

@@ -11,6 +11,7 @@ import { FilaAceite } from './comissao/fila-aceite'
 import { Historico } from './comissao/historico'
 import { MesCorrente } from './comissao/mes-corrente'
 import { Reclassificacao } from './comissao/reclassificacao'
+import { SacadosSemConta } from './comissao/sacados-sem-conta'
 import { Simulador } from './comissao/simulador'
 import { competenciaCorrente, useExtratoLive } from './comissao/use-extrato-live'
 
@@ -33,7 +34,7 @@ import { competenciaCorrente, useExtratoLive } from './comissao/use-extrato-live
  * futuras dela, e é a única ação daqui que reprecifica o trabalho de outra pessoa.
  */
 
-type Aba = 'mes' | 'historico' | 'extrato' | 'simulador' | 'reclassificacao' | 'aceites'
+type Aba = 'mes' | 'historico' | 'extrato' | 'simulador' | 'reclassificacao' | 'aceites' | 'sem-conta'
 
 export function Comissoes({
   ehGestor,
@@ -70,6 +71,9 @@ export function Comissoes({
     { id: 'aceites', rotulo: 'Fila de aceite', visivel: true },
     { id: 'simulador', rotulo: 'Simulador', visivel: ehGestor },
     { id: 'reclassificacao', rotulo: 'Reclassificação', visivel: ehAdmin },
+    // Mesma régua da reclassificação: dizer de quem é um CNPJ decide de quem é o dinheiro
+    // dele, e é uma afirmação sobre a operação inteira, não sobre uma folha.
+    { id: 'sem-conta', rotulo: 'Sem conta', visivel: ehAdmin },
   ]
 
   return (
@@ -144,6 +148,7 @@ export function Comissoes({
       {aba === 'aceites' ? <FilaAceite /> : null}
       {aba === 'simulador' && ehGestor ? <Simulador /> : null}
       {aba === 'reclassificacao' && ehAdmin ? <Reclassificacao /> : null}
+      {aba === 'sem-conta' && ehAdmin ? <SacadosSemConta /> : null}
 
       {aba === 'mes' || aba === 'extrato' ? (
         <Card>

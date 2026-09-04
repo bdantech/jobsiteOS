@@ -64,6 +64,11 @@ export const EVENTO_TIPOS = {
   FORNECEDOR_TIPAGEM_ALTERADA: 'fornecedor.tipagem_alterada',
   SACADO_LIMITE_INSUFICIENTE: 'sacado.limite_insuficiente',
   SACADO_CREDITO_ALTERADO: 'sacado.credito_alterado',
+  /**
+   * Um CNPJ que opera passou a pertencer a uma conta cliente, por decisão de um
+   * gestor — o caso que nem o CNPJ, nem a raiz, nem o grafo de sócios revelam.
+   */
+  SACADO_VINCULADO: 'sacado.vinculado',
   OUTBOX_MENSAGEM_GERADA: 'outbox.mensagem_gerada',
   TOQUE_MANUAL: 'toque.manual',
   CONTATO_PONTO_FOCAL_DEFINIDO: 'contato.ponto_focal_definido',
@@ -269,6 +274,7 @@ export const EVENTO_LABELS: Record<string, string> = {
   'fornecedor.tipagem_alterada': 'Tipagem do fornecedor alterada',
   'sacado.limite_insuficiente': 'Limite do sacado insuficiente',
   'sacado.credito_alterado': 'Crédito do sacado alterado',
+  'sacado.vinculado': 'Sacado vinculado à conta',
   'outbox.mensagem_gerada': 'Mensagem gerada na outbox',
   'toque.manual': 'Toque manual',
   'contato.ponto_focal_definido': 'Ponto focal definido',
