@@ -293,9 +293,19 @@ export async function lancarCessaoConvertida(
   if (!c || !c.convertida_em) {
     return { antecipacao_id: antecipacaoId, lancamentos: 0, motivo: 'antecipação não convertida' }
   }
-  // A CESSÃO é identificada pela access_key da NF. Sem ela não há chave estável para a
-  // idempotência, e um id que muda é pior que nenhum: pagaria de novo a cada reprocesso.
-  const origemId = c.access_key ?? `antecipacao:${c.id_externo}`
+  /*
+   * A CESSÃO é a ANTECIPAÇÃO, e é ela que identifica o lançamento.
+   *
+   * Era a `access_key` da NF, e isso quebrava de dois jeitos ao mesmo tempo. Uma NF cedida
+   * em PARCELAS gera várias antecipações contra a mesma chave — cada uma com valor e prazo
+   * próprios, cada uma imobilizando capital próprio —, e a unicidade
+   * `(papel, origem_tipo, origem_id, vendedor_id)` fazia a segunda em diante entrar como
+   * reprocesso e ser descartada em silêncio: 10 NFs da base, 39 antecipações, e 74% do VOP
+   * delas nunca virava dinheiro de ninguém. E a cessão SEM nota não tinha chave nenhuma.
+   *
+   * `id_externo` é o id da plataforma: estável, único por cessão, e existe sempre.
+   */
+  const origemId = `antecipacao:${c.id_externo}`
 
   const quando = c.convertida_em
   const params = await carregarParams()
@@ -362,7 +372,8 @@ export async function lancarCessaoConvertida(
         `Cessão de ${moeda(cessao.valorCedido)} em ${cessao.anticipationDays} dias: ` +
         `${gravados} lançamento(s) de comissão provisionados.`,
       url: '/comercial/comissoes',
-      access_key: origemId,
+      cessao: origemId,
+      access_key: c.access_key,
       antecipacao_id: c.id_externo,
       vop: lancamentos[0]?.vop ?? null,
       papeis: lancamentos.map((l) => l.papel),
@@ -440,11 +451,7 @@ export async function estornarCessao(
   motivo: string,
   proporcao = 1,
 ): Promise<ResultadoEstorno> {
-  const { rows: refs } = await pool.query<{ access_key: string | null }>(
-    `select access_key_casada as access_key from antecipacoes where id_externo = $1`,
-    [antecipacaoId],
-  )
-  const origemId = refs[0]?.access_key ?? `antecipacao:${antecipacaoId}`
+  const origemId = `antecipacao:${antecipacaoId}`
 
   const { data } = await supabaseAdmin
     .from('comissao_lancamentos_v2')
@@ -481,7 +488,7 @@ export async function estornarCessao(
     resumo,
     url: '/comercial/comissoes',
     antecipacao_id: antecipacaoId,
-    access_key: origemId,
+    cessao: origemId,
     motivo,
     proporcao,
   })
@@ -1000,7 +1007,7 @@ export async function backfillCessoesJob(limite = 500): Promise<ResultadoBackfil
     `select a.id_externo
      from antecipacoes a
      where a.convertida_em is not null and a.regrediu_em is null
-       and a.access_key_casada is not null
+       -- Sem exigir NF casada: a cessão sem nota é uma cessão, e era a maioria delas.
        and a.convertida_em >= greatest(
              (select min(vigente_de) from commission_params),
              coalesce((select (max(competencia) + interval '1 month')::date
@@ -1008,7 +1015,8 @@ export async function backfillCessoesJob(limite = 500): Promise<ResultadoBackfil
            )
        and not exists (
          select 1 from comissao_lancamentos_v2 l
-         where l.origem_tipo = 'nf_convertida' and l.origem_id = a.access_key_casada
+         where l.origem_tipo = 'nf_convertida'
+           and l.origem_id = 'antecipacao:' || a.id_externo
        )
      order by a.convertida_em
      limit $1`,

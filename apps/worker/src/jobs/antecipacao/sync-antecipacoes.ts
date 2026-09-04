@@ -271,7 +271,11 @@ async function processar(
   // ── §4.5 Regressão ──
   // Antes do casamento, e não depois: uma antecipação que já converteu e voltou
   // atrás não deve ser recasada como se fosse nova.
-  if (anterior?.convertida_em && anterior.access_key_casada) {
+  //
+  // Sem `access_key_casada` na condição: a cessão sem NF também converte, e portanto
+  // também precisa poder regredir. Exigi-la aqui deixaria a comissão de uma cessão
+  // cancelada de pé para sempre, sem estorno.
+  if (anterior?.convertida_em) {
     const regrediu =
       !statusConverte(a.status, cfg) ||
       (a.invoice_cancelled_at !== null && anterior.invoice_cancelled_at === null)
@@ -282,35 +286,46 @@ async function processar(
     }
   }
 
-  // Já casada e sem regressão: nada a refazer. O casamento é caro (lê todas as
-  // notas do par) e não muda de ideia sozinho.
-  if (anterior?.match_status === 'casada' || anterior?.match_status === 'ignorada') {
-    // A exceção: casou antes de o status virar conversor. Agora virou.
-    if (
-      anterior.match_status === 'casada' &&
-      anterior.access_key_casada &&
-      !anterior.convertida_em &&
-      statusConverte(a.status, cfg)
-    ) {
-      acc.convertidas += await converterNota(a, anterior.access_key_casada, cfg)
+  /*
+   * ── A conversão, ANTES do casamento ──
+   *
+   * O status da antecipação é o que diz se a cessão aconteceu. O casamento com a NF diz
+   * só se temos o papel dela. Eram a mesma decisão até aqui, e por isso toda operação de
+   * cedente sem certificado ficava fora do funil, fora das métricas de receita realizada
+   * e fora da comissão — sem emitir sintoma nenhum.
+   */
+  if (!anterior?.convertida_em && statusConverte(a.status, cfg)) {
+    // Já casada de antes: converte com a nota junto.
+    if (anterior?.access_key_casada) {
+      acc.convertidas += await converterCessao(a, anterior.access_key_casada, cfg)
       acc.eventos++
+      return
     }
+    // Ainda não casada: tenta casar, e converte com o que houver — inclusive com nada.
+    if (anterior?.match_status !== 'casada' && anterior?.match_status !== 'ignorada') {
+      const r = await casar(a, cfg)
+      acc[r.status === 'casada' ? 'casadas' : r.status === 'sem_nf' ? 'sem_nf' : 'revisao']++
+      acc.convertidas += await converterCessao(a, r.access_key ?? null, cfg)
+      acc.eventos++
+      return
+    }
+    acc.convertidas += await converterCessao(a, null, cfg)
+    acc.eventos++
     return
   }
+
+  // Já casada e sem conversão pendente: nada a refazer. O casamento é caro (lê
+  // todas as notas do par) e não muda de ideia sozinho.
+  if (anterior?.match_status === 'casada' || anterior?.match_status === 'ignorada') return
 
   const resultado = await casar(a, cfg)
   acc[resultado.status === 'casada' ? 'casadas' : resultado.status === 'sem_nf' ? 'sem_nf' : 'revisao']++
   if (resultado.status === 'casada' && resultado.access_key) {
-    if (statusConverte(a.status, cfg)) {
-      acc.convertidas += await converterNota(a, resultado.access_key, cfg)
-      acc.eventos++
-    } else {
-      // Casou, mas o status não converte (REPROVED, DRAFT…). Este é o ÚNICO
-      // caminho que emite `antecipacao.casada`: quando a conversão acontece, o
-      // `nf.convertida` já conta a mesma história com mais detalhe, e dois
-      // eventos por fato transformam a timeline do fornecedor em eco.
-      acc.eventos += await eventoCasada(a, resultado.access_key)
-    }
+    // Casou, mas o status não converte (REPROVED, DRAFT…). Este é o ÚNICO
+    // caminho que emite `antecipacao.casada`: quando a conversão acontece, o
+    // `nf.convertida` já conta a mesma história com mais detalhe, e dois
+    // eventos por fato transformam a timeline do fornecedor em eco.
+    acc.eventos += await eventoCasada(a, resultado.access_key)
   }
 }
 
@@ -367,6 +382,75 @@ async function casar(a: AntecipacaoNormalizada, cfg: ConfigConversao): Promise<R
 // ─── §4.4 Os efeitos da conversão ───────────────────────────────────────────
 
 /**
+ * A CESSÃO converteu. Com nota fiscal casada ou sem ela.
+ *
+ * A separação entre este e `converterNota` é a correção de um erro que custava caro: até
+ * aqui `convertida_em` só era gravado DENTRO da conversão da nota, e a conversão da nota
+ * só acontecia quando o casamento dava certo. Uma antecipação sem NF — porque o sacado ou
+ * o cedente não subiu certificado, que é o caso mais comum na plataforma — nunca era
+ * considerada convertida, por mais conversor que fosse o status dela.
+ *
+ * Medido em 04/09/2026: 780 antecipações com status conversor e sem NF casada, R$ 28,7
+ * milhões. Só em setembro, 155 delas e R$ 4,58 milhões — contra R$ 1,35 milhão que o
+ * motor de comissão enxergava. Ele via 23% da operação e ninguém tinha como notar: o que
+ * não converte não aparece em lugar nenhum como "não convertido".
+ *
+ * A NF é uma consequência da cessão, não a causa dela. Quem antecipa é o cedente, e a
+ * plataforma sabe que a operação aconteceu independentemente de nós termos o XML.
+ */
+async function converterCessao(
+  a: AntecipacaoNormalizada,
+  accessKey: string | null,
+  cfg: ConfigConversao,
+): Promise<number> {
+  const agora = new Date().toISOString()
+
+  await supabaseAdmin
+    .from('antecipacoes')
+    .update({ convertida_em: agora, atualizada_em: agora })
+    .eq('id_externo', a.id_externo)
+
+  // A nota, quando existe. Ela sai do funil e ganha o evento com os valores reais.
+  if (accessKey) await converterNota(a, accessKey, cfg)
+
+  /*
+   * O fato gerador da comissão (04k §1) é ESTE instante, e o lançamento nasce agora.
+   *
+   * Não é o mês que fecha a folha: é a cessão que converte. Provisionar aqui é o que faz
+   * o extrato do vendedor mexer enquanto ele trabalha, em vez de aparecer pronto no dia
+   * 1º — e o motor é idempotente, então um reprocesso do sync não paga duas vezes.
+   *
+   * FORA do `if (accessKey)`: a comissão é da cessão, e a cessão existe com ou sem nota.
+   * O sacado e o cedente vêm de `antecipacoes`, não da NF — a NF só emprestava o número
+   * para a descrição do extrato.
+   *
+   * A falha é ISOLADA de propósito: comissão que não lançou é um problema, mas derrubar a
+   * conversão por causa dele seria trocar um problema por um pior. O job diário de
+   * backfill recolhe o que ficou para trás.
+   */
+  try {
+    await lancarCessaoConvertida(a.id_externo)
+  } catch (e) {
+    logger.error(
+      { id: a.id_externo, erro: String(e) },
+      'Cessão convertida, mas o motor de comissão falhou. O backfill diário recolhe.',
+    )
+  }
+
+  // Sem NF a empresa do fornecedor vem do cadastro pelo CNPJ, não da nota.
+  if (!accessKey) {
+    const { data: emp } = await supabaseAdmin
+      .from('empresas')
+      .select('id')
+      .eq('cnpj', a.fornecedor_cnpj)
+      .maybeSingle()
+    if (emp?.id) await atualizarFornecedor(emp.id, a)
+  }
+
+  return 1
+}
+
+/**
  * A nota vira `convertida`, o evento carrega os valores REAIS da operação e o
  * fornecedor passa a ser recorrência.
  *
@@ -407,11 +491,6 @@ async function converterNota(
     return 0
   }
 
-  await supabaseAdmin
-    .from('antecipacoes')
-    .update({ convertida_em: new Date().toISOString(), atualizada_em: new Date().toISOString() })
-    .eq('id_externo', a.id_externo)
-
   await emitirEvento(nf.fornecedor_empresa_id, EVENTO_TIPOS.NF_CONVERTIDA, {
     titulo: `Nota ${nf.numero ?? accessKey} convertida`,
     resumo:
@@ -434,26 +513,6 @@ async function converterNota(
   })
 
   await atualizarFornecedor(nf.fornecedor_empresa_id, a)
-
-  /*
-   * O fato gerador da comissão (04k §1) é ESTE instante, e o lançamento nasce agora.
-   *
-   * Não é o mês que fecha a folha: é a cessão que converte. Provisionar aqui é o que faz
-   * o extrato do vendedor mexer enquanto ele trabalha, em vez de aparecer pronto no dia
-   * 1º — e o motor é idempotente, então um reprocesso do sync não paga duas vezes.
-   *
-   * A falha é ISOLADA de propósito: comissão que não lançou é um problema, mas derrubar a
-   * conversão da nota por causa dele seria trocar um problema por um pior. O job diário
-   * de backfill recolhe o que ficou para trás.
-   */
-  try {
-    await lancarCessaoConvertida(a.id_externo)
-  } catch (e) {
-    logger.error(
-      { id: a.id_externo, erro: String(e) },
-      'Nota convertida, mas o motor de comissão falhou. O backfill diário recolhe.',
-    )
-  }
 
   return 1
 }
@@ -685,7 +744,17 @@ export async function rematchPendentes(): Promise<ResultadoRematch> {
     if (r.status === 'casada' && r.access_key) {
       acc.casadas++
       if (statusConverte(a.status, cfg)) {
-        acc.convertidas += await converterNota(a, r.access_key, cfg)
+        /*
+         * A nota que chega DEPOIS da cessão já ter convertido.
+         *
+         * Passou a ser um caminho normal: a cessão converte pelo status, e o XML aparece
+         * dias depois, quando o cedente sobe o certificado. Aí só a NOTA converte —
+         * `converterCessao` reescreveria `convertida_em` para hoje e mudaria a
+         * competência da comissão de uma cessão que já foi lançada.
+         */
+        acc.convertidas += linha.convertida_em
+          ? await converterNota(a, r.access_key, cfg)
+          : await converterCessao(a, r.access_key, cfg)
         acc.eventos++
       }
     } else if (r.status === 'sem_nf') {
