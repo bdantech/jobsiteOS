@@ -1,5 +1,7 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
+  agruparDerivaPorConta,
+  compararLancamentos,
   competenciaSp,
   diaSp,
   estornosDaCessao,
@@ -11,7 +13,10 @@ import {
   valorParametro,
   type CessaoConvertida,
   type CommissionParam,
+  type ContaComDeriva,
+  type DiferencaLancamento,
   type FaseConta,
+  type LancamentoComparavel,
   type LancamentoOriginal,
   type LancamentoV2,
   type MudancaGestao,
@@ -1172,3 +1177,272 @@ export async function comissoesDiarioJob(): Promise<ResultadoComissoesDiario> {
 
 const moeda = (n: number): string =>
   Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// ─── Deriva: o que a régua de hoje diria sobre o mês aberto ─────────────────
+
+/**
+ * A PRÉVIA (04k, "avisar e oferecer").
+ *
+ * Publicar um parâmetro não reescreve lançamento — de propósito, e por três mecanismos
+ * independentes: a vigência é aberta para frente, o motor resolve a taxa NA DATA DA
+ * CESSÃO, e o `ignoreDuplicates` da gravação garante que reprocessar não repaga.
+ *
+ * Isso protege o passado e cria uma discordância possível no PRESENTE. A vigência é por
+ * DIA, não por instante: uma cessão convertida hoje de manhã e lançada às 9h05 pela taxa
+ * velha passa a ser regida, às 10h, pela taxa publicada hoje. O lançamento dela não muda
+ * sozinho, e ninguém descobre isso olhando a tela.
+ *
+ * Esta função torna a discordância visível ANTES de virar folha. Ela não escreve nada:
+ * recalcula em memória com o MESMO `lancamentosDaCessao` que grava, e compara com o que
+ * está lançado. Uma segunda implementação "só para a prévia" é como uma tela passa meses
+ * prometendo um número que a folha nunca paga.
+ *
+ * Ela também não pergunta QUAL parâmetro mudou. Comparar tudo contra tudo custa o mesmo e
+ * pega a deriva inteira — inclusive a que veio de titularidade, classificação ou data de
+ * ativação. Uma prévia que só olhasse a chave publicada esconderia exatamente as
+ * diferenças que ninguém está procurando.
+ */
+export interface DerivaComissao {
+  competencia: string
+  /** Competência já fechada: não há o que recalcular, e a tela precisa dizer por quê. */
+  fechada: boolean
+  contas: ContaComDeriva[]
+  diferencas: DiferencaLancamento[]
+  total_atual: number
+  total_novo: number
+  delta: number
+  /** Cessões varridas. Serve para a tela distinguir "sem deriva" de "sem cessão". */
+  cessoes: number
+}
+
+/**
+ * Reconstrói uma cessão SEM escrever nada.
+ *
+ * É `lancarCessaoConvertida` sem os três efeitos colaterais dele: não grava o marco de
+ * ativação, não abre titularidade e não grava lançamento. Os três são escritas legítimas
+ * no caminho ao vivo e seriam mentira numa prévia — sobretudo o marco, que é o zero do
+ * relógio de fase e move todas as taxas da conta pelos anos seguintes.
+ */
+async function preverCessao(
+  c: LinhaCessao,
+  params: readonly CommissionParam[],
+): Promise<LancamentoV2[]> {
+  if (!c.convertida_em) return []
+  const quando = c.convertida_em
+
+  const gestao = gestaoNaData(
+    (c.sacado_gestao ?? null) as GestaoOperacao | null,
+    await historicoGestao(c.sacado_empresa_id),
+    quando,
+  )
+
+  const cessao: CessaoConvertida = {
+    origemId: `antecipacao:${c.id_externo}`,
+    antecipacaoId: c.id_externo,
+    convertidaEm: quando,
+    valorCedido: Number(c.gross_value ?? 0),
+    anticipationDays: Number(c.anticipation_days ?? 0),
+    empresaId: c.sacado_empresa_id,
+    sacadoNome: c.sacado_nome,
+    cedenteCnpj: c.fornecedor_cnpj,
+    cedenteNome: c.cedente_nome,
+    nfNumero: c.nf_numero,
+    gestaoOperacao: gestao,
+    marcoAtivacao: c.sacado_marco,
+    faseManual: (c.sacado_fase_manual ?? null) as FaseConta | null,
+  }
+
+  const [tVendedor, tOriginador] = await Promise.all([
+    titularesNaData(c.sacado_empresa_id, 'vendedor', quando),
+    titularesNaData(c.cedente_empresa_id, 'originador', quando),
+  ])
+
+  return lancamentosDaCessao(cessao, { vendedor: tVendedor, originador: tOriginador }, params)
+}
+
+export async function derivaComissaoJob(): Promise<DerivaComissao> {
+  const competencia = competenciaSp(new Date())
+
+  const { data: fechada } = await supabaseAdmin
+    .from('comissao_competencias')
+    .select('competencia')
+    .eq('competencia', competencia)
+    .maybeSingle()
+
+  const vazio: DerivaComissao = {
+    competencia,
+    fechada: Boolean(fechada),
+    contas: [],
+    diferencas: [],
+    total_atual: 0,
+    total_novo: 0,
+    delta: 0,
+    cessoes: 0,
+  }
+  // Mês fechado é imutável (§6). Varrer para mostrar uma deriva que ninguém pode aplicar
+  // seria oferecer um botão que o próprio motor recusa.
+  if (fechada) return vazio
+
+  /*
+   * SÓ `provisionado`, e só `nf_convertida` — as mesmas duas cercas do recálculo, porque
+   * a prévia tem de prometer exatamente o que o "aplicar" vai fazer. Aprovado e pago são
+   * decisões de uma pessoa; ajuste manual e evento de SDR não dependem de taxa por MM.
+   */
+  const { data: lancados, error } = await supabaseAdmin
+    .from('comissao_lancamentos_v2')
+    .select('papel, origem_id, vendedor_id, valor, empresa_id')
+    .eq('competencia', competencia)
+    .eq('origem_tipo', 'nf_convertida')
+    .eq('status', 'provisionado')
+  if (error) throw new Error(`Falha ao ler os lançamentos da competência: ${error.message}`)
+
+  const { rows } = await pool.query<LinhaCessao>(
+    `select a.id_externo,
+            a.convertida_em,
+            a.gross_value,
+            a.anticipation_days,
+            a.sacado_cnpj,
+            a.fornecedor_cnpj,
+            a.access_key_casada as access_key,
+            nf.numero as nf_numero,
+            sac.id as sacado_empresa_id,
+            sac.razao_social as sacado_nome,
+            sac.gestao_operacao as sacado_gestao,
+            sac.marco_ativacao::text as sacado_marco,
+            sac.fase_manual as sacado_fase_manual,
+            ced.id as cedente_empresa_id,
+            ced.razao_social as cedente_nome
+     from antecipacoes a
+     left join notas_fiscais nf on nf.access_key = a.access_key_casada
+     left join empresas sac on sac.id = public.app_holding_do_sacado(a.sacado_cnpj)
+     left join empresas ced on ced.cnpj = a.fornecedor_cnpj
+     where a.convertida_em is not null and a.regrediu_em is null
+       and (a.convertida_em at time zone 'America/Sao_Paulo')::date >= $1::date
+       and (a.convertida_em at time zone 'America/Sao_Paulo')::date
+             < ($1::date + interval '1 month')
+     order by a.convertida_em`,
+    [competencia],
+  )
+
+  /*
+   * Os parâmetros são lidos UMA vez por chamada e passados adiante — nunca cacheados em
+   * módulo. `carregarParams` lê a tabela inteira e a prévia varre centenas de cessões,
+   * então reler a cada uma seriam centenas de round-trips idênticos; mas um cache que
+   * sobrevivesse à chamada faria a prévia ignorar o parâmetro publicado há um minuto, que
+   * é precisamente o que ela existe para mostrar.
+   */
+  const params = await carregarParams()
+
+  const nomePorConta = new Map<string, string | null>()
+  const novos: LancamentoComparavel[] = []
+  for (const c of rows) {
+    if (c.sacado_empresa_id) nomePorConta.set(c.sacado_empresa_id, c.sacado_nome)
+    let lancamentos: LancamentoV2[] = []
+    try {
+      lancamentos = await preverCessao(c, params)
+    } catch (e) {
+      // Uma cessão que falha na prévia não pode derrubar a prévia inteira: o número que
+      // sai daqui vai para uma tela de conferência, e uma tela vazia por causa de uma
+      // linha é pior que uma tela com uma linha a menos e um aviso no log.
+      logger.error({ antecipacao: c.id_externo, erro: String(e) }, 'Prévia de cessão falhou.')
+      continue
+    }
+    for (const l of lancamentos) {
+      novos.push({
+        papel: l.papel,
+        origem_id: l.origem_id,
+        vendedor_id: l.vendedor_id,
+        valor: l.valor,
+        empresa_id: l.empresa_id,
+        conta_nome: c.sacado_nome,
+      })
+    }
+  }
+
+  const atuais: LancamentoComparavel[] = (lancados ?? []).map((l) => ({
+    papel: l.papel as LancamentoComparavel['papel'],
+    origem_id: l.origem_id,
+    vendedor_id: l.vendedor_id,
+    valor: Number(l.valor ?? 0),
+    empresa_id: l.empresa_id,
+    conta_nome: l.empresa_id ? (nomePorConta.get(l.empresa_id) ?? null) : null,
+  }))
+
+  const comparacao = compararLancamentos(atuais, novos)
+  const contas = agruparDerivaPorConta(comparacao.diferencas)
+
+  logger.info(
+    {
+      competencia,
+      cessoes: rows.length,
+      contas: contas.length,
+      diferencas: comparacao.diferencas.length,
+      delta: comparacao.delta,
+    },
+    'Deriva da competência aberta calculada.',
+  )
+
+  return {
+    competencia,
+    fechada: false,
+    contas,
+    // A tela agrupa por conta; a lista crua serve para o detalhe e para o log de auditoria.
+    diferencas: comparacao.diferencas,
+    total_atual: comparacao.total_atual,
+    total_novo: comparacao.total_novo,
+    delta: comparacao.delta,
+    cessoes: rows.length,
+  }
+}
+
+export interface ResultadoAplicacao {
+  competencia: string
+  contas: number
+  removidos: number
+  lancamentos: number
+  total: number
+  falhas: { empresa_id: string; erro: string }[]
+}
+
+/**
+ * Aplica o recálculo nas contas ESCOLHIDAS. Nunca em todas por padrão.
+ *
+ * Recalcular é a única operação do motor que apaga lançamento, e quem publica um
+ * parâmetro raramente quer atingir a carteira inteira — costuma querer o segmento que a
+ * mudança tocou. A lista vem da tela, e a tela a monta a partir da prévia.
+ *
+ * Uma conta que falha não interrompe as outras: a folha de quinze contas não pode
+ * depender de a décima sexta estar consistente. As falhas voltam na resposta, com nome,
+ * porque uma falha silenciosa aqui vira diferença de folha no dia 1º.
+ */
+export async function aplicarDerivaJob(empresaIds: readonly string[]): Promise<ResultadoAplicacao> {
+  const competencia = competenciaSp(new Date())
+  const acc: ResultadoAplicacao = {
+    competencia,
+    contas: 0,
+    removidos: 0,
+    lancamentos: 0,
+    total: 0,
+    falhas: [],
+  }
+
+  for (const empresaId of [...new Set(empresaIds)]) {
+    try {
+      const r = await recalcularContaJob(empresaId)
+      if (r.motivo) {
+        acc.falhas.push({ empresa_id: empresaId, erro: r.motivo })
+        continue
+      }
+      acc.contas += 1
+      acc.removidos += r.removidos
+      acc.lancamentos += r.lancamentos
+      acc.total += r.total
+    } catch (e) {
+      logger.error({ empresa: empresaId, erro: String(e) }, 'Recálculo da conta falhou.')
+      acc.falhas.push({ empresa_id: empresaId, erro: String(e) })
+    }
+  }
+
+  logger.info(acc, 'Deriva aplicada nas contas escolhidas.')
+  return acc
+}

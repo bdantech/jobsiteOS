@@ -29,6 +29,7 @@ import {
   comissaoKeys,
   type ParametroComVendedor,
 } from '../queries-comissao'
+import { DerivaComissao } from './deriva'
 import { data as fmtData, numero } from './format'
 
 /**
@@ -114,7 +115,15 @@ function PublicarDialog({
             })
             setSalvando(false)
             if (!r.ok) return setErro(r.message)
-            toast.success('Parâmetro publicado. A vigência anterior foi encerrada no mesmo dia.')
+            /*
+             * A mensagem diz o que NÃO aconteceu, e é de propósito. "Publicado" sozinho
+             * deixa a pessoa acreditar que a folha do mês mudou junto — ela não muda, e
+             * descobrir isso no dia 1º é caro. O painel logo abaixo é onde ela confere.
+             */
+            toast.success(
+              'Parâmetro publicado. Os lançamentos já feitos NÃO mudaram — confira o mês no painel abaixo.',
+              { duration: 8000 },
+            )
             onOpenChange(false)
             onSalvo()
           }}
@@ -320,6 +329,8 @@ export function Parametros({ vendedores }: { vendedores: readonly Tables<'vended
           )}
         </CardContent>
       </Card>
+
+      <DerivaComissao />
 
       <p className="text-xs text-muted-foreground">
         Prêmio de transição, carência de migração e reativação de dormente estão

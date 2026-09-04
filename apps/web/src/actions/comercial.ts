@@ -30,7 +30,14 @@ import {
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dispararAceitesSdr, dispararPitchLead, dispararRotearNotas, recalcularConta } from '@/lib/mercado/worker'
+import {
+  aplicarDeriva,
+  derivaComissao,
+  dispararAceitesSdr,
+  dispararPitchLead,
+  dispararRotearNotas,
+  recalcularConta,
+} from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -516,6 +523,110 @@ export async function salvarParametroAction(input: unknown): Promise<ActionResul
     return { ok: true, data: { ok: true } }
   } catch (error) {
     return falha(error)
+  }
+}
+
+/**
+ * A DERIVA do mês aberto: o que a régua de hoje diria sobre o que já está lançado.
+ *
+ * Só lê. É a metade "avisar" do avisar-e-oferecer, e existe porque publicar um parâmetro
+ * nunca reescreve lançamento — a vigência abre para frente, o motor resolve a taxa na
+ * data da cessão, e reprocessar não repaga. As três coisas protegem o passado e deixam a
+ * régua e a folha discordarem dentro do mês corrente sem ninguém ver.
+ *
+ * Não recebe qual parâmetro mudou de propósito: compara tudo contra tudo, e assim pega
+ * também a deriva que veio de titularidade, classificação ou data de ativação.
+ */
+export async function derivaComissaoAction(): Promise<
+  ActionResult<{
+    competencia: string
+    fechada: boolean
+    cessoes: number
+    contas: {
+      empresa_id: string
+      conta_nome: string | null
+      lancamentos: number
+      total_atual: number
+      total_novo: number
+      delta: number
+      tipos: string[]
+    }[]
+    total_atual: number
+    total_novo: number
+    delta: number
+  }>
+> {
+  const { erro } = await autorizar()
+  if (erro) return erro as ActionResult<never>
+  const r = await derivaComissao()
+  if (!r.ok) {
+    return { ok: false, message: `A prévia não rodou: ${r.message}`, code: r.code ?? 'worker' }
+  }
+  const c = (r.corpo ?? {}) as Record<string, unknown>
+  return {
+    ok: true,
+    data: {
+      competencia: String(c.competencia ?? ''),
+      fechada: Boolean(c.fechada),
+      cessoes: Number(c.cessoes ?? 0),
+      contas: (c.contas ?? []) as never,
+      total_atual: Number(c.total_atual ?? 0),
+      total_novo: Number(c.total_novo ?? 0),
+      delta: Number(c.delta ?? 0),
+    },
+  }
+}
+
+/**
+ * Aplica o recálculo nas contas escolhidas — a metade "oferecer".
+ *
+ * Exige a lista. Recalcular é a única operação do motor que APAGA lançamento, e um
+ * default que significasse "todas" faria um clique distraído reescrever a folha inteira.
+ * A checagem de gestor é do RPC no caminho normal; aqui ela é explícita porque este
+ * caminho fala com o worker por service role e não passaria por RLS nenhuma.
+ */
+export async function aplicarDerivaAction(
+  empresaIds: string[],
+): Promise<
+  ActionResult<{
+    contas: number
+    lancamentos: number
+    total: number
+    falhas: { empresa_id: string; erro: string }[]
+  }>
+> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  if (!Array.isArray(empresaIds) || empresaIds.length === 0) {
+    return { ok: false, message: 'Escolha ao menos uma conta.', code: 'invalid' }
+  }
+
+  /*
+   * A checagem de gestor é EXPLÍCITA aqui, e é a única action do módulo em que ela
+   * precisa ser: as outras escrevem por RPC SECURITY DEFINER, que confere
+   * `app_gestor_comercial()` por dentro. Esta fala com o worker, que escreve por service
+   * role — sem esta linha, qualquer sessão do módulo Comercial reescreveria a folha.
+   */
+  const { data: gestor } = await supabase.rpc('app_gestor_comercial')
+  if (gestor !== true) {
+    return { ok: false, message: 'Só gestores recalculam a folha do mês.', code: 'forbidden' }
+  }
+
+  const r = await aplicarDeriva(empresaIds)
+  if (!r.ok) {
+    return { ok: false, message: `O recálculo não rodou: ${r.message}`, code: r.code ?? 'worker' }
+  }
+  revalidatePath('/comercial/comissoes')
+  revalidatePath('/comercial/admin')
+  const c = (r.corpo ?? {}) as Record<string, unknown>
+  return {
+    ok: true,
+    data: {
+      contas: Number(c.contas ?? 0),
+      lancamentos: Number(c.lancamentos ?? 0),
+      total: Number(c.total ?? 0),
+      falhas: (c.falhas ?? []) as never,
+    },
   }
 }
 

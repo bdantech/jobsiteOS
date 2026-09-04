@@ -325,6 +325,28 @@ export async function recalcularConta(empresaId: string): Promise<DispararJobRes
   )
 }
 
+/**
+ * A PRÉVIA da deriva do mês aberto: o que a régua de hoje diria sobre os lançamentos já
+ * provisionados. Não escreve nada.
+ *
+ * Teto generoso porque ela varre TODAS as cessões da competência, e a única alternativa
+ * a esperar seria mandar a pessoa recarregar a tela até o número aparecer — logo depois
+ * de ela mexer numa taxa, que é o pior momento para pedir fé.
+ */
+export async function derivaComissao(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/deriva-comissao', {}, 'comercial-deriva-comissao', 180_000)
+}
+
+/** Aplica o recálculo NAS CONTAS ESCOLHIDAS. Nunca em todas por omissão. */
+export async function aplicarDeriva(empresaIds: readonly string[]): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/comercial/aplicar-deriva',
+    { empresa_ids: empresaIds },
+    'comercial-aplicar-deriva',
+    180_000,
+  )
+}
+
 /** Só a etapa de titularidade do diário — para rodar depois de mexer em carteira. */
 export async function dispararLiberarDormentes(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/liberar-dormentes', {}, 'comercial-comissoes-v2')

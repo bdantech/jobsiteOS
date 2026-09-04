@@ -1105,3 +1105,160 @@ export function sugereRevisao(input: {
   if (!(input.mediaMensalAnterior > 0)) return false
   return input.volumeJanela < input.mediaMensalAnterior * (input.percentualPiso / 100)
 }
+
+// ─── Deriva entre o que está lançado e o que a régua diz hoje ────────────────
+
+/**
+ * O MOTIVO desta seção existir.
+ *
+ * Publicar um parâmetro nunca reescreve lançamento: a vigência é aberta para frente, o
+ * motor resolve a taxa NA DATA DA CESSÃO, e o `ignoreDuplicates` da gravação garante que
+ * reprocessar não repaga. As três coisas juntas são o que impede um mês fechado de mudar
+ * sozinho — e são deliberadas.
+ *
+ * O efeito colateral é que a régua e a folha podem discordar dentro do MÊS ABERTO. A
+ * vigência é por DIA, não por instante: uma cessão convertida hoje de manhã e lançada às
+ * 9h05 pela taxa velha passa a ser regida, às 10h, pela taxa que alguém publicou com
+ * `vigente_de` de hoje. O lançamento dela não muda sozinho, e ninguém tem como saber
+ * disso olhando a tela.
+ *
+ * Esta comparação é o que torna essa discordância VISÍVEL antes de virar folha. Ela é
+ * pura de propósito: quem produz `novos` é o mesmo `lancamentosDaCessao` que grava, então
+ * a prévia não é uma segunda implementação do cálculo — é o cálculo, sem escrever.
+ */
+
+/** O bastante para identificar e comparar um lançamento. */
+export interface LancamentoComparavel {
+  papel: PapelComissao
+  origem_id: string
+  vendedor_id: string
+  valor: number
+  empresa_id?: string | null
+  conta_nome?: string | null
+}
+
+export type TipoDiferenca = 'alterado' | 'novo' | 'removido'
+
+export interface DiferencaLancamento {
+  papel: PapelComissao
+  origem_id: string
+  vendedor_id: string
+  empresa_id: string | null
+  conta_nome: string | null
+  /** `null` = não existe hoje na folha. */
+  valor_atual: number | null
+  /** `null` = a régua de hoje não geraria este lançamento. */
+  valor_novo: number | null
+  delta: number
+  tipo: TipoDiferenca
+}
+
+export interface ComparacaoLancamentos {
+  diferencas: DiferencaLancamento[]
+  total_atual: number
+  total_novo: number
+  delta: number
+}
+
+const chaveLancamento = (l: LancamentoComparavel): string =>
+  `${l.papel}|${l.origem_id}|${l.vendedor_id}`
+
+/**
+ * Compara o que está gravado com o que a régua de hoje produziria.
+ *
+ * Três tipos de diferença, e nenhum deles pode ser colapsado nos outros:
+ *
+ *   `alterado` — a taxa mudou. É o caso comum.
+ *   `novo`     — a régua de hoje paga alguém que a folha não paga. Costuma ser
+ *                titularidade que passou a existir, ou taxa que saiu de ausente.
+ *   `removido` — a folha paga alguém que a régua de hoje não pagaria. É o mais
+ *                perigoso dos três, e some se a comparação for feita só sobre as
+ *                chaves que já existem na folha.
+ *
+ * Centavos são fechados antes de comparar: `0.1 + 0.2` no meio de um VOP produziria
+ * diferenças de 10⁻¹⁴ e uma tela cheia de linhas que ninguém mexeu.
+ */
+export function compararLancamentos(
+  atuais: readonly LancamentoComparavel[],
+  novos: readonly LancamentoComparavel[],
+): ComparacaoLancamentos {
+  const porChaveAtual = new Map(atuais.map((l) => [chaveLancamento(l), l]))
+  const porChaveNovo = new Map(novos.map((l) => [chaveLancamento(l), l]))
+  const chaves = new Set([...porChaveAtual.keys(), ...porChaveNovo.keys()])
+
+  const diferencas: DiferencaLancamento[] = []
+  for (const chave of chaves) {
+    const a = porChaveAtual.get(chave) ?? null
+    const n = porChaveNovo.get(chave) ?? null
+    const valorAtual = a ? arredondar(a.valor) : null
+    const valorNovo = n ? arredondar(n.valor) : null
+    if (valorAtual !== null && valorNovo !== null && valorAtual === valorNovo) continue
+
+    const ref = n ?? a
+    if (!ref) continue
+    diferencas.push({
+      papel: ref.papel,
+      origem_id: ref.origem_id,
+      vendedor_id: ref.vendedor_id,
+      empresa_id: (n?.empresa_id ?? a?.empresa_id) ?? null,
+      conta_nome: (n?.conta_nome ?? a?.conta_nome) ?? null,
+      valor_atual: valorAtual,
+      valor_novo: valorNovo,
+      delta: arredondar((valorNovo ?? 0) - (valorAtual ?? 0)),
+      tipo: valorAtual === null ? 'novo' : valorNovo === null ? 'removido' : 'alterado',
+    })
+  }
+
+  // Ordem: o que mais mexe no bolso primeiro. Quem confere uma folha olha as pontas.
+  diferencas.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
+
+  const total_atual = arredondar(atuais.reduce((s, l) => s + l.valor, 0))
+  const total_novo = arredondar(novos.reduce((s, l) => s + l.valor, 0))
+  return { diferencas, total_atual, total_novo, delta: arredondar(total_novo - total_atual) }
+}
+
+/** Uma conta com deriva, para a tela poder escolher o que recalcular. */
+export interface ContaComDeriva {
+  empresa_id: string
+  conta_nome: string | null
+  lancamentos: number
+  total_atual: number
+  total_novo: number
+  delta: number
+  tipos: TipoDiferenca[]
+}
+
+/**
+ * Agrupa as diferenças por CONTA, que é a unidade que o recálculo sabe tratar
+ * (`recalcularContaJob` roda por conta) — e é também a unidade em que a pessoa pensa:
+ * "a mudança pegou a Alfa e a Beta".
+ *
+ * Diferença sem conta fica de fora com `empresa_id` nulo não agrupável: uma cessão sem
+ * sacado resolvido não tem conta para recalcular, e mostrá-la como uma linha selecionável
+ * ofereceria um botão que não faz nada.
+ */
+export function agruparDerivaPorConta(
+  diferencas: readonly DiferencaLancamento[],
+): ContaComDeriva[] {
+  const mapa = new Map<string, ContaComDeriva>()
+  for (const d of diferencas) {
+    if (!d.empresa_id) continue
+    const atual = mapa.get(d.empresa_id) ?? {
+      empresa_id: d.empresa_id,
+      conta_nome: d.conta_nome,
+      lancamentos: 0,
+      total_atual: 0,
+      total_novo: 0,
+      delta: 0,
+      tipos: [] as TipoDiferenca[],
+    }
+    atual.conta_nome = atual.conta_nome ?? d.conta_nome
+    atual.lancamentos += 1
+    atual.total_atual = arredondar(atual.total_atual + (d.valor_atual ?? 0))
+    atual.total_novo = arredondar(atual.total_novo + (d.valor_novo ?? 0))
+    atual.delta = arredondar(atual.delta + d.delta)
+    if (!atual.tipos.includes(d.tipo)) atual.tipos.push(d.tipo)
+    mapa.set(d.empresa_id, atual)
+  }
+  return [...mapa.values()].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+}

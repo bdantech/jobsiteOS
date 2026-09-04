@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  agruparDerivaPorConta,
   calcularVOP,
+  compararLancamentos,
   comissaoDoVop,
   competenciaSp,
   determinarFase,
@@ -517,4 +519,117 @@ test('o alerta só olha conta passiva, e só quando há base de comparação', (
     sugereRevisao({ gestaoOperacao: 'passivo', volumeJanela: 0, mediaMensalAnterior: 0, percentualPiso: 50 }),
     false,
   )
+})
+
+// ─── Deriva entre a folha e a régua de hoje ─────────────────────────────────
+
+const lanc = (
+  papel: 'VENDEDOR' | 'ORIGINADOR' | 'SDR',
+  origem: string,
+  vendedor: string,
+  valor: number,
+  empresa: string | null = 'conta-1',
+  nome: string | null = 'Alfa',
+) => ({ papel, origem_id: origem, vendedor_id: vendedor, valor, empresa_id: empresa, conta_nome: nome })
+
+test('mesma taxa nos dois lados não vira diferença — nem por centavo de ponto flutuante', () => {
+  // 750 + 0.1 + 0.2 dá 750.30000000000007, não 750.3. Sem fechar centavos antes de
+  // comparar, esta linha apareceria como "alterada" e a tela mostraria uma diferença
+  // que ninguém provocou.
+  const atuais = [lanc('VENDEDOR', 'antecipacao:1', 'v1', 750 + 0.1 + 0.2)]
+  const novos = [lanc('VENDEDOR', 'antecipacao:1', 'v1', 750.3)]
+  const r = compararLancamentos(atuais, novos)
+  assert.deepEqual(r.diferencas, [])
+  assert.equal(r.delta, 0)
+})
+
+test('taxa que subiu vira uma linha `alterado` com o delta fechado', () => {
+  const r = compararLancamentos(
+    [lanc('VENDEDOR', 'antecipacao:1', 'v1', 500)],
+    [lanc('VENDEDOR', 'antecipacao:1', 'v1', 750)],
+  )
+  assert.equal(r.diferencas.length, 1)
+  assert.equal(r.diferencas[0]!.tipo, 'alterado')
+  assert.equal(r.diferencas[0]!.delta, 250)
+  assert.equal(r.total_atual, 500)
+  assert.equal(r.total_novo, 750)
+  assert.equal(r.delta, 250)
+})
+
+test('lançamento que a régua de hoje NÃO geraria aparece como removido', () => {
+  // O caso mais perigoso: some se a comparação for feita só sobre as chaves da folha.
+  const r = compararLancamentos([lanc('VENDEDOR', 'antecipacao:1', 'v1', 500)], [])
+  assert.equal(r.diferencas.length, 1)
+  assert.equal(r.diferencas[0]!.tipo, 'removido')
+  assert.equal(r.diferencas[0]!.valor_novo, null)
+  assert.equal(r.diferencas[0]!.delta, -500)
+})
+
+test('lançamento que a régua paga e a folha não aparece como novo', () => {
+  const r = compararLancamentos([], [lanc('ORIGINADOR', 'antecipacao:9', 'v2', 300)])
+  assert.equal(r.diferencas[0]!.tipo, 'novo')
+  assert.equal(r.diferencas[0]!.valor_atual, null)
+  assert.equal(r.diferencas[0]!.delta, 300)
+})
+
+test('a chave é papel + cessão + vendedor: dois papéis na mesma cessão não se confundem', () => {
+  const r = compararLancamentos(
+    [lanc('VENDEDOR', 'antecipacao:1', 'v1', 500), lanc('ORIGINADOR', 'antecipacao:1', 'v2', 300)],
+    [lanc('VENDEDOR', 'antecipacao:1', 'v1', 600), lanc('ORIGINADOR', 'antecipacao:1', 'v2', 300)],
+  )
+  assert.equal(r.diferencas.length, 1)
+  assert.equal(r.diferencas[0]!.papel, 'VENDEDOR')
+})
+
+test('as diferenças saem ordenadas pelo que mais mexe no bolso', () => {
+  const r = compararLancamentos(
+    [
+      lanc('VENDEDOR', 'antecipacao:1', 'v1', 100),
+      lanc('VENDEDOR', 'antecipacao:2', 'v1', 100),
+      lanc('VENDEDOR', 'antecipacao:3', 'v1', 100),
+    ],
+    [
+      lanc('VENDEDOR', 'antecipacao:1', 'v1', 110),
+      lanc('VENDEDOR', 'antecipacao:2', 'v1', 900),
+      lanc('VENDEDOR', 'antecipacao:3', 'v1', 50),
+    ],
+  )
+  assert.deepEqual(
+    r.diferencas.map((d) => d.origem_id),
+    ['antecipacao:2', 'antecipacao:3', 'antecipacao:1'],
+  )
+})
+
+test('a deriva é agrupada por conta, que é a unidade que o recálculo sabe tratar', () => {
+  const contas = agruparDerivaPorConta(
+    compararLancamentos(
+      [
+        lanc('VENDEDOR', 'antecipacao:1', 'v1', 100, 'conta-a', 'Alfa'),
+        lanc('ORIGINADOR', 'antecipacao:1', 'v2', 100, 'conta-a', 'Alfa'),
+        lanc('VENDEDOR', 'antecipacao:5', 'v1', 100, 'conta-b', 'Beta'),
+      ],
+      [
+        lanc('VENDEDOR', 'antecipacao:1', 'v1', 150, 'conta-a', 'Alfa'),
+        lanc('ORIGINADOR', 'antecipacao:1', 'v2', 130, 'conta-a', 'Alfa'),
+        lanc('VENDEDOR', 'antecipacao:5', 'v1', 90, 'conta-b', 'Beta'),
+      ],
+    ).diferencas,
+  )
+  assert.equal(contas.length, 2)
+  // Alfa primeiro: +80 contra −10.
+  assert.equal(contas[0]!.empresa_id, 'conta-a')
+  assert.equal(contas[0]!.lancamentos, 2)
+  assert.equal(contas[0]!.delta, 80)
+  assert.equal(contas[1]!.empresa_id, 'conta-b')
+  assert.equal(contas[1]!.delta, -10)
+})
+
+test('cessão sem conta resolvida fica fora do agrupamento — não há o que recalcular', () => {
+  const contas = agruparDerivaPorConta(
+    compararLancamentos(
+      [lanc('VENDEDOR', 'antecipacao:7', 'v1', 100, null, null)],
+      [lanc('VENDEDOR', 'antecipacao:7', 'v1', 200, null, null)],
+    ).diferencas,
+  )
+  assert.deepEqual(contas, [])
 })

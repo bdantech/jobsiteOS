@@ -28,6 +28,8 @@ import {
   dispararApurarComissoes,
   dispararComissoesDiario,
   dispararFecharCompetencia,
+  executarAplicarDeriva,
+  executarDerivaComissao,
   executarRecalculoConta,
   dispararAceitesSdr,
   dispararLiberarDormentes,
@@ -522,6 +524,33 @@ app.post('/jobs/comercial/recalcular-conta', (req: Request, res: Response, next:
     return
   }
   executarRecalculoConta(empresaId)
+    .then((r) => res.status(200).json(r))
+    .catch(next)
+})
+
+/*
+ * A PRÉVIA da deriva (04k, "avisar e oferecer"). Síncrona e sem corpo: ela sempre olha a
+ * competência ABERTA, e deixar o mês entrar por parâmetro convidaria alguém a pedir a
+ * prévia de um mês fechado — que o motor recusa de qualquer forma.
+ */
+app.post('/jobs/comercial/deriva-comissao', (_req: Request, res: Response, next: NextFunction) => {
+  executarDerivaComissao()
+    .then((r) => res.status(200).json(r))
+    .catch(next)
+})
+
+/*
+ * A APLICAÇÃO. Exige a lista de contas: recalcular é a única operação do motor que apaga
+ * lançamento, e um corpo vazio que significasse "todas" seria o pior default possível
+ * para uma chamada que alguém pode disparar sem querer.
+ */
+app.post('/jobs/comercial/aplicar-deriva', (req: Request, res: Response, next: NextFunction) => {
+  const { empresa_ids: ids } = (req.body ?? {}) as { empresa_ids?: unknown }
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((i) => typeof i !== 'string')) {
+    res.status(400).json({ erro: 'empresa_ids é obrigatório e precisa ter ao menos uma conta.' })
+    return
+  }
+  executarAplicarDeriva(ids as string[])
     .then((r) => res.status(200).json(r))
     .catch(next)
 })

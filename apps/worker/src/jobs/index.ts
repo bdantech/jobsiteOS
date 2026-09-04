@@ -28,6 +28,8 @@ import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/c
 import {
   alertaReclassificacaoJob,
   comissoesDiarioJob,
+  aplicarDerivaJob,
+  derivaComissaoJob,
   recalcularContaJob,
   fecharCompetenciaJob,
   processarAceitesSdrJob,
@@ -1313,6 +1315,27 @@ export async function executarRecalculoConta(
   empresaId: string,
 ): Promise<Awaited<ReturnType<typeof recalcularContaJob>>> {
   return recalcularContaJob(empresaId)
+}
+
+/**
+ * A prévia da deriva e a aplicação dela. Síncronas pelo mesmo motivo do recálculo de
+ * conta: quem acabou de publicar um parâmetro está olhando a tela para saber o que
+ * aquilo fez com o mês. Um 202 com id transformaria a pergunta "mudou quanto?" em
+ * recarregar a página até descobrir.
+ *
+ * Fora de `dispararAvulso` também de propósito: single-flight por TIPO barraria a
+ * segunda conferência do dia, e conferir é justamente o que se faz várias vezes.
+ */
+export async function executarDerivaComissao(): Promise<
+  Awaited<ReturnType<typeof derivaComissaoJob>>
+> {
+  return derivaComissaoJob()
+}
+
+export async function executarAplicarDeriva(
+  empresaIds: readonly string[],
+): Promise<Awaited<ReturnType<typeof aplicarDerivaJob>>> {
+  return aplicarDerivaJob(empresaIds)
 }
 
 /** Roteia as NFs vivas para os originadores. Encadeado no diário da Antecipação. */
