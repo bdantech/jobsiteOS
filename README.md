@@ -800,6 +800,102 @@ a base de uma decisão de crédito, que uma auditoria vai querer ver muito depoi
 Quando a produção manda `url`, o worker baixa e guarda no bucket privado; a
 requisição não espera por isso, para não ficar refém do servidor deles.
 
+## Precificação e condições comerciais (04o)
+
+Aprovada a análise, alguém do Crédito define por QUANTO aquele sacado opera:
+limite, validade, juros do D0 e do D1, TAC, comissão e acessórios. Publicar essas
+condições **muda a natureza do webhook do 04n**: o bloco
+`condicoes_comerciais.payload_producao` não é relatório, é o corpo de um
+`POST /api/backoffice/credit-analyses` que a produção repassa sem transformação.
+
+### A validação é local porque o erro é caro do outro lado
+
+O contrato deles é validado por Zod, lá. Se a checagem existisse só lá, uma
+condição malformada sairia daqui como "publicada", falharia na entrega, e o
+analista descobriria pelo log do webhook — horas depois, sem saber qual campo.
+`validarCondicoes` (`core/src/credito/precificacao.ts`) é o espelho do Zod deles e
+roda em três lugares pela mesma razão: no formulário a cada tecla, de novo na
+action (uma action é chamável sem passar pelo botão) e mais uma vez como CHECK no
+banco, que torna a incoerência inexprimível.
+
+Falhou, **não sai webhook** — mas a tentativa é gravada como `falha_validacao`,
+com a mensagem exata. É ela que responde, três dias depois, por que a produção
+nunca recebeu aquelas condições.
+
+### `fee_min` não é piso de segurança
+
+É a **TAC efetiva das notas pequenas**. A tarifa cresce proporcionalmente ao valor
+da nota até o limiar (R$ 10.000 por padrão), onde atinge `fee` e para:
+
+```
+TAC = fee_min + (fee − fee_min) × min(valor_nf / limiar, 1)
+```
+
+Com `fee = 300` e `fee_min = 150`, uma NF de R$ 1.000 paga **R$ 165**. Lido como
+piso, pagaria R$ 300 — 30% do valor dela em tarifa. É a diferença entre uma tabela
+cara e uma tabela predatória, e é por isso que a conta mora num lugar só
+(`calcularTac`), com teste, e a tela tem um **simulador** de R$ 1k / 5k / 10k / 50k
+mostrando a taxa efetiva combinada. A tarifa é regressiva: 19,4% na nota de mil
+contra 3,5% na de cinquenta mil, na MESMA tabela. Sem o simulador, ninguém vê isso
+olhando "2,9% ao mês + R$ 300".
+
+### D0 é o produto caro — o exemplo do contrato deles está invertido
+
+`monthly_rate_d0 > monthly_rate_d1` e `fee_d0 > fee_d1`, sempre. O exemplo do
+contrato de produção traz os dois ao contrário; o 04o §3 manda ignorar o exemplo e
+seguir a regra, e é a regra que está no core, no CHECK do banco e na documentação
+que o time deles lê. Mexer no D0 na tela **rederiva** o D1 e as duas TACs mínimas
+pelas regras da matriz — sem isso, baixar o D0 produziria uma incoerência que o
+próprio usuário não provocou.
+
+### A matriz é versionada, e a sugestão sempre diz de onde veio
+
+`precificacao_matriz` segue o padrão de `scorecard_versoes` e `analise_parametros`:
+versão nova a cada mudança, nunca update. A condição publicada grava a versão que a
+sugeriu, então trocar a matriz muda o que será sugerido daqui para frente — nunca o
+preço que alguém já combinou com um cliente.
+
+A sugestão vem com a explicação junto (célula da matriz, faturamento, faixa de
+score, cobertura, protesto, prazo e ticket médios, e cada ajuste com seu sinal). Um
+preço sem procedência chega ao analista com a autoridade de um dado, e é ele quem
+vai defendê-lo num comitê.
+
+Os ajustes movem **dentro** da faixa global. Sair dela é decisão do analista — ele
+conhece o caso, a matriz não —, mas exige **justificativa escrita**, que fica em
+`ajustes` junto do que ele mudou campo a campo.
+
+### A prévia do editor é sobre a carteira real, não sobre uma empresa fictícia
+
+O editor de parâmetros do 04j usa uma empresa inventada, e com razão: lá se ajustam
+fórmulas de balanço. Aqui a pergunta é outra — mexer numa célula muda o preço de um
+SEGMENTO da carteira, e só a carteira responde "quantos clientes isso atinge, e
+quanto". Uma empresa fictícia diria o efeito numa célula e calaria sobre as outras
+vinte e quatro. `precificacao_amostra` devolve o CONTEXTO das análises aprovadas do
+período, e a tela roda o mesmo `sugerirCondicoes` do formulário sobre ele.
+
+### Uma vigente por análise, garantida por índice
+
+Nova versão entra como `publicada` e a anterior vira `substituida`. Um índice
+parcial único garante que a aposentadoria aconteceu: sem ele, um caminho novo que
+esquecesse o UPDATE deixaria duas condições "vigentes", e o `GET` escolheria uma
+por ordenação — a pior forma possível de decidir por quanto o cliente opera.
+
+### Onde está o quê
+
+- **Banco**: migração `0185` (`condicoes_comerciais`, `precificacao_matriz` com a
+  semente v1, RPCs `app_salvar_condicoes` / `app_publicar_condicoes` /
+  `app_salvar_matriz_precificacao` / `app_ativar_matriz_precificacao`, e as leituras
+  `condicoes_painel` e `precificacao_amostra`).
+- **Core**: `credito/precificacao.ts` (matriz, motor, TAC, validador, builder do
+  `payload_producao`), com 32 testes. O bloco novo entra no `PayloadCredito` do
+  04n, montado pelo MESMO `montarPayloadCredito`.
+- **Web**: aba "Condições comerciais" em `/credito/analises/[id]` (só em análise
+  aprovada) e `/credito/precificacao` (webOnly).
+- **Mobile**: leitura das condições e do simulador. Publicar e editar são webOnly —
+  decisão de preço merece tela grande.
+- **Worker**: nada novo. A publicação enfileira em `webhook_entregas` e a fila do
+  04n entrega.
+
 ## Reportar Bugs & Melhorias
 
 Um botão ao lado do sino, em toda a aplicação. Detalhes em [`docs/reports.md`](docs/reports.md);

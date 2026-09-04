@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
-import { AnalisePropriaMobile } from '@/features/credito'
+import { AnalisePropriaMobile, CondicoesComerciaisMobile } from '@/features/credito'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -107,6 +107,8 @@ export default function AnaliseScreen() {
       </Card>
 
       <AnalisePropriaMobile analiseCreditoId={data.id} />
+
+      <CondicoesComerciaisMobile analiseCreditoId={data.id} />
 
       {data.empresa_id ? (
         <Button variant="outline" onPress={() => router.push(`/empresas/${data.empresa_id}` as never)}>

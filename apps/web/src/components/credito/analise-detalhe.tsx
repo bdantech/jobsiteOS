@@ -59,6 +59,7 @@ import { Parecer } from './analise-propria/parecer'
 import { RevisaoExtracao } from './analise-propria/revisao-extracao'
 import { Cenarios, Indicadores, Lacunas, Tetos, brl } from './analise-propria/resultado'
 import { StatusAnalise } from './analise-propria/status-analise'
+import { CondicoesComerciais } from './condicoes/condicoes'
 import { analisePropriaKeys, buscarPainelSacado } from './analise-propria/queries'
 
 /**
@@ -332,6 +333,8 @@ export function AnaliseDetalhe({ id }: { id: string }) {
   const nome = empresa?.razao_social ?? empresa?.nome_fantasia ?? formatCnpj(esteira.cnpj)
   const local = [empresa?.municipio, empresa?.uf].filter(Boolean).join(' / ')
   const concluida = status === 'concluida'
+  // Aprovada parcial também precifica: o limite é menor, o preço continua existindo.
+  const podePrecificar = estagio === 'aprovada' || estagio === 'aprovada_parcial'
 
   return (
     <div className="space-y-4">
@@ -386,6 +389,12 @@ export function AnaliseDetalhe({ id }: { id: string }) {
           {status === 'aguardando_revisao' && <TabsTrigger value="revisao">Revisão</TabsTrigger>}
           <TabsTrigger value="parecer">Parecer</TabsTrigger>
           <TabsTrigger value="seguradora">Seguradora e decisão</TabsTrigger>
+          {/*
+           * A aba só aparece em análise APROVADA. Uma aba de preço numa análise em
+           * curso convidaria alguém a precificar antes de a esteira decidir — e o
+           * `status: APPROVED` que sai daqui seria uma afirmação que ninguém fez.
+           */}
+          {podePrecificar && <TabsTrigger value="condicoes">Condições comerciais</TabsTrigger>}
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="contexto">Contexto</TabsTrigger>
         </TabsList>
@@ -622,6 +631,13 @@ export function AnaliseDetalhe({ id }: { id: string }) {
                   </Card>
                 )}
               </TabsContent>
+
+              {/* ── Condições comerciais (04o) ────────────────────────────── */}
+              {podePrecificar && (
+                <TabsContent value="condicoes" className="mt-0">
+                  <CondicoesComerciais analiseId={id} />
+                </TabsContent>
+              )}
 
               {/* ── Documentos ────────────────────────────────────────────── */}
               <TabsContent value="documentos" className="mt-0">

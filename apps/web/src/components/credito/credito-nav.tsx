@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Calculator,
   LayoutDashboard,
+  Percent,
   Plug,
   Settings,
   ShieldCheck,
@@ -22,6 +23,9 @@ const ITENS = [
   { href: '/credito/painel', label: 'Painel', icon: LayoutDashboard },
   { href: '/credito/scorecard', label: 'Scorecard', icon: SlidersHorizontal },
   { href: '/credito/parametros', label: 'Parâmetros da Análise', icon: Calculator },
+  // Precificação depois dos Parâmetros: os dois são ajuste de motor, e a ordem segue a
+  // do funil — primeiro se decide QUANTO a empresa sustenta, depois por QUANTO ela opera.
+  { href: '/credito/precificacao', label: 'Precificação', icon: Percent },
   { href: '/credito/integracoes', label: 'Integrações', icon: Plug },
   { href: '/credito/config', label: 'Configurações', icon: Settings },
 ] as const

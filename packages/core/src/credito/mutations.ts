@@ -1,25 +1,33 @@
 import {
+  ativarMatrizPrecificacaoSchema,
   ativarScorecardSchema,
   definirExClienteMotivoSchema,
   editarParecerSchema,
   moverAnaliseSchema,
+  publicarCondicoesSchema,
   registrarDecisaoCreditoSchema,
   registrarDocSchema,
   revisarExtracaoSchema,
   rodarAnalisePropriaSchema,
+  salvarCondicoesSchema,
   salvarCreditoConfigSchema,
+  salvarMatrizPrecificacaoSchema,
   salvarParametrosAnaliseSchema,
   salvarScorecardSchema,
   solicitarAnaliseSchema,
+  type AtivarMatrizPrecificacaoInput,
   type AtivarScorecardInput,
   type DefinirExClienteMotivoInput,
   type EditarParecerInput,
   type MoverAnaliseInput,
+  type PublicarCondicoesInput,
   type RegistrarDecisaoCreditoInput,
   type RegistrarDocInput,
   type RevisarExtracaoInput,
   type RodarAnalisePropriaInput,
+  type SalvarCondicoesInput,
   type SalvarCreditoConfigInput,
+  type SalvarMatrizPrecificacaoInput,
   type SalvarParametrosAnaliseInput,
   type SalvarScorecardInput,
   type SolicitarAnaliseInput,
@@ -166,4 +174,60 @@ export async function salvarParametrosAnalise(
   const { data, error } = await supabase.rpc('app_salvar_parametros_analise', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'analise_parametros'>
+}
+
+// ─── Condições comerciais e precificação (04o) ──────────────────────────────
+//
+// Nenhuma delas calcula preço: o motor é `sugerirCondicoes`, no core, e roda antes,
+// na tela. Aqui só se grava o que uma pessoa decidiu — e `publicarCondicoes` é a
+// única que faz o webhook sair.
+
+/** Rascunho: guarda a sugestão e os ajustes sem publicar nada para a produção. */
+export async function salvarCondicoes(
+  supabase: Supabase,
+  input: SalvarCondicoesInput | unknown,
+): Promise<Tables<'condicoes_comerciais'>> {
+  const dados = parseOuFalhar(salvarCondicoesSchema, input)
+  const { data, error } = await supabase.rpc('app_salvar_condicoes', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'condicoes_comerciais'>
+}
+
+/**
+ * A publicação (04o §6). Grava a versão, aposenta a anterior e ENFILEIRA o
+ * `credito.condicoes_definidas` — o único evento do contrato que vira um POST do
+ * outro lado.
+ *
+ * Com `erro_validacao` preenchido, a linha nasce `falha_validacao` e nada é
+ * enfileirado: a tentativa recusada fica registrada, mas não sai daqui.
+ */
+export async function publicarCondicoes(
+  supabase: Supabase,
+  input: PublicarCondicoesInput | unknown,
+): Promise<Tables<'condicoes_comerciais'>> {
+  const dados = parseOuFalhar(publicarCondicoesSchema, input)
+  const { data, error } = await supabase.rpc('app_publicar_condicoes', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'condicoes_comerciais'>
+}
+
+/** Nova versão da matriz. Nunca update: as condições já publicadas apontam para a sua. */
+export async function salvarMatrizPrecificacao(
+  supabase: Supabase,
+  input: SalvarMatrizPrecificacaoInput | unknown,
+): Promise<Tables<'precificacao_matriz'>> {
+  const dados = parseOuFalhar(salvarMatrizPrecificacaoSchema, input)
+  const { data, error } = await supabase.rpc('app_salvar_matriz_precificacao', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'precificacao_matriz'>
+}
+
+export async function ativarMatrizPrecificacao(
+  supabase: Supabase,
+  input: AtivarMatrizPrecificacaoInput | unknown,
+): Promise<Tables<'precificacao_matriz'>> {
+  const dados = parseOuFalhar(ativarMatrizPrecificacaoSchema, input)
+  const { data, error } = await supabase.rpc('app_ativar_matriz_precificacao', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'precificacao_matriz'>
 }

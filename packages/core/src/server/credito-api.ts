@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { documentosFaltantes, type EventoWebhook, type PayloadCredito } from '../credito/api.js'
+import { montarPayloadProducao, type CondicoesFormulario } from '../credito/precificacao.js'
 import type { EstagioAnalise } from '../credito/schemas.js'
 import type { Supabase } from '../registry/types.js'
 
@@ -74,7 +75,9 @@ export async function montarPayloadCredito(
     .maybeSingle()
   if (!analise) return null
 
-  const [empresaRes, universoRes, protestoRes, propriaRes, docsRes, cfgRes] = await Promise.all([
+  // As oito leituras numa ida só. O nome intermediário existe para o array seguir
+  // legível: a desestruturação de oito posições não cabe na mesma linha do `await`.
+  const leituras = await Promise.all([
     analise.empresa_id
       ? supabase
           .from('empresas')
@@ -99,11 +102,34 @@ export async function montarPayloadCredito(
       : Promise.resolve({ data: null }),
     supabase.from('analise_docs').select('tipo').eq('analise_id', analiseId),
     supabase.from('credito_config').select('valor').eq('chave', 'docs').maybeSingle(),
+    /*
+     * As condições VIGENTES (04o §7). Só a `publicada` — rascunho é trabalho em
+     * curso e `falha_validacao` é uma tentativa recusada; nenhuma das duas foi
+     * acordada com ninguém, e o outro lado criaria uma análise de verdade a partir delas.
+     */
+    supabase
+      .from('condicoes_comerciais')
+      .select(
+        'id, credit_limit, max_invoice_amount, max_due_date_days, expires_at, monthly_rate_d0, monthly_rate_d1, fee_d0, fee_min_d0, fee_d1, fee_min_d1, commission_percent, extension_rate_percent, bill_fine_percent, invest_back_limit, invest_back_commission_percent, has_insurance, has_referral, fidc_ready, matriz_versao, publicada_em',
+      )
+      .eq('analise_credito_id', analiseId)
+      .eq('status', 'publicada')
+      .maybeSingle(),
+    /*
+     * O `companyId` do lado deles. Mora em `clientes_onepay`, que é o espelho do
+     * cadastro da plataforma — não em `empresas`, que é a NOSSA ficha e não sabe o id
+     * de ninguém. Sem cadastro lá, o payload identifica por `document` +
+     * `subjectName`; nunca pelos dois caminhos ao mesmo tempo.
+     */
+    supabase.from('clientes_onepay').select('onepay_company_id').eq('cnpj', analise.cnpj).maybeSingle(),
   ])
+  const [empresaRes, universoRes, protestoRes, propriaRes, docsRes, cfgRes, condRes, onepayRes] =
+    leituras
 
   const e = (empresaRes.data ?? null) as Record<string, unknown> | null
   const u = (universoRes.data ?? null) as Record<string, unknown> | null
   const propria = (propriaRes.data ?? null) as Record<string, unknown> | null
+  const cond = (condRes.data ?? null) as Record<string, unknown> | null
 
   const recebidos = [...new Set((docsRes.data ?? []).map((d) => d.tipo as string))].sort()
   const tipos = ((cfgRes.data?.valor as { tipos?: { id: string; essencial?: boolean }[] } | null)
@@ -161,5 +187,54 @@ export async function montarPayloadCredito(
       },
     },
     documentos: { recebidos, faltantes: documentosFaltantes(recebidos, essenciais) },
+    /*
+     * O bloco ACIONÁVEL (04o §7). Vai em TODOS os eventos, não só no
+     * `credito.condicoes_definidas`: quem recebe um `estagio_alterado` precisa poder
+     * decidir sem uma segunda chamada. `null` enquanto ninguém publicou — a chave
+     * existe sempre, como todas as outras do contrato.
+     */
+    condicoes_comerciais: cond
+      ? {
+          definidas_em: String(cond.publicada_em ?? new Date().toISOString()),
+          versao: Number(cond.matriz_versao),
+          payload_producao: montarPayloadProducao(condicoesDaLinha(cond), {
+            onepay_company_id: (onepayRes.data?.onepay_company_id as number | null) ?? null,
+            cnpj: analise.cnpj,
+            razao_social:
+              (e?.razao_social as string | null) ?? (u?.razao_social as string | null) ?? null,
+          }),
+        }
+      : null,
+  }
+}
+
+/**
+ * A linha do banco vira o objeto do core.
+ *
+ * `numeric` chega como STRING no PostgREST, e um `"2.900"` no JSON faria o Zod deles
+ * recusar o POST inteiro por causa de umas aspas. O `Number()` aqui é a fronteira
+ * onde isso é resolvido, uma vez só.
+ */
+function condicoesDaLinha(row: Record<string, unknown>): CondicoesFormulario {
+  const n = (v: unknown): number => Number(v ?? 0)
+  return {
+    credit_limit: n(row.credit_limit),
+    max_invoice_amount: n(row.max_invoice_amount),
+    max_due_date_days: n(row.max_due_date_days),
+    expires_at: String(row.expires_at),
+    monthly_rate_d0: n(row.monthly_rate_d0),
+    monthly_rate_d1: n(row.monthly_rate_d1),
+    fee_d0: n(row.fee_d0),
+    fee_min_d0: n(row.fee_min_d0),
+    fee_d1: n(row.fee_d1),
+    fee_min_d1: n(row.fee_min_d1),
+    commission_percent: n(row.commission_percent),
+    extension_rate_percent: n(row.extension_rate_percent),
+    bill_fine_percent: n(row.bill_fine_percent),
+    invest_back_limit: n(row.invest_back_limit),
+    invest_back_commission_percent: n(row.invest_back_commission_percent),
+    has_insurance: Boolean(row.has_insurance),
+    has_referral: Boolean(row.has_referral),
+    fidc_ready: Boolean(row.fidc_ready),
   }
 }

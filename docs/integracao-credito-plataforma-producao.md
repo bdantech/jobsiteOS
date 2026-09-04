@@ -40,15 +40,29 @@ volta**, por webhook, cada mudança de estágio dela.
         │
         │  2xx rápido
         ├─────────────────────────────────────▶
+        │                                              │
+        │                                       analista define as
+        │                                       CONDIÇÕES COMERCIAIS
+        │  POST no seu endpoint                        ▼
+        │◀──────────────────────────────────────  credito.condicoes_definidas
+        │   com payload_producao pronto            (§8 — acionável)
+        │
+        │  POST /api/backoffice/credit-analyses (de vocês)
+        ├──▶ repassando o payload_producao COMO ESTÁ
 ```
 
-Duas regras que valem para tudo o que vem abaixo:
+Três regras que valem para tudo o que vem abaixo:
 
 1. **O que vocês mandam é insumo, nunca decisão.** Estágio, limite aprovado e
    validade são governados pela esteira do JobsiteOS e pelo time de Crédito.
    Nenhum campo do payload de entrada muda isso.
 2. **Toda mudança de estágio gera webhook**, inclusive as que vocês não
    provocaram (a seguradora respondeu, o limite caiu, a análise expirou).
+3. **Uma parte do payload é acionável.** Depois que a análise é aprovada, o time de
+   Crédito publica as **condições comerciais** — taxas, tarifas e limites. Elas
+   chegam no bloco `condicoes_comerciais`, num formato pronto para vocês repassarem
+   ao `POST /api/backoffice/credit-analyses` de vocês. Isso é o **§8**, e é a única
+   parte deste documento em que o que chega não é relatório: é ordem de serviço.
 
 ---
 
@@ -465,7 +479,32 @@ o que motivou o envio. **Nenhuma chave é omitida** — o que não existe vem `n
       "expira_em": "2027-03-01"
     }
   },
-  "documentos": { "recebidos": ["balanco_patrimonial", "dre"], "faltantes": [] }
+  "documentos": { "recebidos": ["balanco_patrimonial", "dre"], "faltantes": [] },
+  "condicoes_comerciais": {
+    "definidas_em": "2026-09-04T15:20:00Z",
+    "versao": 2,
+    "payload_producao": {
+      "companyId": 748,
+      "role": "PAYER",
+      "status": "APPROVED",
+      "expiresAt": "2027-09-04",
+      "creditLimit": 500000,
+      "commissionPercent": 2.5,
+      "extensionRatePercent": 12,
+      "billFinePercent": 2,
+      "monthlyRateD0": 2.9,
+      "monthlyRateD1": 2.674,
+      "feeD0": 300, "feeMinD0": 150,
+      "feeD1": 250, "feeMinD1": 125,
+      "maxInvoiceAmount": 1000000,
+      "maxDueDateDays": 90,
+      "hasInsurance": false,
+      "hasReferral": false,
+      "fidcReady": true,
+      "investBackLimit": 0,
+      "investBackCommissionPercent": 0
+    }
+  }
 }
 ```
 
@@ -479,7 +518,7 @@ o que motivou o envio. **Nenhuma chave é omitida** — o que não existe vem `n
 | `analise.analise_id` | uuid | sim | Nosso id |
 | `analise.external_id` | string \| null | sim (pode ser null) | O id de vocês |
 | `analise.estagio_anterior` | string \| null | sim (null na criação) | Estágio de onde saiu |
-| `analise.estagio_atual` | string | sim | Ver glossário (§8) |
+| `analise.estagio_atual` | string | sim | Ver glossário (§9) |
 | `analise.limite_solicitado` | número \| null | sim | O que foi pedido |
 | `analise.limite_aprovado` | número \| null | sim | O que a seguradora concedeu |
 | `analise.validade` | date \| null | sim | Até quando o limite vale |
@@ -504,6 +543,7 @@ o que motivou o envio. **Nenhuma chave é omitida** — o que não existe vem `n
 | `credito.seguradora` | objeto \| null | sim | |
 | `documentos.recebidos` | string[] | sim | Tipos já entregues |
 | `documentos.faltantes` | string[] | sim | Essenciais que faltam |
+| `condicoes_comerciais` | objeto \| null | sim | As condições publicadas. `null` até alguém publicar. Ver §8 |
 
 ### 7.1 Eventos
 
@@ -514,11 +554,215 @@ o que motivou o envio. **Nenhuma chave é omitida** — o que não existe vem `n
 | `credito.documento_recebido` | Um documento foi registrado na análise |
 | `credito.limite_alterado` | `limite_aprovado` mudou — inclusive **redução** pela seguradora, que é sinal de risco e costuma acontecer sem mudar o estágio |
 | `credito.decisao_registrada` | A decisão operacional foi registrada |
+| `credito.condicoes_definidas` | As condições comerciais foram publicadas. **É o único evento acionável**: veja o §8 |
 | `webhook.teste` | Disparado pelo botão de teste. Payload reduzido, sem análise |
 
 ---
 
-## 8. Glossário dos estágios
+## 8. Condições comerciais aprovadas
+
+Esta é a parte **acionável** da integração. Tudo até aqui é informativo: conta o
+que aconteceu na esteira. O bloco `condicoes_comerciais` é diferente — ele carrega
+um objeto pronto para vocês repassarem ao **`POST /api/backoffice/credit-analyses`**
+de vocês, sem transformação nenhuma.
+
+### 8.1 O que são
+
+Quando uma análise é aprovada, um analista do time de Crédito define **por quanto**
+aquele sacado opera: limite, validade, juros do D0 e do D1, tarifas (TAC), comissão
+e os acessórios. Isso é uma decisão comercial humana, tomada em cima do porte da
+empresa, do score, da cobertura da seguradora e do comportamento das notas dela.
+
+Sem condições publicadas, vocês têm uma aprovação **sem preço** — e não há como
+operar. Com elas, vocês têm tudo o que a criação da análise de crédito de verdade
+precisa.
+
+### 8.2 O fluxo completo
+
+```
+  JOBSITEOS                                        PLATAFORMA DE PRODUÇÃO
+  ─────────                                        ──────────────────────
+  esteira aprova a análise
+        │
+        │  (webhook credito.estagio_alterado → aprovada)
+        ├────────────────────────────────────────────────────────▶
+        │
+  analista abre "Condições comerciais"
+  o motor SUGERE a partir da matriz
+  o analista ajusta o que quiser
+        │
+        ▼
+  validação local (as MESMAS regras do §8.4)
+        │
+        ├── falhou ──▶ nada é publicado, nada sai daqui.
+        │              O analista corrige e tenta de novo.
+        │
+        └── passou ──▶ grava a versão e dispara o webhook
+                  │
+                  │  credito.condicoes_definidas
+                  ├────────────────────────────────────────────────▶ vocês pegam
+                  │                                                  payload_producao
+                  │  2xx rápido                                      e o repassam ao
+                  ◀────────────────────────────────────────────────  seu endpoint
+```
+
+Duas garantias que valem a pena conhecer:
+
+1. **Nada malformado sai daqui.** O JobsiteOS aplica localmente o mesmo contrato
+   que o Zod de vocês aplica, antes de publicar. Se algo não passa, a publicação é
+   registrada como falha, o analista é avisado na hora, e **nenhum webhook é
+   enviado**. Vocês nunca recebem um `payload_producao` que o seu endpoint fosse
+   recusar por validação.
+2. **Uma condição vigente por análise.** Republicar cria uma versão nova e aposenta
+   a anterior. O `payload_producao` que vocês recebem é sempre o vigente.
+
+### 8.3 O evento e o bloco
+
+O evento **`credito.condicoes_definidas`** dispara no momento da publicação.
+
+O bloco `condicoes_comerciais`, porém, **vai em todos os eventos** do §7 — não só
+nesse. Quem recebe um `credito.estagio_alterado` consegue decidir sem uma segunda
+chamada. Como todo o resto do contrato, **a chave existe sempre**: vem `null`
+enquanto ninguém publicou.
+
+```jsonc
+"condicoes_comerciais": {
+  "definidas_em": "2026-09-04T15:20:00Z",  // quando foi publicada
+  "versao": 2,                              // versão da matriz de precificação usada
+  "payload_producao": { /* §8.4 */ }
+}
+```
+
+`versao` é a versão da **matriz de precificação** que sugeriu aqueles números. Ela
+serve para responder, meses depois, "por que essa empresa ficou com essa taxa?" —
+não é um número de versão do contrato.
+
+### 8.4 Tabela de campos de `payload_producao`
+
+Os nomes são **exatamente** os do contrato de vocês (camelCase). Repassem o objeto
+como está.
+
+| Campo | Tipo | Obrigatório | Faixa / validação | O que significa |
+| ----- | ---- | ----------- | ----------------- | --------------- |
+| `companyId` | inteiro > 0 | condicional | Presente **só** se a empresa já tem cadastro na plataforma | Id da empresa do lado de vocês. Ver §8.6 |
+| `document` | string | condicional | 14 dígitos, sem máscara | CNPJ do sacado. Só quando **não** há `companyId` |
+| `subjectName` | string | condicional | 1–300 caracteres | Razão social. Acompanha `document`, sempre |
+| `role` | string | sim | Literal `"PAYER"` | Esta esteira é só de sacado. Nunca virá outro valor |
+| `status` | string | sim | Literal `"APPROVED"` | Condição comercial só se publica de análise aprovada |
+| `expiresAt` | string | sim | `AAAA-MM-DD`, data futura | Até quando a condição vale |
+| `creditLimit` | número | sim | > 0 | Limite de crédito, em reais |
+| `commissionPercent` | número | sim | ≥ 0 e < 100 | Comissão, em % |
+| `extensionRatePercent` | número | sim | ≥ 0 e < 100 | Taxa de prorrogação, em % |
+| `billFinePercent` | número | sim | ≥ 0 e < 100 | Multa, em % |
+| `monthlyRateD0` | número | sim | ≥ 0 e < 100 · **> `monthlyRateD1`** | Juros mensal do D0 (dinheiro hoje), em % |
+| `monthlyRateD1` | número | sim | ≥ 0 e < 100 | Juros mensal do D1 (dinheiro amanhã), em % |
+| `feeD0` | número | sim | ≥ 0 · **> `feeD1`** | TAC cheia do D0, em reais. Ver §8.5 |
+| `feeMinD0` | número | sim | ≥ 0 · **≤ `feeD0`** | TAC das notas pequenas no D0. **Não é piso.** Ver §8.5 |
+| `feeD1` | número | sim | ≥ 0 | TAC cheia do D1, em reais |
+| `feeMinD1` | número | sim | ≥ 0 · **≤ `feeD1`** | TAC das notas pequenas no D1 |
+| `maxInvoiceAmount` | número | sim | 500 a 10.000.000 | Valor máximo de uma nota antecipável |
+| `maxDueDateDays` | inteiro | sim | 5 a 365 | Prazo máximo de vencimento aceito |
+| `hasInsurance` | booleano | sim | — | Se há cobertura vigente da seguradora. **Derivado**, não escolhido |
+| `hasReferral` | booleano | sim | — | Se veio por indicação |
+| `fidcReady` | booleano | sim | — | Se a operação é elegível ao FIDC |
+| `investBackLimit` | número | sim | ≥ 0 · **≤ `creditLimit`** | Limite de invest back, em reais |
+| `investBackCommissionPercent` | número | sim | ≥ 0 e < 100 | Comissão do invest back, em % |
+
+**As três validações cruzadas.** São elas que o JobsiteOS aplica antes de publicar,
+e que valem a pena vocês repetirem no Zod de vocês:
+
+1. **D0 é mais caro que D1**: `monthlyRateD0 > monthlyRateD1` **e** `feeD0 > feeD1`.
+   Estritamente maior; iguais não passam.
+2. **A TAC mínima nunca passa da cheia**: `feeMinD0 ≤ feeD0` **e** `feeMinD1 ≤ feeD1`.
+3. **Invest back não passa do limite**: `investBackLimit ≤ creditLimit`.
+
+### 8.5 A TAC é proporcional — `feeMin` não é piso de segurança
+
+Este é o ponto do documento que mais custa caro se for lido errado.
+
+`feeMin` **não** é "o mínimo que se cobra". É a **TAC efetiva das notas pequenas**.
+A tarifa cresce proporcionalmente ao valor da nota até um limiar (hoje **R$
+10.000**), onde atinge `fee` e para:
+
+```
+TAC = feeMin + (fee − feeMin) × min(valor_da_nota / 10000, 1)
+```
+
+Com `feeD0 = 300` e `feeMinD0 = 150`:
+
+| Valor da nota | TAC cobrada | Conta |
+| ------------- | ----------- | ----- |
+| R$ 1.000 | **R$ 165,00** | 150 + 150 × 0,10 |
+| R$ 5.000 | **R$ 225,00** | 150 + 150 × 0,50 |
+| R$ 10.000 | **R$ 300,00** | 150 + 150 × 1,00 (atingiu o limiar) |
+| R$ 50.000 | **R$ 300,00** | trava no limiar, não cresce mais |
+
+Lido como piso, uma nota de R$ 1.000 pagaria R$ 300 — **30% do valor dela em
+tarifa**, quase o dobro do correto. É a diferença entre uma tabela cara e uma
+tabela predatória.
+
+Reparem também que a tarifa é regressiva: a taxa efetiva combinada
+(`juros + TAC ÷ valor`) de uma nota de R$ 1.000 em D0 a 2,9% é **19,4%**, contra
+**3,5%** numa de R$ 50.000. É a mesma tabela.
+
+### 8.6 Identificação: `companyId` **ou** `document` + `subjectName`
+
+**Exatamente um** dos dois caminhos, nunca os dois:
+
+- A empresa **já tem cadastro** na plataforma → vem `companyId`, e `document` e
+  `subjectName` estão **ausentes**.
+- A empresa **ainda não tem cadastro** → vêm `document` (14 dígitos, sem máscara) e
+  `subjectName` (razão social), e `companyId` está **ausente**.
+
+Mandar os dois é erro no contrato de vocês, e por isso o JobsiteOS nunca os manda
+juntos. Ausentes significa **chave ausente do objeto**, não `null`. (Esta é a única
+exceção à regra "nenhuma chave é omitida" do §7, e ela existe justamente porque o
+contrato de vocês distingue os dois caminhos pela presença da chave.)
+
+### 8.7 Repassando ao endpoint de vocês
+
+Recebido o webhook, o repasse é literal — `payload_producao` já está no formato do
+seu endpoint:
+
+```bash
+# 1) Do corpo do webhook recebido, extraiam o bloco:
+CONDICOES=$(echo "$CORPO_DO_WEBHOOK" | jq -c '.condicoes_comerciais.payload_producao')
+
+# 2) Se vier null, essa análise ainda não tem condições publicadas. Não chamem nada.
+[ "$CONDICOES" = "null" ] && exit 0
+
+# 3) Repassem COMO ESTÁ, sem renomear nem converter campo nenhum:
+curl -X POST "https://SUA-PLATAFORMA/api/backoffice/credit-analyses" \
+  -H "Authorization: Bearer $SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$CONDICOES"
+```
+
+Em Node, o equivalente:
+
+```js
+const { condicoes_comerciais: cc } = corpoDoWebhook
+if (cc) {
+  await fetch('https://SUA-PLATAFORMA/api/backoffice/credit-analyses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    // Sem spread, sem renomear, sem defaults: o objeto já é o corpo.
+    body: JSON.stringify(cc.payload_producao),
+  })
+}
+```
+
+Duas recomendações:
+
+- **Deduplique por `evento_id`**, como em todo o resto (§4). Uma retentativa do
+  webhook não pode virar duas análises.
+- **Trate republicação como atualização.** Se vocês já criaram a análise e chega um
+  `credito.condicoes_definidas` novo para o mesmo sacado, são condições revisadas —
+  compare `condicoes_comerciais.definidas_em` com o que vocês guardaram.
+
+---
+
+## 9. Glossário dos estágios
 
 | Estágio | O que significa para o negócio |
 | ------- | ------------------------------ |
@@ -540,7 +784,7 @@ ordem**: uma análise pode ir direto de `em_analise` para `negada`, ou de
 
 ---
 
-## 9. Exemplos prontos
+## 10. Exemplos prontos
 
 ```bash
 export BASE="https://SEU-JOBSITEOS"
@@ -576,7 +820,7 @@ curl "$BASE/api/v1/credito/analises?external_id=prod-2026-00123" \
 
 ---
 
-## 10. Checklist de homologação
+## 11. Checklist de homologação
 
 Percorram na ordem. Cada item tem um critério objetivo.
 
@@ -606,7 +850,38 @@ Percorram na ordem. Cada item tem um critério objetivo.
       reaparece ~1 min depois com o **mesmo** `evento_id`, e que seu código o
       deduplica quando finalmente responder 200.
 - [ ] **12. Reconciliação** — `GET /analises/{id}` devolve o mesmo payload do
-      último webhook recebido.
+      último webhook recebido, **incluindo** o bloco `condicoes_comerciais`.
+
+### Condições comerciais (§8)
+
+- [ ] **13. Bloco sempre presente** — antes de qualquer publicação, todo evento
+      traz `condicoes_comerciais: null`. A chave existe; o valor é nulo. Confirmem
+      que o seu parser não quebra nisso.
+- [ ] **14. Evento de publicação** — peçam ao time do JobsiteOS para publicar
+      condições numa análise aprovada de homologação. Vocês devem receber
+      `credito.condicoes_definidas` com `payload_producao` preenchido.
+- [ ] **15. Repasse literal** — mandem o `payload_producao` recebido ao seu
+      `POST /api/backoffice/credit-analyses` **sem transformar nada**. Deve passar
+      no seu Zod de primeira. Se não passar, é divergência de contrato: abram
+      chamado em vez de adaptar o objeto.
+- [ ] **16. D0 mais caro que D1** — confiram no payload recebido que
+      `monthlyRateD0 > monthlyRateD1` e `feeD0 > feeD1`. **O exemplo original do
+      contrato está invertido**; se o seu Zod foi escrito a partir dele, ele vai
+      recusar um payload correto.
+- [ ] **17. Identificação** — confiram que veio `companyId` **ou** `document` +
+      `subjectName`, e nunca os dois. Testem os dois cenários: um sacado já
+      cadastrado na plataforma e um que nunca operou.
+- [ ] **18. TAC proporcional** — com `feeD0 = 300` e `feeMinD0 = 150`, o seu
+      cálculo de tarifa precisa dar **R$ 165** numa nota de R$ 1.000 e **R$ 300**
+      numa de R$ 10.000. Se der R$ 300 nas duas, vocês implementaram `feeMin` como
+      piso — releiam o §8.5.
+- [ ] **19. Republicação** — peçam uma segunda publicação na mesma análise. Vocês
+      recebem um novo `credito.condicoes_definidas`, com `definidas_em` mais
+      recente. Confirmem que o seu lado ATUALIZA a análise, em vez de criar uma
+      segunda.
+- [ ] **20. Validação recusada não chega** — peçam ao time do JobsiteOS para tentar
+      publicar uma condição inválida (D1 mais caro que D0, por exemplo). **Nenhum
+      webhook deve chegar**: a recusa acontece antes da publicação.
 
 ---
 
@@ -616,3 +891,7 @@ Erros da API ficam registrados do nosso lado com a rota, o código e a
 `Idempotency-Key`. Ao abrir um chamado, mandem **`external_id` ou `analise_id`, o
 horário aproximado e o `evento_id`** quando for sobre webhook — com isso achamos a
 requisição exata.
+
+Se for sobre **condições comerciais**, mandem também o `condicoes_comerciais.versao`
+e o `definidas_em` que vocês receberam: é por eles que localizamos qual versão da
+matriz de precificação produziu aqueles números, e quem a publicou.

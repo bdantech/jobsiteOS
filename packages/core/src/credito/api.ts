@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { isValidCnpj, normalizeCnpj } from '../schemas/cnpj.js'
 import { TIPOS_DOC_CONTABEIS, type TipoDocContabil } from './analise.js'
+import type { PayloadProducao } from './precificacao.js'
 import { ESTAGIOS_ANALISE, type EstagioAnalise } from './schemas.js'
 
 /**
@@ -21,6 +22,9 @@ export const EVENTOS_WEBHOOK = [
   'credito.documento_recebido',
   'credito.limite_alterado',
   'credito.decisao_registrada',
+  // 04o: as condições comerciais foram definidas e publicadas. É o único evento
+  // ACIONÁVEL do contrato — o `payload_producao` dele vira um POST do outro lado.
+  'credito.condicoes_definidas',
   'webhook.teste',
 ] as const
 export type EventoWebhook = (typeof EVENTOS_WEBHOOK)[number]
@@ -31,6 +35,7 @@ export const EVENTO_WEBHOOK_LABELS: Record<EventoWebhook, string> = {
   'credito.documento_recebido': 'Documento recebido',
   'credito.limite_alterado': 'Limite alterado',
   'credito.decisao_registrada': 'Decisão registrada',
+  'credito.condicoes_definidas': 'Condições comerciais definidas',
   'webhook.teste': 'Evento de teste',
 }
 
@@ -188,6 +193,19 @@ export interface PayloadCredito {
     recebidos: string[]
     faltantes: string[]
   }
+  /**
+   * As condições comerciais publicadas (04o §7). `null` enquanto ninguém publicou —
+   * a CHAVE existe sempre, como todas as outras, e vai em TODOS os eventos, não só
+   * no `credito.condicoes_definidas`.
+   *
+   * É o único bloco acionável do payload: `payload_producao` é repassado como está
+   * para o `POST /api/backoffice/credit-analyses` do outro lado.
+   */
+  condicoes_comerciais: {
+    definidas_em: string
+    versao: number
+    payload_producao: PayloadProducao
+  } | null
 }
 
 /** Os estágios, para o glossário da documentação e para validar entrada. */

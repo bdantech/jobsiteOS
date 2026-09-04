@@ -851,6 +851,35 @@ que o fator "histórico de análises" e a view `analise_vigente` leem.
 
 Ver **[docs/analise-credito.md](analise-credito.md)**.
 
+## O preço, depois da aprovação (04o)
+
+A esteira responde "esta empresa pode operar, e até quanto". O 04o responde a
+pergunta seguinte: **por quanto**. Aprovada a análise, o detalhe ganha a aba
+"Condições comerciais", onde um motor sugere taxas, tarifas e limites a partir de
+uma matriz versionada (`precificacao_matriz`, migração
+[`0185`](../supabase/migrations/0185_condicoes_comerciais_e_precificacao.sql)) e o
+analista ajusta o que quiser.
+
+Publicar grava em `condicoes_comerciais` e dispara `credito.condicoes_definidas` —
+o **único evento acionável** do webhook do 04n: o `payload_producao` dele vira um
+`POST /api/backoffice/credit-analyses` do lado da plataforma de produção, sem
+transformação. Por isso a validação é local e acontece antes: falhou, não sai
+webhook, e a tentativa fica registrada como `falha_validacao` com a mensagem exata.
+
+Dois pontos que não podem ser implementados errado, e que valem em qualquer lugar
+que toque estes números:
+
+- **D0 é o produto caro**: `monthly_rate_d0 > monthly_rate_d1` e `fee_d0 > fee_d1`.
+  O exemplo do contrato de produção está invertido — a regra ganha do exemplo.
+- **`fee_min` não é piso de segurança**: é a TAC efetiva das notas pequenas. Com
+  `fee = 300` e `fee_min = 150`, uma NF de R$ 1.000 paga R$ 165, não R$ 300.
+
+O motor, a calculadora da TAC e o validador vivem em
+`packages/core/src/credito/precificacao.ts`. A tela de ajuste é
+**`/credito/precificacao`** (webOnly), com prévia do impacto sobre as análises
+aprovadas do período. O documento para o time de produção é
+**[docs/integracao-credito-plataforma-producao.md §8](integracao-credito-plataforma-producao.md)**.
+
 ## A receita prevista, e por que a fórmula mudou de forma (22/08/2026)
 
 A conta era `volume = limite × giro`, com o giro calibrado na carteira. O resultado estava

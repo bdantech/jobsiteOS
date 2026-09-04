@@ -469,6 +469,166 @@ export type Database = {
           },
         ]
       }
+      condicoes_comerciais: {
+        Row: {
+          ajustes: Json | null
+          analise_credito_id: string
+          bill_fine_percent: number
+          cnpj: string
+          commission_percent: number
+          credit_limit: number
+          criada_em: string
+          definida_por: string | null
+          empresa_id: string | null
+          erro_validacao: string | null
+          expires_at: string
+          extension_rate_percent: number
+          fee_d0: number
+          fee_d1: number
+          fee_min_d0: number
+          fee_min_d1: number
+          fidc_ready: boolean
+          has_insurance: boolean
+          has_referral: boolean
+          id: string
+          invest_back_commission_percent: number
+          invest_back_limit: number
+          matriz_versao: number
+          max_due_date_days: number
+          max_invoice_amount: number
+          monthly_rate_d0: number
+          monthly_rate_d1: number
+          publicada_em: string | null
+          status: string
+          sugestao: Json
+        }
+        Insert: {
+          ajustes?: Json | null
+          analise_credito_id: string
+          bill_fine_percent: number
+          cnpj: string
+          commission_percent: number
+          credit_limit: number
+          criada_em?: string
+          definida_por?: string | null
+          empresa_id?: string | null
+          erro_validacao?: string | null
+          expires_at: string
+          extension_rate_percent: number
+          fee_d0: number
+          fee_d1: number
+          fee_min_d0: number
+          fee_min_d1: number
+          fidc_ready?: boolean
+          has_insurance: boolean
+          has_referral?: boolean
+          id?: string
+          invest_back_commission_percent?: number
+          invest_back_limit?: number
+          matriz_versao: number
+          max_due_date_days: number
+          max_invoice_amount: number
+          monthly_rate_d0: number
+          monthly_rate_d1: number
+          publicada_em?: string | null
+          status?: string
+          sugestao: Json
+        }
+        Update: {
+          ajustes?: Json | null
+          analise_credito_id?: string
+          bill_fine_percent?: number
+          cnpj?: string
+          commission_percent?: number
+          credit_limit?: number
+          criada_em?: string
+          definida_por?: string | null
+          empresa_id?: string | null
+          erro_validacao?: string | null
+          expires_at?: string
+          extension_rate_percent?: number
+          fee_d0?: number
+          fee_d1?: number
+          fee_min_d0?: number
+          fee_min_d1?: number
+          fidc_ready?: boolean
+          has_insurance?: boolean
+          has_referral?: boolean
+          id?: string
+          invest_back_commission_percent?: number
+          invest_back_limit?: number
+          matriz_versao?: number
+          max_due_date_days?: number
+          max_invoice_amount?: number
+          monthly_rate_d0?: number
+          monthly_rate_d1?: number
+          publicada_em?: string | null
+          status?: string
+          sugestao?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "condicoes_comerciais_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "condicoes_comerciais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "condicoes_comerciais_matriz_versao_fkey"
+            columns: ["matriz_versao"]
+            isOneToOne: false
+            referencedRelation: "precificacao_matriz"
+            referencedColumns: ["versao"]
+          },
+          {
+            foreignKeyName: "condicoes_comerciais_definida_por_fkey"
+            columns: ["definida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      precificacao_matriz: {
+        Row: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao: Json
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          criada_em?: string
+          criada_por?: string | null
+          definicao?: Json
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "precificacao_matriz_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analise_parametros: {
         Row: {
           ativa: boolean
@@ -12535,6 +12695,128 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "motivos_perda"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      condicoes_painel: {
+        Args: { p_analise_credito_id: string }
+        Returns: Json
+      }
+      precificacao_amostra: {
+        Args: { p_meses?: number }
+        Returns: Json
+      }
+      app_salvar_condicoes: {
+        Args: { p: Json }
+        Returns: {
+          ajustes: Json | null
+          analise_credito_id: string
+          bill_fine_percent: number
+          cnpj: string
+          commission_percent: number
+          credit_limit: number
+          criada_em: string
+          definida_por: string | null
+          empresa_id: string | null
+          erro_validacao: string | null
+          expires_at: string
+          extension_rate_percent: number
+          fee_d0: number
+          fee_d1: number
+          fee_min_d0: number
+          fee_min_d1: number
+          fidc_ready: boolean
+          has_insurance: boolean
+          has_referral: boolean
+          id: string
+          invest_back_commission_percent: number
+          invest_back_limit: number
+          matriz_versao: number
+          max_due_date_days: number
+          max_invoice_amount: number
+          monthly_rate_d0: number
+          monthly_rate_d1: number
+          publicada_em: string | null
+          status: string
+          sugestao: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "condicoes_comerciais"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_publicar_condicoes: {
+        Args: { p: Json }
+        Returns: {
+          ajustes: Json | null
+          analise_credito_id: string
+          bill_fine_percent: number
+          cnpj: string
+          commission_percent: number
+          credit_limit: number
+          criada_em: string
+          definida_por: string | null
+          empresa_id: string | null
+          erro_validacao: string | null
+          expires_at: string
+          extension_rate_percent: number
+          fee_d0: number
+          fee_d1: number
+          fee_min_d0: number
+          fee_min_d1: number
+          fidc_ready: boolean
+          has_insurance: boolean
+          has_referral: boolean
+          id: string
+          invest_back_commission_percent: number
+          invest_back_limit: number
+          matriz_versao: number
+          max_due_date_days: number
+          max_invoice_amount: number
+          monthly_rate_d0: number
+          monthly_rate_d1: number
+          publicada_em: string | null
+          status: string
+          sugestao: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "condicoes_comerciais"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_matriz_precificacao: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "precificacao_matriz"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_ativar_matriz_precificacao: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          criada_em: string
+          criada_por: string | null
+          definicao: Json
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "precificacao_matriz"
           isOneToOne: true
           isSetofReturn: false
         }

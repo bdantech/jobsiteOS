@@ -262,3 +262,78 @@ export const compararSeguradoraSchema = z.object({
     .describe('Janela em dias, contada das análises concluídas.'),
 })
 export type CompararSeguradoraInput = z.infer<typeof compararSeguradoraSchema>
+
+// ─── Condições comerciais e precificação (04o) ──────────────────────────────
+
+/**
+ * Os campos do formulário de condições. O `coerce` existe porque eles chegam de
+ * `<input type="number">` — e um "2.9" em texto que virasse `NaN` silencioso
+ * publicaria uma taxa nula para a plataforma de produção.
+ *
+ * As regras (faixas, cruzadas, TAC) NÃO estão aqui: elas moram em
+ * `validarCondicoes`, que é o espelho do Zod deles e roda no formulário a cada
+ * tecla. Este schema só garante que chegou número onde se espera número — repetir
+ * as regras nos dois lugares criaria duas verdades sobre o mesmo campo.
+ */
+export const condicoesCamposSchema = z.object({
+  credit_limit: z.coerce.number(),
+  max_invoice_amount: z.coerce.number(),
+  max_due_date_days: z.coerce.number(),
+  expires_at: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Validade em AAAA-MM-DD.'),
+  monthly_rate_d0: z.coerce.number(),
+  monthly_rate_d1: z.coerce.number(),
+  fee_d0: z.coerce.number(),
+  fee_min_d0: z.coerce.number(),
+  fee_d1: z.coerce.number(),
+  fee_min_d1: z.coerce.number(),
+  commission_percent: z.coerce.number(),
+  extension_rate_percent: z.coerce.number(),
+  bill_fine_percent: z.coerce.number(),
+  invest_back_limit: z.coerce.number(),
+  invest_back_commission_percent: z.coerce.number(),
+  has_insurance: z.boolean(),
+  has_referral: z.boolean(),
+  fidc_ready: z.boolean(),
+})
+export type CondicoesCamposInput = z.infer<typeof condicoesCamposSchema>
+
+export const salvarCondicoesSchema = z.object({
+  analise_credito_id: z.string().uuid(),
+  condicoes: condicoesCamposSchema,
+  /** O que o motor sugeriu, para a linha registrar de onde o analista partiu. */
+  sugestao: z.record(z.unknown()),
+  /** O que ele mudou, campo a campo, e a justificativa do que saiu da faixa. */
+  ajustes: z.record(z.unknown()).optional().nullable(),
+  matriz_versao: z.coerce.number().int().positive(),
+})
+export type SalvarCondicoesInput = z.infer<typeof salvarCondicoesSchema>
+
+/**
+ * A publicação. `erro_validacao` é preenchido pela action quando o espelho do Zod
+ * de produção recusou: aí a linha nasce `falha_validacao`, NENHUM webhook sai, e a
+ * mensagem exata fica gravada. A tentativa que falhou é registro, não silêncio.
+ */
+export const publicarCondicoesSchema = salvarCondicoesSchema.extend({
+  erro_validacao: z.string().trim().max(4000).optional().nullable(),
+})
+export type PublicarCondicoesInput = z.infer<typeof publicarCondicoesSchema>
+
+export const salvarMatrizPrecificacaoSchema = z.object({
+  definicao: z.record(z.unknown()).describe('Faixas globais, ajustes e as células da matriz.'),
+  ativar: z.boolean().default(true),
+})
+export type SalvarMatrizPrecificacaoInput = z.infer<typeof salvarMatrizPrecificacaoSchema>
+
+export const ativarMatrizPrecificacaoSchema = z.object({
+  versao: z.coerce.number().int().positive(),
+})
+export type AtivarMatrizPrecificacaoInput = z.infer<typeof ativarMatrizPrecificacaoSchema>
+
+/** Tool de leitura: as condições vigentes de um CNPJ. */
+export const condicoesDoCnpjSchema = z.object({
+  cnpj: z.string().describe('CNPJ do sacado (14 dígitos, com ou sem pontuação).'),
+})
+export type CondicoesDoCnpjInput = z.infer<typeof condicoesDoCnpjSchema>

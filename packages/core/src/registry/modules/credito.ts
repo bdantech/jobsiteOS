@@ -41,11 +41,14 @@ import {
 import {
   analisePropriaSchema,
   compararSeguradoraSchema,
+  condicoesDoCnpjSchema,
   rodarAnaliseToolSchema,
   type AnalisePropriaInput,
   type CompararSeguradoraInput,
+  type CondicoesDoCnpjInput,
   type RodarAnaliseToolInput,
 } from '../../credito/schemas.js'
+import { calcularTac, VALORES_SIMULACAO } from '../../credito/precificacao.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -425,6 +428,76 @@ async function compararSeguradora(input: CompararSeguradoraInput, ctx: ToolConte
   }
 }
 
+// ─── Condições comerciais (04o) ─────────────────────────────────────────────
+
+/**
+ * Por QUANTO este CNPJ opera. Devolve sempre a TAC de quatro tickets junto das
+ * taxas, e não só `fee`/`fee_min`.
+ *
+ * O motivo é o erro que essa dupla de números convida: `fee_min` parece piso de
+ * segurança e é a TAC EFETIVA das notas pequenas (04o §4). Um modelo lendo
+ * "TAC R$ 300, mínima R$ 150" diria a um cliente que a nota de mil reais custa
+ * R$ 300 — quando custa R$ 165. Devolver a conta pronta remove a chance do erro.
+ */
+async function condicoesDoCnpj(input: CondicoesDoCnpjInput, ctx: ToolContext) {
+  const cnpj = normalizeCnpj(input.cnpj)
+  const [condRes, matrizRes] = await Promise.all([
+    ctx.supabase
+      .from('condicoes_comerciais')
+      .select('analise_credito_id, credit_limit, max_invoice_amount, max_due_date_days, expires_at, monthly_rate_d0, monthly_rate_d1, fee_d0, fee_min_d0, fee_d1, fee_min_d1, commission_percent, extension_rate_percent, bill_fine_percent, has_insurance, has_referral, fidc_ready, matriz_versao, publicada_em')
+      .eq('cnpj', cnpj)
+      .eq('status', 'publicada')
+      .maybeSingle(),
+    ctx.supabase.from('precificacao_matriz').select('definicao').eq('ativa', true).maybeSingle(),
+  ])
+  if (condRes.error) throw new Error(condRes.error.message)
+
+  const c = condRes.data
+  if (!c) {
+    return {
+      encontrado: false,
+      cnpj: formatCnpj(cnpj),
+      aviso:
+        'Este CNPJ não tem condições comerciais publicadas. Elas são definidas por alguém do ' +
+        'Crédito depois que a análise é aprovada — sem elas, a plataforma de produção não tem ' +
+        'preço para operar.',
+    }
+  }
+
+  const definicao = matrizRes.data?.definicao as
+    | { faixas?: { limiar_proporcionalidade_tac?: number } }
+    | null
+  const limiar = Number(definicao?.faixas?.limiar_proporcionalidade_tac ?? 10_000)
+  const n = (v: unknown): number => Number(v ?? 0)
+
+  return {
+    encontrado: true,
+    cnpj: formatCnpj(cnpj),
+    limite_de_credito: brl(c.credit_limit),
+    validade: c.expires_at,
+    juros_d0: `${n(c.monthly_rate_d0)}% a.m.`,
+    juros_d1: `${n(c.monthly_rate_d1)}% a.m.`,
+    comissao: `${n(c.commission_percent)}%`,
+    tac_por_valor_de_nota: VALORES_SIMULACAO.map((valor) => ({
+      nota: brl(valor),
+      tac_d0: brl(calcularTac(valor, n(c.fee_d0), n(c.fee_min_d0), limiar)),
+      tac_d1: brl(calcularTac(valor, n(c.fee_d1), n(c.fee_min_d1), limiar)),
+    })),
+    maximo_por_nota: brl(c.max_invoice_amount),
+    prazo_maximo_dias: c.max_due_date_days,
+    tem_cobertura: c.has_insurance,
+    multa: `${n(c.bill_fine_percent)}%`,
+    prorrogacao: `${n(c.extension_rate_percent)}%`,
+    matriz_versao: c.matriz_versao,
+    publicada_em: c.publicada_em,
+    ressalva:
+      `A TAC cresce com o valor da nota até ${brl(limiar)} e para lá. A "TAC mínima" NÃO é um ` +
+      'piso de segurança: é o que a nota pequena paga. Nunca informe a TAC cheia como custo de ' +
+      'uma nota abaixo do limiar.',
+    route: `/credito/analises/${c.analise_credito_id}`,
+  }
+}
+
 export const creditoModule: AppModule = {
   id: 'credito',
   name: 'Crédito',
@@ -522,6 +595,18 @@ export const creditoModule: AppModule = {
       inputSchema: analisePropriaSchema,
       mutates: false,
       execute: (input, ctx) => analisePropriaDoCnpj(input as AnalisePropriaInput, ctx),
+    },
+    {
+      id: 'credito.condicoes_comerciais',
+      name: 'Condições comerciais do sacado',
+      description:
+        'Por QUANTO um CNPJ opera: limite, validade, juros D0/D1, comissão, prazo e a TAC já ' +
+        'calculada para notas de R$ 1k, 5k, 10k e 50k. D0 (dinheiro hoje) é sempre o produto ' +
+        'mais caro que o D1. A "TAC mínima" NÃO é piso de segurança — é a tarifa que a nota ' +
+        'pequena paga, e por isso a resposta traz a TAC por ticket em vez de dois números soltos.',
+      inputSchema: condicoesDoCnpjSchema,
+      mutates: false,
+      execute: (input, ctx) => condicoesDoCnpj(input as CondicoesDoCnpjInput, ctx),
     },
     {
       id: 'credito.comparar_seguradora',
