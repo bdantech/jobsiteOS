@@ -26,6 +26,8 @@ import { formatarData, formatarDataHora, formatarMoedaExata } from './format'
 import {
   antecipacaoKeys,
   buscarAntecipacoes,
+  buscarContasDosSacados,
+  mapaDeContas,
   buscarStatusConversoes,
   LIMITE_ANTECIPACOES,
   type Antecipacao,
@@ -155,6 +157,26 @@ export function AntecipacoesLista({ idInicial }: { idInicial?: number }) {
     queryFn: () => buscarAntecipacoes(filtros),
   })
 
+  /*
+   * A CONTA de cada sacado da lista. O cabeçalho da linha mostra o cliente, não a
+   * SPE: aqui o sacado é quase sempre uma SPE de obra, e "PRIDE 06 QD 04" não diz
+   * a ninguém de qual cliente é a antecipação.
+   *
+   * Em lote, e depois da lista: são ~100 CNPJs distintos em mil linhas, e a
+   * resolução por CNPJ custa meio milissegundo.
+   */
+  const cnpjs = React.useMemo(
+    () => (data ?? []).map((a) => a.sacado_cnpj).filter((c): c is string => Boolean(c)),
+    [data],
+  )
+  const { data: contas } = useQuery({
+    queryKey: [...antecipacaoKeys.all, 'contas-lote-antecipacoes', cnpjs.length, filtros],
+    queryFn: () => buscarContasDosSacados(cnpjs),
+    enabled: cnpjs.length > 0,
+    staleTime: 300_000,
+  })
+  const contaPorCnpj = React.useMemo(() => mapaDeContas(contas), [contas])
+
   async function sincronizar() {
     setSincronizando(true)
     const r = await sincronizarAntecipacoesAction()
@@ -226,6 +248,7 @@ export function AntecipacoesLista({ idInicial }: { idInicial?: number }) {
             <LinhaAntecipacao
               key={a.id_externo}
               antecipacao={a}
+              conta={a.sacado_cnpj ? contaPorCnpj.get(a.sacado_cnpj) : null}
               destacada={a.id_externo === idInicial}
               onResolvida={() => void qc.invalidateQueries({ queryKey: antecipacaoKeys.all })}
             />
@@ -281,12 +304,16 @@ function LinhaAntecipacao({
   antecipacao: a,
   destacada,
   onResolvida,
+  conta,
 }: {
   antecipacao: Antecipacao
   destacada: boolean
   onResolvida: () => void
+  /** O cliente a que a antecipação está amarrada, quando difere do sacado. */
+  conta?: string | null
 }) {
   const [filaAberta, setFilaAberta] = React.useState(destacada)
+  const nomeSacado = a.sacado_nome ?? formatCnpj(a.sacado_cnpj)
   const precisaDecisao = a.match_status === 'revisao' || a.match_status === 'sem_nf'
 
   return (
@@ -298,8 +325,15 @@ function LinhaAntecipacao({
             <span className="truncate">{a.fornecedor_nome ?? formatCnpj(a.fornecedor_cnpj)}</span>
             <span className="text-muted-foreground">→</span>
             <span className="truncate text-sm font-normal text-muted-foreground">
-              {a.sacado_nome ?? formatCnpj(a.sacado_cnpj)}
+              {conta ?? nomeSacado}
             </span>
+            {/* A SPE fica, menor: ela é quem paga o boleto e é o nome que aparece
+                no relatório da plataforma. O que muda é a hierarquia. */}
+            {conta && conta !== nomeSacado ? (
+              <span className="truncate text-xs font-normal text-muted-foreground/70">
+                via {nomeSacado}
+              </span>
+            ) : null}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Badge variant="outline">{a.status}</Badge>

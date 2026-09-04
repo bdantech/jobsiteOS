@@ -285,6 +285,49 @@ export async function buscarFornecedores(cnpjs: readonly string[]): Promise<Forn
   return (data ?? []) as FornecedorFunil[]
 }
 
+/**
+ * A CONTA do sacado — o cliente a que a nota está amarrada, e não a SPE que
+ * emitiu o boleto.
+ *
+ * ─── POR QUE EM LOTE, E NÃO NA VIEW ─────────────────────────────────────────
+ * `app_holding_do_sacado` custa ~0,55 ms por CNPJ. Em `notas_funil` isso seriam
+ * 58 mil chamadas e meio minuto contra o timeout de 8 s do PostgREST — o mesmo
+ * defeito que já derrubou a tela de contas por comissão uma vez.
+ *
+ * A tela, porém, mostra 40 cards. Resolver só os CNPJs pintados custa ~30 ms, e
+ * a regra continua tendo um dono só. Reescrevê-la como join na view seria mais
+ * rápido de digitar e criaria uma segunda versão da regra para divergir.
+ *
+ * Mesmo formato do lote de fornecedores logo acima, pelo mesmo motivo: sem isto
+ * seria uma requisição por card.
+ */
+export interface ContaDoSacado {
+  cnpj: string
+  conta_id: string | null
+  conta_nome: string | null
+  conta_fantasia: string | null
+}
+
+export async function buscarContasDosSacados(
+  cnpjs: readonly string[],
+): Promise<ContaDoSacado[]> {
+  const unicos = [...new Set(cnpjs.filter(Boolean))]
+  if (unicos.length === 0) return []
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_contas_dos_sacados', { p_cnpjs: unicos })
+  if (error) throw error
+  return (data ?? []) as ContaDoSacado[]
+}
+
+/** O mapa cnpj → conta, pronto para o card. Sem conta resolvida, a chave nem entra. */
+export function mapaDeContas(linhas: readonly ContaDoSacado[] | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const l of linhas ?? []) {
+    if (l.cnpj && l.conta_nome) m.set(l.cnpj, l.conta_nome)
+  }
+  return m
+}
+
 export interface DetalheFornecedor {
   fornecedor: FornecedorFunil | null
   notas: NotaFunil[]

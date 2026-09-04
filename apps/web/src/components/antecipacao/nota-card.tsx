@@ -52,11 +52,18 @@ export function NotaCard({
   minimoOperavel,
   compacto = false,
   dono,
+  conta,
 }: {
   nota: NotaFunil
   fornecedor?: FornecedorFunil
   minimoOperavel: number
   compacto?: boolean
+  /**
+   * O nome do CLIENTE a que esta nota está amarrada, quando ele existe e é
+   * diferente do sacado. Vem pronto de cima, resolvido em lote — cada card
+   * buscando a própria conta seria uma leitura por card.
+   */
+  conta?: string | null
   /**
    * O dono da nota, só quando a lista NÃO está recortada por vendedor. Vem pronto de
    * cima em vez de ser buscado aqui: são dezenas de cards por coluna, e cada um
@@ -78,6 +85,20 @@ export function NotaCard({
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
   const liquido = valorLiquidoEstimado(nota.valor, nota.receita_esperada)
   const nomeFornecedor = nota.fornecedor_nome ?? nota.fornecedor_cnpj ?? '—'
+  const nomeSacado = nota.sacado_nome ?? nota.sacado_cnpj ?? '—'
+  /*
+   * O rodapé mostra o CLIENTE, não o sacado.
+   *
+   * Na maioria das notas o sacado é uma SPE — "PRIDE 06 QD 04", "SPE ILHAS
+   * VIRGENS" —, e quem varre a coluna não reconhece o nome do cliente ali. A conta
+   * é a empresa a que tudo está amarrado, e é por ela que a pessoa pensa.
+   *
+   * A SPE não some: ela vira a linha de baixo, porque é ela que identifica DE QUAL
+   * obra é a nota — e é o nome que aparece no boleto e no relatório da plataforma.
+   * Some só quando é igual à conta, que é quando repeti-la não diz nada.
+   */
+  const nomePrincipal = conta ?? nomeSacado
+  const spe = conta && conta !== nomeSacado ? nomeSacado : null
 
   return (
     <>
@@ -228,13 +249,14 @@ export function NotaCard({
             {!compacto && (
               <footer className="mt-3 space-y-2 border-t pt-2">
                 <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    {nota.sacado_nome ?? nota.sacado_cnpj}
-                  </span>
+                  <span className="min-w-0 truncate text-muted-foreground">{nomePrincipal}</span>
                   <Badge className={cn('shrink-0', creditoBadge(nota.sacado_credito_status))}>
                     {labelCredito(nota.sacado_credito_status)}
                   </Badge>
                 </div>
+                {spe ? (
+                  <p className="-mt-1 truncate text-[11px] text-muted-foreground/70">via {spe}</p>
+                ) : null}
 
                 {nota.sacado_credito_status === 'APPROVED' && !nota.sacado_limite_cobre_nota && (
                   <p className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-300">
@@ -311,6 +333,16 @@ export function NotaCard({
               <dt className="sr-only">Fornecedor</dt>
               <dd className="font-semibold leading-snug">{nomeFornecedor}</dd>
             </div>
+            {/* O sacado no tooltip é o par completo: a conta responde "de quem é o
+                cliente" e a SPE responde "contra qual obra a nota foi emitida". No
+                card só cabe a primeira. */}
+            <div className="flex justify-between gap-4">
+              <dt className="opacity-70">Sacado</dt>
+              <dd className="text-right">
+                {nomePrincipal}
+                {spe ? <span className="block text-[11px] opacity-70">via {spe}</span> : null}
+              </dd>
+            </div>
             {/* O número INTEIRO: no card ele trunca para não empurrar o valor. */}
             <div className="flex justify-between gap-4">
               <dt className="opacity-70">Nota</dt>
@@ -381,7 +413,7 @@ export function NotaCard({
         <NotaModal
           accessKey={nota.access_key}
           titulo={`Nota ${nota.numero ?? nota.access_key}${nota.serie ? `/${nota.serie}` : ''}`}
-          subtitulo={`${nomeFornecedor} → ${nota.sacado_nome ?? nota.sacado_cnpj ?? '—'}`}
+          subtitulo={`${nomeFornecedor} → ${nomePrincipal}${spe ? ` (via ${spe})` : ''}`}
           aberto={notaAberta}
           onOpenChange={setNotaAberta}
           aba={aba}

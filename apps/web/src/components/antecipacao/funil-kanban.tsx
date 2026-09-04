@@ -48,6 +48,8 @@ import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import {
   ORDENS_FUNIL,
   PAGINA_FUNIL,
+  buscarContasDosSacados,
+  mapaDeContas,
   antecipacaoKeys,
   buscarConfig,
   buscarFornecedores,
@@ -593,6 +595,27 @@ function ColunaFunil({
   }, [fornecedores])
 
   /*
+   * A CONTA de cada sacado pintado, no mesmo formato do lote de fornecedores e
+   * pelo mesmo motivo. O card mostra o cliente, não a SPE — e resolver isso na
+   * view custaria 58 mil chamadas de `app_holding_do_sacado` por consulta.
+   *
+   * `staleTime` mais longo que o dos fornecedores: a conta de um sacado muda
+   * quando alguém vincula um CNPJ, o que acontece algumas vezes por semana — não
+   * a cada carregamento de coluna.
+   */
+  const { data: contas } = useQuery({
+    queryKey: [...antecipacaoKeys.all, 'contas-lote', filtro, notas.length],
+    queryFn: () =>
+      buscarContasDosSacados(
+        notas.map((n) => n.sacado_cnpj).filter((c): c is string => Boolean(c)),
+      ),
+    enabled: notas.length > 0,
+    staleTime: 300_000,
+  })
+
+  const contaPorCnpj = React.useMemo(() => mapaDeContas(contas), [contas])
+
+  /*
    * Carrega sozinho quando o fim DESTA coluna entra na tela — e PARA depois de
    * `AUTO_PAGINAS`.
    *
@@ -690,6 +713,7 @@ function ColunaFunil({
           <>
             {notas.map((nota) => (
               <NotaCard
+                conta={nota.sacado_cnpj ? contaPorCnpj.get(nota.sacado_cnpj) : null}
                 key={nota.access_key}
                 nota={nota}
                 fornecedor={nota.fornecedor_cnpj ? porCnpj.get(nota.fornecedor_cnpj) : undefined}

@@ -11320,6 +11320,15 @@ export type Database = {
         Args: { p_evento: string; p_analise: string | null; p_semente: Json }
         Returns: undefined
       }
+      app_contas_dos_sacados: {
+        Args: { p_cnpjs: string[] }
+        Returns: {
+          cnpj: string
+          conta_id: string | null
+          conta_nome: string | null
+          conta_fantasia: string | null
+        }[]
+      }
       app_criar_api_key: {
         Args: { p: Json }
         Returns: {
