@@ -166,6 +166,7 @@ export type TipoJob =
   | 'credito-scores'
   | 'credito-potencial'
   | 'credito-enviar'
+  | 'credito-decisao-vendas'
   | 'credito-poll'
   | 'credito-backfill'
   | 'credito-sync'
@@ -1002,11 +1003,33 @@ export function dispararEstimarPotencial(): string {
   return dispararAvulso('credito-potencial', async () => estimarPotencialJob())
 }
 
-/** Envia à seguradora as análises marcadas. Ação PAGA: resolve buyer novo. */
-export function dispararEnviarAnalises(analiseIds?: string[]): string {
+/**
+ * Envia à seguradora as análises marcadas. Ação PAGA: resolve buyer novo.
+ *
+ * `docIds` são os anexos que o analista escolheu no diálogo de envio. Ausente = nenhum:
+ * documento de terceiro não sai daqui por omissão, sai por escolha.
+ */
+export function dispararEnviarAnalises(analiseIds?: string[], docIds?: string[]): string {
   return dispararAvulso('credito-enviar', async () => {
-    logger.info({ quantidade: analiseIds?.length ?? 'todas as solicitadas' }, 'Enviando análises à seguradora.')
-    return enviarAnalises(analiseIds)
+    logger.info(
+      { quantidade: analiseIds?.length ?? 'todas as pendentes', documentos: docIds?.length ?? 0 },
+      'Enviando análises à seguradora.',
+    )
+    return enviarAnalises(analiseIds, docIds)
+  })
+}
+
+/**
+ * Aplica no funil comercial o desfecho de uma análise concluída PELA TELA (0187).
+ *
+ * O worker já fazia isso para a decisão da seguradora, dentro de `aplicarDecisao`. Sem
+ * este disparo, uma análise aprovada pela nossa decisão deixaria o card da venda parado
+ * — dois jeitos de aprovar produzindo dois destinos diferentes para o mesmo negócio.
+ */
+export function dispararDecisaoEmVendas(analiseId: string, decisao: string): string {
+  return dispararAvulso('credito-decisao-vendas', async () => {
+    const cards = await aplicarDecisaoCreditoEmVendas(analiseId, decisao)
+    return { cards }
   })
 }
 

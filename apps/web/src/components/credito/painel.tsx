@@ -99,7 +99,7 @@ export function CreditoPainel() {
   const daEsteira = analises.filter((a) => a.origem === 'jobsiteos')
   const solicitadas = daEsteira.length
   const enviadas = daEsteira.filter((a) =>
-    ['enviada_seguradora', 'em_analise', 'aprovada', 'aprovada_parcial', 'negada', 'expirada'].includes(a.estagio),
+    ['enviada_seguradora', 'em_analise', 'aprovada', 'aprovada_parcial', 'negada'].includes(a.estagio),
   ).length
   const aprovadas = daEsteira.filter((a) => ['aprovada', 'aprovada_parcial'].includes(a.estagio)).length
 

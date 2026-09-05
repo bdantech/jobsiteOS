@@ -2,6 +2,7 @@ import { EVENTO_TIPOS, type EventoTipo } from '../../../../../packages/core/src/
 import { houveReducaoDeLimite } from '../../../../../packages/core/src/credito/seguradora.js'
 import type {
   DecisaoSeguradora,
+  DocumentoParaSeguradora,
   Seguradora,
 } from '../../../../../packages/core/src/credito/seguradora.js'
 import type { Json } from '../../../../../packages/core/src/types/database.js'
@@ -22,8 +23,10 @@ import { processarAnalisePropria } from './analise-propria.js'
  * 1. **Buyer novo só entra pelo envio.** `resolverBuyer` pode ser cobrado, e por isso ele
  *    aparece exatamente uma vez, dentro de `enviarAnalises`, sobre uma análise que um
  *    humano marcou para enviar. Backfill e sync leem o que a apólice JÁ tem.
- * 2. **Decisão nunca vem da tela.** Só estes jobs escrevem `aprovada`/`negada`/`expirada`,
- *    com service role. A migração 0073 recusa esses estágios no RPC de mover.
+ * 2. **Limite aprovado nunca vem da tela.** Só estes jobs escrevem `limite_aprovado` e os
+ *    códigos da apólice, com service role. O ESTÁGIO ganhou uma segunda porta na 0187
+ *    (`app_concluir_analise`), que conclui a esteira a partir da nossa decisão e não
+ *    encosta no número da seguradora — são duas verdades diferentes.
  * 3. **Toda decisão vira snapshot em `credito_snapshots` + evento.** Um limite que muda
  *    sem deixar rastro é um limite que ninguém consegue explicar depois.
  */
@@ -32,12 +35,25 @@ const seguradora: Seguradora = atradius
 
 // ─── §4.2 Envio ─────────────────────────────────────────────────────────────
 
-export async function enviarAnalises(analiseIds?: string[]): Promise<{
+export async function enviarAnalises(
+  analiseIds?: string[],
+  /**
+   * Os documentos que o analista marcou no diálogo de envio, por id de `analise_docs`.
+   *
+   * `undefined` significa "não escolheram nada" e NÃO significa "mande todos": o envio
+   * também roda por lote e por retomada, onde não houve tela nenhuma. Mandar a pasta
+   * inteira por omissão faria uma rotina automática despejar documento na seguradora
+   * sem ninguém ter olhado.
+   */
+  docIds?: string[],
+): Promise<{
   status: 'ok' | 'nao_configurada'
   enviadas?: number
   falharam?: number
   /** Quantas análises proprietárias o envio abriu de carona (04j §6). */
   analises_disparadas?: number
+  /** Documentos aceitos pela seguradora, somando as análises do lote. */
+  documentos_enviados?: number
   detalhes?: Array<{ id: string; erro: string }>
 }> {
   // `configurada()` é assíncrono desde que o ambiente (sandbox/produção) virou setting:
@@ -59,14 +75,16 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
   }
   logger.info({ apolice: apolice.dados.descricao }, 'Envio à seguradora sob esta apólice.')
 
+  // `docs_recebidos` entra junto de `solicitada`: é de lá que sai o envio depois de a
+  // pasta ser conferida, e era para lá que o gatilho do checklist passou a levar (0187).
   let q = supabaseAdmin
     .from('analises_credito')
     .select('id, cnpj, limite_solicitado, moeda, atradius_buyer_id')
-    .eq('estagio', 'solicitada')
+    .in('estagio', ['solicitada', 'docs_recebidos'])
   if (analiseIds?.length) q = q.in('id', analiseIds)
 
   const { data: pendentes } = await q
-  const acc = { enviadas: 0, falharam: 0, analises_disparadas: 0 }
+  const acc = { enviadas: 0, falharam: 0, analises_disparadas: 0, documentos_enviados: 0 }
   const detalhes: Array<{ id: string; erro: string }> = []
 
   for (const a of pendentes ?? []) {
@@ -117,6 +135,12 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
     await emitirEventoAnalise(a.id, EVENTO_TIPOS.ANALISE_ENVIADA, 'Análise enviada à seguradora', `Pedido ${pedido.dados.case_id} aberto na ${seguradora.nome}.`)
     acc.enviadas++
 
+    // Os documentos vão DEPOIS do pedido, e o resultado deles não muda o do envio: a
+    // cobertura já foi submetida e a seguradora aceita anexo mais tarde. Tratar uma
+    // recusa de PDF como falha de envio faria alguém reenviar — e reenviar resolve
+    // buyer, que é a chamada paga.
+    acc.documentos_enviados += await enviarDocumentosDaAnalise(a.id, pedido.dados.case_id, docIds)
+
     // 04j §6: a análise proprietária dispara JUNTO do envio, não antes dele.
     //
     // Em paralelo e sem bloquear — o envio já aconteceu e não pode ser desfeito por uma
@@ -127,6 +151,91 @@ export async function enviarAnalises(analiseIds?: string[]): Promise<{
 
   logger.info(acc, 'Envio de análises concluído.')
   return { status: 'ok', ...acc, detalhes }
+}
+
+/**
+ * Manda à seguradora os documentos ESCOLHIDOS desta análise.
+ *
+ * ── POR QUE A ESCOLHA É EXPLÍCITA ──────────────────────────────────────────
+ * A pasta de uma análise tem coisas que a seguradora precisa (balanço, DRE, contrato
+ * social) e coisas que são nossas (a relação de faturamento que o cliente mandou por
+ * WhatsApp, um balancete rascunhado, um documento anexado no tipo errado). Mandar tudo
+ * por padrão entrega dado de terceiro que ninguém decidiu entregar — e é irreversível.
+ *
+ * Por isso `docIds` vazio significa NENHUM, e não TODOS: quem quer mandar marca.
+ *
+ * ── O QUE FICA GRAVADO ─────────────────────────────────────────────────────
+ * Linha a linha: `enviado_seguradora_em` quando a seguradora aceitou, ou o motivo em
+ * `envio_seguradora_erro`. "Mandei os documentos" sem isso não responde QUAIS, que é
+ * exatamente a pergunta de quem abre um chamado três semanas depois.
+ */
+async function enviarDocumentosDaAnalise(
+  analiseId: string,
+  caseId: string,
+  docIds?: string[],
+): Promise<number> {
+  if (!docIds?.length) return 0
+
+  const { data: linhas } = await supabaseAdmin
+    .from('analise_docs')
+    .select('id, tipo, nome_arquivo, arquivo_url')
+    .eq('analise_id', analiseId)
+    .in('id', docIds)
+  if (!linhas?.length) return 0
+
+  const documentos: DocumentoParaSeguradora[] = []
+  for (const d of linhas) {
+    // URL externa é documento que o job de download ainda não trouxe para o bucket.
+    // Mandá-lo daqui exigiria buscá-lo na origem — e a origem é justamente a que pode
+    // ter sumido; é para isso que a 04n §2.2 manda guardar o arquivo conosco.
+    if (/^https?:\/\//i.test(d.arquivo_url)) {
+      await marcarErroDoDocumento(d.id, 'O arquivo ainda não foi baixado para o nosso bucket.')
+      continue
+    }
+    const baixado = await supabaseAdmin.storage.from('analise-docs').download(d.arquivo_url)
+    if (baixado.error || !baixado.data) {
+      await marcarErroDoDocumento(d.id, `Não foi possível ler o arquivo: ${baixado.error?.message ?? 'sem corpo'}.`)
+      continue
+    }
+    documentos.push({
+      id: d.id,
+      tipo: d.tipo,
+      nome_arquivo: d.nome_arquivo ?? `${d.tipo}.pdf`,
+      mime: baixado.data.type || 'application/octet-stream',
+      conteudo: new Uint8Array(await baixado.data.arrayBuffer()),
+    })
+  }
+  if (documentos.length === 0) return 0
+
+  const r = await seguradora.enviarDocumentos(caseId, documentos)
+  if (!r.ok) {
+    // Falha do LOTE (autenticação, rota) — o motivo é o mesmo para todos, e cada linha
+    // precisa carregá-lo: a tela mostra o documento, não o lote.
+    for (const d of documentos) await marcarErroDoDocumento(d.id, r.erro)
+    return 0
+  }
+
+  let aceitos = 0
+  for (const item of r.dados) {
+    if (item.ok) {
+      aceitos++
+      await supabaseAdmin
+        .from('analise_docs')
+        .update({ enviado_seguradora_em: new Date().toISOString(), envio_seguradora_erro: null })
+        .eq('id', item.id)
+    } else {
+      await marcarErroDoDocumento(item.id, item.erro ?? 'A seguradora recusou sem dizer o motivo.')
+    }
+  }
+  logger.info({ analiseId, caseId, aceitos, tentados: documentos.length }, 'Documentos enviados à seguradora.')
+  return aceitos
+}
+
+async function marcarErroDoDocumento(docId: string, erro: string): Promise<void> {
+  await supabaseAdmin
+    .from('analise_docs')
+    .update({ envio_seguradora_erro: erro.slice(0, 500), enviado_seguradora_em: null })
+    .eq('id', docId)
 }
 
 /**
@@ -262,9 +371,7 @@ async function aplicarDecisao(
         ? EVENTO_TIPOS.ANALISE_APROVADA_PARCIAL
         : d.estagio === 'negada'
           ? EVENTO_TIPOS.ANALISE_NEGADA
-          : d.estagio === 'expirada'
-            ? EVENTO_TIPOS.ANALISE_EXPIRADA
-            : null
+          : null
 
   if (tipo) {
     await emitirEvento(empresaId, tipo, {
@@ -709,9 +816,17 @@ export async function syncAtradius(): Promise<{
 // ─── §4.4 Expiração ─────────────────────────────────────────────────────────
 
 /**
- * Marca como expirada a aprovação cuja validade passou. Roda mesmo sem seguradora
- * configurada: a data de validade é NOSSA, e uma aprovação vencida contando como
- * vigente no scorecard valeria pontos que ela não tem mais.
+ * Repara nas aprovações cuja validade passou. Roda mesmo sem seguradora configurada:
+ * a data de validade é NOSSA, e uma aprovação vencida contando como vigente no
+ * scorecard valeria pontos que ela não tem mais.
+ *
+ * ── O QUE ELA NÃO FAZ MAIS: MUDAR O ESTÁGIO ───────────────────────────────
+ * Havia um estágio `expirada`, e ele apagava o desfecho: depois de expirar, ninguém
+ * mais sabia se aquilo tinha sido aprovado ou aprovado parcial. O vencimento já está
+ * dito por `expira_em` no passado — uma data não precisa de uma coluna para ser lida.
+ *
+ * `expirada_em` existe só para esta rotina ser idempotente: sem ele, a varredura diária
+ * reencontraria as mesmas linhas para sempre e reemitiria o mesmo evento todo dia.
  */
 export async function expirarAnalises(): Promise<{ expiradas: number }> {
   const hoje = new Date().toISOString().slice(0, 10)
@@ -721,11 +836,12 @@ export async function expirarAnalises(): Promise<{ expiradas: number }> {
     .in('estagio', ['aprovada', 'aprovada_parcial'])
     .not('expira_em', 'is', null)
     .lt('expira_em', hoje)
+    .is('expirada_em', null)
 
   for (const a of vencidas ?? []) {
     await supabaseAdmin
       .from('analises_credito')
-      .update({ estagio: 'expirada', atualizada_em: new Date().toISOString() })
+      .update({ expirada_em: new Date().toISOString(), atualizada_em: new Date().toISOString() })
       .eq('id', a.id)
 
     await emitirEvento(a.empresa_id, EVENTO_TIPOS.ANALISE_EXPIRADA, {
@@ -739,10 +855,11 @@ export async function expirarAnalises(): Promise<{ expiradas: number }> {
 
   // Expirar também mexe no fator de histórico: "aprovada vigente" vale mais que
   // "aprovada expirada", e a empresa não pode continuar levando os pontos de uma
-  // cobertura que acabou ontem.
+  // cobertura que acabou ontem. O scorecard olha a DATA, não o estágio — por isso ele
+  // continua acertando depois de o estágio ter deixado de mudar.
   await recalcularScoresDeCnpjs((vencidas ?? []).map((a) => a.cnpj))
 
   const expiradas = (vencidas ?? []).length
-  if (expiradas > 0) logger.info({ expiradas }, 'Análises expiradas.')
+  if (expiradas > 0) logger.info({ expiradas }, 'Aprovações vencidas marcadas.')
   return { expiradas }
 }

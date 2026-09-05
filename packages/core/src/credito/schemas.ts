@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { DecisaoFinal } from './analise.js'
 
 // Vocabulário e schemas do módulo Crédito. Mesmas convenções do resto do core:
 // tupla SCREAMING `as const` → enum zod camelCase → tipo PascalCase → LABELS pt-BR,
@@ -10,12 +11,12 @@ export const ESTAGIOS_ANALISE = [
   'rascunho',
   'solicitada',
   'docs_pendentes',
+  'docs_recebidos',
   'enviada_seguradora',
   'em_analise',
   'aprovada',
   'aprovada_parcial',
   'negada',
-  'expirada',
   'cancelada',
 ] as const
 export const estagioAnaliseSchema = z.enum(ESTAGIOS_ANALISE)
@@ -25,29 +26,33 @@ export const ESTAGIO_ANALISE_LABELS: Record<EstagioAnalise, string> = {
   rascunho: 'Rascunho',
   solicitada: 'Solicitada',
   docs_pendentes: 'Documentos pendentes',
+  docs_recebidos: 'Documentos recebidos',
   enviada_seguradora: 'Enviada à seguradora',
   em_analise: 'Em análise',
   aprovada: 'Aprovada',
   aprovada_parcial: 'Aprovada parcial',
   negada: 'Negada',
-  expirada: 'Expirada',
   cancelada: 'Cancelada',
 }
 
 /**
  * A ordem do kanban. `cancelada` fica fora das colunas: é um fim de linha administrativo,
  * não uma etapa — e uma coluna de canceladas cresceria para sempre no canto da tela.
+ *
+ * NÃO HÁ `expirada`. Ela era uma coluna para um fato que já mora em `expira_em`: uma
+ * data no passado diz "venceu" sem apagar o desfecho: depois de expirar, ninguém mais
+ * sabia se aquilo tinha sido aprovado ou aprovado parcial.
  */
 export const COLUNAS_ESTEIRA: readonly EstagioAnalise[] = [
   'rascunho',
   'solicitada',
   'docs_pendentes',
+  'docs_recebidos',
   'enviada_seguradora',
   'em_analise',
   'aprovada',
   'aprovada_parcial',
   'negada',
-  'expirada',
 ]
 
 /** Estágios que ainda estão em curso — o que impede uma segunda solicitação. */
@@ -55,6 +60,7 @@ export const ESTAGIOS_ANALISE_ABERTOS: readonly EstagioAnalise[] = [
   'rascunho',
   'solicitada',
   'docs_pendentes',
+  'docs_recebidos',
   'enviada_seguradora',
   'em_analise',
 ]
@@ -64,11 +70,43 @@ export const ESTAGIOS_MANUAIS: readonly EstagioAnalise[] = [
   'rascunho',
   'solicitada',
   'docs_pendentes',
+  'docs_recebidos',
   'cancelada',
 ]
 
+/**
+ * De onde uma análise pode ir à seguradora.
+ *
+ * `docs_recebidos` entra porque é o estado normal de quem tem a pasta em mãos — e
+ * `solicitada` fica porque uma análise pedida aqui dentro nasce nele, sem checklist
+ * avaliado. Envio é chamada PAGA: oferecer o botão fora destes dois seria desenhar um
+ * clique que o worker recusa.
+ */
+export const ESTAGIOS_QUE_ENVIAM: readonly EstagioAnalise[] = ['solicitada', 'docs_recebidos']
+
+export function podeEnviarASeguradora(estagio: string): boolean {
+  return (ESTAGIOS_QUE_ENVIAM as readonly string[]).includes(estagio)
+}
+
+/**
+ * De onde a decisão do confronto pode CONCLUIR a esteira.
+ *
+ * Antes de `docs_recebidos` não há o que concluir: a pasta ainda não foi conferida.
+ * Depois dela sim — inclusive com o pedido aberto na seguradora, porque
+ * `operar_sem_cobertura` é uma decisão completa que não espera resposta de ninguém.
+ */
+export const ESTAGIOS_CONCLUIVEIS: readonly EstagioAnalise[] = [
+  'docs_recebidos',
+  'enviada_seguradora',
+  'em_analise',
+]
+
+export function podeConcluirPelaDecisao(estagio: string): boolean {
+  return (ESTAGIOS_CONCLUIVEIS as readonly string[]).includes(estagio)
+}
+
 export function ehEstagioDecidido(estagio: string): boolean {
-  return ['aprovada', 'aprovada_parcial', 'negada', 'expirada'].includes(estagio)
+  return ['aprovada', 'aprovada_parcial', 'negada'].includes(estagio)
 }
 
 // ─── Mutações ───────────────────────────────────────────────────────────────
@@ -88,12 +126,46 @@ export type SolicitarAnaliseInput = z.infer<typeof solicitarAnaliseSchema>
 export const moverAnaliseSchema = z.object({
   id: z.string().uuid(),
   estagio: z
-    .enum(['rascunho', 'solicitada', 'docs_pendentes', 'cancelada'])
+    .enum(['rascunho', 'solicitada', 'docs_pendentes', 'docs_recebidos', 'cancelada'])
     .describe('Só estágios manuais. Decisão da seguradora não se define pela tela.'),
   limite_solicitado: z.coerce.number().nonnegative().optional().nullable(),
   observacoes: z.string().trim().max(2000).optional(),
 })
 export type MoverAnaliseInput = z.infer<typeof moverAnaliseSchema>
+
+/**
+ * O desfecho que cada decisão do confronto produz na esteira.
+ *
+ * `operar_limite_reduzido` vira `aprovada_parcial` porque é literalmente isso: um sim
+ * menor que o pedido. `operar_sem_cobertura` vira `aprovada` — a ausência de cobertura
+ * é uma condição da operação, não uma reprovação, e o que ficou menor foi o risco que
+ * aceitamos, não o limite que demos.
+ *
+ * Este mapa é a ÚNICA fonte da sugestão que o diálogo de conclusão mostra. O RPC
+ * `app_concluir_analise` não confia nele: lá a checagem é entre `decisao_interna` e o
+ * estágio pedido, porque um mapa na tela é conveniência e o banco precisa de garantia.
+ */
+export const DESFECHO_DA_DECISAO: Record<DecisaoFinal, EstagioAnalise> = {
+  operar_com_cobertura: 'aprovada',
+  operar_sem_cobertura: 'aprovada',
+  operar_limite_reduzido: 'aprovada_parcial',
+  nao_operar: 'negada',
+}
+
+export const concluirAnaliseSchema = z.object({
+  id: z.string().uuid().describe('A análise da esteira, não a proprietária.'),
+  estagio: z
+    .enum(['aprovada', 'aprovada_parcial', 'negada'])
+    .describe('O desfecho. Tem de corresponder à decisão já registrada no confronto.'),
+  motivo: z
+    .string()
+    .trim()
+    .max(4000)
+    .optional()
+    .nullable()
+    .describe('Vai para o campo `motivo` da esteira, que é o que aparece no card.'),
+})
+export type ConcluirAnaliseInput = z.infer<typeof concluirAnaliseSchema>
 
 export const registrarDocSchema = z.object({
   analise_id: z.string().uuid(),

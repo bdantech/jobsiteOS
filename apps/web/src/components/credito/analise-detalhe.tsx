@@ -25,6 +25,7 @@ import {
   KNOCKOUT_LABELS,
   ehEstagioDecidido,
   formatCnpj,
+  podeEnviarASeguradora,
   type DecisaoFinal,
   type EstagioAnalise,
   type FaixaScore,
@@ -32,24 +33,18 @@ import {
   type OpcoesProtesto,
   type Quadrante,
   type StatusAnalisePropria,
+  type Tables,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import { enviarAnalisesAction, moverAnaliseAction } from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
+import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
@@ -110,6 +105,7 @@ function Acoes({
   jaTemPropria,
   empresaId,
   temGrupo,
+  docs,
   protestoConsultadoEm,
   recenciaDias,
   anosAtrasPadrao,
@@ -122,6 +118,7 @@ function Acoes({
   jaTemPropria: boolean
   empresaId: string | null
   temGrupo: boolean
+  docs: Tables<'analise_docs'>[]
   protestoConsultadoEm: string | null
   recenciaDias: number
   anosAtrasPadrao: number
@@ -134,13 +131,13 @@ function Acoes({
   const [enviando, setEnviando] = React.useState(false)
 
   const decidida = ehEstagioDecidido(estagio)
-  // Só "solicitada" vai à seguradora — é o que o worker aceita, e oferecer o botão nos
+  // `solicitada` e `docs_recebidos` — é o que o worker aceita, e oferecer o botão nos
   // outros estágios seria desenhar um clique que não faz nada.
-  const podeEnviar = estagio === 'solicitada'
+  const podeEnviar = podeEnviarASeguradora(estagio)
 
-  async function enviar() {
+  async function enviar(docIds: string[]) {
     setEnviando(true)
-    const r = await enviarAnalisesAction([analiseId])
+    const r = await enviarAnalisesAction([analiseId], docIds)
     setEnviando(false)
     setConfirmandoEnvio(false)
     if (!r.ok) {
@@ -245,30 +242,18 @@ function Acoes({
 
       {/*
        * Diálogo, e não clique direto: `resolverBuyer` pode ser cobrado, uma vez por CNPJ
-       * sem cadastro na Atradius. Mesma cerimônia dos protestos, pelo mesmo motivo.
+       * sem cadastro na Atradius. Mesma cerimônia dos protestos, pelo mesmo motivo — e é
+       * aqui que se escolhe QUAIS documentos acompanham o pedido, porque documento de
+       * terceiro que sai não volta.
        */}
-      <Dialog open={confirmandoEnvio} onOpenChange={setConfirmandoEnvio}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar à seguradora</DialogTitle>
-            <DialogDescription>
-              O envio resolve o cadastro do buyer na Atradius, e{' '}
-              <strong>essa consulta pode ser cobrada</strong> — uma vez por CNPJ que ainda não
-              tem cadastro. Depois disso o pedido de cobertura é submetido e a decisão chega
-              pelo acompanhamento automático.
-            </DialogDescription>
-          </DialogHeader>
-          <p className="rounded-md border p-3 text-sm">{nome}</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmandoEnvio(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void enviar()} disabled={enviando}>
-              {enviando ? 'Enviando…' : 'Enviar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DialogoEnviarSeguradora
+        aberto={confirmandoEnvio}
+        onOpenChange={setConfirmandoEnvio}
+        nome={nome}
+        docs={docs}
+        enviando={enviando}
+        onConfirmar={(docIds) => void enviar(docIds)}
+      />
     </>
   )
 }
@@ -375,6 +360,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             jaTemPropria={propria !== null}
             empresaId={empresa?.id ?? null}
             temGrupo={(data.metricas?.grupo_spes_total ?? 0) > 0}
+            docs={data.docs}
             protestoConsultadoEm={data.protestos?.consultado_em ?? null}
             recenciaDias={data.parametros_ativos?.protestos?.recencia_dias ?? 90}
             anosAtrasPadrao={data.parametros_ativos?.protestos?.spes_anos_atras_padrao ?? 5}
@@ -613,6 +599,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
                   <Confronto
                     analiseId={propria.id}
                     analiseCreditoId={id}
+                    estagio={estagio}
                     quadrante={propria.quadrante as Quadrante | null}
                     nossaRecomendacao={propria.recomendacao}
                     nossoLimite={propria.limite_recomendado}

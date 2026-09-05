@@ -129,16 +129,74 @@ Quando não há score, a chance usada é `chance_sem_score` (0,5) e o resultado 
 ## A esteira
 
 ```
-rascunho → solicitada → docs_pendentes → enviada_seguradora → em_analise
-                                                            → aprovada | aprovada_parcial | negada
-                                                            → expirada
+rascunho → solicitada → docs_pendentes → docs_recebidos → enviada_seguradora → em_analise
+                                                                            ↓
+                                              aprovada | aprovada_parcial | negada
+                                                        ↑
+                              app_concluir_analise, a partir de docs_recebidos
 ```
 
-**Só os quatro primeiros são nossos.** De `enviada_seguradora` em diante quem escreve é o
-worker, com service role — o RPC `app_mover_analise` recusa esses estágios. Por isso o
-kanban não tem arrastar-e-soltar e o seletor do detalhe só oferece os quatro manuais: uma
-coluna que aceita um card promete um poder que não existe, e o banco negaria a escrita,
-transformando um gesto natural num erro inexplicável.
+**Os cinco primeiros são nossos.** `app_mover_analise` aceita `rascunho`, `solicitada`,
+`docs_pendentes`, `docs_recebidos` e `cancelada` — e nada mais. Por isso o kanban não tem
+arrastar-e-soltar: uma coluna que aceita um card promete um poder que não existe, e o
+banco negaria a escrita, transformando um gesto natural num erro inexplicável.
+
+### `docs_recebidos`
+
+A parada entre "faltam documentos" e a consulta paga. Antes dela, a pasta completa
+devolvia a análise para `solicitada` — que é a coluna **anterior** a `docs_pendentes` no
+kanban, e o card andava para trás na tela. Chega-se nela de dois jeitos, e os dois dizem a
+mesma coisa:
+
+- **à mão**, pelo seletor do detalhe, quando o analista conferiu o que chegou;
+- **sozinha**, pelo gatilho `analise_docs__completar_checklist`, quando o último documento
+  essencial entra (é assim que chegam as análises da plataforma de produção).
+
+O envio à seguradora sai de `solicitada` **ou** de `docs_recebidos`.
+
+### O desfecho pela nossa decisão
+
+`app_concluir_analise` (migração 0187) move a esteira para `aprovada`, `aprovada_parcial`
+ou `negada` a partir da decisão já registrada no confronto (04j §7) — e **não escreve
+`limite_aprovado`**, que continua sendo o número da seguradora. O nosso número é
+`limite_operacional`, gravado pelo registro da decisão.
+
+Ele existe porque metade das análises não vai à seguradora: `operar_sem_cobertura` é uma
+decisão completa que ficava presa numa coluna aberta para sempre — bloqueando, de quebra,
+a próxima análise do mesmo CNPJ. O RPC exige que `decisao_interna` exista e **corresponda**
+ao desfecho pedido: `nao_operar` ⇔ `negada`, qualquer outra ⇔ aprovada.
+
+Depois de registrar a decisão, a aba **Seguradora e decisão** pergunta se é para concluir.
+É pergunta, e não consequência automática, porque análise decidida não volta para a
+esteira — quem prefere esperar a seguradora responde "agora não", e o botão continua ali.
+
+### Não existe `expirada`
+
+Ela era um estágio para um fato que já mora em `expira_em`: uma data no passado diz
+"venceu" sem apagar o desfecho — e o estágio apagava, porque depois de expirar ninguém
+mais sabia se aquilo tinha sido aprovado ou aprovado parcial. A rotina diária
+(`expirarAnalises`) continua rodando: ela **marca** `expirada_em` e recalcula o score
+(aprovada vigente vale mais que aprovada vencida), sem mexer na coluna do kanban. Do lado
+da seguradora, o código `ECLD` (expired decision) cai em `cancelada`, junto com todo o
+resto que encerra uma cobertura.
+
+### Os documentos que vão à seguradora
+
+O diálogo de envio lista os anexos da análise, **todos marcados**, e deixa desmarcar. A
+pasta acumula coisas que são nossas e não da seguradora — uma relação de faturamento que o
+cliente mandou por WhatsApp, um balancete rascunhado, um arquivo anexado no tipo errado —
+e mandar dado de terceiro é irreversível.
+
+No worker, `docIds` vazio significa **nenhum**, nunca "todos": o envio também roda por
+lote e por retomada, onde não houve tela nenhuma. O resultado fica gravado por documento
+(`analise_docs.enviado_seguradora_em` / `envio_seguradora_erro`) e aparece na aba
+Documentos — "mandei os documentos" sem isso não responde *quais*.
+
+Uma recusa de anexo **não** derruba o envio: o pedido de cobertura já foi submetido, já
+pode ter sido cobrado, e a seguradora aceita documento depois. A rota de anexo da Atradius
+é a única deste provedor que **não** está confirmada contra resposta real — está marcada
+como tal em `ROTAS.documentosDaCobertura`, e é por isso que a falha é por documento e vai
+inteira para o log.
 
 ### A regra de custo
 

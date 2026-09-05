@@ -23,9 +23,10 @@ import { buscarEsteira, creditoKeys, type AnaliseNaEsteira } from './queries'
  * A esteira (04d §4.4): kanban por estágio, com tabela como alternativa.
  *
  * O kanban NÃO tem arrastar-e-soltar, e a ausência é deliberada: metade dos estágios
- * (enviada, em análise, aprovada, negada, expirada) pertence à seguradora, não a nós.
- * Uma coluna que aceita um card arrastado promete um poder que não existe — e a migração
- * 0073 recusaria a escrita, transformando um gesto natural num erro inexplicável.
+ * (enviada, em análise, aprovada, negada) só é escrita depois de uma resposta da
+ * seguradora ou de uma decisão registrada no confronto. Uma coluna que aceita um card
+ * arrastado promete um poder que não existe — e o RPC recusaria a escrita, transformando
+ * um gesto natural num erro inexplicável.
  *
  * ─── ESTA TELA NÃO ESCREVE NADA ─────────────────────────────────────────────
  * Nem move estágio, nem envia à seguradora. O envio morava aqui como um botão de lote
@@ -43,10 +44,10 @@ const moeda = (v: number | null): string =>
     : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 const ESTAGIO_CLASSE: Partial<Record<EstagioAnalise, string>> = {
+  docs_recebidos: 'border-sky-500/40 bg-sky-500/5',
   aprovada: 'border-emerald-500/40 bg-emerald-500/5',
   aprovada_parcial: 'border-amber-500/40 bg-amber-500/5',
   negada: 'border-destructive/40 bg-destructive/5',
-  expirada: 'border-muted-foreground/30 bg-muted/40',
 }
 
 function nomeDe(a: AnaliseNaEsteira): string {
@@ -193,10 +194,11 @@ export function Esteira() {
             <div className="space-y-1.5">
               <CardTitle className="text-base">Esteira de análise</CardTitle>
               <CardDescription>
-                Só os quatro primeiros estágios são nossos. <strong>Enviada em diante é da
-                seguradora</strong> — por isso não há arrastar-e-soltar: uma coluna que aceita
-                um card promete um poder que não existe. Abra uma análise para enviá-la à
-                seguradora ou rodar a nossa.
+                Os cinco primeiros estágios são nossos, até documentos recebidos.{' '}
+                <strong>Enviada em diante depende de uma resposta</strong> — da seguradora, ou
+                da decisão registrada no confronto. Por isso não há arrastar-e-soltar: uma
+                coluna que aceita um card promete um poder que não existe. Abra uma análise
+                para enviá-la à seguradora, rodar a nossa ou concluí-la.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">

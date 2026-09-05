@@ -492,8 +492,8 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     tipo: 'enum',
     coluna: 'analise_estagio',
     opcoes: [
-      'rascunho', 'solicitada', 'docs_pendentes', 'enviada_seguradora', 'em_analise',
-      'aprovada', 'aprovada_parcial', 'negada', 'expirada', 'cancelada',
+      'rascunho', 'solicitada', 'docs_pendentes', 'docs_recebidos', 'enviada_seguradora',
+      'em_analise', 'aprovada', 'aprovada_parcial', 'negada', 'cancelada',
     ],
     descricao: 'Estágio da análise mais recente deste CNPJ.',
   },

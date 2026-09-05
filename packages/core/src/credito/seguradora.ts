@@ -87,12 +87,20 @@ export function ehUidTypeSeguradora(v: unknown): v is UidTypeSeguradora {
 /** ISO 3166-1 Alpha-3, como a API exige. O Brasil não tem sufixo de exceção. */
 export const PAIS_SEGURADORA_BR = 'BRA'
 
+/**
+ * NÃO existe `expirada` aqui.
+ *
+ * Uma cobertura que venceu não é um desfecho diferente de uma que foi cancelada: nos
+ * dois casos ela deixou de existir, e o que a distingue é o MOTIVO, que já vem no
+ * `motivo` e nos códigos crus. Um estágio próprio para o vencimento apagava o desfecho
+ * original — depois de expirar, ninguém mais sabia se aquilo tinha sido aprovado ou
+ * aprovado parcial — e por isso ele saiu do vocabulário da esteira.
+ */
 export type EstagioSeguradora =
   | 'em_analise'
   | 'aprovada'
   | 'aprovada_parcial'
   | 'negada'
-  | 'expirada'
   | 'cancelada'
 
 export interface BuyerSeguradora {
@@ -154,6 +162,29 @@ export interface PedidoCobertura {
 }
 
 /**
+ * Um documento a caminho da seguradora.
+ *
+ * Já vem com os BYTES, e não com um caminho de bucket, por dois motivos: quem sabe ler
+ * o bucket é o worker, e quem sabe falar com a seguradora é o provedor — misturar as
+ * duas coisas obrigaria cada provedor novo a conhecer o nosso storage.
+ */
+export interface DocumentoParaSeguradora {
+  /** O id da linha em `analise_docs`. Volta no resultado para marcar o que foi aceito. */
+  id: string
+  /** O tipo do catálogo (`balanco_patrimonial`, `dre`, …). */
+  tipo: string
+  nome_arquivo: string
+  mime: string
+  conteudo: Uint8Array
+}
+
+export interface ResultadoEnvioDocumento {
+  id: string
+  ok: boolean
+  erro?: string
+}
+
+/**
  * Toda operação devolve um resultado discriminado em vez de lançar: o job precisa
  * distinguir "a seguradora respondeu que não" de "não consegui falar com a seguradora",
  * e uma exceção genérica apaga essa diferença justamente onde ela decide se o item é
@@ -209,6 +240,21 @@ export interface Seguradora {
 
   /** Submete o pedido de cobertura. */
   pedirCobertura(pedido: PedidoCobertura): Promise<ResultadoSeguradora<{ case_id: string }>>
+
+  /**
+   * Anexa documentos ao pedido já aberto.
+   *
+   * Um resultado POR DOCUMENTO, e não um `ok` do lote: metade aceita e metade recusada
+   * é o caso comum (tamanho, formato), e um booleano só do conjunto obrigaria o Crédito
+   * a reenviar tudo para descobrir o que faltou. A esteira grava linha a linha.
+   *
+   * Falhar aqui NUNCA desfaz o pedido de cobertura: ele já foi submetido, já pode ter
+   * sido cobrado, e a seguradora aceita documento depois. O envio segue valendo.
+   */
+  enviarDocumentos(
+    caseId: string,
+    documentos: DocumentoParaSeguradora[],
+  ): Promise<ResultadoSeguradora<ResultadoEnvioDocumento[]>>
 
   /** Estado atual de um pedido. Usado pelo poll. */
   consultarDecisao(caseId: string): Promise<ResultadoSeguradora<DecisaoSeguradora | null>>

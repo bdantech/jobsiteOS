@@ -39,9 +39,11 @@ import { brl } from './resultado'
 const PASSOS_ESTEIRA = ['Solicitada', 'Documentos', 'Enviada', 'Em análise', 'Decidida'] as const
 
 /**
- * Dez estágios em cinco passos. `cancelada` e `expirada` não são passos: a primeira é um
- * fim administrativo e a segunda é um fim por decurso de prazo — desenhar as duas como
- * "chegou ao fim da régua" leria como sucesso.
+ * Dez estágios em cinco passos. `cancelada` não é passo: é um fim administrativo, e
+ * desenhá-lo como "chegou ao fim da régua" leria como sucesso.
+ *
+ * Pendentes e recebidos dividem o passo "Documentos" — são o mesmo momento da esteira
+ * visto de dois lados, e separá-los daria seis passos para contar a mesma história.
  */
 function passoDaEsteira(estagio: EstagioAnalise): number {
   switch (estagio) {
@@ -49,6 +51,7 @@ function passoDaEsteira(estagio: EstagioAnalise): number {
     case 'solicitada':
       return 0
     case 'docs_pendentes':
+    case 'docs_recebidos':
       return 1
     case 'enviada_seguradora':
       return 2
@@ -94,18 +97,18 @@ function leituraDaEsteira(estagio: EstagioAnalise): { tom: Tom; frase: string } 
       return { tom: 'andamento', frase: 'Na fila para envio. O envio à seguradora é um clique humano — e pode ser cobrado.' }
     case 'docs_pendentes':
       return { tom: 'atencao', frase: 'Faltam documentos. A seguradora costuma pedir por eles antes de decidir.' }
+    case 'docs_recebidos':
+      return { tom: 'andamento', frase: 'A pasta está completa. Daqui sai o envio à seguradora — e é no envio que se escolhe quais documentos vão junto.' }
     case 'enviada_seguradora':
       return { tom: 'andamento', frase: 'Pedido aberto na seguradora. O worker consulta a decisão de tempos em tempos.' }
     case 'em_analise':
       return { tom: 'andamento', frase: 'A seguradora está analisando. A tela se atualiza sozinha quando ela responder.' }
     case 'aprovada':
-      return { tom: 'bom', frase: 'A seguradora concedeu o limite pedido.' }
+      return { tom: 'bom', frase: 'Aprovada — pela seguradora, ou pela nossa decisão quando ela não passou por lá. O que vale para operar é o limite operacional.' }
     case 'aprovada_parcial':
-      return { tom: 'bom', frase: 'A seguradora concedeu menos do que foi pedido.' }
+      return { tom: 'bom', frase: 'Aprovada por menos do que foi pedido.' }
     case 'negada':
-      return { tom: 'ruim', frase: 'A seguradora recusou. Operar assim mesmo é decisão nossa, e exige motivo escrito.' }
-    case 'expirada':
-      return { tom: 'ruim', frase: 'A aprovação venceu. Ela não conta mais como vigente em lugar nenhum.' }
+      return { tom: 'ruim', frase: 'Negada. Operar assim mesmo é decisão nossa, e exige motivo escrito.' }
     case 'cancelada':
       return { tom: 'neutro', frase: 'Cancelada. Fim de linha administrativo, não uma decisão de risco.' }
   }
@@ -288,9 +291,9 @@ export function StatusAnalise({
   const esteira = leituraDaEsteira(estagio)
   const propria = leituraDaPropria(statusPropria, etapa, erro, recomendacao, decisaoFinal !== null)
   /*
-   * Só a DECISÃO fecha a régua. `cancelada` e `expirada` param no último passo sem os
-   * vistos: uma fila de cinco marcas verdes lê como "chegou ao fim", e nenhuma das duas
-   * chegou — uma foi arquivada e a outra venceu no caminho.
+   * Só a DECISÃO fecha a régua. `cancelada` para no último passo sem os vistos: uma
+   * fila de cinco marcas verdes lê como "chegou ao fim", e ela não chegou — foi
+   * arquivada no caminho.
    */
   const fim = ['aprovada', 'aprovada_parcial', 'negada'].includes(estagio)
 

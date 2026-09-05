@@ -1,6 +1,7 @@
 import {
   ativarMatrizPrecificacaoSchema,
   ativarScorecardSchema,
+  concluirAnaliseSchema,
   definirExClienteMotivoSchema,
   editarParecerSchema,
   moverAnaliseSchema,
@@ -17,6 +18,7 @@ import {
   solicitarAnaliseSchema,
   type AtivarMatrizPrecificacaoInput,
   type AtivarScorecardInput,
+  type ConcluirAnaliseInput,
   type DefinirExClienteMotivoInput,
   type EditarParecerInput,
   type MoverAnaliseInput,
@@ -40,9 +42,14 @@ import type { Json, Tables } from '../types/database.js'
 /**
  * Escritas do módulo Crédito, todas por RPC SECURITY DEFINER (migração 0073).
  *
- * Nenhuma delas escreve decisão de seguradora: aprovar, negar e expirar são do worker,
- * com service role. Um atalho de tela para "aprovada" produziria um limite que a apólice
- * não conhece — e é o tipo de número que ninguém questiona porque está na tela.
+ * Nenhuma delas escreve decisão DE SEGURADORA: o limite aprovado e os códigos da
+ * apólice são do worker, com service role. Um atalho de tela para "limite aprovado"
+ * produziria um número que a apólice não conhece — e é o tipo de número que ninguém
+ * questiona porque está na tela.
+ *
+ * `concluirAnalise` (0187) é a exceção que confirma a regra: ela move o estágio para o
+ * desfecho da NOSSA decisão, já registrada no confronto, e não encosta em
+ * `limite_aprovado`. São duas verdades diferentes, e continuam separadas.
  */
 
 export async function solicitarAnalise(
@@ -61,6 +68,24 @@ export async function moverAnalise(
 ): Promise<Tables<'analises_credito'>> {
   const dados = parseOuFalhar(moverAnaliseSchema, input)
   const { data, error } = await supabase.rpc('app_mover_analise', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_credito'>
+}
+
+/**
+ * Conclui a esteira a partir da decisão já registrada no confronto.
+ *
+ * Não existia até aqui, e a ausência tinha motivo: aprovar pela tela produziria um
+ * limite que a apólice da seguradora não conhece. Ele continua não escrevendo
+ * `limite_aprovado` — o que escreve é o DESFECHO, que é consequência de uma decisão
+ * nossa já gravada. O RPC recusa qualquer desfecho que não corresponda a ela.
+ */
+export async function concluirAnalise(
+  supabase: Supabase,
+  input: ConcluirAnaliseInput | unknown,
+): Promise<Tables<'analises_credito'>> {
+  const dados = parseOuFalhar(concluirAnaliseSchema, input)
+  const { data, error } = await supabase.rpc('app_concluir_analise', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'analises_credito'>
 }

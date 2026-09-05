@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { FileUp, ScanLine } from 'lucide-react'
+import { AlertTriangle, FileUp, ScanLine, Send } from 'lucide-react'
 import type { Tables } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -152,11 +152,32 @@ export function Documentos({
                   </label>
                 </div>
                 {doTipo.map((d) => (
-                  <p key={d.id} className="truncate text-xs text-muted-foreground">
-                    {d.nome_arquivo ?? d.arquivo_url} ·{' '}
-                    {new Date(d.enviado_em).toLocaleDateString('pt-BR')}
-                    {d.extraido_em ? ' · já lido pela extração' : ''}
-                  </p>
+                  <div key={d.id} className="space-y-0.5">
+                    <p className="truncate text-xs text-muted-foreground">
+                      {d.nome_arquivo ?? d.arquivo_url} ·{' '}
+                      {new Date(d.enviado_em).toLocaleDateString('pt-BR')}
+                      {d.extraido_em ? ' · já lido pela extração' : ''}
+                    </p>
+                    {/*
+                     * O que foi À SEGURADORA, por documento.
+                     *
+                     * A escolha acontece no diálogo de envio e some com ele; sem esta
+                     * linha, "quais documentos ela recebeu?" só teria resposta no log do
+                     * worker — e é a primeira pergunta de quem abre um chamado.
+                     */}
+                    {d.enviado_seguradora_em ? (
+                      <p className="flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-500">
+                        <Send className="size-3" aria-hidden />
+                        enviado à seguradora em{' '}
+                        {new Date(d.enviado_seguradora_em).toLocaleDateString('pt-BR')}
+                      </p>
+                    ) : d.envio_seguradora_erro ? (
+                      <p className="flex items-start gap-1 text-[11px] text-destructive">
+                        <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
+                        a seguradora não recebeu: {d.envio_seguradora_erro}
+                      </p>
+                    ) : null}
+                  </div>
                 ))}
               </li>
             )

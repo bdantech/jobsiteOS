@@ -112,9 +112,14 @@ export function documentosFaltantes(
 /**
  * O estágio com que a análise NASCE. Nunca depois de nascer: a partir daí quem
  * manda é a esteira, e o payload da integração é insumo, não decisão (§1).
+ *
+ * Dossiê completo nasce em `docs_recebidos`, e não mais em `solicitada`: é o mesmo
+ * destino a que o gatilho do checklist leva quando o último essencial chega depois.
+ * O fato observado é um só — "temos os documentos" — e ele não pode produzir dois
+ * estágios diferentes conforme a hora em que o arquivo chegou.
  */
 export function estagioInicial(faltantes: readonly string[]): EstagioAnalise {
-  return faltantes.length > 0 ? 'docs_pendentes' : 'solicitada'
+  return faltantes.length > 0 ? 'docs_pendentes' : 'docs_recebidos'
 }
 
 // ─── Entrega do webhook ─────────────────────────────────────────────────────

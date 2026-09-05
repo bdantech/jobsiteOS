@@ -770,13 +770,13 @@ sabe se a primeira chamada chegou.
 ### O payload de entrada é insumo, nunca decisão
 
 Nada do que a produção manda define estágio, limite ou aprovação. A única coisa
-que o corpo decide é se a análise nasce em `solicitada` ou `docs_pendentes` — e
-mesmo isso sai do checklist que o Crédito configurou, não de um campo do JSON.
+que o corpo decide é se a análise nasce em `docs_recebidos` ou `docs_pendentes` —
+e mesmo isso sai do checklist que o Crédito configurou, não de um campo do JSON.
 
 ### A emissão do webhook é da TABELA
 
-O estágio muda por cinco caminhos (RPC do kanban, sync da Atradius, job de
-expiração, esta API, e a mão de um admin no SQL). Pendurar a emissão em cada um
+O estágio muda por cinco caminhos (RPC do kanban, RPC de conclusão pela nossa
+decisão, sync da Atradius, esta API, e a mão de um admin no SQL). Pendurar a emissão em cada um
 garantiria esquecê-la no sexto, e um webhook que não sai é uma integração que
 mente em silêncio. Por isso um gatilho em `analises_credito` enfileira, e o worker
 entrega.

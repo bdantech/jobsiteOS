@@ -5,6 +5,7 @@ import {
   MutationError,
   ativarScorecardVersao,
   canAccessRoute,
+  concluirAnalise,
   criarApiKey,
   criarApiKeySchema,
   enviarWebhookTeste,
@@ -25,6 +26,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   dispararBackfillAtradius,
   dispararCreditoMensal,
+  dispararDecisaoEmVendas,
   dispararEnviarAnalises,
   dispararEstimarPotencial,
   dispararPollDecisoes,
@@ -37,9 +39,12 @@ import {
  * Mutações do módulo Crédito. Escrita sempre pelos RPCs SECURITY DEFINER da migração
  * 0073, com o client do USUÁRIO — o RLS e o próprio RPC decidem o que a escrita toca.
  *
- * NENHUMA action aqui aprova, nega ou expira uma análise. Esses estágios são do worker,
- * com service role: um atalho de tela para "aprovada" produziria um limite que a apólice
- * da seguradora não conhece, e ele apareceria na Company 360 com cara de fato.
+ * NENHUMA action aqui escreve LIMITE de seguradora. Esse número é do worker, com service
+ * role: um atalho de tela para "limite aprovado" produziria uma cobertura que a apólice
+ * não conhece, e ela apareceria na Company 360 com cara de fato.
+ *
+ * `concluirAnaliseAction` move o ESTÁGIO para o desfecho da nossa decisão — que é outra
+ * coisa, já registrada no confronto, e que o RPC recusa se as duas não corresponderem.
  */
 
 export type ActionResult<T> =
@@ -129,15 +134,52 @@ export async function registrarDocAction(input: unknown): Promise<ActionResult<T
  */
 export async function enviarAnalisesAction(
   analiseIds: string[],
+  /**
+   * Os anexos escolhidos no diálogo. Lista VAZIA é uma escolha legítima — "manda o
+   * pedido, os documentos eu levo por outro canal" — e por isso ela não é recusada.
+   */
+  docIds: string[] = [],
 ): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
   const { erro } = await autorizar()
   if (erro) return erro
   if (!analiseIds.length) {
     return { ok: false, message: 'Selecione ao menos uma análise para enviar.', code: 'invalid' }
   }
-  const r = await dispararEnviarAnalises(analiseIds)
+  const r = await dispararEnviarAnalises(analiseIds, docIds)
   revalidatePath('/credito')
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Conclui a esteira pelo desfecho da decisão já registrada.
+ *
+ * O RPC é a garantia (ele confere `decisao_interna` contra o estágio pedido); esta
+ * action é a propagação: depois de gravar, cutuca o worker para o card do funil andar,
+ * como ele já andava quando quem decidia era a seguradora. O `aviso` existe porque a
+ * esteira JÁ mudou mesmo quando o worker não responde — dizer "falhou" aqui faria
+ * alguém tentar de novo uma coisa que já aconteceu.
+ */
+export async function concluirAnaliseAction(
+  input: unknown,
+): Promise<ActionResult<{ analise: Tables<'analises_credito'>; aviso?: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const a = await concluirAnalise(supabase, input)
+    const r = await dispararDecisaoEmVendas(a.id, a.estagio)
+    revalidatePath('/credito')
+    revalidatePath(`/credito/analises/${a.id}`)
+    if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)
+    return {
+      ok: true,
+      data: {
+        analise: a,
+        aviso: r.ok ? undefined : 'A esteira foi concluída, mas o card do funil comercial não andou.',
+      },
+    }
+  } catch (e) {
+    return falhaDe(e)
+  }
 }
 
 export async function salvarScorecardAction(

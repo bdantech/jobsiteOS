@@ -54,6 +54,7 @@ import {
   dispararBackfillAtradius,
   dispararCreditoMensal,
   dispararDominioEmpresa,
+  dispararDecisaoEmVendas,
   dispararEnviarAnalises,
   dispararEstimarPotencial,
   dispararAnalisePropria,
@@ -886,7 +887,16 @@ app.post('/jobs/radar/reestimar', (_req: Request, res: Response, next: NextFunct
 
 // ─── Crédito (Prompt 04d) ────────────────────────────────────────────────────
 
-const enviarAnalisesSchema = z.object({ analise_ids: z.array(z.string().uuid()).optional() })
+const enviarAnalisesSchema = z.object({
+  analise_ids: z.array(z.string().uuid()).optional(),
+  /** Os anexos escolhidos no diálogo de envio. Ausente = nenhum, nunca "todos". */
+  doc_ids: z.array(z.string().uuid()).max(50).optional(),
+})
+
+const decisaoEmVendasSchema = z.object({
+  analise_id: z.string().uuid(),
+  decisao: z.enum(['aprovada', 'aprovada_parcial', 'negada']),
+})
 
 /** Mensal: calibra na carteira, pontua a base e calcula o potencial, NESTA ordem. */
 /**
@@ -936,8 +946,23 @@ app.post('/jobs/credito/potencial', (_req: Request, res: Response, next: NextFun
  */
 app.post('/jobs/credito/enviar', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { analise_ids } = enviarAnalisesSchema.parse(req.body ?? {})
-    res.status(202).json({ job_id: dispararEnviarAnalises(analise_ids), status: 'executando' })
+    const { analise_ids, doc_ids } = enviarAnalisesSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararEnviarAnalises(analise_ids, doc_ids), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * O desfecho de uma análise concluída pela tela chegando ao funil comercial (0187).
+ *
+ * Rota própria, e não um pedaço do RPC: mover o card exige service role, notificação e
+ * a busca do motivo de perda — coisas do worker. O RPC escreve a esteira; isto propaga.
+ */
+app.post('/jobs/credito/decisao-em-vendas', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { analise_id, decisao } = decisaoEmVendasSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararDecisaoEmVendas(analise_id, decisao), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

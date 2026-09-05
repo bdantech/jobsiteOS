@@ -41,7 +41,7 @@ test('o checklist diz o que falta, e é ele que decide o estágio de nascimento'
   ])
   assert.equal(estagioInicial(['dre']), 'docs_pendentes')
   assert.deepEqual(documentosFaltantes(essenciais, essenciais), [])
-  assert.equal(estagioInicial([]), 'solicitada')
+  assert.equal(estagioInicial([]), 'docs_recebidos')
 })
 
 test('o backoff cresce e ACABA — a sexta tentativa é a última', () => {

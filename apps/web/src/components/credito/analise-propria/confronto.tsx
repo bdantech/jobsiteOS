@@ -7,20 +7,34 @@ import { Scale, ShieldAlert } from 'lucide-react'
 import {
   DECISOES_FINAIS,
   DECISAO_FINAL_LABELS,
+  DESFECHO_DA_DECISAO,
+  ESTAGIO_ANALISE_LABELS,
   QUADRANTE_LABELS,
   QUADRANTE_LEITURA,
   motivoObrigatorio,
+  podeConcluirPelaDecisao,
   type DecisaoFinal,
+  type EstagioAnalise,
   type Quadrante,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { concluirAnaliseAction } from '@/actions/credito'
 import { registrarDecisaoAction } from '@/actions/credito-analise'
+import { creditoKeys } from '../queries'
 import { analisePropriaKeys } from './queries'
 import { brl } from './resultado'
 
@@ -56,6 +70,7 @@ function decisaoSugerida(q: Quadrante | null): DecisaoFinal | '' {
 export function Confronto({
   analiseId,
   analiseCreditoId,
+  estagio,
   quadrante,
   nossaRecomendacao,
   nossoLimite,
@@ -68,6 +83,7 @@ export function Confronto({
 }: {
   analiseId: string
   analiseCreditoId: string
+  estagio: EstagioAnalise
   quadrante: Quadrante | null
   nossaRecomendacao: string | null
   nossoLimite: number | null
@@ -93,6 +109,16 @@ export function Confronto({
   const [motivo, setMotivo] = React.useState(decisaoMotivo ?? '')
   const [salvando, setSalvando] = React.useState(false)
 
+  const [concluindo, setConcluindo] = React.useState(false)
+  /**
+   * A decisão que o diálogo de conclusão está perguntando sobre.
+   *
+   * Guardada em estado próprio, e não lida do `decisao` do formulário: entre registrar e
+   * responder ao diálogo, alguém pode mexer no select — e a pergunta tem de continuar
+   * sendo sobre o que foi GRAVADO, não sobre o que está na tela.
+   */
+  const [perguntandoDesfecho, setPerguntandoDesfecho] = React.useState<DecisaoFinal | null>(null)
+
   const exigeMotivo = decisao !== '' && motivoObrigatorio(quadrante, decisao)
   const semMotivo = exigeMotivo && motivo.trim().length === 0
   const naoOpera = decisao === 'nao_operar'
@@ -113,6 +139,40 @@ export function Confronto({
     }
     toast.success('Decisão registrada. O limite operacional foi aplicado na esteira.')
     void qc.invalidateQueries({ queryKey: analisePropriaKeys.painel(analiseCreditoId) })
+
+    /*
+     * A pergunta que fecha a esteira.
+     *
+     * Registrar a decisão e concluir a análise eram duas coisas separadas, e a segunda
+     * não tinha botão nenhum: metade das análises não vai à seguradora, e uma decidida
+     * por nós ficava aberta para sempre numa coluna do kanban — bloqueando, de quebra, a
+     * próxima análise do mesmo CNPJ.
+     *
+     * É PERGUNTA e não consequência automática porque o desfecho é irreversível: análise
+     * decidida não volta para a esteira. Quem quiser decidir agora e concluir depois
+     * (esperando a seguradora, por exemplo) responde "agora não" e o botão continua ali.
+     */
+    if (podeConcluirPelaDecisao(estagio)) setPerguntandoDesfecho(decisao)
+  }
+
+  async function concluir(escolhida: DecisaoFinal) {
+    setConcluindo(true)
+    const r = await concluirAnaliseAction({
+      id: analiseCreditoId,
+      estagio: DESFECHO_DA_DECISAO[escolhida],
+      motivo: motivo.trim() || null,
+    })
+    setConcluindo(false)
+    setPerguntandoDesfecho(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    const desfecho = ESTAGIO_ANALISE_LABELS[DESFECHO_DA_DECISAO[escolhida]].toLowerCase()
+    if (r.data.aviso) toast.warning(r.data.aviso)
+    else toast.success(`Análise concluída como ${desfecho}.`)
+    void qc.invalidateQueries({ queryKey: analisePropriaKeys.painel(analiseCreditoId) })
+    void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })
   }
 
   return (
@@ -217,11 +277,91 @@ export function Confronto({
             )}
           </div>
 
-          <Button onClick={() => void registrar()} disabled={decisao === '' || semMotivo || salvando}>
-            {salvando ? 'Registrando…' : decisaoAtual ? 'Atualizar decisão' : 'Registrar decisão'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => void registrar()} disabled={decisao === '' || semMotivo || salvando}>
+              {salvando ? 'Registrando…' : decisaoAtual ? 'Atualizar decisão' : 'Registrar decisão'}
+            </Button>
+            {/*
+             * O caminho de volta para quem respondeu "agora não" — ou para quem registrou
+             * a decisão antes de a esteira chegar em documentos recebidos. Sem ele, a
+             * única forma de concluir seria registrar a mesma decisão de novo só para ver
+             * o diálogo aparecer.
+             */}
+            {decisaoAtual && podeConcluirPelaDecisao(estagio) && (
+              <Button
+                variant="outline"
+                onClick={() => setPerguntandoDesfecho(decisaoAtual)}
+                disabled={salvando || concluindo}
+              >
+                Concluir a análise
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      {/*
+       * A pergunta é sobre o DESFECHO, e o desfecho é consequência da decisão — por isso
+       * ele aparece escrito, e não escolhido: oferecer um segundo seletor aqui criaria
+       * duas verdades sobre a mesma análise, e o RPC recusaria a que discordasse.
+       */}
+      <Dialog
+        open={perguntandoDesfecho !== null}
+        onOpenChange={(v) => !v && setPerguntandoDesfecho(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {perguntandoDesfecho === 'nao_operar' ? 'Negar a análise?' : 'Aprovar a análise?'}
+            </DialogTitle>
+            <DialogDescription>
+              A decisão foi registrada. Concluir move a análise para o desfecho abaixo e a tira
+              da esteira — <strong>análise decidida não volta</strong>. Se preferir esperar a
+              seguradora, responda “agora não”: o botão continua no card.
+            </DialogDescription>
+          </DialogHeader>
+
+          {perguntandoDesfecho && (
+            <dl className="space-y-1.5 rounded-md border p-3 text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-xs text-muted-foreground">Decisão registrada</dt>
+                <dd>{DECISAO_FINAL_LABELS[perguntandoDesfecho]}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-xs text-muted-foreground">Desfecho na esteira</dt>
+                <dd className="font-medium">
+                  {ESTAGIO_ANALISE_LABELS[DESFECHO_DA_DECISAO[perguntandoDesfecho]]}
+                </dd>
+              </div>
+              {perguntandoDesfecho !== 'nao_operar' && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-xs text-muted-foreground">Limite operacional</dt>
+                  <dd className="tabular-nums">
+                    {brl(Number(limite.replace(/\D/g, '')) || null)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPerguntandoDesfecho(null)}>
+              Agora não
+            </Button>
+            <Button
+              variant={perguntandoDesfecho === 'nao_operar' ? 'destructive' : 'default'}
+              onClick={() => perguntandoDesfecho && void concluir(perguntandoDesfecho)}
+              disabled={concluindo}
+            >
+              {concluindo
+                ? 'Concluindo…'
+                : perguntandoDesfecho === 'nao_operar'
+                  ? 'Negar'
+                  : 'Aprovar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -735,8 +735,29 @@ export async function dispararEstimarPotencial(): Promise<DispararJobResultado> 
  * explícitos, nunca "todas". A confirmação de custo fica no caller (a tela mostra
  * quantas e o que isso significa antes de disparar).
  */
-export async function dispararEnviarAnalises(analiseIds: string[]): Promise<DispararJobResultado> {
-  return postar('/jobs/credito/enviar', { analise_ids: analiseIds }, 'credito-enviar')
+export async function dispararEnviarAnalises(
+  analiseIds: string[],
+  /** Os anexos que o analista marcou. Vazio = nenhum documento vai junto. */
+  docIds: string[] = [],
+): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/enviar', { analise_ids: analiseIds, doc_ids: docIds }, 'credito-enviar')
+}
+
+/**
+ * O desfecho de uma análise concluída pela tela chegando ao funil comercial.
+ *
+ * Separado do RPC de propósito: o RPC escreve a esteira com o usuário; mover o card da
+ * venda exige service role e notificação, que são do worker.
+ */
+export async function dispararDecisaoEmVendas(
+  analiseId: string,
+  decisao: string,
+): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/credito/decisao-em-vendas',
+    { analise_id: analiseId, decisao },
+    'credito-decisao-vendas',
+  )
 }
 
 export async function dispararPollDecisoes(): Promise<DispararJobResultado> {

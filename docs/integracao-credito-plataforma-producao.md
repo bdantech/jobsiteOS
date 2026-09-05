@@ -17,7 +17,7 @@ volta**, por webhook, cada mudança de estágio dela.
         │
         │  POST /api/v1/credito/analises
         ├─────────────────────────────────────▶ cria/acha a empresa pelo CNPJ
-        │                                       cria a análise (solicitada
+        │                                       cria a análise (docs_recebidos
         │  201 { analise_id, estagio,           ou docs_pendentes)
         │◀────── documentos_faltantes }         dispara enriquecimento grátis
         │
@@ -28,7 +28,7 @@ volta**, por webhook, cada mudança de estágio dela.
         │                                              │
         │                                              │ checklist completo?
         │                                              ▼
-        │                                       docs_pendentes → solicitada
+        │                                       docs_pendentes → docs_recebidos
         │                                              │
         │                                       time de Crédito trabalha:
         │                                       envia à seguradora, analisa,
@@ -307,7 +307,7 @@ pelo time de Crédito. Hoje: `balanco_patrimonial`, `dre`, `faturamento_declarad
 Não fixem essa lista no código de vocês: leiam `documentos_faltantes` da resposta.
 
 Quando o último essencial chega, a análise passa sozinha de `docs_pendentes` para
-`solicitada` — e vocês recebem `credito.estagio_alterado`.
+`docs_recebidos` — e vocês recebem `credito.estagio_alterado`.
 
 ### Códigos
 
@@ -767,20 +767,35 @@ Duas recomendações:
 | Estágio | O que significa para o negócio |
 | ------- | ------------------------------ |
 | `rascunho` | Aberta internamente, ainda não é um pedido. **Não chega por API.** |
-| `solicitada` | Pedido registrado, dossiê completo o bastante para começar |
+| `solicitada` | Pedido registrado internamente, sem checklist avaliado |
 | `docs_pendentes` | Falta documento essencial. Veja `documentos.faltantes` |
+| `docs_recebidos` | Dossiê completo. É daqui que o Crédito envia à seguradora |
 | `enviada_seguradora` | Submetida à seguradora; aguardando o parecer dela |
 | `em_analise` | A seguradora está analisando |
 | `aprovada` | Limite concedido. Ver `limite_aprovado` e `validade` |
 | `aprovada_parcial` | Concedido **menos** que o solicitado. `motivo` costuma explicar |
-| `negada` | Recusada. `motivo` traz o que a seguradora disse. Não avança daqui |
-| `expirada` | O limite venceu. Precisa de nova análise |
-| `cancelada` | Encerrada administrativamente |
+| `negada` | Recusada. `motivo` traz o porquê. Não avança daqui |
+| `cancelada` | Encerrada administrativamente, ou a cobertura deixou de existir |
 
-A ordem normal é `solicitada → enviada_seguradora → em_analise → aprovada`, com
-`docs_pendentes` antes de `solicitada` quando falta documento. **Não presuma essa
-ordem**: uma análise pode ir direto de `em_analise` para `negada`, ou de
-`aprovada` para `expirada` meses depois.
+A ordem normal é `docs_recebidos → enviada_seguradora → em_analise → aprovada`, com
+`docs_pendentes` antes quando falta documento. **Não presuma essa ordem**: uma análise
+pode ir direto de `em_analise` para `negada`, e pode ser concluída como `aprovada` sem
+passar pela seguradora — nem toda operação é feita com cobertura.
+
+> ### ⚠️ Mudanças nesta versão do glossário
+>
+> **`docs_recebidos` é novo, e é onde a análise de vocês para.** Antes, o checklist
+> completo levava a análise de `docs_pendentes` para `solicitada`; agora ela vai para
+> `docs_recebidos`. Análises criadas **já com todos os documentos** também nascem em
+> `docs_recebidos` (antes: `solicitada`). Se o código de vocês tem um `switch` ou um
+> mapa de estágios, ele precisa conhecer o valor novo — o comportamento do webhook e do
+> `estagio_atual` não mudou, só o valor que chega neles.
+>
+> **`expirada` deixou de existir.** Ela apagava o desfecho: depois de expirar, ninguém
+> sabia mais se a análise tinha sido aprovada ou aprovada parcial. Uma aprovação vencida
+> agora **permanece** `aprovada`, com `validade` (`expira_em`) no passado — é a data que
+> diz se o limite vale hoje, e é ela que vocês devem comparar. Uma cobertura que a
+> seguradora encerrou vira `cancelada`, com o `motivo` explicando.
 
 ---
 
@@ -841,7 +856,8 @@ Percorram na ordem. Cada item tem um critério objetivo.
 - [ ] **7. Documento por URL** — JSON com `url`: **202**. Confirme com o time do
       JobsiteOS que o arquivo chegou ao bucket (a linha some do estado "baixando").
 - [ ] **8. Checklist completo** — depois de mandar todos os essenciais, a análise
-      sai de `docs_pendentes` sozinha e vocês recebem `credito.estagio_alterado`.
+      sai de `docs_pendentes` sozinha para `docs_recebidos`, e vocês recebem
+      `credito.estagio_alterado`.
 - [ ] **9. Webhook de teste** — peça ao time do JobsiteOS para clicar em "Enviar
       evento de teste". Seu endpoint deve receber `webhook.teste` e responder 2xx.
 - [ ] **10. Assinatura** — com o secret **errado**, seu endpoint deve recusar

@@ -36,9 +36,9 @@ import { pedirAnaliseDaVendaAction } from '@/actions/comercial'
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
-/** Só a trilha que o comercial precisa ler. Expirada e cancelada não são caminho. */
+/** Só a trilha que o comercial precisa ler. Cancelada não é caminho. */
 const TRILHA: readonly EstagioAnalise[] = ESTAGIOS_ANALISE.filter(
-  (e) => e !== 'expirada' && e !== 'cancelada' && e !== 'rascunho',
+  (e) => e !== 'cancelada' && e !== 'rascunho',
 ) as EstagioAnalise[]
 
 export interface AnaliseDaVenda {
