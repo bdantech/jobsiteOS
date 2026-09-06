@@ -633,3 +633,152 @@ test('cessão sem conta resolvida fica fora do agrupamento — não há o que re
   )
   assert.deepEqual(contas, [])
 })
+
+// ─── Auxiliar do closer ─────────────────────────────────────────────────────
+
+/**
+ * O repasse é a única remuneração do sistema que NÃO vem do VOP: ela vem da linha de
+ * outra pessoa. Por isso cada teste aqui afirma uma coisa sobre o dinheiro do closer
+ * tanto quanto sobre o do auxiliar — a regra só está certa se os dois estiverem.
+ */
+const AUX_UM = { vendedorId: 'aux-1', superiorId: 'vend-1', isIa: false }
+const AUX_DOIS = { vendedorId: 'aux-2', superiorId: 'vend-1', isIa: false }
+
+function comRepasse(pct: number, vendedorId: string | null = null): CommissionParam[] {
+  return [...PARAMS, param({ chave: 'repasse_auxiliar_pct', valor: pct, unidade: 'PERCENT', vendedor_id: vendedorId })]
+}
+
+test('sem repasse publicado, o auxiliar não gera lançamento nenhum', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM] }, PARAMS)
+  assert.equal(ls.length, 2)
+  assert.equal(ls.some((l) => l.papel === 'AUXILIAR'), false)
+})
+
+test('o repasse SOMA ao closer, não desconta dele', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM] }, comRepasse(30))
+
+  const closer = ls.find((l) => l.papel === 'VENDEDOR')!
+  const aux = ls.find((l) => l.papel === 'AUXILIAR')!
+  // O closer recebe EXATAMENTE o que receberia sem auxiliar nenhum.
+  assert.equal(closer.valor, 750)
+  assert.equal(aux.valor, 225)
+  assert.equal(aux.vendedor_id, 'aux-1')
+  // A casa paga 975 onde pagava 750: o repasse é custo novo, não redistribuição.
+  assert.equal(closer.valor + aux.valor, 975)
+})
+
+test('o percentual é do CLOSER e se divide entre os auxiliares dele', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM, AUX_DOIS] }, comRepasse(30))
+  const auxs = ls.filter((l) => l.papel === 'AUXILIAR')
+
+  assert.equal(auxs.length, 2)
+  assert.equal(auxs[0]!.valor, 112.5)
+  assert.equal(auxs[1]!.valor, 112.5)
+  // O bolo é o mesmo de um auxiliar só — o que muda é entre quantos ele se divide.
+  assert.equal(auxs[0]!.valor + auxs[1]!.valor, 225)
+  assert.equal(ls.find((l) => l.papel === 'VENDEDOR')!.valor, 750)
+})
+
+test('o exemplo da mesa: R$ 10.000 de closer, 30%, dois auxiliares → R$ 1.500 cada', () => {
+  // VOP de 10 MM à taxa de crescimento (R$ 1.000/MM) = R$ 10.000 para o closer.
+  const grande = { ...CESSAO, valorCedido: 10_000_000, anticipationDays: 30 }
+  const ls = lancamentosDaCessao(grande, { ...TITULARES, auxiliares: [AUX_UM, AUX_DOIS] }, comRepasse(30))
+
+  assert.equal(ls.find((l) => l.papel === 'VENDEDOR')!.valor, 10_000)
+  const auxs = ls.filter((l) => l.papel === 'AUXILIAR')
+  assert.deepEqual(auxs.map((l) => l.valor), [1500, 1500])
+})
+
+test('o repasse do closer vence o repasse geral da casa', () => {
+  const params = [
+    ...PARAMS,
+    param({ chave: 'repasse_auxiliar_pct', valor: 10, unidade: 'PERCENT' }),
+    param({ chave: 'repasse_auxiliar_pct', valor: 40, unidade: 'PERCENT', vendedor_id: 'vend-1' }),
+  ]
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM] }, params)
+  assert.equal(ls.find((l) => l.papel === 'AUXILIAR')!.valor, 300) // 750 × 40%, não × 10%.
+})
+
+test('auxiliar de OUTRO closer não entra no rateio desta cessão', () => {
+  const deOutro = { vendedorId: 'aux-x', superiorId: 'vend-outro', isIa: false }
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM, deOutro] }, comRepasse(30))
+  const auxs = ls.filter((l) => l.papel === 'AUXILIAR')
+
+  // Um só, e com o bolo INTEIRO: o de outro closer não divide o que não é dele.
+  assert.equal(auxs.length, 1)
+  assert.equal(auxs[0]!.vendedor_id, 'aux-1')
+  assert.equal(auxs[0]!.valor, 225)
+})
+
+test('auxiliar de IA não gera lançamento, e não conta no rateio', () => {
+  const ia = { vendedorId: 'aux-ia', superiorId: 'vend-1', isIa: true }
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM, ia] }, comRepasse(30))
+  const auxs = ls.filter((l) => l.papel === 'AUXILIAR')
+
+  assert.equal(auxs.length, 1)
+  // 225, e não 112,50: o de IA não divide o bolo com o humano.
+  assert.equal(auxs[0]!.valor, 225)
+})
+
+test('o repasse deriva SÓ da linha de vendedor, mesmo quando o closer também originou', () => {
+  const closerTambemOriginador: TitularesDaCessao = {
+    vendedor: [{ vendedorId: 'vend-1', sharePct: 100, isIa: false }],
+    originador: [{ vendedorId: 'vend-1', sharePct: 100, isIa: false }],
+    auxiliares: [AUX_UM],
+  }
+  const ls = lancamentosDaCessao(CESSAO, closerTambemOriginador, comRepasse(30))
+  const auxs = ls.filter((l) => l.papel === 'AUXILIAR')
+
+  // 750 × 30% = 225, e não (750 + 450) × 30%: os 450 são pagamento por ORIGINAÇÃO,
+  // trabalho que o auxiliar do closer não fez.
+  assert.equal(auxs.length, 1)
+  assert.equal(auxs[0]!.valor, 225)
+})
+
+test('conta em RESIDUAL não paga o closer, logo não paga o auxiliar dele', () => {
+  const antiga = { ...CESSAO, marcoAtivacao: '2023-01-01' }
+  const ls = lancamentosDaCessao(antiga, { ...TITULARES, auxiliares: [AUX_UM] }, comRepasse(30))
+
+  assert.equal(ls.length, 1)
+  assert.equal(ls[0]!.papel, 'ORIGINADOR')
+})
+
+test('a linha do auxiliar carrega a conta inteira no snapshot', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM, AUX_DOIS] }, comRepasse(30))
+  const aux = ls.find((l) => l.papel === 'AUXILIAR')!
+
+  assert.equal(aux.params_snapshot.repasse_pct, 30)
+  assert.equal(aux.params_snapshot.closer_id, 'vend-1')
+  assert.equal(aux.params_snapshot.valor_base_closer, 750)
+  assert.equal(aux.params_snapshot.auxiliares_no_rateio, 2)
+  // Sem taxa por MM: ele não é pago por VOP, e fingir uma taxa aqui seria mentir na
+  // única tela onde alguém vai contestar o valor.
+  assert.equal(aux.taxa_brl_por_mm, null)
+
+  const texto = explicarCalculo(aux)
+  assert.match(texto, /30,0%/)
+  assert.match(texto, /÷ 2 auxiliares/)
+  assert.match(texto, /não descontado/)
+})
+
+test('a cessão revertida estorna o auxiliar junto com o closer', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, auxiliares: [AUX_UM] }, comRepasse(30))
+  const originais: LancamentoOriginal[] = ls.map((l) => ({
+    vendedor_id: l.vendedor_id,
+    papel: l.papel,
+    origem_id: l.origem_id,
+    origem_tipo: l.origem_tipo,
+    valor: l.valor,
+    empresa_id: l.empresa_id,
+    cedente_cnpj: l.cedente_cnpj,
+    cedente_nome: l.cedente_nome,
+    nf_numero: l.nf_numero,
+    descricao: l.descricao,
+    competencia: l.competencia,
+  }))
+
+  const estornos = estornosDaCessao(originais, '2026-05-02T12:00:00Z', 'NF cancelada')
+  const doAux = estornos.find((e) => e.papel === 'AUXILIAR')!
+  assert.equal(doAux.valor, -225)
+  assert.equal(doAux.vendedor_id, 'aux-1')
+})

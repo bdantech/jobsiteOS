@@ -139,8 +139,15 @@ function CabecalhoLimite() {
   )
 }
 
-export function CarteiraVendedor({ ehGestor }: { ehGestor: boolean }) {
-  const [vendedorId, setVendedorId] = React.useState<string | null>(null)
+export function CarteiraVendedor({
+  ehGestor,
+  vendedorInicial = null,
+}: {
+  ehGestor: boolean
+  /** De quem é a carteira que a tela abre. Nulo = a minha. */
+  vendedorInicial?: string | null
+}) {
+  const [vendedorId, setVendedorId] = React.useState<string | null>(vendedorInicial)
 
   const visiveis = useQuery({ queryKey: comercialKeys.visiveis(), queryFn: buscarVendedoresVisiveis })
   const { data, isPending } = useQuery({

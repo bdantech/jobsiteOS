@@ -20,7 +20,7 @@ import { createClient } from '@/lib/supabase/server'
 export interface ContextoComercial {
   context: SessionContext
   /** O cadastro de vendedor do usuário logado, quando existe. */
-  vendedor: { id: string; tipo: string } | null
+  vendedor: { id: string; tipo: string; superior_id: string | null } | null
   ehGestor: boolean
 }
 
@@ -31,7 +31,7 @@ export async function contextoComercial(): Promise<ContextoComercial> {
   const [vendedorRes, gestorRes] = await Promise.all([
     supabase
       .from('vendedores')
-      .select('id, tipo')
+      .select('id, tipo, superior_id')
       .eq('usuario_id', context.usuario.id)
       .eq('ativo', true)
       .maybeSingle(),

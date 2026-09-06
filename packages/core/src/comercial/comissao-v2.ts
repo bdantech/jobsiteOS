@@ -26,14 +26,24 @@ import type { GestaoOperacao } from './schemas.js'
 
 // ─── Vocabulário ────────────────────────────────────────────────────────────
 
-export const PAPEIS_COMISSAO = ['VENDEDOR', 'ORIGINADOR', 'SDR'] as const
+export const PAPEIS_COMISSAO = ['VENDEDOR', 'ORIGINADOR', 'SDR', 'AUXILIAR'] as const
 export type PapelComissao = (typeof PAPEIS_COMISSAO)[number]
 
 export const PAPEL_COMISSAO_LABELS: Record<PapelComissao, string> = {
   VENDEDOR: 'Vendedor',
   ORIGINADOR: 'Originador',
   SDR: 'SDR',
+  AUXILIAR: 'Auxiliar do closer',
 }
+
+/**
+ * O percentual da comissão do CLOSER que vira comissão dos auxiliares dele.
+ *
+ * Aceita override por vendedor, e é justamente o override que interessa: o repasse é uma
+ * combinação de cada closer com a casa. O valor geral existe como piso — quem não tiver
+ * override cai nele.
+ */
+export const CHAVE_REPASSE_AUXILIAR = 'repasse_auxiliar_pct'
 
 export const FASES_CONTA = ['CRESCIMENTO', 'MANUTENCAO', 'RESIDUAL'] as const
 export type FaseConta = (typeof FASES_CONTA)[number]
@@ -127,7 +137,7 @@ export interface ParametroCatalogado {
   chave: string
   rotulo: string
   unidade: UnidadeParametro
-  grupo: 'calculo' | 'taxas' | 'fases' | 'sdr' | 'titularidade' | 'sinalizadores' | 'desligados'
+  grupo: 'calculo' | 'taxas' | 'fases' | 'sdr' | 'auxiliar' | 'titularidade' | 'sinalizadores' | 'desligados'
   /** Taxas aceitam override por vendedor. PRAZO é sempre geral (§2). */
   aceitaOverride: boolean
   descricao: string
@@ -271,6 +281,18 @@ export const PARAMETROS_COMISSAO: readonly ParametroCatalogado[] = [
     descricao: 'Quanto tempo depois da reunião aceita o fechamento ainda é creditado a ela.',
   },
   {
+    chave: CHAVE_REPASSE_AUXILIAR,
+    rotulo: 'Repasse aos auxiliares do closer',
+    unidade: 'PERCENT',
+    grupo: 'auxiliar',
+    aceitaOverride: true,
+    descricao:
+      'Percentual da comissão do closer que a casa PAGA A MAIS, rateado entre os '
+      + 'auxiliares ativos dele. 30% com dois auxiliares = 15% para cada, e o closer '
+      + 'continua recebendo os 100% dele — não é desconto, é custo adicional da casa. '
+      + 'Publique por closer: o valor geral é só o piso de quem não tem override.',
+  },
+  {
     chave: 'dormencia_cedente_dias',
     rotulo: 'Dormência do cedente',
     unidade: 'DAYS',
@@ -330,6 +352,7 @@ export const GRUPO_PARAMETRO_LABELS: Record<ParametroCatalogado['grupo'], string
   taxas: 'Taxas por papel',
   fases: 'Fases e sunset',
   sdr: 'SDR',
+  auxiliar: 'Auxiliar do closer',
   titularidade: 'Titularidade',
   sinalizadores: 'Sinalizadores',
   desligados: 'Desativados (fora de escopo)',
@@ -631,9 +654,24 @@ export interface CessaoConvertida {
   faseManual?: FaseConta | null
 }
 
+/**
+ * Um auxiliar ativo e o closer de quem ele deriva. Vem de `vendedores.superior_id`.
+ *
+ * Não é um `Titular`, e a diferença é o ponto: titular tem share sobre uma ENTIDADE
+ * (o sacado, o cedente) e recebe pelo VOP dela. O auxiliar não titulariza nada — ele
+ * recebe uma fração do que o closer dele ganhou, seja qual for a conta.
+ */
+export interface AuxiliarDoCloser {
+  vendedorId: string
+  superiorId: string
+  isIa: boolean
+}
+
 export interface TitularesDaCessao {
   vendedor: readonly Titular[]
   originador: readonly Titular[]
+  /** Auxiliares ATIVOS na data da cessão. Ausente ou vazio = ninguém tem auxiliar. */
+  auxiliares?: readonly AuxiliarDoCloser[]
 }
 
 /**
@@ -755,6 +793,72 @@ export function lancamentosDaCessao(
           sunset_originador_meses: sunsetOriginador,
         },
       })
+    }
+  }
+
+  /*
+   * ── Auxiliar do closer: uma fração do que o closer ganhou, SOMADA ───────────
+   *
+   * Deriva das linhas de VENDEDOR já emitidas acima, e só delas. É onde a comissão do
+   * closer nasce — o que ele eventualmente receba como ORIGINADOR é pagamento por
+   * originação, trabalho de outra pessoa que não o auxiliar dele.
+   *
+   * TRÊS DECISÕES QUE MEXEM COM DINHEIRO, e é melhor lê-las aqui do que descobri-las
+   * numa contestação de folha:
+   *
+   *   SOMA, NÃO DESCONTA. A linha do closer, acima, não é tocada. Os 30% são custo novo
+   *   da casa. Descontar transformaria cada auxiliar contratado numa redução do salário
+   *   de quem pediu o auxiliar.
+   *
+   *   O PERCENTUAL É DO CLOSER, RATEADO ENTRE OS AUXILIARES DELE. Dois auxiliares num
+   *   repasse de 30% levam 15% cada. O custo da casa por closer não muda com o tamanho
+   *   da equipe dele — o que muda é entre quantos aquele bolo se divide.
+   *
+   *   O RATEIO É FIXADO NA CESSÃO, não recalculado no fim do mês. Um auxiliar que entra
+   *   no dia 20 não redivide o que os colegas já ganharam nos 19 primeiros dias, e um
+   *   que sai não devolve nada. Cada linha é uma afirmação sobre a equipe que existia
+   *   naquele dia — a mesma regra que já vale para taxa, fase e titularidade.
+   */
+  const auxiliares = titulares.auxiliares ?? []
+  if (auxiliares.length > 0) {
+    // Cópia antes de crescer o array: iterar `out` enquanto se empurra nele leria as
+    // próprias linhas de auxiliar e derivaria auxiliares de auxiliares.
+    const linhasDoCloser = out.filter((l) => l.papel === 'VENDEDOR')
+
+    for (const linha of linhasDoCloser) {
+      const equipe = auxiliares.filter((a) => a.superiorId === linha.vendedor_id && !a.isIa)
+      if (equipe.length === 0) continue
+
+      const pct = valorParametro(params, CHAVE_REPASSE_AUXILIAR, linha.vendedor_id, quando)
+      // Sem repasse publicado não há repasse. Ausência é um valor (§2), e aqui ela
+      // significa "este closer ainda não combinou repasse nenhum".
+      if (pct === null || pct <= 0) continue
+
+      const porAuxiliar = arredondar((linha.valor * (pct / 100)) / equipe.length)
+      if (porAuxiliar <= 0) continue
+
+      for (const a of equipe) {
+        out.push({
+          ...base,
+          vendedor_id: a.vendedorId,
+          papel: 'AUXILIAR',
+          // 100 porque ele leva o inteiro da fração que lhe cabe. O rateio entre a
+          // equipe está no snapshot, que é onde a contestação vai procurar.
+          share_pct: 100,
+          taxa_brl_por_mm: null,
+          valor: porAuxiliar,
+          descricao: `${linha.descricao} — auxiliar`,
+          params_snapshot: {
+            ...snapshotComum,
+            papel: 'AUXILIAR',
+            repasse_chave: CHAVE_REPASSE_AUXILIAR,
+            repasse_pct: pct,
+            closer_id: linha.vendedor_id,
+            valor_base_closer: linha.valor,
+            auxiliares_no_rateio: equipe.length,
+          },
+        })
+      }
     }
   }
 
@@ -982,6 +1086,17 @@ export function explicarCalculo(l: {
   }
   if (l.origem_tipo === 'ajuste_manual') {
     return `Ajuste manual de ${brl(l.valor)}, lançado por um gestor.`
+  }
+  if (snap.repasse_pct !== undefined) {
+    const pct = Number(snap.repasse_pct ?? 0)
+    const base = Number(snap.valor_base_closer ?? 0)
+    const n = Number(snap.auxiliares_no_rateio ?? 1)
+    const bolo = arredondar(base * (pct / 100))
+    const rateio = n > 1 ? `, ÷ ${n} auxiliares` : ''
+    return (
+      `${brl(base)} do closer × ${num(pct, 1)}% = ${brl(bolo)}${rateio} = ${brl(l.valor)}. ` +
+      `Somado ao que o closer recebe, não descontado dele.`
+    )
   }
 
   const cedido = l.valor_cedido ?? 0

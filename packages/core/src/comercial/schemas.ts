@@ -39,14 +39,18 @@ export function aceitaGestaoOperacao(empresa: { estagio?: string | null }): bool
 
 // ─── Vendedores ─────────────────────────────────────────────────────────────
 
-export const TIPOS_VENDEDOR = ['sdr', 'vendedor', 'originador'] as const
+export const TIPOS_VENDEDOR = ['sdr', 'vendedor', 'originador', 'auxiliar'] as const
 export type TipoVendedorId = (typeof TIPOS_VENDEDOR)[number]
 
 export const TIPO_VENDEDOR_LABELS: Record<TipoVendedorId, string> = {
   sdr: 'SDR',
   vendedor: 'Vendedor (closer)',
   originador: 'Originador',
+  auxiliar: 'Auxiliar do closer',
 }
+
+/** Tipos que exigem um `superior_id` — hoje só o auxiliar. */
+export const TIPOS_COM_SUPERIOR: readonly TipoVendedorId[] = ['auxiliar']
 
 /*
  * Os três primeiros papéis são do 04g e continuam significando o que sempre
@@ -493,11 +497,22 @@ export const salvarVendedorSchema = z
     email_remetente: z.string().email('E-mail inválido.').nullable().optional().or(z.literal('')),
     settings: z.record(z.unknown()).default({}),
     ativo: z.boolean().default(true),
+    /** O closer de quem este auxiliar deriva comissão e visibilidade. */
+    superior_id: uuid.nullable().optional(),
   })
   // O mesmo CHECK da tabela, aqui só para a mensagem chegar no campo certo.
   .refine((v) => !!v.usuario_id || v.is_ia, {
     message: 'Escolha o usuário, ou marque como vendedor de IA.',
     path: ['usuario_id'],
+  })
+  /*
+   * Auxiliar sem closer não é um cadastro incompleto — é uma pessoa que não vê funil
+   * nenhum e não recebe comissão nenhuma. O RPC também recusa; aqui a mensagem chega
+   * no campo em vez de virar um toast genérico.
+   */
+  .refine((v) => v.tipo !== 'auxiliar' || !!v.superior_id, {
+    message: 'Escolha o closer de quem esta pessoa é auxiliar.',
+    path: ['superior_id'],
   })
 export type SalvarVendedorInput = z.infer<typeof salvarVendedorSchema>
 
@@ -521,9 +536,20 @@ export type SalvarTerritorioInput = z.infer<typeof salvarTerritorioSchema>
  * `valor_por_reuniao` numa regra de originador faz o cálculo não achar o parâmetro,
  * devolver null, e a pessoa simplesmente não receber — sem erro nenhum.
  */
+/**
+ * Os tipos que TÊM regra de comissão v1.
+ *
+ * O auxiliar fica de fora, e não por esquecimento: a comissão dele não é uma taxa
+ * própria, é uma fração da comissão do closer — ela só existe no motor v2, derivada dos
+ * lançamentos dele. Uma regra v1 para o auxiliar seria um campo que ninguém consegue
+ * preencher de um jeito que signifique alguma coisa.
+ */
+export const TIPOS_REGRA_V1 = ['sdr', 'vendedor', 'originador'] as const
+export type TipoRegraV1 = (typeof TIPOS_REGRA_V1)[number]
+
 export const salvarRegraSchema = z
   .object({
-    tipo_vendedor: z.enum(TIPOS_VENDEDOR),
+    tipo_vendedor: z.enum(TIPOS_REGRA_V1),
     vendedor_id: uuid.nullable().optional(),
     valor: z.number().positive('O valor tem de ser positivo.'),
     vigente_de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -538,7 +564,7 @@ export const salvarRegraSchema = z
 export type SalvarRegraInput = z.input<typeof salvarRegraSchema>
 
 /** O nome do parâmetro que cada tipo usa — a tela rotula o campo com isto. */
-export const PARAMETRO_DA_REGRA: Record<TipoVendedorId, { chave: string; rotulo: string }> = {
+export const PARAMETRO_DA_REGRA: Record<TipoRegraV1, { chave: string; rotulo: string }> = {
   sdr: { chave: 'valor_por_reuniao', rotulo: 'Valor por reunião agendada' },
   originador: { chave: 'valor_por_milhao', rotulo: 'Valor por milhão convertido' },
   vendedor: { chave: 'valor_por_milhao', rotulo: 'Valor por milhão de volume passivo' },

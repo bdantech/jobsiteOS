@@ -38,6 +38,10 @@ import type { Tables } from '@jobsiteos/core'
  *
  *   SDR também tem recorte, mas para a distribuição semanal — não para nota.
  *
+ *   AUXILIAR DO CLOSER não recebe trabalho: ele acompanha o de um closer. Não tem
+ *   território, não tem carteira e não tem taxa própria — o único campo dele é QUAL
+ *   closer, porque é essa resposta que decide o que ele enxerga e quanto ele ganha.
+ *
  * NÃO EXISTE EXCLUIR. Vendedor se desativa. Apagar levaria junto a explicação de
  * comissões já pagas — o histórico de carteira aponta para ele.
  */
@@ -46,6 +50,10 @@ const SETTINGS_POR_TIPO: Record<TipoVendedorId, string> = {
   sdr: 'Recebe empresas na distribuição semanal, dentro do território e da cota.',
   originador: 'Recebe as NFs das empresas que você escolher abaixo. Nada de território.',
   vendedor: 'Recebe contas por território, e gere as contas passivas da carteira dele.',
+  auxiliar:
+    'Enxerga tudo o que o closer dele enxerga. A comissão é um percentual da comissão '
+    + 'desse closer, rateado entre os auxiliares dele — publique o percentual em '
+    + 'Comissão → Parâmetros.',
 }
 
 /** Território é do closer (recorte de conta) e do SDR (recorte de distribuição). */
@@ -53,6 +61,9 @@ const TEM_TERRITORIO: Record<TipoVendedorId, boolean> = {
   sdr: true,
   vendedor: true,
   originador: false,
+  // O auxiliar herda o recorte do closer: um território próprio lhe daria conta que o
+  // closer dele não tem, que é exatamente o que "auxiliar" não é.
+  auxiliar: false,
 }
 
 export interface EmpresaEscolhida {
@@ -335,6 +346,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
   const [salvando, setSalvando] = React.useState(false)
   const [erro, setErro] = React.useState<string | null>(null)
   const [tipo, setTipo] = React.useState<TipoVendedorId>((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
+  const [superiorId, setSuperiorId] = React.useState<string>(vendedor?.superior_id ?? '')
   const [ehIa, setEhIa] = React.useState(vendedor?.is_ia ?? false)
   const [escolhidas, setEscolhidas] = React.useState<EmpresaEscolhida[]>([])
   const [passivas, setPassivas] = React.useState<EmpresaEscolhida[]>([])
@@ -348,6 +360,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
   React.useEffect(() => {
     if (!aberto) return
     setTipo((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
+    setSuperiorId(vendedor?.superior_id ?? '')
     setEhIa(vendedor?.is_ia ?? false)
     setErro(null)
 
@@ -422,6 +435,9 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
       email_remetente: String(fd.get('email_remetente') ?? '') || null,
       settings: novasSettings,
       ativo: fd.get('ativo') === 'on',
+      // Só vai quando é auxiliar: o CHECK da tabela recusa superior em qualquer outro
+      // tipo, e mandar o valor antigo de quem mudou de tipo seria criar esse caso.
+      superior_id: tipo === 'auxiliar' ? superiorId || null : null,
     })
 
     if (!r.ok) {
@@ -563,6 +579,37 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
               </select>
               <p className="text-xs text-muted-foreground">{SETTINGS_POR_TIPO[tipo]}</p>
             </div>
+
+            {/*
+              O closer do auxiliar é o campo mais importante da tela quando o tipo é
+              esse: ele decide o que a pessoa enxerga E de onde vem a comissão dela.
+              Só closers ativos aparecem — um auxiliar pendurado num SDR não teria
+              linha de VENDEDOR de onde derivar.
+            */}
+            {tipo === 'auxiliar' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="superior_id">Auxiliar de qual closer</Label>
+                <select
+                  id="superior_id"
+                  name="superior_id"
+                  value={superiorId}
+                  onChange={(e) => setSuperiorId(e.target.value)}
+                  required
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Escolha o closer…</option>
+                  {vendedores
+                    .filter((v) => v.tipo === 'vendedor' && v.ativo)
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>{v.nome}</option>
+                    ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Ele passa a enxergar os funis, a carteira e as contas deste closer. O
+                  percentual de repasse é publicado em Comissão → Parâmetros, por closer.
+                </p>
+              </div>
+            )}
 
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={ehIa} onChange={(e) => setEhIa(e.target.checked)} />

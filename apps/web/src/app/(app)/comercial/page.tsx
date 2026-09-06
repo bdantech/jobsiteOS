@@ -18,6 +18,8 @@ const FUNIL_DO_TIPO: Record<string, string> = {
   sdr: '/comercial/sdr',
   vendedor: '/comercial/vendas',
   originador: '/comercial/nfs',
+  // O auxiliar abre onde o closer dele abre: o dia dos dois começa no mesmo lugar.
+  auxiliar: '/comercial/vendas',
 }
 
 export default async function Pagina() {

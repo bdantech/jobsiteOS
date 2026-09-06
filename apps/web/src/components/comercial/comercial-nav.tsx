@@ -19,6 +19,11 @@ import { cn } from '@/lib/utils'
  * funil: é lá que está a próxima ação. Calendário, comissão e carteira são consulta —
  * abrir o módulo neles seria abrir o trabalho pela contabilidade dele.
  *
+ * O AUXILIAR DO CLOSER não tem conjunto próprio: ele vê exatamente o do closer, e a
+ * normalização abaixo é o que garante isso para sempre. Listar 'auxiliar' ao lado de
+ * 'vendedor' em cada aba funcionaria hoje e sairia do lugar na primeira aba nova que
+ * alguém desse ao closer e esquecesse de dar a ele.
+ *
  * Cada tipo vê o seu conjunto:
  *   SDR         funil de reuniões · análise · calendário · comissão
  *   Originador  funil de NFs · funil de certificados · cadastro de fornecedores ·
@@ -112,12 +117,15 @@ export function ComercialNav({
   ehAdmin: boolean
 }) {
   const pathname = usePathname()
+  // O auxiliar navega como o closer dele. O que ele VÊ dentro de cada tela continua
+  // sendo decidido pela RLS, que lhe dá o alcance do superior e nada além.
+  const tipoDeVisao = tipo === 'auxiliar' ? 'vendedor' : tipo
   const itens = ITENS.filter((i) => {
     if (i.somenteAdmin && !ehAdmin) return false
     if (i.somenteGestor && !ehGestor) return false
     if (!i.tipos) return true
     // Gestor enxerga todos os funis mesmo sem ser vendedor de nenhum tipo.
-    return ehGestor || (tipo !== null && i.tipos.includes(tipo))
+    return ehGestor || (tipoDeVisao !== null && i.tipos.includes(tipoDeVisao))
   })
 
   return (
@@ -127,7 +135,7 @@ export function ComercialNav({
         const Icon = item.icon
         // Sem tipo (gestor puro), o rótulo genérico: "Empresas da carteira" e "Passivas na
         // carteira" são a mesma tela, e prometer uma das duas para quem vê as duas mente.
-        const label = (tipo && item.labelPorTipo?.[tipo]) || item.label
+        const label = (tipoDeVisao && item.labelPorTipo?.[tipoDeVisao]) || item.label
         return (
           <Link
             key={item.href}

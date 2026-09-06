@@ -11,6 +11,7 @@ import {
   lancamentosDaCessao,
   sugereRevisao,
   valorParametro,
+  type AuxiliarDoCloser,
   type CessaoConvertida,
   type CommissionParam,
   type ContaComDeriva,
@@ -90,6 +91,28 @@ async function titularesNaData(
     sharePct: Number(r.share_pct),
     isIa: r.is_ia,
   }))
+}
+
+/**
+ * Os auxiliares ativos, com o closer de cada um.
+ *
+ * Carrega TODOS de uma vez, e não os de um closer específico, porque uma cessão pode ter
+ * mais de um titular vendedor — e porque a tabela tem o tamanho de uma equipe comercial,
+ * não de um funil. O motor filtra por superior.
+ *
+ * `ativo` é lido AGORA, não na data da cessão: `vendedores` não guarda histórico de
+ * ativação, e inventar um aqui seria afirmar sobre o passado com dado do presente. Para
+ * o caminho ao vivo — cessão convertida hoje — as duas leituras coincidem, que é o caso
+ * que paga a folha. O recálculo de uma cessão antiga usa a equipe de hoje, e isso está
+ * documentado no lançamento pelo `auxiliares_no_rateio` do snapshot.
+ */
+async function auxiliaresAtivos(): Promise<AuxiliarDoCloser[]> {
+  const { rows } = await pool.query<{ id: string; superior_id: string; is_ia: boolean }>(
+    `select v.id, v.superior_id, v.is_ia
+     from vendedores v
+     where v.tipo = 'auxiliar' and v.ativo and v.superior_id is not null`,
+  )
+  return rows.map((r) => ({ vendedorId: r.id, superiorId: r.superior_id, isIa: r.is_ia }))
 }
 
 async function historicoGestao(empresaId: string | null): Promise<MudancaGestao[]> {
@@ -360,12 +383,17 @@ export async function lancarCessaoConvertida(
     faseManual: (c.sacado_fase_manual ?? null) as FaseConta | null,
   }
 
-  const [tVendedor, tOriginador] = await Promise.all([
+  const [tVendedor, tOriginador, auxiliares] = await Promise.all([
     titularesNaData(c.sacado_empresa_id, 'vendedor', quando),
     titularesNaData(c.cedente_empresa_id, 'originador', quando),
+    auxiliaresAtivos(),
   ])
 
-  const lancamentos = lancamentosDaCessao(cessao, { vendedor: tVendedor, originador: tOriginador }, params)
+  const lancamentos = lancamentosDaCessao(
+    cessao,
+    { vendedor: tVendedor, originador: tOriginador, auxiliares },
+    params,
+  )
 
   // §5 — o bônus de conta fechada só existe na PRIMEIRA conversão do sacado.
   if (primeiraConversao && c.sacado_empresa_id) {
@@ -1252,12 +1280,22 @@ async function preverCessao(
     faseManual: (c.sacado_fase_manual ?? null) as FaseConta | null,
   }
 
-  const [tVendedor, tOriginador] = await Promise.all([
+  /*
+   * Os auxiliares entram na prévia pelo mesmo motivo que tudo o mais entra: ela promete
+   * o que o "aplicar" vai fazer. Omiti-los aqui faria a deriva acusar toda linha de
+   * auxiliar como excedente e sugerir apagá-las.
+   */
+  const [tVendedor, tOriginador, auxiliares] = await Promise.all([
     titularesNaData(c.sacado_empresa_id, 'vendedor', quando),
     titularesNaData(c.cedente_empresa_id, 'originador', quando),
+    auxiliaresAtivos(),
   ])
 
-  return lancamentosDaCessao(cessao, { vendedor: tVendedor, originador: tOriginador }, params)
+  return lancamentosDaCessao(
+    cessao,
+    { vendedor: tVendedor, originador: tOriginador, auxiliares },
+    params,
+  )
 }
 
 export async function derivaComissaoJob(): Promise<DerivaComissao> {

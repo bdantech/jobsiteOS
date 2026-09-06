@@ -14,8 +14,7 @@ export const dynamic = 'force-dynamic'
  */
 export default async function Pagina() {
   const { vendedor, ehGestor } = await contextoComercial()
-  if (!ehGestor && vendedor?.tipo !== 'sdr' && vendedor?.tipo !== 'vendedor') {
-    redirect('/comercial')
-  }
+  const podeLer = ['sdr', 'vendedor', 'auxiliar'].includes(vendedor?.tipo ?? '')
+  if (!ehGestor && !podeLer) redirect('/comercial')
   return <AnaliseDoFunilTela />
 }

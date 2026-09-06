@@ -8381,6 +8381,7 @@ export type Database = {
           is_ia: boolean
           nome: string
           settings: Json
+          superior_id: string | null
           tipo: string
           usuario_id: string | null
           whatsapp_conta_id: string | null
@@ -8393,6 +8394,7 @@ export type Database = {
           is_ia?: boolean
           nome: string
           settings?: Json
+          superior_id?: string | null
           tipo: string
           usuario_id?: string | null
           whatsapp_conta_id?: string | null
@@ -8405,6 +8407,7 @@ export type Database = {
           is_ia?: boolean
           nome?: string
           settings?: Json
+          superior_id?: string | null
           tipo?: string
           usuario_id?: string | null
           whatsapp_conta_id?: string | null
