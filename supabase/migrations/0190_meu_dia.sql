@@ -245,3 +245,6 @@ $$;
 -- Rodar `supabase db pull` reconcilia este arquivo com o banco. Ele não foi colado aqui
 -- à mão de propósito: uma cópia digitada de 800 linhas de plpgsql é uma cópia que já
 -- nasce podendo divergir do que está instalado.
+--   meu_dia_montar_sem_sessao          app__md_montar (a mecânica, sem auth) + meu_dia
+--                                      reduzido a autorizar e delegar; config passa a
+--                                      ser do gestor comercial, não só do Admin

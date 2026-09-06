@@ -32,6 +32,7 @@ import {
   executarDerivaComissao,
   executarRecalculoConta,
   dispararAceitesSdr,
+  dispararResumoMeuDia,
   dispararLiberarDormentes,
   dispararAlertaReclassificacao,
   dispararRotearNotas,
@@ -559,6 +560,14 @@ app.post('/jobs/comercial/aplicar-deriva', (req: Request, res: Response, next: N
 app.post('/jobs/comercial/liberar-dormentes', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararLiberarDormentes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/meu-dia-resumo', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararResumoMeuDia(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

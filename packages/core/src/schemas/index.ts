@@ -329,5 +329,13 @@ export type RegistrarPushExpoInput = z.infer<typeof registrarPushExpoSchema>
 export const prefsNotificacoesSchema = z.object({
   push_web: z.boolean().default(true),
   push_mobile: z.boolean().default(true),
+  /**
+   * O resumo matinal do Meu Dia (04p §5). Separado dos canais porque a pergunta é
+   * outra: `push_web`/`push_mobile` dizem POR ONDE avisar, este diz SE a lista de
+   * trabalho deve procurar a pessoa de manhã. Quem trabalha por fila quer; quem entra
+   * no sistema por outro caminho acha intrusivo — e sem o desligamento fácil, a saída
+   * dessa pessoa é desligar o push inteiro.
+   */
+  resumo_meu_dia: z.boolean().default(true),
 })
 export type PrefsNotificacoes = z.infer<typeof prefsNotificacoesSchema>

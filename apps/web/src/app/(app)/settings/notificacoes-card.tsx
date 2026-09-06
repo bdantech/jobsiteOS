@@ -95,6 +95,35 @@ export function NotificacoesCard({ prefsIniciais }: { prefsIniciais: PrefsNotifi
             />
           </div>
 
+          <Separator />
+
+          {/*
+            Uma pergunta diferente das duas de cima: elas dizem POR ONDE avisar, esta diz
+            SE a lista de trabalho deve procurar a pessoa de manhã. Sem o desligamento
+            próprio, quem acha o resumo intrusivo desliga o push inteiro — e perde junto
+            os avisos que importam.
+          */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="resumo_meu_dia" className="text-sm font-medium">
+                Resumo do Meu Dia, às 8h
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Em dia útil, quantos itens esperam por você e quanto está em jogo. Dia sem
+                item não gera aviso.
+              </p>
+            </div>
+            <Switch
+              id="resumo_meu_dia"
+              name="resumo_meu_dia"
+              checked={prefs.resumo_meu_dia}
+              disabled={isPending}
+              onCheckedChange={(marcado) =>
+                setPrefs((atual) => ({ ...atual, resumo_meu_dia: marcado }))
+              }
+            />
+          </div>
+
           <Button type="submit" disabled={isPending}>
             {isPending ? (
               <>

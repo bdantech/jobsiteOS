@@ -97,9 +97,42 @@ rótulo na tela é honesto: *"se tudo converter"*.
 
 ## Ajustar os limiares
 
-`Settings → Comercial → Meu Dia`, por tipo de vendedor. A tabela `meu_dia_config` guarda
-**só o override** — chave ausente cai no padrão do catálogo. Guardar o catálogo inteiro
-faria cada bloco novo nascer invisível para quem já tem linha salva.
+**Comercial → Configurações → Meu Dia**, por tipo de vendedor. Quem edita é o gestor
+comercial (Admin ou o perfil Comercial) — quem responde pelo time é quem calibra a régua
+dele; deixar isso só com o Admin transformaria cada ajuste num pedido para outra pessoa,
+e limiar que depende de pedido não é ajustado, é suportado.
+
+A tela é **gerada pelo catálogo**. Não é economia de código: é o que garante que um bloco
+novo nasça configurável. Um formulário escrito à mão produziria, na primeira adição, um
+bloco que aparece para o vendedor e não aparece aqui — existe, incomoda, e ninguém
+desliga.
+
+A tabela `meu_dia_config` guarda **só o override** — chave ausente cai no padrão do
+catálogo, e voltar um campo ao padrão APAGA a chave em vez de gravar o mesmo número.
+Assim, se o padrão mudar amanhã, quem nunca mexeu acompanha; quem gravou "5" fica com 5.
+
+## O resumo matinal
+
+`/api/cron/meu-dia-resumo`, às **8h de São Paulo em dia útil** (`0 11 * * 1-5` em UTC).
+Job em `apps/worker/src/jobs/comercial/meu-dia-resumo.ts`.
+
+> *"Bom dia — 12 itens, 3 urgentes, R$ 340k em jogo"*, com deep link para a tela.
+
+Duas decisões que separam hábito de ruído:
+
+- **Dia vazio não notifica.** Um push dizendo "nada para hoje" ensina que a mensagem não
+  precisa ser aberta — e a lição vale também para os dias em que precisava.
+- **Dia útil, não todo dia.** Quem desliga a notificação por causa do sábado desliga para
+  a terça junto.
+
+O número vem de `app__md_montar`, a **mesma** função que a tela chama depois de autorizar.
+Se o push contasse por conta própria, a pessoa abriria o app atrás de doze itens e
+encontraria nove — e a partir daí não abriria mais.
+
+Cada pessoa desliga em **Configurações → Notificações → "Resumo do Meu Dia, às 8h"**. A
+preferência é separada de `push_web`/`push_mobile` porque a pergunta é outra: aquelas
+dizem por onde avisar, esta diz se a lista de trabalho deve procurar a pessoa de manhã.
+Sem o desligamento próprio, quem acha o resumo intrusivo desliga o push inteiro.
 
 A calibragem tem insumo: `meu_dia.item_adiado` e `meu_dia.item_irrelevante`. A distinção
 importa — adiar é escolha de agenda, marcar irrelevante é **voto contra a régua do bloco**,

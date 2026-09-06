@@ -35,6 +35,7 @@ import {
   processarAceitesSdrJob,
   titularidadesJob,
 } from './comercial/comissoes-v2.js'
+import { resumoMeuDiaJob } from './comercial/meu-dia-resumo.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
 import { gerarPitchLead } from './comercial/pitch.js'
 import {
@@ -138,6 +139,7 @@ export type TipoJob =
   | 'comercial-comissoes-v2'
   | 'comercial-sdr-aceites'
   | 'comercial-reclassificacao'
+  | 'comercial-meu-dia-resumo'
   | 'comercial-rotear'
   | 'fornecedores-funil'
   | 'fornecedores-descoberta'
@@ -1251,6 +1253,11 @@ export function dispararAceitesSdr(): string {
 /** Semanal: aponta contas passivas cujo volume desabou. SINALIZA — nunca reclassifica. */
 export function dispararAlertaReclassificacao(): string {
   return dispararAvulso('comercial-reclassificacao', async () => alertaReclassificacaoJob())
+}
+
+/** 8h de SP, dia útil: o resumo do Meu Dia de cada vendedor, com deep link para a tela. */
+export function dispararResumoMeuDia(): string {
+  return dispararAvulso('comercial-meu-dia-resumo', async () => resumoMeuDiaJob())
 }
 
 /*

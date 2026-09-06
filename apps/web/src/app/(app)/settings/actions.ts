@@ -33,6 +33,7 @@ export async function salvarPrefsNotificacoes(
     // An unchecked switch submits nothing at all, which is exactly `false`.
     push_web: formData.get('push_web') === 'on',
     push_mobile: formData.get('push_mobile') === 'on',
+    resumo_meu_dia: formData.get('resumo_meu_dia') === 'on',
   })
 
   if (!parsed.success) {

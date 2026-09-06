@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/client'
 import { salvarConfigAction, salvarMotivoAction } from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 import { VendedorForm } from './vendedor-form'
+import { ConfigMeuDia } from './meu-dia/config-meu-dia'
 import { Parametros } from './comissao/parametros'
 import { ConfigFornecedores } from './fornecedores/config'
 
@@ -419,6 +420,13 @@ export function ConfigComercial() {
         mundo que tem o módulo.
       */}
       <ConfigFornecedores />
+
+      {/*
+        Meu Dia por último porque é a única seção que não configura o SISTEMA — configura
+        a LEITURA que cada cargo faz dele. Ela lê o catálogo de blocos de packages/core,
+        então um bloco novo nasce configurável aqui sem ninguém tocar nesta tela.
+      */}
+      <ConfigMeuDia />
 
       <VendedorForm
         aberto={abrindoForm}

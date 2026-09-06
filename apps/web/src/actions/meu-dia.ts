@@ -176,3 +176,38 @@ export async function concluirTarefaAction(id: string): Promise<ResultadoMeuDia>
   revalidatePath('/comercial/meu-dia')
   return { ok: true }
 }
+
+/**
+ * A configuração de um cargo. Gestor comercial (Admin ou Comercial) — a mesma régua da
+ * policy, e a mesma da tela de Configurações do Comercial onde ela mora.
+ *
+ * Recebe o objeto de overrides JÁ limpo pela tela: campo que voltou ao padrão não vem.
+ * Gravar o padrão junto prenderia quem nunca mexeu num valor antigo no dia em que o
+ * catálogo mudasse.
+ */
+export async function salvarConfigMeuDiaAction(input: {
+  tipoVendedor: string
+  blocos: Record<string, unknown>
+}): Promise<ResultadoMeuDia> {
+  const { erro, supabase, usuarioId } = await autorizar()
+  if (erro) return erro
+
+  if (!['sdr', 'vendedor', 'originador'].includes(input.tipoVendedor)) {
+    return { ok: false, message: 'Cargo inválido.' }
+  }
+
+  const { error } = await supabase
+    .from('meu_dia_config')
+    .update({
+      blocos: input.blocos as never,
+      atualizado_por: usuarioId,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('tipo_vendedor', input.tipoVendedor)
+
+  if (error) return { ok: false, message: error.message }
+
+  revalidatePath('/comercial/meu-dia')
+  revalidatePath('/comercial/admin')
+  return { ok: true }
+}

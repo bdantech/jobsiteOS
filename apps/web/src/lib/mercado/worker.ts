@@ -258,6 +258,11 @@ export async function dispararDistribuirSdr(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/distribuir-sdr', {}, 'comercial-distribuir')
 }
 
+/** 8h de SP, dia útil: o resumo matinal do Meu Dia (04p §5). */
+export async function dispararResumoMeuDia(): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/meu-dia-resumo', {}, 'comercial-meu-dia-resumo')
+}
+
 /**
  * O pitch do SDR para um lead. SÍNCRONO e devolve o corpo, como o briefing do
  * Jurídico: quem abriu o card está com a tela aberta esperando o texto para discar.
