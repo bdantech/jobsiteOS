@@ -29,6 +29,16 @@ um `if` por tipo de bloco na UI, e um bloco novo nasce com o widget certo por di
 | `rolagem` | lista longa num cartão só | fornecedores a cadastrar |
 | `lista` | poucos itens, cada um com a sua ação | o padrão |
 
+O **mapa da carteira** é um treemap (squarify): a área de cada retângulo é a fração do
+limite aprovado, e a soma delas é o componente inteiro. A versão anterior era uma fileira
+de quadrados com `flex-wrap`, e deixava um rio de espaço vazio à direita que entrava na
+leitura como se dissesse algo sobre a última linha. O preço do treemap é que a cauda fica
+pequena de verdade: na carteira do Fabio, 13 dos 29 retângulos comportam o nome; os outros
+16 são contas de R$ 300 mil para baixo numa carteira de R$ 18 milhões, e continuam com
+tooltip e clique. Preferimos a área honesta ao rótulo em todos — o mapa existe para dizer
+onde está o limite, e é o retângulo grande que tem de ler grande. Medido: cobertura de
+100,00%, zero sobreposição, pior razão de aspecto 2,5:1.
+
 **A paleta não foi escolhida no olho.** São os slots categóricos validados do sistema de
 dataviz, rodados no validador para as duas superfícies: pior par adjacente em ΔE 9,1
 (claro) e 8,4 (escuro) sob simulação de daltonismo, acima do piso de 8. O modo escuro tem
@@ -94,7 +104,7 @@ bloco que aparece na tela e não aparece nas configurações.
 | Reuniões pendentes de aceite | `sdr_aceites` pendentes com destino nele | — |
 | Crédito decidido | `vendas` + `analises_credito` aprovada/parcial/negada | — |
 | Propostas sem resposta | `vendas` em `proposta_enviada` | dias parada (4) |
-| Carteira passiva ociosa | `clientes_onepay` das empresas em `gestao_passiva` — parada há N dias **ou** apontada pelo temperature report | dias sem antecipar (30), limite mínimo (50k) |
+| Carteira ociosa | `clientes_onepay` da carteira do closer — parada há N dias **ou** apontada pelo temperature report. Traz as duas naturezas (`passivo` e `prospeccao_ativa`), e a tela filtra por elas | dias sem antecipar (30), limite mínimo (50k) |
 | Novos clientes | `empresas.marco_ativacao` dentro da janela | janela em dias (60) |
 | Certificados vencendo | `certificados` das empresas da carteira | avisar faltando (30) |
 | Análises expirando | `analises_credito.expira_em` | avisar faltando (60) |
@@ -112,6 +122,14 @@ manuais.
 > `requires_attention` no report, mas antecipou há dois dias — pela régua antiga ela sumia
 > justamente do dia de quem devia estar olhando para ela. O sinal da plataforma entra como
 > segunda porta, e a ordem é o limite ocioso, do maior para o menor.
+
+> **O bloco nunca foi só de passivas.** `v_passiva` junta os papéis `gestao_passiva` e
+> `vendedor`, e no papel `vendedor` cabem tanto a conta passiva quanto a que está em
+> prospecção ativa. No Fabio são 8 passivas e 7 ativas — e as ativas respondem por R$ 13,4
+> dos R$ 18,0 milhões ociosos, incluindo as três maiores. O título dizia "Carteira passiva
+> ociosa" sobre uma lista majoritariamente ativa; passou a "Carteira ociosa", `meta`
+> carrega o `gestao_operacao`, e o widget filtra entre ambas / passiva / ativa. O teto do
+> bloco subiu de 12 para 20 porque um teto aplicado ANTES do filtro faz o filtro mentir.
 
 ## Comissão projetada
 

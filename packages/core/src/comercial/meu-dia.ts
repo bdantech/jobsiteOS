@@ -351,7 +351,12 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
   },
   {
     tipo: 'carteira_ociosa',
-    rotulo: 'Carteira passiva ociosa',
+    /*
+     * Era "Carteira PASSIVA ociosa", e o bloco nunca foi só de passivas: a carteira do
+     * closer junta as duas naturezas, e no Fabio as contas em prospecção ativa são a
+     * maior parte do dinheiro parado. O título dizia o contrário do que a lista trazia.
+     */
+    rotulo: 'Carteira ociosa',
     descricao:
       'Cliente com limite aprovado e sem operar. O valor ao lado é dinheiro parado que já '
       + 'foi aprovado — não é potencial, é limite ocioso.',
@@ -360,7 +365,12 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     visual: 'barras',
     acao: 'abrir_empresa',
     acaoRotulo: 'Abrir o cliente',
-    maxPadrao: 12,
+    /*
+     * Vinte, e não doze, porque a tela filtra por natureza da conta. Um teto que corta a
+     * lista ANTES do filtro faz o filtro mentir: "prospecção ativa" mostraria as ativas
+     * que couberam nas doze, não as ativas que existem.
+     */
+    maxPadrao: 20,
     limiaresPadrao: { dias_sem_antecipar: 30, limite_minimo: 50000 },
     limiarRotulos: {
       dias_sem_antecipar: 'Dias sem antecipar',

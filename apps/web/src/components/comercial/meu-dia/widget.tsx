@@ -15,11 +15,13 @@ import { cn } from '@/lib/utils'
  * "ver todos". Altura previsível, para a grade não dançar quando um bloco cresce.
  */
 export function Widget({
-  titulo, descricao, contexto, children, rodape, className,
+  titulo, descricao, contexto, filtro, children, rodape, className,
 }: {
   titulo: string
   descricao?: string
   contexto?: React.ReactNode
+  /** Controle que recorta o conteúdo. Fica no cabeçalho, junto do que ele governa. */
+  filtro?: React.ReactNode
   children: React.ReactNode
   rodape?: React.ReactNode
   className?: string
@@ -40,6 +42,8 @@ export function Widget({
         </div>
         {contexto ? <div className="shrink-0 text-sm tabular-nums">{contexto}</div> : null}
       </header>
+
+      {filtro ? <div>{filtro}</div> : null}
 
       <div className="min-h-0 flex-1">{children}</div>
 
@@ -176,6 +180,44 @@ export function ListaDeItens({
           onDescartar={() => onDescartar(item)}
           onConcluir={() => onConcluir(item)}
         />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * O filtro de um widget: opções lado a lado, com a CONTAGEM em cada uma.
+ *
+ * A contagem não é enfeite — é ela que dispensa clicar em cada opção para descobrir se
+ * há algo lá. Um filtro que leva a uma lista vazia é um clique que o número já teria
+ * evitado.
+ */
+export function SegmentoFiltro<T extends string>({
+  valor, onMudar, opcoes, rotulo,
+}: {
+  valor: T
+  onMudar: (v: T) => void
+  opcoes: { valor: T; rotulo: string; total: number }[]
+  rotulo: string
+}) {
+  return (
+    <div role="group" aria-label={rotulo} className="flex rounded-md border border-border p-0.5">
+      {opcoes.map((o) => (
+        <button
+          key={o.valor}
+          type="button"
+          aria-pressed={valor === o.valor}
+          onClick={() => onMudar(o.valor)}
+          className={cn(
+            'flex-1 rounded-[3px] px-2 py-1 text-[11px] transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            valor === o.valor
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {o.rotulo} <span className="tabular-nums opacity-70">{o.total}</span>
+        </button>
       ))}
     </div>
   )

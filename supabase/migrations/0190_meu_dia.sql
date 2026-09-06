@@ -252,3 +252,12 @@ $$;
 --                                      _concluir_tarefa — a régua de adiar, descartar e
 --                                      concluir sai das plataformas e vai para o banco,
 --                                      porque o celular não tem server actions
+--   meu_dia_nomes_e_widgets            fornecedor sem ficha ganha o nome da nota;
+--                                      certificados e inbound viram bolhas
+--   meu_dia_conversas_e_carteira       conversa sem empresa ganha o contato; carteira
+--                                      ociosa passa a ter o report como segunda porta
+--   meu_dia_closer_e_mapa              mapa da carteira com nome e status
+--   meu_dia_carteira_ociosa_por_gestao `gestao_operacao` viaja no meta do bloco de
+--                                      carteira ociosa: ele sempre trouxe as duas
+--                                      naturezas (passiva e prospecção ativa) sem
+--                                      dizer qual era qual, e é a tela que filtra

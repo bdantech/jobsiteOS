@@ -27,9 +27,9 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
   BarrasRanking, GraficoBolhas, ListaRolagem, PizzaPorChave,
-  STATUS_CORES, STATUS_ROTULOS, type Bolha,
+  STATUS_CORES, STATUS_ROTULOS, squarify, tintaSobre, useLargura, type Bolha,
 } from './graficos'
-import { LinhaItem, ListaDeItens, Widget, destinoDoItem } from './widget'
+import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from './widget'
 
 /**
  * Meu Dia — grade de WIDGETS, não pilha de cards.
@@ -60,6 +60,21 @@ const COR_GRUPO: Record<GrupoMeuDia, string> = {
   carteira: 'bg-emerald-500',
   credito: 'bg-amber-500',
   cadastro: 'bg-slate-400',
+}
+
+/**
+ * A natureza da conta na carteira do closer.
+ *
+ * `passivo` é a conta que ele GERE e parou de operar; `prospeccao_ativa` é a conta que
+ * ele TRABALHA e ainda não começou. As duas aparecem com limite ocioso e as duas pedem
+ * uma ligação — mas não a mesma ligação, e é por isso que o filtro existe.
+ */
+type Natureza = 'todas' | 'passivo' | 'prospeccao_ativa'
+
+const NATUREZA_ROTULO: Record<Natureza, string> = {
+  todas: 'Ambas',
+  passivo: 'Passiva',
+  prospeccao_ativa: 'Ativa',
 }
 
 /**
@@ -292,6 +307,7 @@ function WidgetDoBloco({
 }) {
   const cat = blocoCatalogado(bloco.tipo)
   const [fatia, setFatia] = React.useState<string | null>(null)
+  const [natureza, setNatureza] = React.useState<Natureza>('todas')
   const rotulo = cat?.rotulo ?? bloco.tipo
   const contexto = bloco.valor_total > 0 ? brl(bloco.valor_total) : `${bloco.total}`
   const restantes = bloco.total - bloco.itens.length
@@ -399,7 +415,22 @@ function WidgetDoBloco({
   // ── Barras: ranking por uma grandeza ────────────────────────────────────
   if (cat?.visual === 'barras') {
     const ehEspera = bloco.tipo === 'conversas_aguardando_resposta'
-    const itens = ordenarItens(bloco.itens)
+    const ehCarteira = bloco.tipo === 'carteira_ociosa'
+
+    const naNatureza = (i: ItemMeuDia, n: Natureza) =>
+      n === 'todas' || String(i.meta.gestao_operacao ?? '') === n
+
+    const doFiltro = ehCarteira ? bloco.itens.filter((i) => naNatureza(i, natureza)) : bloco.itens
+
+    /* A barra mais longa continua sendo a maior do BLOCO, e não a maior do recorte:
+       trocar a referência a cada filtro faria a segunda maior conta virar 100% e parecer
+       que ela é o problema. */
+    const teto = Math.max(
+      ...bloco.itens.map((i) => (ehEspera ? Number(i.meta.horas ?? 0) : (i.valor ?? 0))),
+      1,
+    )
+
+    const itens = ordenarItens(doFiltro)
       .slice(0, 8)
       .map((i) => ({
         id: i.referencia_id,
@@ -410,15 +441,56 @@ function WidgetDoBloco({
           ? corPorEspera(Number(i.meta.horas ?? 0))
           : STATUS_CORES[String(i.meta.operation_status ?? '')],
       }))
+
+    const ocioso = doFiltro.reduce((s, i) => s + (i.valor ?? 0), 0)
+    const sobrando = doFiltro.length - itens.length
+
     return (
       <Widget
         titulo={rotulo}
-        descricao={ehEspera ? 'Do que espera há mais tempo para o mais recente' : cat.descricao}
-        contexto={contexto}
-        rodape={rodape}
+        descricao={
+          ehEspera
+            ? 'Do que espera há mais tempo para o mais recente'
+            : ehCarteira
+              ? 'Do maior limite parado para o menor, com a cor do temperature report'
+              : cat.descricao
+        }
+        contexto={ehCarteira ? brl(ocioso) : contexto}
+        filtro={
+          ehCarteira ? (
+            <SegmentoFiltro<Natureza>
+              rotulo="Natureza da conta"
+              valor={natureza}
+              onMudar={setNatureza}
+              opcoes={(['todas', 'passivo', 'prospeccao_ativa'] as const).map((v) => ({
+                valor: v,
+                rotulo: NATUREZA_ROTULO[v],
+                total: bloco.itens.filter((i) => naNatureza(i, v)).length,
+              }))}
+            />
+          ) : null
+        }
+        rodape={
+          ehCarteira ? (
+            doFiltro.length === 0 ? (
+              <span>Nenhuma conta desta natureza está com limite parado.</span>
+            ) : sobrando > 0 ? (
+              <button
+                type="button"
+                className="underline"
+                onClick={() => onAbrirLista(rotulo, doFiltro)}
+              >
+                e mais {sobrando} — ver todas
+              </button>
+            ) : null
+          ) : (
+            rodape
+          )
+        }
       >
         <BarrasRanking
           itens={itens}
+          maximo={teto}
           formatar={ehEspera ? (n) => `${n}h` : brl}
           onItem={(id) => {
             const item = bloco.itens.find((i) => i.referencia_id === id)
@@ -533,7 +605,7 @@ function IndicadorDoCargo({
       rotulo="Limite ocioso"
       valor={brl(b?.valor_total ?? 0)}
       detalhe={`${b?.total ?? 0} cliente(s)`}
-      onClick={() => onAbrir({ titulo: 'Carteira passiva ociosa', itens: b?.itens ?? [] })}
+      onClick={() => onAbrir({ titulo: 'Carteira ociosa', itens: b?.itens ?? [] })}
     />
   )
 }
@@ -574,10 +646,28 @@ function Timeline({ itens }: { itens: ItemMeuDia[] }) {
  * A cor era a ociosidade em dias, que é um proxy. O report é a leitura da plataforma
  * sobre a saúde da conta — usar o proxy existindo a leitura direta é escolher o pior dos
  * dois. E cada quadrado leva o nome: um mapa de retângulos sem rótulo é bonito e mudo.
+ *
+ * O LAYOUT é um treemap (squarify), e não uma fileira de quadrados que quebra linha. Os
+ * dois desenham a mesma informação; a diferença é a sobra. Com `flex-wrap`, a última
+ * linha ficava pela metade e o vazio à direita entrava na leitura como se dissesse algo.
+ * No treemap a área é a fração do limite e a soma delas é o componente inteiro — não há
+ * espaço morto para interpretar.
  */
+const ALTURA_MAPA = 240
+
 function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
-  const ordenados = [...clientes].sort((a, b) => b.limite - a.limite)
-  const maior = Math.max(...ordenados.map((c) => c.limite), 1)
+  const [ref, largura] = useLargura<HTMLDivElement>()
+
+  const ordenados = React.useMemo(
+    () => [...clientes].sort((a, b) => b.limite - a.limite),
+    [clientes],
+  )
+  /* Squarify precisa da entrada em ordem decrescente — é o que lhe permite fechar cada
+     faixa antes que a proporção dos retângulos piore. */
+  const caixas = React.useMemo(
+    () => squarify(ordenados.map((c) => c.limite), largura, ALTURA_MAPA),
+    [ordenados, largura],
+  )
 
   const porStatus = new Map<string, number>()
   for (const c of ordenados) {
@@ -588,7 +678,7 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
   return (
     <Widget
       titulo="Minha carteira passiva"
-      descricao="Tamanho pelo limite, cor pelo temperature report"
+      descricao="Área pelo limite aprovado, cor pelo temperature report"
       contexto={`${ordenados.length}`}
       rodape={
         <span className="flex flex-wrap gap-x-3 gap-y-1">
@@ -605,23 +695,49 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
         </span>
       }
     >
-      <div className="flex max-h-56 flex-wrap content-start gap-1 overflow-y-auto">
-        {ordenados.map((c) => {
-          const status = String((c as { operation_status?: string }).operation_status ?? 'operating_normally')
-          const lado = Math.max(40, Math.round(Math.sqrt(c.limite / maior) * 92))
+      <div ref={ref} className="relative w-full" style={{ height: ALTURA_MAPA }}>
+        {ordenados.map((c, i) => {
+          const r = caixas[i]
+          if (!r || r.w <= 0 || r.h <= 0) return null
+          const status = String(
+            (c as { operation_status?: string }).operation_status ?? 'operating_normally',
+          )
+          const fundo = STATUS_CORES[status] ?? '#94a3b8'
+          /* O nome só entra onde cabe inteiro o suficiente para ser lido; onde não cabe,
+             o `title` e o clique continuam lá. Meio nome truncado num retângulo de 30px
+             não informa — só suja. */
+          const cabeNome = r.w >= 44 && r.h >= 20
+          const cabeValor = r.w >= 92 && r.h >= 44
           return (
             <Link
               key={c.cnpj}
               href={c.empresa_id ? `/empresas/${c.empresa_id}` : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ width: lado, height: lado, backgroundColor: STATUS_CORES[status] ?? '#94a3b8' }}
-              title={`${c.nome} — ${brl(c.limite_disponivel)} disponíveis · ${STATUS_ROTULOS[status] ?? status}`}
-              className="flex items-end overflow-hidden rounded p-1 transition-transform hover:scale-105"
+              title={`${c.nome} — limite de ${brl(c.limite)}, ${brl(c.limite_disponivel)} disponíveis · ${
+                STATUS_ROTULOS[status] ?? status
+              }`}
+              /* O `inset` de 1px de cada lado dá os 2px de superfície entre preenchimentos
+                 vizinhos — sem ele, dois retângulos do mesmo status viram um só. */
+              style={{
+                position: 'absolute',
+                left: r.x + 1,
+                top: r.y + 1,
+                width: Math.max(r.w - 2, 0),
+                height: Math.max(r.h - 2, 0),
+                backgroundColor: fundo,
+                color: tintaSobre(fundo),
+              }}
+              className="overflow-hidden rounded-[3px] p-1 leading-tight transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="line-clamp-2 text-[9px] font-medium leading-tight text-white/95">
-                {c.nome}
-              </span>
+              {cabeNome ? (
+                <span className="line-clamp-2 text-[9px] font-medium">{c.nome}</span>
+              ) : null}
+              {cabeValor ? (
+                <span className="mt-0.5 block text-[9px] tabular-nums opacity-80">
+                  {brl(c.limite)}
+                </span>
+              ) : null}
             </Link>
           )
         })}
