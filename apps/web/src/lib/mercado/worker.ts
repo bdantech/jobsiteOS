@@ -263,6 +263,37 @@ export async function dispararResumoMeuDia(): Promise<DispararJobResultado> {
   return postar('/jobs/comercial/meu-dia-resumo', {}, 'comercial-meu-dia-resumo')
 }
 
+// ─── Report Semanal Executivo (Prompt 04q) ──────────────────────────────────
+
+export interface OpcoesReportSemanal {
+  inicio?: string
+  fim?: string
+  enviar?: boolean
+  destinatariosTeste?: { email: string; nome?: string }[]
+  criadoPor?: string | null
+  sincrono?: boolean
+}
+
+/**
+ * Gera o report. O cron chama sem nada e recebe 202; a aba chama com `sincrono: true` e
+ * espera — quem clicou "Gerar PDF agora" está com a tela aberta à espera do link, e um
+ * 202 faria a aba perguntar "já?" para um job de uns quinze segundos.
+ *
+ * O teto é generoso pela mesma razão do clique de descoberta: o caminho tem uma chamada ao
+ * modelo, o desenho do PDF e o upload. Quinze segundos devolveriam "não foi possível falar
+ * com o worker" para um report que rodou e foi guardado.
+ */
+export async function dispararReportSemanal(
+  opcoes: OpcoesReportSemanal = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/reports/gerar-semanal', opcoes, 'reports-gerar-semanal', 120_000)
+}
+
+/** Diário e barato: reescreve a série mensal que sustenta a média de 12 meses. */
+export async function dispararMaterializarSeriesReport(): Promise<DispararJobResultado> {
+  return postar('/jobs/reports/materializar-series', {}, 'reports-materializar-series')
+}
+
 /**
  * O pitch do SDR para um lead. SÍNCRONO e devolve o corpo, como o briefing do
  * Jurídico: quem abriu o card está com a tela aberta esperando o texto para discar.

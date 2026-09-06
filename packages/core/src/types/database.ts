@@ -5653,6 +5653,120 @@ export type Database = {
           },
         ]
       }
+      report_config: {
+        Row: {
+          assunto_template: string | null
+          ativo: boolean
+          atualizado_em: string
+          atualizado_por: string | null
+          destinatarios: Json
+          dias_semana: number[]
+          horario: string
+          id: string
+          timezone: string
+          tipo: string
+        }
+        Insert: {
+          assunto_template?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          destinatarios?: Json
+          dias_semana?: number[]
+          horario?: string
+          id?: string
+          timezone?: string
+          tipo?: string
+        }
+        Update: {
+          assunto_template?: string | null
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          destinatarios?: Json
+          dias_semana?: number[]
+          horario?: string
+          id?: string
+          timezone?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      report_execucoes: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          dados: Json
+          destinatarios_enviados: Json | null
+          enviado_em: string | null
+          erro: string | null
+          id: string
+          pdf_url: string | null
+          periodo_fim: string
+          periodo_inicio: string
+          resumo_ia: string | null
+          status: string
+          tentativas: number
+          tipo: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          dados?: Json
+          destinatarios_enviados?: Json | null
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          pdf_url?: string | null
+          periodo_fim: string
+          periodo_inicio: string
+          resumo_ia?: string | null
+          status?: string
+          tentativas?: number
+          tipo?: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          dados?: Json
+          destinatarios_enviados?: Json | null
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          pdf_url?: string | null
+          periodo_fim?: string
+          periodo_inicio?: string
+          resumo_ia?: string | null
+          status?: string
+          tentativas?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
+      report_series: {
+        Row: {
+          atualizado_em: string
+          competencia: string
+          metrica: string
+          peso: number
+          valor: number
+        }
+        Insert: {
+          atualizado_em?: string
+          competencia: string
+          metrica: string
+          peso?: number
+          valor?: number
+        }
+        Update: {
+          atualizado_em?: string
+          competencia?: string
+          metrica?: string
+          peso?: number
+          valor?: number
+        }
+        Relationships: []
+      }
       meu_dia_config: {
         Row: {
           atualizado_em: string

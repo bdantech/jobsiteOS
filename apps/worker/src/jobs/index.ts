@@ -36,6 +36,9 @@ import {
   titularidadesJob,
 } from './comercial/comissoes-v2.js'
 import { resumoMeuDiaJob } from './comercial/meu-dia-resumo.js'
+import {
+  gerarReportSemanal, materializarSeriesReport, type OpcoesReport,
+} from './reports/semanal.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
 import { gerarPitchLead } from './comercial/pitch.js'
 import {
@@ -140,6 +143,8 @@ export type TipoJob =
   | 'comercial-sdr-aceites'
   | 'comercial-reclassificacao'
   | 'comercial-meu-dia-resumo'
+  | 'reports-gerar-semanal'
+  | 'reports-materializar-series'
   | 'comercial-rotear'
   | 'fornecedores-funil'
   | 'fornecedores-descoberta'
@@ -1258,6 +1263,27 @@ export function dispararAlertaReclassificacao(): string {
 /** 8h de SP, dia útil: o resumo do Meu Dia de cada vendedor, com deep link para a tela. */
 export function dispararResumoMeuDia(): string {
   return dispararAvulso('comercial-meu-dia-resumo', async () => resumoMeuDiaJob())
+}
+
+/*
+ * Report Semanal Executivo (04q).
+ *
+ * DOIS jobs, e a separação é de custo e de cadência:
+ *
+ *   series   diário, barato, só reescreve a série mensal que sustenta a média de 12
+ *            meses. Roda de madrugada e não manda e-mail nenhum.
+ *   semanal  nos dias configurados: monta o snapshot, chama o modelo, desenha o PDF,
+ *            guarda no Storage e envia. É o único que fala com o mundo de fora.
+ *
+ * A prévia sob demanda ("Gerar PDF agora") usa o MESMO job com `enviar: false` — um
+ * segundo caminho de geração seria um segundo lugar onde os números podem divergir.
+ */
+export function dispararReportSemanal(opcoes: OpcoesReport = {}): string {
+  return dispararAvulso('reports-gerar-semanal', async () => gerarReportSemanal(opcoes))
+}
+
+export function dispararMaterializarSeriesReport(): string {
+  return dispararAvulso('reports-materializar-series', async () => materializarSeriesReport())
 }
 
 /*

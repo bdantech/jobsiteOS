@@ -53,6 +53,14 @@ export const EVENTO_TIPOS = {
   FATURAMENTO_REESTIMADO: 'faturamento.reestimado',
   ESTIMADOR_RECALIBRADO: 'estimador.recalibrado',
 
+  /*
+   * Report semanal (04q). Sem empresa_id: o report é da GESTÃO, não de uma conta — e a
+   * coluna aceita nulo justamente para os eventos que falam do sistema, e não de alguém.
+   */
+  REPORT_GERADO: 'report.gerado',
+  REPORT_ENVIADO: 'report.enviado',
+  REPORT_FALHOU: 'report.falhou',
+
   // Antecipação (funil de NFs)
   NF_SINCRONIZADA: 'nf.sincronizada',
   NF_FAIXA_ALTERADA: 'nf.faixa_alterada',

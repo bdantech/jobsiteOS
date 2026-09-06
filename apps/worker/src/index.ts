@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { arvoreSchema } from '../../../packages/core/src/mercado/filters.js'
 import { camadaComRegraSchema } from '../../../packages/core/src/mercado/schemas.js'
 import { exigirSegredo } from './auth.js'
+import { gerarReportSemanal } from './jobs/reports/semanal.js'
 import { pingDb, pool } from './db.js'
 import { env } from './env.js'
 import { logger } from './logger.js'
@@ -33,6 +34,8 @@ import {
   executarRecalculoConta,
   dispararAceitesSdr,
   dispararResumoMeuDia,
+  dispararReportSemanal,
+  dispararMaterializarSeriesReport,
   dispararLiberarDormentes,
   dispararAlertaReclassificacao,
   dispararRotearNotas,
@@ -568,6 +571,49 @@ app.post('/jobs/comercial/liberar-dormentes', (_req: Request, res: Response, nex
 app.post('/jobs/comercial/meu-dia-resumo', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararResumoMeuDia(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * Report Semanal (04q). SÍNCRONO quando a prévia é pedida da tela, e assíncrono no cron:
+ * quem clicou "Gerar PDF agora" está com a tela aberta esperando o link, e um 202 faria a
+ * aba ficar perguntando "já?" para um job que leva quinze segundos.
+ */
+const reportSemanalSchema = z.object({
+  inicio: z.string().date().optional(),
+  fim: z.string().date().optional(),
+  enviar: z.boolean().optional(),
+  destinatariosTeste: z.array(z.object({ email: z.string().email(), nome: z.string().optional() })).optional(),
+  criadoPor: z.string().uuid().nullable().optional(),
+  sincrono: z.boolean().optional(),
+})
+
+app.post('/jobs/reports/gerar-semanal', (req: Request, res: Response, next: NextFunction) => {
+  let o: z.infer<typeof reportSemanalSchema>
+  try {
+    o = reportSemanalSchema.parse(req.body ?? {})
+  } catch (erro) {
+    return next(erro)
+  }
+  const { sincrono, ...opcoes } = o
+  if (sincrono) {
+    gerarReportSemanal(opcoes)
+      .then((r) => res.status(200).json(r))
+      .catch(next)
+    return
+  }
+  try {
+    res.status(202).json({ job_id: dispararReportSemanal(opcoes), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/reports/materializar-series', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararMaterializarSeriesReport(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

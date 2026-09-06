@@ -152,6 +152,14 @@
     {
       "path": "/api/cron/webhooks-entregar",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/reports-series",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/reports-semanal",
+      "schedule": "0 9 * * *"
     }
   ]
 }
