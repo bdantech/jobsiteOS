@@ -248,3 +248,7 @@ $$;
 --   meu_dia_montar_sem_sessao          app__md_montar (a mecânica, sem auth) + meu_dia
 --                                      reduzido a autorizar e delegar; config passa a
 --                                      ser do gestor comercial, não só do Admin
+--   meu_dia_acoes_por_rpc              app_meu_dia_ocultar / _reexibir /
+--                                      _concluir_tarefa — a régua de adiar, descartar e
+--                                      concluir sai das plataformas e vai para o banco,
+--                                      porque o celular não tem server actions

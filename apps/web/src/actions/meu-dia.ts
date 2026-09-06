@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { EVENTO_TIPOS, blocoCatalogado } from '@jobsiteos/core'
+import { blocoCatalogado } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 
@@ -33,27 +33,12 @@ async function autorizar() {
 }
 
 /**
- * O vendedor cujo dia esta pessoa MEXE.
- *
- * Vem do banco (`app_meu_dia_alvos`), que é a mesma régua da policy de escrita: eu, e o
- * meu closer quando sou auxiliar. Escolher aqui o primeiro da lista é seguro porque o
- * auxiliar e o closer compartilham a fila — adiar por um é adiar pelos dois.
- */
-async function vendedorDoDia(
-  supabase: NonNullable<Awaited<ReturnType<typeof autorizar>>['supabase']>,
-): Promise<string | null> {
-  const { data } = await supabase.rpc('app_meu_dia_alvos' as never)
-  const alvos = (data ?? []) as string[]
-  return alvos[0] ?? null
-}
-
-/**
  * "Hoje não" e "isto não devia estar aqui".
  *
- * A distinção é o que alimenta a calibragem dos limiares depois: um adiamento é uma
- * escolha de agenda, um descarte é um voto contra a régua do bloco. Por isso o descarte
- * pede motivo e emite evento — sem o motivo, a única informação que sobraria é que
- * alguém não gostou, e não dá para ajustar um limiar com isso.
+ * A régua e o evento de calibragem moram no BANCO (`app_meu_dia_ocultar`), e não aqui:
+ * o mobile não tem server actions e fala com o Postgres direto, então uma versão em
+ * TypeScript seria a segunda implementação de esconder um item — uma emitindo o evento,
+ * outra esquecendo. Esta função é o botão; a decisão é do RPC.
  */
 export async function ocultarItemAction(input: {
   tipoItem: string
@@ -61,48 +46,26 @@ export async function ocultarItemAction(input: {
   acao: 'adiado' | 'irrelevante'
   adiadoAte?: string | null
   motivo?: string | null
+  empresaId?: string | null
 }): Promise<ResultadoMeuDia> {
-  const { erro, supabase, usuarioId } = await autorizar()
+  const { erro, supabase } = await autorizar()
   if (erro) return erro
 
   const catalogo = blocoCatalogado(input.tipoItem)
   if (!catalogo) return { ok: false, message: 'Bloco desconhecido.' }
-  if (input.acao === 'adiado' && !input.adiadoAte) {
-    return { ok: false, message: 'Escolha até quando adiar — sem data, o item sumiria para sempre.' }
-  }
 
-  const vendedorId = await vendedorDoDia(supabase)
-  if (!vendedorId) return { ok: false, message: 'Você não tem um cadastro de vendedor ativo.' }
-
-  const { error } = await supabase.from('meu_dia_itens_ocultos').upsert(
-    {
-      vendedor_id: vendedorId,
+  const { error } = await supabase.rpc('app_meu_dia_ocultar' as never, {
+    p: {
       tipo_item: input.tipoItem,
       referencia_id: input.referenciaId,
       acao: input.acao,
-      adiado_ate: input.acao === 'adiado' ? input.adiadoAte : null,
-      motivo: input.motivo ?? null,
-    },
-    { onConflict: 'vendedor_id,tipo_item,referencia_id' },
-  )
-  if (error) return { ok: false, message: error.message }
-
-  /*
-   * O evento é best-effort: uma falha ao registrar não desfaz a escolha da pessoa. Ele
-   * existe para a calibragem (§6), não para o funcionamento da tela.
-   */
-  await supabase.from('empresa_eventos').insert({
-    empresa_id: null,
-    tipo: input.acao === 'adiado' ? EVENTO_TIPOS.MEU_DIA_ITEM_ADIADO : EVENTO_TIPOS.MEU_DIA_ITEM_IRRELEVANTE,
-    ator_usuario_id: usuarioId,
-    payload: {
-      resumo: `${catalogo.rotulo}: item ${input.acao === 'adiado' ? 'adiado' : 'marcado como irrelevante'}.`,
-      bloco: input.tipoItem,
-      referencia: input.referenciaId,
-      motivo: input.motivo ?? null,
       adiado_ate: input.adiadoAte ?? null,
-    } as never,
-  })
+      motivo: input.motivo ?? null,
+      empresa_id: input.empresaId ?? null,
+      rotulo: catalogo.rotulo,
+    },
+  } as never)
+  if (error) return { ok: false, message: error.message }
 
   revalidatePath('/comercial/meu-dia')
   return { ok: true }
@@ -116,15 +79,9 @@ export async function reexibirItemAction(input: {
   const { erro, supabase } = await autorizar()
   if (erro) return erro
 
-  const vendedorId = await vendedorDoDia(supabase)
-  if (!vendedorId) return { ok: false, message: 'Você não tem um cadastro de vendedor ativo.' }
-
-  const { error } = await supabase
-    .from('meu_dia_itens_ocultos')
-    .delete()
-    .eq('vendedor_id', vendedorId)
-    .eq('tipo_item', input.tipoItem)
-    .eq('referencia_id', input.referenciaId)
+  const { error } = await supabase.rpc('app_meu_dia_reexibir' as never, {
+    p: { tipo_item: input.tipoItem, referencia_id: input.referenciaId },
+  } as never)
   if (error) return { ok: false, message: error.message }
 
   revalidatePath('/comercial/meu-dia')
@@ -145,7 +102,8 @@ export async function criarTarefaAction(input: {
   const titulo = input.titulo.trim()
   if (titulo.length < 3) return { ok: false, message: 'Escreva o que precisa ser feito.' }
 
-  const alvo = input.vendedorId ?? (await vendedorDoDia(supabase))
+  const { data: alvos } = await supabase.rpc('app_meu_dia_alvos' as never)
+  const alvo = input.vendedorId ?? ((alvos ?? []) as string[])[0]
   if (!alvo) return { ok: false, message: 'Você não tem um cadastro de vendedor ativo.' }
 
   const { error } = await supabase.from('meu_dia_tarefas').insert({
@@ -167,10 +125,7 @@ export async function concluirTarefaAction(id: string): Promise<ResultadoMeuDia>
   const { erro, supabase } = await autorizar()
   if (erro) return erro
 
-  const { error } = await supabase
-    .from('meu_dia_tarefas')
-    .update({ concluida_em: new Date().toISOString() })
-    .eq('id', id)
+  const { error } = await supabase.rpc('app_meu_dia_concluir_tarefa' as never, { p_id: id } as never)
   if (error) return { ok: false, message: error.message }
 
   revalidatePath('/comercial/meu-dia')

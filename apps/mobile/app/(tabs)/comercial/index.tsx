@@ -1,32 +1,71 @@
-import {
-  TIPO_VENDEDOR_LABELS,
-  STATUS_LANCAMENTO_V2_LABELS,
-  type StatusLancamentoV2,
-  type TipoVendedorId,
-} from '@jobsiteos/core'
-import { useRouter } from 'expo-router'
-import { CalendarDays, Clock, Coins, Inbox, PackageSearch, Target, Users } from 'lucide-react-native'
+import { useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { useRouter } from 'expo-router'
+import {
+  AlertTriangle, CalendarClock, CheckCircle2, Clock, LayoutDashboard, Wallet,
+} from 'lucide-react-native'
+import {
+  GRUPO_MEU_DIA_LABELS,
+  blocoCatalogado,
+  composicaoDoDia,
+  itensUrgentes,
+  ordenarItens,
+  totalDeItens,
+  valorEmJogo,
+  type GrupoMeuDia,
+  type ItemMeuDia,
+} from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
-import { useResumoComercial } from '@/features/comercial'
-import { usePainelFornecedores } from '@/features/comercial/fornecedores'
+import { Text } from '@/components/ui/text'
+import { useConcluirTarefa, useMeuDia, useOcultarItem } from '@/features/comercial/meu-dia'
+import { ItemMeuDiaCard } from '@/features/comercial/components/item-meu-dia'
+import { cn } from '@/lib/utils'
 
-const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const brl = (n: number) =>
+  n >= 1000
+    ? `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')}k`
+    : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+
+const COR_GRUPO: Record<GrupoMeuDia, string> = {
+  funil: 'bg-sky-500',
+  conversa: 'bg-violet-500',
+  carteira: 'bg-emerald-500',
+  credito: 'bg-amber-500',
+  cadastro: 'bg-slate-400',
+}
 
 /**
- * "Meu Painel" no celular: o número que importa, o que está marcado para hoje, e dois
- * atalhos. É a tela que se abre antes de entrar numa reunião — não é lugar de gráfico.
+ * Meu Dia (04p) — e é no celular que esta tela mais importa: é a primeira coisa aberta
+ * no café, antes do computador.
+ *
+ * A ORDEM É OUTRA, de propósito. Na web os indicadores vêm primeiro; aqui a TIMELINE
+ * abre a tela, porque quem pega o telefone de manhã está perguntando "o que eu tenho
+ * hoje", e não "quanto vale o meu dia". Os indicadores entram logo abaixo, em carrossel
+ * horizontal, e o número grande continua a um olhar de distância.
+ *
+ * O gráfico de composição vira uma barra fina com legenda tocável — mesma função da web
+ * (filtrar os cards), tamanho de celular. E o que na web é menu de três pontos, aqui é
+ * SWIPE: a mão que segura o telefone é a mesma que trabalha o item.
  */
-export default function ComercialScreen() {
+export default function MeuDiaScreen() {
   const router = useRouter()
   const { colors } = useTheme()
-  const { data, isPending, isError, refetch, isRefetching } = useResumoComercial()
-  const fornecedores = usePainelFornecedores()
+  const { data, isPending, isError, refetch, isRefetching } = useMeuDia()
+  const ocultar = useOcultarItem()
+  const concluir = useConcluirTarefa()
+  const [filtro, setFiltro] = useState<GrupoMeuDia | null>(null)
+
+  const compromissos = useMemo(() => {
+    if (!data) return []
+    return data.blocos
+      .flatMap((b) => b.itens)
+      .filter((i) => i.quando)
+      .sort((a, b) => (a.quando ?? '').localeCompare(b.quando ?? ''))
+      .slice(0, 6)
+  }, [data])
 
   if (isPending) {
     return (
@@ -36,157 +75,248 @@ export default function ComercialScreen() {
     )
   }
   if (isError) return <ErrorState onRetry={() => void refetch()} />
-  if (!data.tem_acesso) return <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
-  if (data.sem_vendedor) {
+  if (!data.tem_acesso) {
+    return (
+      <EmptyState
+        title="Sem acesso"
+        description="O módulo Comercial não está liberado para o seu perfil."
+      />
+    )
+  }
+  if (!data.vendedor_id) {
     return (
       <EmptyState
         title="Você não é vendedor"
-        description="Seu usuário administra o módulo. Os painéis por pessoa ficam na web."
+        description="Seu usuário administra o módulo. O Meu Dia de cada pessoa fica na web."
       />
     )
   }
 
-  const tipo = (data.vendedor?.tipo ?? '') as TipoVendedorId
+  const total = totalDeItens(data)
+  const urgentes = itensUrgentes(data)
+  const emJogo = valorEmJogo(data)
+  const composicao = composicaoDoDia(data)
+
+  const blocos = data.blocos
+    .filter((b) => b.itens.length > 0)
+    .filter((b) => !filtro || blocoCatalogado(b.tipo)?.grupo === filtro)
+
+  function adiar(bloco: string, item: ItemMeuDia, dias: number) {
+    const ate = new Date(Date.now() + dias * 86_400_000).toISOString().slice(0, 10)
+    ocultar.mutate({
+      tipoItem: bloco,
+      referenciaId: item.referencia_id,
+      acao: 'adiado',
+      adiadoAte: ate,
+      empresaId: item.empresa_id,
+      rotulo: blocoCatalogado(bloco)?.rotulo,
+    })
+  }
 
   return (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="gap-3 p-4"
+      contentContainerClassName="gap-4 p-4"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
-      <View className="gap-1">
-        <Text className="text-xl font-semibold">{data.vendedor?.nome}</Text>
+      <View className="gap-0.5">
+        <Text className="text-xl font-semibold">
+          {data.espelhado ? `Carteira de ${data.vendedor_nome ?? '—'}` : 'Meu Dia'}
+        </Text>
         <Text variant="muted" className="text-xs">
-          {TIPO_VENDEDOR_LABELS[tipo] ?? tipo}
+          {total === 0
+            ? 'Nada esperando por você agora.'
+            : `${total} ${total === 1 ? 'item' : 'itens'}${
+                urgentes.length > 0 ? `, ${urgentes.length} com relógio correndo` : ''
+              }`}
         </Text>
       </View>
 
-      {/*
-        O card de comissão agora ABRE a tela — o motor v2 tornou o número live, e o
-        primeiro reflexo de quem vê o valor mudar é querer saber qual cessão o mudou.
-      */}
-      <Pressable onPress={() => router.push('/comercial/comissoes')}>
-        <Card className="gap-1 p-4">
+      {/* A agenda ABRE a tela no celular — é a primeira pergunta de quem acorda. */}
+      {compromissos.length > 0 ? (
+        <Card className="gap-2 p-4">
           <View className="flex-row items-center gap-2">
-            <Coins size={14} color={colors.mutedForeground} />
+            <CalendarClock size={14} color={colors.mutedForeground} />
             <Text variant="muted" className="text-xs uppercase tracking-wide">
-              Comissão do mês
+              A agenda de hoje
             </Text>
           </View>
-          <Text className="text-2xl font-semibold">{brl(data.comissao_mes.total)}</Text>
-          <View className="flex-row flex-wrap gap-1.5 pt-1">
-            {Object.entries(data.comissao_mes.por_status).map(([s, v]) => (
-              <Badge key={s} variant="outline">
-                <Text className="text-[10px]">
-                  {STATUS_LANCAMENTO_V2_LABELS[s as StatusLancamentoV2] ?? s}: {brl(Number(v))}
-                </Text>
-              </Badge>
-            ))}
-          </View>
-          <Text variant="muted" className="pt-1 text-[11px]">
-            Provisionado ainda não é fechado, fechado ainda não é aprovado, e aprovado ainda
-            não é pago. Toque para ver o extrato.
-          </Text>
-        </Card>
-      </Pressable>
-
-      {/*
-        A fila de aceite fica ACIMA dos funis quando tem gente esperando: passado o SLA a
-        reunião conta como aceita sozinha, e o que decide é a comissão de outra pessoa.
-      */}
-      {data.aceites_pendentes > 0 ? (
-        <Pressable onPress={() => router.push('/comercial/comissoes')}>
-          <Card className="flex-row items-center justify-between p-4">
-            <View className="flex-row items-center gap-2">
-              <Clock size={16} color={colors.mutedForeground} />
-              <Text className="font-medium">Reuniões aguardando seu aceite</Text>
-            </View>
-            <Badge>
-              <Text className="text-[10px]">{data.aceites_pendentes}</Text>
-            </Badge>
-          </Card>
-        </Pressable>
-      ) : null}
-
-      {/* Atalhos pelo TIPO: um SDR não tem funil de vendas, e o contrário também. */}
-      {tipo === 'sdr' && (
-        <Pressable onPress={() => router.push('/comercial/sdr')}>
-          <Card className="flex-row items-center justify-between p-4">
-            <View className="flex-row items-center gap-2">
-              <Target size={16} color={colors.mutedForeground} />
-              <Text className="font-medium">Funil de reuniões</Text>
-            </View>
-            <Text variant="muted">
-              {Object.values(data.leads_por_estagio).reduce((s, n) => s + Number(n), 0)}
-            </Text>
-          </Card>
-        </Pressable>
-      )}
-
-      {tipo === 'vendedor' && (
-        <Pressable onPress={() => router.push('/comercial/vendas')}>
-          <Card className="flex-row items-center justify-between p-4">
-            <View className="flex-row items-center gap-2">
-              <Users size={16} color={colors.mutedForeground} />
-              <Text className="font-medium">Funil de vendas</Text>
-            </View>
-            <Text variant="muted">
-              {Object.values(data.vendas_por_estagio).reduce((s, n) => s + Number(n), 0)}
-            </Text>
-          </Card>
-        </Pressable>
-      )}
-
-      {tipo === 'originador' && (
-        <Card className="flex-row items-center justify-between p-4">
-          <View className="flex-row items-center gap-2">
-            <Inbox size={16} color={colors.mutedForeground} />
-            <Text className="font-medium">NFs vivas na carteira</Text>
-          </View>
-          <Text variant="muted">{data.nfs_vivas}</Text>
-        </Card>
-      )}
-
-      {/*
-        O funil de cadastro de fornecedores (04l) é atalho para TODOS, e não só para o
-        originador. A lista já é recortada pela RLS: quem não tem fornecedor atribuído
-        abre a tela e encontra o estado vazio explicando por quê — o que é uma resposta.
-        Esconder o item faria a mesma pessoa concluir que perdeu acesso.
-      */}
-      <Pressable onPress={() => router.push('/comercial/fornecedores')}>
-        <Card className="flex-row items-center justify-between p-4">
-          <View className="flex-row items-center gap-2">
-            <PackageSearch size={16} color={colors.mutedForeground} />
-            <Text className="font-medium">Fornecedores a cadastrar</Text>
-          </View>
-          <Text variant="muted">
-            {fornecedores.data?.tem_acesso ? brl(fornecedores.data.potencial_total) : '—'}
-          </Text>
-        </Card>
-      </Pressable>
-
-      <Card className="gap-2 p-4">
-        <View className="flex-row items-center gap-2">
-          <CalendarDays size={14} color={colors.mutedForeground} />
-          <Text variant="muted" className="text-xs uppercase tracking-wide">
-            Próximas reuniões
-          </Text>
-        </View>
-        {data.proximas_reunioes.length === 0 ? (
-          <Text variant="muted" className="text-sm">Nada marcado.</Text>
-        ) : (
-          data.proximas_reunioes.map((e) => (
-            <View key={e.id} className="flex-row items-baseline justify-between gap-2">
-              <Text className="flex-1 text-sm">{e.titulo}</Text>
-              <Text variant="muted" className="text-xs">
-                {new Date(e.inicio_em).toLocaleString('pt-BR', {
-                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                })}
+          {compromissos.map((i) => (
+            <View key={`${i.referencia_id}-${i.quando}`} className="flex-row items-baseline gap-2">
+              <Text className="w-24 text-xs" variant="muted">
+                {i.quando
+                  ? new Date(i.quando).toLocaleString('pt-BR', {
+                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                    })
+                  : '—'}
+              </Text>
+              <Text numberOfLines={1} className="flex-1 text-sm">
+                {i.titulo}
               </Text>
             </View>
-          ))
+          ))}
+        </Card>
+      ) : null}
+
+      {/* Indicadores em carrossel: o número grande sem ocupar a tela inteira. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerClassName="gap-3 pr-4"
+        className="-mx-4 px-4"
+      >
+        <IndicadorMobile
+          Icone={Wallet}
+          rotulo="Em jogo hoje"
+          valor={brl(emJogo)}
+          detalhe={`${total} ${total === 1 ? 'item' : 'itens'}`}
+        />
+        <IndicadorMobile
+          Icone={AlertTriangle}
+          rotulo="Urgentes"
+          valor={String(urgentes.length)}
+          detalhe={urgentes.length > 0 ? 'com relógio correndo' : 'nada vencendo'}
+          alerta={urgentes.length > 0}
+        />
+        {data.tipo === 'sdr' ? (
+          <IndicadorMobile
+            Icone={Clock}
+            rotulo="Inbound sem resposta"
+            valor={String(data.blocos.find((b) => b.tipo === 'inbound_nao_contatado')?.total ?? 0)}
+            detalhe="minutos importam"
+          />
+        ) : (
+          <IndicadorMobile
+            Icone={Wallet}
+            rotulo={data.tipo === 'originador' ? 'NF alta parada' : 'Limite ocioso'}
+            valor={brl(
+              data.blocos.find((b) =>
+                b.tipo === (data.tipo === 'originador' ? 'nfs_alta_nao_prospectadas' : 'carteira_ociosa'),
+              )?.valor_total ?? 0,
+            )}
+            detalhe="esperando trabalho"
+          />
         )}
-      </Card>
+      </ScrollView>
+
+      {/* A composição: mesma função da web, tamanho de celular. */}
+      {composicao.length > 0 ? (
+        <View className="gap-2">
+          <View className="h-2 flex-row overflow-hidden rounded-full bg-muted">
+            {composicao.map((f) => (
+              <View
+                key={f.grupo}
+                style={{ flex: f.itens }}
+                className={cn(COR_GRUPO[f.grupo], filtro && filtro !== f.grupo && 'opacity-25')}
+              />
+            ))}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3">
+            {composicao.map((f) => (
+              <Pressable
+                key={f.grupo}
+                onPress={() => setFiltro((a) => (a === f.grupo ? null : f.grupo))}
+                className={cn(
+                  'flex-row items-center gap-1.5',
+                  filtro && filtro !== f.grupo && 'opacity-40',
+                )}
+              >
+                <View className={cn('h-2 w-2 rounded-full', COR_GRUPO[f.grupo])} />
+                <Text className="text-xs font-medium">{GRUPO_MEU_DIA_LABELS[f.grupo]}</Text>
+                <Text variant="muted" className="text-xs">{f.itens}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Os blocos. Vazio SOME — a tela encolhe conforme o dia é feito. */}
+      {blocos.length === 0 ? (
+        <Card className="items-center gap-2 p-8">
+          <CheckCircle2 size={32} color={colors.primary} />
+          <Text className="text-base font-medium">Tudo em dia por aqui</Text>
+          <Text variant="muted" className="text-center text-sm">
+            {filtro
+              ? 'Nada pendente nesta fatia. Toque na legenda para tirar o filtro.'
+              : 'Nenhum item pedindo ação agora.'}
+          </Text>
+        </Card>
+      ) : (
+        blocos.map((bloco) => (
+          <View key={bloco.tipo} className="gap-2">
+            <View className="flex-row items-baseline justify-between gap-2">
+              <Text className="font-semibold">{blocoCatalogado(bloco.tipo)?.rotulo ?? bloco.tipo}</Text>
+              {bloco.valor_total > 0 ? (
+                <Text variant="muted" className="text-xs">{brl(bloco.valor_total)}</Text>
+              ) : null}
+            </View>
+
+            {ordenarItens(bloco.itens).map((item) => (
+              <ItemMeuDiaCard
+                key={item.referencia_id}
+                item={item}
+                bloco={bloco.tipo}
+                onAdiar={(dias) => adiar(bloco.tipo, item, dias)}
+                onDescartar={() =>
+                  ocultar.mutate({
+                    tipoItem: bloco.tipo,
+                    referenciaId: item.referencia_id,
+                    acao: 'irrelevante',
+                    motivo: 'Marcado como irrelevante no celular',
+                    empresaId: item.empresa_id,
+                    rotulo: blocoCatalogado(bloco.tipo)?.rotulo,
+                  })
+                }
+                onConcluir={() => concluir.mutate(String(item.meta.tarefa_id))}
+              />
+            ))}
+
+            {bloco.total > bloco.itens.length ? (
+              <Text variant="muted" className="text-xs">
+                e mais {bloco.total - bloco.itens.length} — a lista completa está na web
+              </Text>
+            ) : null}
+          </View>
+        ))
+      )}
+
+      {/*
+        O painel do mês fica no rodapé, e não no topo: ele responde "como está o meu mês",
+        que é consulta. O que abre a tela é o trabalho de hoje.
+      */}
+      <Pressable onPress={() => router.push('/comercial/painel')}>
+        <Card className="flex-row items-center justify-between p-4">
+          <View className="flex-row items-center gap-2">
+            <LayoutDashboard size={16} color={colors.mutedForeground} />
+            <Text className="font-medium">Meu painel do mês</Text>
+          </View>
+          <Text variant="muted" className="text-xs">comissão, funis e agenda</Text>
+        </Card>
+      </Pressable>
     </ScrollView>
+  )
+}
+
+function IndicadorMobile({
+  Icone, rotulo, valor, detalhe, alerta = false,
+}: {
+  Icone: typeof Wallet
+  rotulo: string
+  valor: string
+  detalhe: string
+  alerta?: boolean
+}) {
+  const { colors } = useTheme()
+  return (
+    <Card className={cn('w-44 gap-1 p-3', alerta && 'border-red-500/40')}>
+      <View className="flex-row items-center gap-1.5">
+        <Icone size={12} color={alerta ? colors.destructive : colors.mutedForeground} />
+        <Text variant="muted" className="text-[10px] uppercase tracking-wide">
+          {rotulo}
+        </Text>
+      </View>
+      <Text className="text-xl font-semibold">{valor}</Text>
+      <Text variant="muted" className="text-[11px]">{detalhe}</Text>
+    </Card>
   )
 }

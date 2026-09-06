@@ -20,8 +20,9 @@ adoção de um painel:
 | Catálogo dos blocos (fonte da verdade) | `packages/core/src/comercial/meu-dia.ts` |
 | Agregador | `meu_dia()` + `app__md_originador/sdr/closer/comuns` no banco |
 | Carga e projeção de comissão | `apps/web/src/components/comercial/meu-dia/queries.ts` |
-| Tela | `apps/web/src/components/comercial/meu-dia/meu-dia-tela.tsx` |
-| Ações (adiar, descartar, tarefas) | `apps/web/src/actions/meu-dia.ts` |
+| Tela (web) | `apps/web/src/components/comercial/meu-dia/meu-dia-tela.tsx` |
+| Tela (celular) | `apps/mobile/app/(tabs)/comercial/index.tsx` |
+| Ações | `app_meu_dia_ocultar` / `_reexibir` / `_concluir_tarefa` no banco |
 | Tabelas | migração `0190_meu_dia.sql` |
 
 O **catálogo** é a única lista de blocos que existe. Ele dirige, ao mesmo tempo, os
@@ -138,6 +139,31 @@ A calibragem tem insumo: `meu_dia.item_adiado` e `meu_dia.item_irrelevante`. A d
 importa — adiar é escolha de agenda, marcar irrelevante é **voto contra a régua do bloco**,
 e por isso o descarte pede motivo. Um bloco que acumula descartes com o mesmo motivo está
 pedindo um limiar diferente.
+
+## No celular
+
+É onde a tela mais importa: é a primeira coisa aberta no café, antes do computador. A
+**ordem muda** — a timeline abre a tela, e não os indicadores, porque quem pega o telefone
+de manhã pergunta "o que eu tenho hoje", não "quanto vale o meu dia". Os indicadores vêm
+logo abaixo, em carrossel horizontal.
+
+O que na web é menu de três pontos, aqui é **swipe**: arrastar para a direita adia, para a
+esquerda descarta, e o toque abre a tela onde o trabalho acontece. Adiar abre uma folha
+com quatro opções (amanhã, depois de amanhã, semana que vem, 15 dias) em vez de um
+calendário — escolher data exata com uma mão, no metrô, é o atrito que faz a pessoa
+simplesmente não adiar, e item que não pode ser adiado acaba ignorado.
+
+Duas coisas ficam só na web, de propósito: a **comissão projetada** (o celular é onde se
+decide o que fazer agora, não onde se confere quanto o dia vale — e esse número tem tela
+própria em Comissão) e a **lista completa** quando um bloco estoura o teto. O painel do mês
+saiu da home e virou `/comercial/painel`, um toque abaixo: ele responde "como está o meu
+mês", que é consulta.
+
+**As três ações passam por RPC** (`app_meu_dia_ocultar`, `app_meu_dia_reexibir`,
+`app_meu_dia_concluir_tarefa`) e não por escrita direta na tabela. A web tem server
+actions, o celular não tem — se cada um escrevesse a sua versão, uma emitiria o evento de
+calibragem e a outra esqueceria. O alvo nunca vem da chamada: é `app_meu_dia_alvos()` quem
+diz de quem é o dia que a pessoa mexe.
 
 ## O que as ações NÃO fazem
 

@@ -8,7 +8,12 @@ import { ModuleStack } from '@/components/shell/module-stack'
  * um módulo registrado sem pasta aqui é uma tela que o React Navigation não resolve,
  * e o app quebra na inicialização, não no clique.
  *
- * Só o que se usa em pé: painel, funis, a COMISSÃO — que entrou porque o motor v2
+ * A home é o MEU DIA (04p) — é no celular que essa tela mais importa, porque é a
+ * primeira coisa aberta no café, antes do computador. O painel do mês continua aqui, um
+ * toque abaixo: ele responde "como está o meu mês", que é consulta; o Meu Dia responde
+ * "o que eu faço agora", que é trabalho.
+ *
+ * Só o que se usa em pé: Meu Dia, painel, funis, a COMISSÃO — que entrou porque o motor v2
  * (04k) a tornou live: o número muda enquanto a pessoa trabalha, e é justamente esse
  * número que ela quer conferir entre uma reunião e outra — e o CADASTRO DE FORNECEDORES
  * (04l), que é a tela que mais pertence ao celular de todas: o uso real dela é na obra
@@ -26,7 +31,8 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function ComercialLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Meu Painel' }} />
+      <Stack.Screen name="index" options={{ title: 'Meu Dia' }} />
+      <Stack.Screen name="painel" options={{ title: 'Meu Painel' }} />
       <Stack.Screen name="sdr" options={{ title: 'Reuniões' }} />
       <Stack.Screen name="vendas" options={{ title: 'Vendas' }} />
       <Stack.Screen name="comissoes" options={{ title: 'Comissão' }} />
