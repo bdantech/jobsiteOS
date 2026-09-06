@@ -5653,6 +5653,99 @@ export type Database = {
           },
         ]
       }
+      meu_dia_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          blocos: Json
+          id: string
+          tipo_vendedor: string
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          blocos?: Json
+          id?: string
+          tipo_vendedor: string
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          blocos?: Json
+          id?: string
+          tipo_vendedor?: string
+        }
+        Relationships: []
+      }
+      meu_dia_itens_ocultos: {
+        Row: {
+          acao: string
+          adiado_ate: string | null
+          criado_em: string
+          id: string
+          motivo: string | null
+          referencia_id: string
+          tipo_item: string
+          vendedor_id: string
+        }
+        Insert: {
+          acao: string
+          adiado_ate?: string | null
+          criado_em?: string
+          id?: string
+          motivo?: string | null
+          referencia_id: string
+          tipo_item: string
+          vendedor_id: string
+        }
+        Update: {
+          acao?: string
+          adiado_ate?: string | null
+          criado_em?: string
+          id?: string
+          motivo?: string | null
+          referencia_id?: string
+          tipo_item?: string
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
+      meu_dia_tarefas: {
+        Row: {
+          concluida_em: string | null
+          criada_em: string
+          criada_por: string | null
+          detalhe: string | null
+          empresa_id: string | null
+          id: string
+          titulo: string
+          vence_em: string | null
+          vendedor_id: string
+        }
+        Insert: {
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          detalhe?: string | null
+          empresa_id?: string | null
+          id?: string
+          titulo: string
+          vence_em?: string | null
+          vendedor_id: string
+        }
+        Update: {
+          concluida_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          detalhe?: string | null
+          empresa_id?: string | null
+          id?: string
+          titulo?: string
+          vence_em?: string | null
+          vendedor_id?: string
+        }
+        Relationships: []
+      }
       motivos_perda: {
         Row: {
           ativo: boolean

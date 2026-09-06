@@ -14,21 +14,24 @@ export const dynamic = 'force-dynamic'
  * Redirecionar em vez de renderizar o funil aqui mantém UMA url por funil. Duas rotas
  * pintando a mesma tela deixariam a aba ativa piscando conforme o caminho de entrada.
  */
-const FUNIL_DO_TIPO: Record<string, string> = {
-  sdr: '/comercial/sdr',
-  vendedor: '/comercial/vendas',
-  originador: '/comercial/nfs',
-  // O auxiliar abre onde o closer dele abre: o dia dos dois começa no mesmo lugar.
-  auxiliar: '/comercial/vendas',
-}
+/*
+ * Desde a 04p o despacho é UM só: Meu Dia.
+ *
+ * Ele existe justamente para ser a primeira tela — a lista do que fazer agora. O funil
+ * de cada tipo continua a uma aba de distância, e é para lá que os botões dos cards
+ * levam. Abrir no funil era abrir o dia pela contabilidade dele; abrir no Meu Dia é
+ * abrir pela próxima ação, que é a razão de a tela existir.
+ */
+const DESTINO = '/comercial/meu-dia'
 
 export default async function Pagina() {
   const { vendedor, ehGestor } = await contextoComercial()
 
-  const destino = vendedor?.tipo ? FUNIL_DO_TIPO[vendedor.tipo] : undefined
+  if (vendedor?.tipo) redirect(DESTINO)
+
   // Gestor sem cadastro de vendedor administra o módulo — para ele o painel É a tela
   // inicial, porque o trabalho dele é olhar o trabalho dos outros. Quem não é gestor nem
   // vendedor cadastrado ainda tem a própria comissão, que é a única coisa que existe
   // para ele até alguém completar o cadastro.
-  redirect(destino ?? (ehGestor ? '/comercial/painel' : '/comercial/comissoes'))
+  redirect(ehGestor ? '/comercial/painel' : '/comercial/comissoes')
 }

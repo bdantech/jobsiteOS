@@ -142,6 +142,14 @@ export const EVENTO_TIPOS = {
   SDR_ACEITE_PENDENTE: 'sdr.aceite_pendente',
 
   /*
+   * Meu Dia (04p). Os dois eventos são o insumo da calibragem dos limiares: adiar é
+   * escolha de agenda, marcar irrelevante é voto contra a régua do bloco. Sem separá-los,
+   * a única leitura possível seria "sumiu da tela", que não ajusta limiar nenhum.
+   */
+  MEU_DIA_ITEM_ADIADO: 'meu_dia.item_adiado',
+  MEU_DIA_ITEM_IRRELEVANTE: 'meu_dia.item_irrelevante',
+
+  /*
    * Funil de cadastro de fornecedores (04l).
    *
    * `fornecedor.sem_interesse` NÃO está aqui: ele já existe desde a Antecipação, e é

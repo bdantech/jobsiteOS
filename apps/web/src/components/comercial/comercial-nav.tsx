@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Megaphone, PackageSearch,
-  Settings, ShieldCheck, Sparkles, Target, TrendingDown, Users,
+  Settings, ShieldCheck, Sparkles, Sunrise, Target, TrendingDown, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -58,6 +58,12 @@ interface ItemNav {
 }
 
 const ITENS: readonly ItemNav[] = [
+  /*
+   * Meu Dia é a PRIMEIRA aba, e vira a home do vendedor. Ela é a única tela do módulo
+   * que responde "o que eu faço agora" — as outras respondem "como está o funil", que é
+   * a segunda pergunta do dia, não a primeira.
+   */
+  { href: '/comercial/meu-dia', label: 'Meu Dia', icon: Sunrise },
   { href: '/comercial/sdr', label: 'Funil de Reuniões', icon: Target, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/vendas', label: 'Funil de Vendas', icon: Users, tipos: ['vendedor'] },
   { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador', 'vendedor'] },
