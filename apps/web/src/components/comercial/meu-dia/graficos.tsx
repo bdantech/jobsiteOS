@@ -105,7 +105,25 @@ function Dica({ children }: { children: React.ReactNode }) {
  *
  * Cinco fatias e "Outros". Além disso a legenda deixa de caber e as fatias finas viram
  * uma faixa de cor que ninguém distingue.
+ *
+ * A legenda LATERAL saiu e o gráfico ficou com o componente inteiro. O que ela dava —
+ * nome e valor de cada fatia — passou para duas coisas melhores: o RÓTULO DIRETO na
+ * fatia, que o método de dataviz prefere à legenda justamente por não exigir o vaivém
+ * dos olhos, e o TOOLTIP, que traz o nome inteiro e o valor em reais. Fatia abaixo de 7%
+ * não recebe rótulo (o texto colidiria com o vizinho) e depende do tooltip — é o preço
+ * de mostrar seis fatias num círculo, e por isso "Outros" existe.
  */
+const RAD = Math.PI / 180
+
+interface FatiaRotulo {
+  cx: number
+  cy: number
+  midAngle: number
+  outerRadius: number
+  percent: number
+  index: number
+}
+
 export function PizzaPorChave({
   itens, chave, onFatia, fatiaAtiva,
 }: {
@@ -130,76 +148,89 @@ export function PizzaPorChave({
 
   const total = dados.reduce((s, d) => s + d.valor, 0)
 
-  return (
-    <div className="flex items-center gap-3">
-      <div className="h-[132px] w-[132px] shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={dados}
-              dataKey="valor"
-              nameKey="nome"
-              innerRadius={34}
-              outerRadius={62}
-              paddingAngle={2}
-              stroke="none"
-              /* O recharts tipa o payload do clique como a sua própria forma interna;
-                 o nosso dado chega junto, e é dele que sai a fatia. */
-              onClick={(d) => {
-                const nome = (d as unknown as { nome?: string }).nome ?? null
-                onFatia(fatiaAtiva === nome ? null : nome)
-              }}
-            >
-              {dados.map((d, i) => (
-                <Cell
-                  key={d.nome}
-                  fill={paleta[i % paleta.length]}
-                  opacity={fatiaAtiva && fatiaAtiva !== d.nome ? 0.3 : 1}
-                  className="cursor-pointer outline-none"
-                />
-              ))}
-            </Pie>
-            <Tooltip
-              content={({ payload }) =>
-                payload?.[0] ? (
-                  <Dica>
-                    <p className="font-medium">{payload[0].name}</p>
-                    <p className="tabular-nums text-muted-foreground">
-                      {brl(Number(payload[0].value))}
-                    </p>
-                  </Dica>
-                ) : null
-              }
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+  const rotulo = (props: unknown) => {
+    const d = props as FatiaRotulo
+    if (d.percent < 0.07) return null
+    const r = d.outerRadius + 12
+    const x = d.cx + r * Math.cos(-d.midAngle * RAD)
+    const y = d.cy + r * Math.sin(-d.midAngle * RAD)
+    const nome = dados[d.index]?.nome ?? ''
+    const curto = nome.length > 20 ? `${nome.slice(0, 19)}…` : nome
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor={x > d.cx ? 'start' : 'end'}
+        dominantBaseline="central"
+        fontSize={10}
+      >
+        <tspan className="fill-foreground font-medium">{curto}</tspan>
+        <tspan x={x} dy="1.15em" className="fill-muted-foreground">
+          {Math.round(d.percent * 100)}%
+        </tspan>
+      </text>
+    )
+  }
 
-      {/* A legenda repete o valor em texto: é o alívio exigido pelo contraste da fatia. */}
-      <ul className="min-w-0 flex-1 space-y-1">
-        {dados.map((d, i) => (
-          <li key={d.nome}>
-            <button
-              type="button"
-              onClick={() => onFatia(fatiaAtiva === d.nome ? null : d.nome)}
-              className={cn(
-                'flex w-full items-baseline gap-1.5 text-left text-xs transition-opacity',
-                fatiaAtiva && fatiaAtiva !== d.nome && 'opacity-40',
-              )}
-            >
-              <span
-                className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: paleta[i % paleta.length] }}
-                aria-hidden
+  return (
+    <div className="relative h-[272px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart margin={{ top: 12, right: 78, bottom: 12, left: 78 }}>
+          <Pie
+            data={dados}
+            dataKey="valor"
+            nameKey="nome"
+            innerRadius="52%"
+            outerRadius="82%"
+            paddingAngle={2}
+            stroke="none"
+            isAnimationActive={false}
+            label={rotulo}
+            /* Sem linha-guia: o recharts desenha uma por fatia mesmo quando o rótulo é
+               nulo, e as fatias abaixo de 7% ficariam com um traço apontando para o
+               nada. O rótulo encosta no arco e dispensa a linha. */
+            labelLine={false}
+            /* O recharts tipa o payload do clique como a sua própria forma interna;
+               o nosso dado chega junto, e é dele que sai a fatia. */
+            onClick={(d) => {
+              const nome = (d as unknown as { nome?: string }).nome ?? null
+              onFatia(fatiaAtiva === nome ? null : nome)
+            }}
+          >
+            {dados.map((d, i) => (
+              <Cell
+                key={d.nome}
+                fill={paleta[i % paleta.length]}
+                opacity={fatiaAtiva && fatiaAtiva !== d.nome ? 0.25 : 1}
+                className="cursor-pointer outline-none"
               />
-              <span className="min-w-0 flex-1 truncate">{d.nome}</span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {total > 0 ? Math.round((d.valor / total) * 100) : 0}%
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+            ))}
+          </Pie>
+          <Tooltip
+            content={({ payload }) => {
+              const p = payload?.[0]
+              if (!p) return null
+              const valor = Number(p.value)
+              return (
+                <Dica>
+                  <p className="max-w-[18rem] font-medium">{p.name}</p>
+                  <p className="tabular-nums text-muted-foreground">
+                    {brl(valor)}
+                    {total > 0 ? ` · ${Math.round((valor / total) * 100)}%` : ''}
+                  </p>
+                </Dica>
+              )
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+
+      {/* O total no miolo: o buraco do donut é espaço morto, e a soma é o número que
+          contextualiza toda fatia. */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-base font-semibold tabular-nums">{brl(total)}</span>
+        <span className="text-[10px] text-muted-foreground">{dados.length} cedentes</span>
+      </div>
     </div>
   )
 }
@@ -238,9 +269,9 @@ export function GraficoBolhas({
   const fy = formatarY ?? brl
 
   return (
-    <div className="h-[200px] w-full">
+    <div className="h-[272px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart margin={{ top: 8, right: 12, bottom: 22, left: 4 }}>
+        <ScatterChart margin={{ top: 10, right: 14, bottom: 24, left: 4 }}>
           <XAxis
             type="number"
             dataKey="x"
@@ -262,7 +293,7 @@ export function GraficoBolhas({
             label={{ value: rotuloY, angle: -90, position: 'insideLeft', fontSize: 10, offset: 12 }}
           />
           {/* O tamanho é a terceira grandeza; a área, e não o raio, é o que se compara. */}
-          <ZAxis type="number" dataKey="tamanho" range={[80, 900]} />
+          <ZAxis type="number" dataKey="tamanho" range={[110, 1500]} />
           <Tooltip
             cursor={{ strokeDasharray: '3 3' }}
             content={({ payload }) => {

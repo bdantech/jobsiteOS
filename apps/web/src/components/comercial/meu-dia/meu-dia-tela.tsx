@@ -1,20 +1,16 @@
 'use client'
 
 import * as React from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, Clock, Wallet } from 'lucide-react'
 import {
-  GRUPO_MEU_DIA_LABELS,
   blocoCatalogado,
-  composicaoDoDia,
   itensUrgentes,
   ordenarItens,
   totalDeItens,
   valorEmJogo,
   type BlocoMeuDia,
-  type GrupoMeuDia,
   type ItemMeuDia,
   type MeuDia,
 } from '@jobsiteos/core'
@@ -29,6 +25,7 @@ import {
   BarrasRanking, GraficoBolhas, ListaRolagem, PizzaPorChave,
   STATUS_CORES, STATUS_ROTULOS, squarify, tintaSobre, useLargura, type Bolha,
 } from './graficos'
+import { LinkEmAba } from '@/components/shell/link-em-aba'
 import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from './widget'
 
 /**
@@ -45,6 +42,12 @@ import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from '
  *
  * E TODO gráfico é clicável. Ele não decora a lista — ele é o índice dela: clicar numa
  * fatia, numa bolha ou numa barra abre os itens daquele recorte, no mesmo lugar.
+ *
+ * NÃO HÁ FILTRO DE GRUPO. Havia um, com carteira / funil / cadastro, e ele era um botão
+ * que ESCONDIA widget: o vendedor abria o dia, via nove painéis, clicava em "carteira" e
+ * passava a ver três — sem nada lhe dizer que os outros seis continuavam existindo. Num
+ * dashboard cuja regra é pouca informação no menor espaço, todos os painéis cabem de uma
+ * vez, e a rolagem é resposta melhor do que um filtro que apaga contexto.
  */
 
 const brl = (n: number) =>
@@ -53,14 +56,6 @@ const brl = (n: number) =>
     : n >= 1000
       ? `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')} mil`
       : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
-
-const COR_GRUPO: Record<GrupoMeuDia, string> = {
-  funil: 'bg-sky-500',
-  conversa: 'bg-violet-500',
-  carteira: 'bg-emerald-500',
-  credito: 'bg-amber-500',
-  cadastro: 'bg-slate-400',
-}
 
 /**
  * A natureza da conta na carteira do closer.
@@ -100,18 +95,14 @@ export interface MeuDiaTelaProps {
 
 export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
   const router = useRouter()
-  const [filtro, setFiltro] = React.useState<GrupoMeuDia | null>(null)
   const [modal, setModal] = React.useState<{ titulo: string; itens: ItemMeuDia[] } | null>(null)
   const [adiando, setAdiando] = React.useState<{ bloco: string; item: ItemMeuDia } | null>(null)
 
   const urgentes = itensUrgentes(dia)
   const emJogo = valorEmJogo(dia)
   const total = totalDeItens(dia)
-  const composicao = composicaoDoDia(dia)
 
-  const blocos = dia.blocos
-    .filter((b) => b.itens.length > 0)
-    .filter((b) => !filtro || blocoCatalogado(b.tipo)?.grupo === filtro)
+  const blocos = dia.blocos.filter((b) => b.itens.length > 0)
 
   const compromissos = ordenarItens(dia.blocos.flatMap((b) => b.itens).filter((i) => i.quando)).sort(
     (a, b) => (a.quando ?? '').localeCompare(b.quando ?? ''),
@@ -184,8 +175,8 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
         )}
       </div>
 
-      {/* ── Indicadores + composição, numa faixa só ───────────────────────── */}
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+      {/* ── Indicadores ───────────────────────────────────────────────────── */}
+      <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Indicador
             icone={Wallet}
@@ -209,26 +200,6 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
           />
           <IndicadorDoCargo dia={dia} onAbrir={setModal} />
         </div>
-
-        {composicao.length > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
-            {composicao.map((f) => (
-              <button
-                key={f.grupo}
-                type="button"
-                onClick={() => setFiltro((a) => (a === f.grupo ? null : f.grupo))}
-                className={cn(
-                  'flex items-center gap-1.5 text-xs transition-opacity',
-                  filtro && filtro !== f.grupo ? 'opacity-40' : 'opacity-100',
-                )}
-              >
-                <span className={cn('h-2 w-2 rounded-full', COR_GRUPO[f.grupo])} aria-hidden />
-                <span className="hidden font-medium sm:inline">{GRUPO_MEU_DIA_LABELS[f.grupo]}</span>
-                <span className="tabular-nums text-muted-foreground">{f.itens}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── A grade de widgets ────────────────────────────────────────────── */}
@@ -237,13 +208,16 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
           <CheckCircle2 className="h-9 w-9 text-emerald-600" aria-hidden />
           <p className="text-base font-medium">Tudo em dia por aqui</p>
           <p className="max-w-sm text-xs text-muted-foreground">
-            {filtro
-              ? 'Nada pendente nesta fatia. Tire o filtro para ver o resto.'
-              : 'Nenhum item pedindo ação agora.'}
+            Nenhum item pedindo ação agora.
           </p>
         </div>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
+          {/* O mapa da carteira ABRE a grade, e não a fecha. Para o closer ele é o retrato
+              de onde está o dinheiro que ele responde — o contexto de tudo o que vem
+              depois, e não uma ilustração de rodapé. */}
+          {dia.mapa_carteira.length > 0 && <MapaCarteira clientes={dia.mapa_carteira} />}
+
           {blocos.map((bloco) => (
             <WidgetDoBloco
               key={bloco.tipo}
@@ -256,7 +230,6 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
             />
           ))}
 
-          {dia.mapa_carteira.length > 0 && <MapaCarteira clientes={dia.mapa_carteira} />}
           {dia.funil_semana.length > 0 && <FunilSemana etapas={dia.funil_semana} />}
           {dia.evolucao.length > 0 && <Evolucao serie={dia.evolucao} />}
           {compromissos.length > 0 && <Timeline itens={compromissos} />}
@@ -334,21 +307,50 @@ function WidgetDoBloco({
 
   // ── Bolhas: certificados e inbound ──────────────────────────────────────
   if (cat?.visual === 'bolhas' && bloco.tipo === 'certificados_a_prospectar') {
-    const bolhas: Bolha[] = bloco.itens.map((i) => ({
-      id: i.referencia_id,
-      nome: i.titulo,
-      x: Number(i.meta.faltantes ?? 0),
-      y: Number(i.meta.limite_ocioso ?? 0),
-      tamanho: Number(i.meta.limite_ocioso ?? 0),
-      cor: '#2a78d6',
-      detalhe: `${i.meta.faltantes} CNPJ(s) sem certificado · ${brl(Number(i.meta.limite_ocioso ?? 0))} ociosos`,
-    }))
+    /* A MESMA cor do mapa do closer: o status do temperature report. Antes eram todas do
+       mesmo azul, e a cor não dizia nada — os dois eixos e o tamanho já carregavam as
+       grandezas do gráfico. Com o status, a bolha passa a dizer também como a conta anda,
+       e a paleta de status é a mesma em toda a tela. */
+    const bolhas: Bolha[] = bloco.itens.map((i) => {
+      const status = String(i.meta.operation_status ?? '')
+      return {
+        id: i.referencia_id,
+        nome: i.titulo,
+        x: Number(i.meta.faltantes ?? 0),
+        y: Number(i.meta.limite_ocioso ?? 0),
+        tamanho: Number(i.meta.limite_ocioso ?? 0),
+        cor: STATUS_CORES[status] ?? '#94a3b8',
+        detalhe: `${i.meta.faltantes} CNPJ(s) sem certificado · ${brl(
+          Number(i.meta.limite_ocioso ?? 0),
+        )} ociosos${STATUS_ROTULOS[status] ? ` · ${STATUS_ROTULOS[status]}` : ''}`,
+      }
+    })
+    const statusPresentes = [
+      ...new Set(bloco.itens.map((i) => String(i.meta.operation_status ?? '')).filter(Boolean)),
+    ]
     return (
       <Widget
         titulo={rotulo}
         descricao="Quanto está parado × quantos CNPJs estão cegos. Bolha grande e à direita é o maior potencial não atacado."
         contexto={contexto}
-        rodape={rodape}
+        rodape={
+          statusPresentes.length > 0 ? (
+            <span className="flex flex-wrap gap-x-3 gap-y-1">
+              {statusPresentes.map((st) => (
+                <span key={st} className="flex items-center gap-1">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: STATUS_CORES[st] ?? '#94a3b8' }}
+                    aria-hidden
+                  />
+                  {STATUS_ROTULOS[st] ?? st}
+                </span>
+              ))}
+            </span>
+          ) : (
+            rodape
+          )
+        }
       >
         <GraficoBolhas
           bolhas={bolhas}
@@ -693,11 +695,10 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
           const cabeNome = r.w >= 44 && r.h >= 20
           const cabeValor = r.w >= 92 && r.h >= 44
           return (
-            <Link
+            <LinkEmAba
               key={c.cnpj}
               href={c.empresa_id ? `/empresas/${c.empresa_id}` : '#'}
-              target="_blank"
-              rel="noopener noreferrer"
+              tituloDaAba={c.nome}
               title={`${c.nome} — limite de ${brl(c.limite)}, ${brl(c.limite_disponivel)} disponíveis · ${
                 STATUS_ROTULOS[status] ?? status
               }`}
@@ -722,7 +723,7 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
                   {brl(c.limite)}
                 </span>
               ) : null}
-            </Link>
+            </LinkEmAba>
           )
         })}
       </div>
@@ -811,14 +812,13 @@ function ModalDeItens({
                   <p className="text-sm tabular-nums">{brl(i.valor)}</p>
                 )}
                 {i.empresa_id && (
-                  <Link
+                  <LinkEmAba
                     href={`/empresas/${i.empresa_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    tituloDaAba={i.titulo}
                     className="text-xs underline text-muted-foreground"
                   >
                     abrir ficha
-                  </Link>
+                  </LinkEmAba>
                 )}
               </div>
             </li>

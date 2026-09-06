@@ -29,6 +29,15 @@ um `if` por tipo de bloco na UI, e um bloco novo nasce com o widget certo por di
 | `rolagem` | lista longa num cartão só | fornecedores a cadastrar |
 | `lista` | poucos itens, cada um com a sua ação | o padrão |
 
+**Não há filtro de grupo.** Havia um — carteira / funil / cadastro — e ele era um botão que
+escondia widget: o vendedor abria o dia, via nove painéis, clicava em "carteira" e passava a
+ver três, sem nada lhe dizer que os outros seis continuavam existindo. Todos os painéis
+aparecem de uma vez, e a rolagem é resposta melhor do que um filtro que apaga contexto. (O
+celular ainda tem o filtro; ele entra no redesenho do mobile.)
+
+Para o closer, o **mapa da carteira abre a grade**, não a fecha: é o retrato de onde está o
+dinheiro pelo qual ele responde, e portanto o contexto de tudo o que vem depois.
+
 O **mapa da carteira** é um treemap (squarify): a área de cada retângulo é a fração do
 limite aprovado, e a soma delas é o componente inteiro. A versão anterior era uma fileira
 de quadrados com `flex-wrap`, e deixava um rio de espaço vazio à direita que entrava na
@@ -49,6 +58,12 @@ legenda repete o valor em texto — nenhuma informação depende só de matiz.
 O **status do temperature report** (`operating_normally`, `low_operation`,
 `requires_attention`, `inoperative`) usa a paleta de status, que é reservada e nunca vira
 "série 4". Ela sempre aparece com rótulo ao lado.
+
+A pizza dos cedentes não tem legenda lateral: ela ficou com o componente inteiro, com
+**rótulo direto** na fatia (nome + %) e o valor em reais no tooltip. O método de dataviz
+prefere o rótulo direto à legenda justamente por dispensar o vaivém dos olhos. Fatia abaixo
+de 7% não recebe rótulo — o texto colidiria com o vizinho — e depende do tooltip; é o preço
+de seis fatias num círculo, e a razão de "Outros" existir.
 
 A cor da bolha do inbound (azul aos 0h → vermelho às 96h) é **codificação redundante**: o
 eixo X já diz quantas horas passaram e a cor repete. É o que torna legítimo usar dois tons
@@ -113,10 +128,28 @@ bloco que aparece na tela e não aparece nas configurações.
 Conversas paradas, aguardando minha resposta, próximos passos do Agente (05A) e tarefas
 manuais.
 
-> **Nomes.** Nenhum item chega à tela como CNPJ ou como "Sem empresa". 183 dos 185
-> fornecedores do funil não têm ficha em `empresas` — mas todos têm nome na nota fiscal; e
-> 38 das 39 conversas não têm empresa vinculada — mas todas têm o número, que é o que a
-> pessoa reconhece. O CNPJ é o último recurso, nunca o primeiro.
+> **Nomes.** Nenhum item chega à tela como CNPJ, como "Sem empresa" ou como um número de
+> telefone. 183 dos 185 fornecedores do funil não têm ficha em `empresas` — mas todos têm
+> nome na nota fiscal. O CNPJ é o último recurso, nunca o primeiro.
+>
+> Duas causas separadas produziam o mesmo sintoma, e cada uma tem a sua correção:
+>
+> - **`coalesce` não pula string vazia.** Onze empresas têm `nome_fantasia` = `''` (dez) ou
+>   `'******'` (uma), e `coalesce(e.nome_fantasia, e.razao_social, …)` devolve o vazio —
+>   coalesce só olha NULL. Quatro delas estão na carteira do Fabio, três com limite acima de
+>   R$ 1 mi, e apareciam como quadrados mudos no mapa. `app__md_nome(text)` devolve o texto
+>   só se ele tiver ao menos um alfanumérico.
+> - **O nome do perfil não era lido.** 38 das 39 conversas do originador não têm empresa nem
+>   contato, e o título caía no número do WhatsApp. Mas `conversas_nao_vinculadas.nome_sugerido`
+>   — o nome do perfil de quem escreveu — já estava gravado para 35 delas, e ninguém fora da
+>   fila de identificação o lia. A ordem passou a ser razão social → nome fantasia → contato
+>   no CRM → nome do perfil → número.
+
+> **"Só o que eu ainda não respondi" já era a régua.** `conversas_aguardando_resposta` filtra
+> por `ultima_direcao = 'entrada'`. Conferido contra as mensagens: das 77 conversas abertas do
+> Rodrigo, as 39 marcadas como 'entrada' têm mesmo uma mensagem recebida como última, e as 38
+> marcadas como 'saida' têm uma enviada — nenhuma resposta de IA no meio. A flag não estava
+> mentindo; o que enganava era o título sem nome.
 
 > **A régua de dias sozinha perdia conta boa.** A Halsten tem R$ 1,4 mi parados e
 > `requires_attention` no report, mas antecipou há dois dias — pela régua antiga ela sumia
@@ -145,6 +178,21 @@ O motor continua de pé: `projetarComissao()` segue exportado do core e com os s
 rodando o mesmo VOP (`valor × dias / N`), a mesma fase e a mesma taxa vigente do 04k. **Ele
 ficou sem chamador** — o que saiu foi a chamada, não a régua, para que voltar a projetar em
 outra tela não signifique reescrever a fórmula. O celular nunca teve o indicador.
+
+## Abrir sem perder o lugar
+
+Todo link do Meu Dia para uma tela nossa abre **numa aba do sistema**, via `<LinkEmAba>`
+(`components/shell/link-em-aba.tsx`), que é o par `openTab` + `router.push` do shell.
+
+Antes era `target="_blank"`, e ele resolvia a metade errada do problema: a tela de origem
+continuava aberta, sim, mas numa aba do NAVEGADOR — fora da barra de abas, sem o estado do
+shell e sem o voltar contextual. Pior: `RouteSync` recusa de propósito qualquer `<a>` com
+`target` diferente de `_self` (`internalRoute()`), então o `target="_blank"` desligava o
+sistema de abas exatamente onde ele estava sendo pedido.
+
+Continua sendo um `<a>` com `href` de verdade: cmd+clique, botão do meio e "abrir em nova
+aba" do menu do navegador seguem funcionando, e o `onClick` só muda o clique simples. Link
+externo — site do cliente, tribunal — segue `target="_blank"`: aquilo não é tela nossa.
 
 ## Quem vê o dia de quem
 

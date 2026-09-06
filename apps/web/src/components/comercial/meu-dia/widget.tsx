@@ -1,8 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import Link from 'next/link'
 import { ExternalLink, MoreHorizontal } from 'lucide-react'
+import { LinkEmAba } from '@/components/shell/link-em-aba'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -136,10 +136,12 @@ export function LinhaItem({
             {cat?.acaoRotulo}
           </Button>
         ) : href ? (
+          /* Aba do SISTEMA, não do navegador: o dia fica na aba de trás, com o shell, a
+             barra de abas e o voltar contextual inteiros. */
           <Button variant="ghost" size="sm" className="h-6 px-2" asChild>
-            <Link href={href} target="_blank" rel="noopener noreferrer" aria-label={cat?.acaoRotulo}>
+            <LinkEmAba href={href} tituloDaAba={item.titulo} aria-label={cat?.acaoRotulo}>
               <ExternalLink className="h-3 w-3" aria-hidden />
-            </Link>
+            </LinkEmAba>
           </Button>
         ) : null}
 

@@ -261,3 +261,14 @@ $$;
 --                                      carteira ociosa: ele sempre trouxe as duas
 --                                      naturezas (passiva e prospecção ativa) sem
 --                                      dizer qual era qual, e é a tela que filtra
+--   meu_dia_nome_vazio_e_perfil_do_whatsapp
+--                                      app__md_nome() — coalesce não pula string vazia,
+--                                      e onze empresas têm nome_fantasia = '' ou
+--                                      '******'; o mapa da carteira mostrava quadrado mudo
+--   meu_dia_conversas_com_nome_do_perfil
+--                                      a conversa sem ficha passa a usar o nome_sugerido
+--                                      da fila de identificação (o nome do perfil de
+--                                      WhatsApp) antes de cair no número
+--   meu_dia_certificados_com_status_da_conta
+--                                      operation_status no meta do bloco de certificados,
+--                                      para a bolha ter a cor do temperature report
