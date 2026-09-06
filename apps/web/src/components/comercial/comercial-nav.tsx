@@ -20,9 +20,17 @@ import { cn } from '@/lib/utils'
  * abrir o módulo neles seria abrir o trabalho pela contabilidade dele.
  *
  * Cada tipo vê o seu conjunto:
- *   SDR         funil de reuniões · calendário · comissão
- *   Originador  funil de NFs · funil de certificados · carteira · comissão
- *   Closer      funil de vendas · calendário · comissão · passivas na carteira
+ *   SDR         funil de reuniões · análise · calendário · comissão
+ *   Originador  funil de NFs · funil de certificados · cadastro de fornecedores ·
+ *               carteira · comissão
+ *   Closer      os funis de quem está abaixo dele (reuniões, NFs, certificados) ·
+ *               funil de vendas · análise · calendário · comissão · passivas
+ *
+ * O CLOSER VÊ OS FUNIS DOS OUTROS, e é de propósito: ele responde pelo que o time
+ * abaixo dele produz. A aba aparece sempre e quem recorta é a RLS — ele enxerga o
+ * funil de quem `vendedor_acessos` lhe deu, e mais ninguém. Uma aba que só aparece
+ * quando há alguém abaixo some e volta conforme o cadastro muda, e aí ninguém sabe
+ * se a tela sumiu ou se o time encolheu.
  *
  * Gestor (Admin/Comercial) vê tudo — é ele quem atribui a fila e aprova a comissão — e
  * ganha "Painel" no fim, que é a tela de olhar o trabalho dos outros.
@@ -35,26 +43,41 @@ interface ItemNav {
   /** Tipos de vendedor para quem o item faz sentido. Vazio = todos. */
   tipos?: readonly string[]
   somenteGestor?: boolean
+  /**
+   * Mais estreito que `somenteGestor`: nem a gestora do Comercial entra. É para a
+   * tela que decide como a casa aparece para FORA, não como ela trabalha por dentro.
+   */
+  somenteAdmin?: boolean
   /** Rótulo diferente por tipo, quando a mesma tela responde a perguntas diferentes. */
   labelPorTipo?: Record<string, string>
 }
 
 const ITENS: readonly ItemNav[] = [
-  { href: '/comercial/sdr', label: 'Funil de Reuniões', icon: Target, tipos: ['sdr'] },
+  { href: '/comercial/sdr', label: 'Funil de Reuniões', icon: Target, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/vendas', label: 'Funil de Vendas', icon: Users, tipos: ['vendedor'] },
-  { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador'] },
-  // Do originador: a carteira dele é o recorte, e capturar certificado é o trabalho
-  // que destrava a ingestão das NFs que ele origina.
-  { href: '/comercial/certificados', label: 'Funil de Certificados', icon: ShieldCheck, tipos: ['originador'] },
+  { href: '/comercial/nfs', label: 'Funil de NFs', icon: Inbox, tipos: ['originador', 'vendedor'] },
+  // Do originador pela carteira dele, e do closer pelo time abaixo: capturar
+  // certificado é o trabalho que destrava a ingestão das NFs de qualquer um dos dois.
+  {
+    href: '/comercial/certificados',
+    label: 'Funil de Certificados',
+    icon: ShieldCheck,
+    tipos: ['originador', 'vendedor'],
+  },
   // Análise fica logo depois dos funis e antes do calendário: ela lê os mesmos cards, e
   // quem termina de mexer no funil é quem pergunta onde ele trava.
   { href: '/comercial/analise', label: 'Análise do Funil', icon: TrendingDown, tipos: ['sdr', 'vendedor'] },
   { href: '/comercial/calendario', label: 'Calendário', icon: CalendarDays, tipos: ['sdr', 'vendedor'] },
   // O funil de cadastro (04l) vem ANTES da comissão: é trabalho do dia, e comissão é
-  // consulta. Visível para todos os tipos porque a lista já é recortada por originador
-  // pela RLS — quem não tem fornecedor atribuído vê a tela vazia, que é uma resposta,
-  // e não um item de menu que some sem explicação.
-  { href: '/comercial/fornecedores', label: 'Cadastro de Fornecedores', icon: PackageSearch },
+  // consulta. Só do ORIGINADOR: a lista é recortada por originador na RLS, e para SDR
+  // e closer ela vinha sempre vazia. Uma aba que nunca tem nada não é uma resposta —
+  // é um item de menu que ensina a não clicar.
+  {
+    href: '/comercial/fornecedores',
+    label: 'Cadastro de Fornecedores',
+    icon: PackageSearch,
+    tipos: ['originador'],
+  },
   { href: '/comercial/comissoes', label: 'Comissão', icon: Coins },
   {
     href: '/comercial/carteira',
@@ -63,22 +86,34 @@ const ITENS: readonly ItemNav[] = [
     tipos: ['originador', 'vendedor'],
     labelPorTipo: { originador: 'Empresas da Carteira', vendedor: 'Passivas na Carteira' },
   },
-  // Leads é do time todo (o SDR precisa ver de onde veio o que chegou na fila dele),
-  // mas só o gestor cria formulário — a página resolve isso por dentro.
-  { href: '/comercial/leads', label: 'Leads', icon: Sparkles },
-  // Campanhas ao lado de Leads porque as duas respondem "de onde vem quem chega":
-  // uma é o que entra sozinho, a outra é o que a gente foi buscar. Visível para o
-  // time todo — quem não é gestor lê o placar e não vê o botão de criar, e saber
-  // que a conta recebeu um disparo hoje é informação de quem vai ligar amanhã.
-  { href: '/comercial/campanhas', label: 'Campanhas', icon: Megaphone },
+  /*
+   * Leads e Campanhas saíram do menu do time e ficaram só com o Admin.
+   *
+   * As duas respondem "de onde vem quem chega" — uma é o que entra sozinho, a outra é
+   * o que a gente foi buscar — e as duas são decisões sobre como a casa fala com o
+   * mercado: um formulário publicado é uma URL na landing page de um cliente, e uma
+   * campanha é um disparo em nome da empresa. Isso não é trabalho de funil, é política
+   * de aquisição. Quem trabalha o lead continua vendo a origem dele no card.
+   */
+  { href: '/comercial/leads', label: 'Leads', icon: Sparkles, somenteAdmin: true },
+  { href: '/comercial/campanhas', label: 'Campanhas', icon: Megaphone, somenteAdmin: true },
   { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true },
   { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },
 ]
 
-export function ComercialNav({ tipo, ehGestor }: { tipo: string | null; ehGestor: boolean }) {
+export function ComercialNav({
+  tipo,
+  ehGestor,
+  ehAdmin,
+}: {
+  tipo: string | null
+  ehGestor: boolean
+  ehAdmin: boolean
+}) {
   const pathname = usePathname()
   const itens = ITENS.filter((i) => {
+    if (i.somenteAdmin && !ehAdmin) return false
     if (i.somenteGestor && !ehGestor) return false
     if (!i.tipos) return true
     // Gestor enxerga todos os funis mesmo sem ser vendedor de nenhum tipo.

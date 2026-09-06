@@ -112,7 +112,22 @@ function paraFormValues(empresa: Tables<'empresas'>): EmpresaFormValues {
  * null can never blank a column. Text fields are therefore cleared by sending
  * '' (which does write). The two exceptions are called out at their fields.
  */
-export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
+export function EmpresaForm({
+  empresa,
+  somenteDominio = false,
+}: {
+  empresa: Tables<'empresas'>
+  /**
+   * Vendedor não gestor. Ele altera o DOMÍNIO — que é o insumo do enriquecimento e a
+   * primeira coisa que quem liga para a empresa descobre — e nada mais. Razão social,
+   * tipo, regime e ERP são afirmações que valem para a casa toda, e o estágio decide
+   * de quem é o dinheiro dela.
+   *
+   * A recusa de verdade está em `app_atualizar_empresa` (0188). Isto aqui é só para
+   * não oferecer um campo que o banco vai devolver com erro.
+   */
+  somenteDominio?: boolean
+}) {
   const [salvando, setSalvando] = React.useState(false)
   const queryClient = useQueryClient()
 
@@ -145,7 +160,10 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
 
   async function onSubmit(values: EmpresaFormValues) {
     const trim = (valor: string) => valor.trim()
-    const payload = {
+    // Não é só a UI que encolhe, o PAYLOAD também: `app_atualizar_empresa` recusa o
+    // pedido inteiro se vier qualquer chave além de `id` e `dominio`, e mandar os
+    // campos desabilitados (iguais aos de antes, mas presentes) seria erro garantido.
+    const payloadCompleto = {
       id: empresa.id,
       razao_social: trim(values.razao_social),
       nome_fantasia: trim(values.nome_fantasia),
@@ -170,6 +188,9 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
         trim(values.erp_mrr) === '' ? (empresa.erp_mrr === null ? undefined : 0) : values.erp_mrr,
       erp_canal_venda: trim(values.erp_canal_venda),
     }
+    const payload = somenteDominio
+      ? { id: empresa.id, dominio: trim(values.dominio) }
+      : payloadCompleto
 
     const parsed = atualizarEmpresaSchema.safeParse(payload)
     if (!parsed.success) {
@@ -202,7 +223,9 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
           <CardHeader>
             <CardTitle>Dados gerais</CardTitle>
             <CardDescription>
-              O CNPJ não é editável: ele é a identidade da empresa.
+              {somenteDominio
+                ? 'Você edita o site — é ele que destrava a busca de contatos. Razão social, tipo, regime e ERP valem para a casa toda e são da gestão.'
+                : 'O CNPJ não é editável: ele é a identidade da empresa.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -213,7 +236,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 <FormItem>
                   <FormLabel>Razão social</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" />
+                    <Input {...field} autoComplete="off" disabled={somenteDominio} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -227,7 +250,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 <FormItem>
                   <FormLabel>Nome fantasia</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" />
+                    <Input {...field} autoComplete="off" disabled={somenteDominio} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -240,7 +263,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={somenteDominio}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -271,7 +294,11 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Regime tributário</FormLabel>
-                  <Select value={field.value || 'nenhum'} onValueChange={(v) => field.onChange(v === 'nenhum' ? '' : v)}>
+                  <Select
+                    value={field.value || 'nenhum'}
+                    onValueChange={(v) => field.onChange(v === 'nenhum' ? '' : v)}
+                    disabled={somenteDominio}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Não informado" />
@@ -299,7 +326,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                   <FormItem>
                     <FormLabel>Município</FormLabel>
                     <FormControl>
-                      <Input {...field} autoComplete="off" />
+                      <Input {...field} autoComplete="off" disabled={somenteDominio} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -312,7 +339,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>UF</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={somenteDominio}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="—" />
@@ -339,7 +366,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 <FormItem>
                   <FormLabel>CNAE principal</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" />
+                    <Input {...field} autoComplete="off" disabled={somenteDominio} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -353,7 +380,7 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
                 <FormItem>
                   <FormLabel>Porte</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" />
+                    <Input {...field} autoComplete="off" disabled={somenteDominio} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -400,7 +427,13 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
           </CardContent>
         </Card>
 
-        <Card>
+        {/*
+          Inteligência de ERP é leitura de gestão — MRR, canal, representante. Some
+          inteira para o vendedor em vez de aparecer travada: um cartão de campos
+          cinzentos que ele nunca vai preencher é ruído no meio da ficha.
+        */}
+        {!somenteDominio && (
+          <Card>
           <CardHeader>
             <CardTitle>Inteligência de ERP</CardTitle>
             <CardDescription>
@@ -511,7 +544,8 @@ export function EmpresaForm({ empresa }: { empresa: Tables<'empresas'> }) {
               </p>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        )}
 
         <div className="flex items-center justify-end gap-3">
           {formState.isDirty && (

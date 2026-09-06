@@ -37,19 +37,24 @@ export default async function Pagina() {
     )
   }
 
-  // Gestor sem cadastro de vendedor vê o funil inteiro: para ele a pergunta é "onde está
-  // a receita", não "onde está a minha".
-  //
-  // Para o gestor QUE TEM carteira, `vendedorId` é o ponto de partida e não uma trava: a
-  // tela abre na carteira dele e o seletor de originador troca de carteira sem sair
-  // daqui. Antes ele ficava preso à própria fila, e responder "quantas notas o fulano
-  // tem parado em análise" exigia ir para /antecipacao e olhar card a card.
-  //
-  // Para quem NÃO é gestor o recorte continua sendo trava: trocar de carteira ali seria
-  // ver a fila de outra pessoa, que é decisão de distribuição, não de visualização.
-  // Gestor sem recorte enxerga o dono em cada card e pode trocar ali mesmo; o
-  // originador vê a própria carteira, onde o nome seria constante e inútil.
-  // `padraoComercial`: aqui o funil é um entre quatro irmãos, e a moldura tem de ser a
-  // mesma deles. Em /antecipacao ele é a tela inteira e continua como está.
-  return <FunilKanban vendedorId={vendedor?.id} ehGestor={ehGestor} padraoComercial />
+  /*
+   * Gestor sem cadastro de vendedor vê o funil inteiro: para ele a pergunta é "onde
+   * está a receita", não "onde está a minha".
+   *
+   * Para o gestor QUE TEM carteira, `vendedorId` é o ponto de partida e não uma trava:
+   * a tela abre na carteira dele e o seletor de originador troca de carteira sem sair
+   * daqui.
+   *
+   * Para o ORIGINADOR o recorte é trava: ele abre na própria carteira e fica nela.
+   *
+   * Para o CLOSER não há recorte inicial nenhum, e é de propósito — nota não é dele,
+   * é do time abaixo dele e das contas passivas que ele carrega. Travá-lo no próprio
+   * id abriria um funil vazio. Quem recorta aqui é a RLS (0188): ele enxerga a nota de
+   * quem `vendedor_acessos` lhe deu, mais a das empresas da carteira dele.
+   *
+   * `padraoComercial`: aqui o funil é um entre irmãos e a moldura tem de ser a mesma
+   * deles. Em /antecipacao ele é a tela inteira e continua como está.
+   */
+  const recorte = vendedor?.tipo === 'originador' ? vendedor.id : undefined
+  return <FunilKanban vendedorId={recorte} ehGestor={ehGestor} padraoComercial />
 }

@@ -64,7 +64,15 @@ function LinhasCarregando() {
   )
 }
 
-function Vazio({ filtrado, onLimpar }: { filtrado: boolean; onLimpar: () => void }) {
+function Vazio({
+  filtrado,
+  onLimpar,
+  podeCriar,
+}: {
+  filtrado: boolean
+  onLimpar: () => void
+  podeCriar: boolean
+}) {
   return (
     <TableRow>
       <TableCell colSpan={COLUNAS} className="h-64">
@@ -86,9 +94,9 @@ function Vazio({ filtrado, onLimpar }: { filtrado: boolean; onLimpar: () => void
             <Button variant="outline" size="sm" onClick={onLimpar}>
               Limpar filtros
             </Button>
-          ) : (
+          ) : podeCriar ? (
             <NovaEmpresaDialog />
-          )}
+          ) : null}
         </div>
       </TableCell>
     </TableRow>
@@ -116,7 +124,7 @@ function Erro({ mensagem, onTentar }: { mensagem: string; onTentar: () => void }
   )
 }
 
-export function EmpresasLista() {
+export function EmpresasLista({ podeCriar = true }: { podeCriar?: boolean }) {
   const router = useRouter()
   const [filtros, setFiltros] = React.useState<FiltrosEmpresas>(FILTROS_VAZIOS)
 
@@ -152,7 +160,7 @@ export function EmpresasLista() {
             Toda a carteira em um lugar só: mercado, funil e inteligência de ERP.
           </p>
         </div>
-        <NovaEmpresaDialog />
+        {podeCriar && <NovaEmpresaDialog />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -257,7 +265,7 @@ export function EmpresasLista() {
                 onTentar={() => void refetch()}
               />
             ) : empresas.length === 0 ? (
-              <Vazio filtrado={filtrado} onLimpar={limpar} />
+              <Vazio filtrado={filtrado} onLimpar={limpar} podeCriar={podeCriar} />
             ) : (
               empresas.map((empresa) => (
                 // The row is clickable for the mouse; the <Link> in the first

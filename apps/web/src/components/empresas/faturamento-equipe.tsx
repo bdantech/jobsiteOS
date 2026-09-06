@@ -420,6 +420,12 @@ export interface FaturamentoEquipeProps {
    * teve chance de acontecer.
    */
   dominio: string | null
+  /**
+   * Se a pessoa tem o módulo `radar`. Enriquecer, resolver domínio e atualizar
+   * headcount continuam sendo do Radar, que é o dono do orçamento — e a barra some
+   * para quem não o tem, em vez de oferecer três botões que respondem "sem acesso".
+   */
+  temRadar: boolean
   /** Só clientes ganham os campos de declaração (§5). */
   eCliente: boolean
 }
@@ -543,6 +549,7 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
            * foi obtido há menos de 30 dias. Os avulsos ficam: quem quer só o domínio não
            * deve ter de pagar o resto.
            */}
+          {props.temRadar && (
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button
               size="sm"
@@ -607,6 +614,7 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
               {atualizando === 'funcionarios' ? 'Disparando…' : 'Atualizar funcionários'}
             </Button>
           </div>
+          )}
         </div>
         {!props.dominio && (
           <p className="text-xs text-muted-foreground">

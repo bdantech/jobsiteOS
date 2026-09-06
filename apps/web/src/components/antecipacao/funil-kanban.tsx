@@ -39,7 +39,11 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { atribuirNfAction } from '@/actions/comercial'
-import { buscarVendedores, comercialKeys } from '@/components/comercial/queries'
+import {
+  buscarVendedores,
+  buscarVendedoresVisiveis,
+  comercialKeys,
+} from '@/components/comercial/queries'
 import { useDebounce } from '@/components/empresas/use-debounce'
 import { cn } from '@/lib/utils'
 import { formatarInteiro, formatarMoeda } from './format'
@@ -165,13 +169,29 @@ export function FunilKanban({
   const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
 
   /*
+   * Quem eu posso ABRIR não é quem existe. O gestor abre todos; o closer abre o time
+   * abaixo dele. Oferecer no seletor um originador cuja carteira a RLS devolveria
+   * vazia ensina que a tela está quebrada — então quem não é gestor só vê os nomes
+   * que `vendedor_acessos` lhe deu.
+   */
+  const alcance = useQuery({
+    queryKey: comercialKeys.visiveis(),
+    queryFn: buscarVendedoresVisiveis,
+    enabled: !travadoNoVendedor && !ehGestor,
+    staleTime: 5 * 60_000,
+  })
+  const idsAoAlcance = ehGestor ? null : new Set((alcance.data ?? []).map((v) => v.id))
+
+  /*
    * Quem titulariza NF é o ORIGINADOR (04k §4) — é o papel que o dono do card
    * oferece. A carteira de quem abriu entra na lista mesmo se for de outro tipo:
    * sem isso, um gestor cadastrado como `vendedor` abriria a tela com o seletor
    * apontando para um item que não existe, e o próprio nome dele sumiria.
    */
   const originadores = (vendedores.data ?? []).filter(
-    (v) => v.tipo === 'originador' || v.id === vendedorId,
+    (v) =>
+      (v.tipo === 'originador' || v.id === vendedorId) &&
+      (idsAoAlcance === null || idsAoAlcance.has(v.id)),
   )
 
   async function atribuir(accessKey: string, destino: string) {
@@ -287,7 +307,11 @@ export function FunilKanban({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={TODOS}>Todos os originadores</SelectItem>
-            <SelectItem value={SEM_DONO}>Sem dono</SelectItem>
+            {/*
+              Nota sem dono é a Fila sem Dono, e a RLS (0188) só a entrega ao gestor:
+              para qualquer outro este filtro devolveria sempre zero.
+            */}
+            {ehGestor && <SelectItem value={SEM_DONO}>Sem dono</SelectItem>}
             {originadores.map((v) => (
               <SelectItem key={v.id} value={v.id}>
                 {v.nome}

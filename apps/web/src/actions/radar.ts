@@ -54,6 +54,31 @@ async function autorizar() {
   return { erro: null, supabase: await createClient() }
 }
 
+const SEM_EMPRESAS: Falha = {
+  ok: false,
+  message: 'Você não tem acesso ao módulo Empresas.',
+  code: 'forbidden',
+}
+
+/**
+ * A régua das ações que partem da FICHA de UMA empresa, e não do Radar.
+ *
+ * A diferença com `autorizar()` não é burocracia: o Radar é dono do ORÇAMENTO — lote,
+ * supressão, teto mensal, configuração — e nada disso passa por aqui. O que passa é o
+ * clique de quem está com uma empresa aberta na frente, gastando o preço de um contato.
+ *
+ * Ela existe porque o botão "Buscar no Apollo" era oferecido a todo mundo com o módulo
+ * `empresas` e recusado a quem não tivesse `radar`: SDR, closer, originador, crédito e
+ * jurídico viam o botão e tomavam "sem acesso" ao clicar. Prometer e negar é pior que
+ * não prometer — e quem trabalha o funil é justamente quem precisa do contato.
+ */
+async function autorizarPelaFicha() {
+  const context = await getSessionContext()
+  if (!context) return { erro: SEM_SESSAO as Falha }
+  if (!canAccessRoute('/empresas', context.grantedModuleIds)) return { erro: SEM_EMPRESAS as Falha }
+  return { erro: null }
+}
+
 function falhaDe(e: unknown): Falha {
   if (e instanceof MutationError) return { ok: false, message: e.message, code: e.code, fieldErrors: e.fieldErrors }
   return { ok: false, message: 'Não foi possível concluir a operação.', code: 'unknown' }
@@ -169,8 +194,8 @@ export async function rodarProtestosEmpresaAction(input: {
 }
 
 /**
- * Dispara contatos do Apollo (ação PAGA) de uma empresa. Autoriza pelo módulo Radar,
- * dono do dado e do orçamento — a ficha da empresa é só de onde o clique parte.
+ * Dispara contatos do Apollo (ação PAGA) de uma empresa. Autoriza pelo módulo
+ * EMPRESAS, que é de onde o clique parte — ver `autorizarPelaFicha()`.
  *
  * O TTL de contatos vale: se o domínio foi enriquecido dentro da janela, o item volta
  * `pulado` e nada é cobrado. Por isso o botão não precisa de confirmação de custo a
@@ -195,7 +220,7 @@ export async function rodarContatosEmpresaAction(input: {
   empresaId: string
   revelarTelefone?: boolean
 }): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizar()
+  const { erro } = await autorizarPelaFicha()
   if (erro) return erro
   const r = await dispararContatosEmpresa({ ...input, forcar: true })
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }

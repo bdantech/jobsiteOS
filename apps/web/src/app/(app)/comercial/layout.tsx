@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
+import { isAdmin } from '@/lib/auth'
 import { contextoComercial } from '@/lib/comercial'
 import { ComercialNav } from '@/components/comercial/comercial-nav'
 
@@ -15,7 +16,11 @@ export default async function ComercialLayout({ children }: { children: ReactNod
 
   return (
     <div>
-      <ComercialNav tipo={vendedor?.tipo ?? null} ehGestor={ehGestor} />
+      <ComercialNav
+        tipo={vendedor?.tipo ?? null}
+        ehGestor={ehGestor}
+        ehAdmin={isAdmin(context)}
+      />
       {children}
     </div>
   )

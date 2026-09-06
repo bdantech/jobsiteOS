@@ -392,12 +392,18 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
     queryFn: buscarMotivosCertificado,
     staleTime: 60 * 60_000,
   })
-  // Só os originadores: são eles que têm carteira, e oferecer um closer num filtro que
-  // lê `vendedor_carteira` seria oferecer uma opção que sempre volta vazia.
+  /*
+   * Só os originadores: são eles que têm carteira, e oferecer um closer num filtro que
+   * lê `vendedor_carteira` seria oferecer uma opção que sempre volta vazia.
+   *
+   * A lista é buscada para TODO MUNDO, e não só para o gestor. Desde a 0188 o RPC
+   * aceita um `p_vendedor_id` de quem não é gestor, desde que seja alguém que a pessoa
+   * possa abrir — é assim que o closer filtra o funil do originador abaixo dele. Quem
+   * não tem ninguém ao alcance recebe a lista vazia e o seletor nem aparece.
+   */
   const { data: visiveis } = useQuery({
     queryKey: comercialKeys.visiveis(),
     queryFn: buscarVendedoresVisiveis,
-    enabled: ehGestor,
   })
   const originadores = (visiveis ?? []).filter((v) => v.tipo === 'originador')
 
@@ -478,10 +484,11 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
                * de vendas e do de reuniões. Um filtro que muda de lugar entre telas
                * irmãs custa uma procura por tela, toda vez.
                *
-               * Quem não é gestor não o vê porque para ele não há escolha: o RPC
-               * devolve a própria carteira e ignora o argumento.
+               * Quem não é gestor só o vê quando há mais de um funil ao alcance dele —
+               * o closer com originadores abaixo. Sem ninguém ao alcance não há
+               * escolha a fazer, e um seletor de uma opção só é ruído.
                */}
-              {ehGestor && originadores.length > 0 && (
+              {(ehGestor || originadores.length > 1) && originadores.length > 0 && (
                 <Select
                   value={vendedorId ?? 'todos'}
                   onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}
@@ -565,8 +572,9 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
                           key={c.card_id}
                           c={c}
                           onAbrir={() => setAbertoId(c.card_id)}
-                          // Com o filtro de originador ligado o nome seria constante.
-                          mostrarDono={ehGestor && !vendedorId}
+                          // Com o filtro de originador ligado — ou com um só ao
+                          // alcance — o nome seria constante em todo card.
+                          mostrarDono={!vendedorId && (ehGestor || originadores.length > 1)}
                         />
                       ))}
                     </div>

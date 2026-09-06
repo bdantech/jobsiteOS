@@ -55,6 +55,25 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
    * vê que existe ação contra o sacado (08 §8). O CONTEÚDO do processo, não: o link
    * para /juridico só sai para quem tem o módulo, porque oferecer um link que leva a
    * /sem-acesso é pior que não oferecer link nenhum.
+   *
+   * `podeEditarDados` vem do BANCO (`app_vendedor_restrito()`), que é a mesma régua
+   * que `app_atualizar_empresa` aplica na hora de gravar (0188). Uma segunda régua
+   * escrita aqui divergiria da que recusa, e a tela passaria a oferecer campos que o
+   * banco devolve com erro.
+   *
+   * `temRadar` esconde a barra de enriquecimento (enriquecer tudo, resolver domínio,
+   * atualizar funcionários) de quem não tem o módulo: essas ações continuam sendo do
+   * Radar, dono do orçamento. Só a busca de contatos migrou para a ficha.
    */
-  return <EmpresaDetalhe empresaId={id} podeAbrirJuridico={grantedModuleIds.includes('juridico')} />
+  const supabase = await createClient()
+  const { data: restrito } = await supabase.rpc('app_vendedor_restrito' as never)
+
+  return (
+    <EmpresaDetalhe
+      empresaId={id}
+      podeAbrirJuridico={grantedModuleIds.includes('juridico')}
+      temRadar={grantedModuleIds.includes('radar')}
+      podeEditarDados={restrito !== true}
+    />
+  )
 }

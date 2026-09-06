@@ -126,10 +126,19 @@ function EstadoVazio({
 export function EmpresaDetalhe({
   empresaId,
   podeAbrirJuridico = false,
+  temRadar = false,
+  podeEditarDados = true,
 }: {
   empresaId: string
   /** Se o usuário tem o módulo `juridico` — decide se a seção Jurídico linka (08 §8). */
   podeAbrirJuridico?: boolean
+  /** Se tem o módulo `radar` — decide se a barra de enriquecimento é oferecida. */
+  temRadar?: boolean
+  /**
+   * Falso para vendedor não gestor: ele altera o domínio e os contatos, e mais nada.
+   * Quem recusa de verdade é `app_atualizar_empresa` (0188); isto só evita oferecer.
+   */
+  podeEditarDados?: boolean
 }) {
   // Controlado (e não `defaultValue`) só por causa do atalho "Ver quadro societário":
   // um botão que leva a uma aba precisa poder escolhê-la.
@@ -187,7 +196,7 @@ export function EmpresaDetalhe({
       <FichaTopo
         titulo="Empresa"
         descricao={formatCnpj(data.cnpj)}
-        acao={<EmpresaAcaoEstagio empresa={data} />}
+        acao={podeEditarDados ? <EmpresaAcaoEstagio empresa={data} /> : <EstagioBadge estagio={data.estagio} />}
       />
 
       {/*
@@ -319,6 +328,7 @@ export function EmpresaDetalhe({
                   funcionariosEm={data.funcionarios_atualizado_em}
                   dominio={data.dominio}
                   eCliente={data.estagio === 'cliente'}
+                  temRadar={temRadar}
                 />
                 {/*
                  * Crédito depois de Faturamento & Equipe porque DEPENDE dele: o limite
@@ -352,7 +362,7 @@ export function EmpresaDetalhe({
                  * a contradição antes do número contradito.
                  */}
                 <SecaoJuridico empresaId={data.id} podeAbrirProcesso={podeAbrirJuridico} />
-                <EmpresaForm empresa={data} />
+                <EmpresaForm empresa={data} somenteDominio={!podeEditarDados} />
               </TabsContent>
 
               {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}

@@ -52,7 +52,16 @@ const LUGAR_DA_ABA: Record<Aba, { href: string; titulo: string }> = {
   analise: { href: '/empresas?tab=analise', titulo: 'Análise Onepay' },
 }
 
-export function EmpresasTabs({ temRadar, abaInicial }: { temRadar: boolean; abaInicial?: string }) {
+export function EmpresasTabs({
+  temRadar,
+  abaInicial,
+  podeCriar = true,
+}: {
+  temRadar: boolean
+  abaInicial?: string
+  /** Falso para o SDR: ele só enxerga o próprio funil, e criaria ficha invisível. */
+  podeCriar?: boolean
+}) {
   const [aba, setAba] = React.useState<Aba>(ehAba(abaInicial) ? abaInicial : 'todas')
   const store = useTabsStoreApi()
   const hidratado = useTabsHydrated()
@@ -96,7 +105,7 @@ export function EmpresasTabs({ temRadar, abaInicial }: { temRadar: boolean; abaI
       </TabsList>
 
       <TabsContent value="todas" className="mt-0">
-        <EmpresasLista />
+        <EmpresasLista podeCriar={podeCriar} />
       </TabsContent>
 
       <TabsContent value="clientes" className="mt-0">

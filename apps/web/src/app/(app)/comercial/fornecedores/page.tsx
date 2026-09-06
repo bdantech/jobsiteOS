@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { contextoComercial } from '@/lib/comercial'
 import { CadastroDeFornecedores } from '@/components/comercial/fornecedores'
 
@@ -8,8 +9,14 @@ export const metadata: Metadata = { title: 'Cadastro de Fornecedores' }
 // carteira de quem abriu a página primeiro para todo mundo.
 export const dynamic = 'force-dynamic'
 
+/**
+ * Do ORIGINADOR (e do gestor). A RLS já recortava a lista por originador, então para
+ * SDR e closer a tela vinha sempre vazia — e vazia por permissão parece vazia por
+ * falta de trabalho, que é a leitura errada sobre o próprio dia.
+ */
 export default async function Pagina() {
   const { context, ehGestor, vendedor } = await contextoComercial()
+  if (!ehGestor && vendedor?.tipo !== 'originador') redirect('/comercial')
 
   return (
     <CadastroDeFornecedores
