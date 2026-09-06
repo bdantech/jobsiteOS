@@ -126,14 +126,11 @@ function EstadoVazio({
 export function EmpresaDetalhe({
   empresaId,
   podeAbrirJuridico = false,
-  temRadar = false,
   podeEditarDados = true,
 }: {
   empresaId: string
   /** Se o usuário tem o módulo `juridico` — decide se a seção Jurídico linka (08 §8). */
   podeAbrirJuridico?: boolean
-  /** Se tem o módulo `radar` — decide se a barra de enriquecimento é oferecida. */
-  temRadar?: boolean
   /**
    * Falso para vendedor não gestor: ele altera o domínio e os contatos, e mais nada.
    * Quem recusa de verdade é `app_atualizar_empresa` (0188); isto só evita oferecer.
@@ -328,7 +325,6 @@ export function EmpresaDetalhe({
                   funcionariosEm={data.funcionarios_atualizado_em}
                   dominio={data.dominio}
                   eCliente={data.estagio === 'cliente'}
-                  temRadar={temRadar}
                 />
                 {/*
                  * Crédito depois de Faturamento & Equipe porque DEPENDE dele: o limite

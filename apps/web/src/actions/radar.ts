@@ -60,22 +60,41 @@ const SEM_EMPRESAS: Falha = {
   code: 'forbidden',
 }
 
+const EMPRESA_INVISIVEL: Falha = {
+  ok: false,
+  message: 'Empresa não encontrada.',
+  code: 'forbidden',
+}
+
 /**
  * A régua das ações que partem da FICHA de UMA empresa, e não do Radar.
  *
  * A diferença com `autorizar()` não é burocracia: o Radar é dono do ORÇAMENTO — lote,
  * supressão, teto mensal, configuração — e nada disso passa por aqui. O que passa é o
- * clique de quem está com uma empresa aberta na frente, gastando o preço de um contato.
+ * clique de quem está com UMA empresa aberta na frente, gastando o preço de um contato
+ * ou de uma resolução de domínio.
  *
- * Ela existe porque o botão "Buscar no Apollo" era oferecido a todo mundo com o módulo
- * `empresas` e recusado a quem não tivesse `radar`: SDR, closer, originador, crédito e
- * jurídico viam o botão e tomavam "sem acesso" ao clicar. Prometer e negar é pior que
- * não prometer — e quem trabalha o funil é justamente quem precisa do contato.
+ * Ela existe porque a barra de enriquecimento e o "Buscar no Apollo" eram oferecidos a
+ * todo mundo com o módulo `empresas` e recusados a quem não tivesse `radar`: SDR,
+ * closer, originador, crédito e jurídico viam os botões e tomavam "sem acesso" ao
+ * clicar. Prometer e negar é pior que não prometer — e quem trabalha o funil é
+ * justamente quem precisa do contato.
+ *
+ * O `empresaId` é OBRIGATÓRIO, e a checagem dele é o que sustenta o resto. Sem ela, a
+ * autorização seria "tem o módulo Empresas" e qualquer um poderia gastar orçamento em
+ * qualquer CNPJ da base trocando um uuid na chamada — inclusive o SDR, que desde a 0188
+ * só enxerga as empresas do funil dele. A leitura abaixo usa o client do USUÁRIO: quem
+ * decide é a RLS, e a resposta é a mesma que a ficha daria.
  */
-async function autorizarPelaFicha() {
+async function autorizarPelaFicha(empresaId: string) {
   const context = await getSessionContext()
   if (!context) return { erro: SEM_SESSAO as Falha }
   if (!canAccessRoute('/empresas', context.grantedModuleIds)) return { erro: SEM_EMPRESAS as Falha }
+
+  const supabase = await createClient()
+  const { data } = await supabase.from('empresas').select('id').eq('id', empresaId).maybeSingle()
+  if (!data) return { erro: EMPRESA_INVISIVEL as Falha }
+
   return { erro: null }
 }
 
@@ -220,7 +239,7 @@ export async function rodarContatosEmpresaAction(input: {
   empresaId: string
   revelarTelefone?: boolean
 }): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizarPelaFicha()
+  const { erro } = await autorizarPelaFicha(input.empresaId)
   if (erro) return erro
   const r = await dispararContatosEmpresa({ ...input, forcar: true })
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
@@ -284,13 +303,15 @@ export async function ultimoEnriquecimentoContatosAction(
 /**
  * Roda a cascata de domínio de UMA empresa (Radar §3), do botão da ficha.
  *
- * Autoriza pelo módulo Radar, dono do dado e do orçamento — a ficha é só de onde o
- * clique parte, como em protestos e contatos.
+ * Autoriza pela FICHA, como o Apollo: o domínio é o insumo de todo o resto — sem ele
+ * não há busca de contato nem headcount — e quem descobre o site certo é quem está
+ * ligando para a empresa, não quem administra o Radar. R$ 0,10 quando a cascata chega
+ * até o Claude; nas etapas anteriores (e-mail da Receita, contatos, DNS/MX), zero.
  */
 export async function resolverDominioEmpresaAction(
   empresaId: string,
 ): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizar()
+  const { erro } = await autorizarPelaFicha(empresaId)
   if (erro) return erro
   const r = await dispararDominioEmpresa(empresaId)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
@@ -302,11 +323,14 @@ export async function resolverDominioEmpresaAction(
  * Sem confirmação de custo, ao contrário de protestos: `organizations/enrich` não
  * consome crédito de revelação. Se um dia o plano passar a cobrar, o valor está em
  * `radar_config.funcionarios.custo_unitario` e este botão precisa ganhar um diálogo.
+ *
+ * Pela FICHA: é o botão de custo ZERO da barra, e negá-lo a quem trabalha a empresa
+ * seria negar de graça.
  */
 export async function atualizarFuncionariosAction(
   empresaId: string,
 ): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizar()
+  const { erro } = await autorizarPelaFicha(empresaId)
   if (erro) return erro
   const r = await dispararFuncionariosEmpresa(empresaId)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
@@ -322,12 +346,15 @@ export async function atualizarFuncionariosAction(
  *
  * A ordem e a janela de 30 dias moram no worker (`enriquecer-empresa.ts`), não aqui: são
  * regra de domínio, e a action é só a camada que autoriza.
+ *
+ * Pela FICHA, como os avulsos que ela encadeia: seria incoerente liberar domínio,
+ * headcount e contatos um a um e trancar o botão que faz os três na ordem certa.
  */
 export async function enriquecerEmpresaAction(
   empresaId: string,
   incluirPagos = true,
 ): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizar()
+  const { erro } = await autorizarPelaFicha(empresaId)
   if (erro) return erro
   const r = await dispararEnriquecerEmpresa(empresaId, incluirPagos)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }

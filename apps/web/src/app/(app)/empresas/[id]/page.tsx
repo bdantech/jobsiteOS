@@ -60,10 +60,6 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
    * que `app_atualizar_empresa` aplica na hora de gravar (0188). Uma segunda régua
    * escrita aqui divergiria da que recusa, e a tela passaria a oferecer campos que o
    * banco devolve com erro.
-   *
-   * `temRadar` esconde a barra de enriquecimento (enriquecer tudo, resolver domínio,
-   * atualizar funcionários) de quem não tem o módulo: essas ações continuam sendo do
-   * Radar, dono do orçamento. Só a busca de contatos migrou para a ficha.
    */
   const supabase = await createClient()
   const { data: restrito } = await supabase.rpc('app_vendedor_restrito' as never)
@@ -72,7 +68,6 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
     <EmpresaDetalhe
       empresaId={id}
       podeAbrirJuridico={grantedModuleIds.includes('juridico')}
-      temRadar={grantedModuleIds.includes('radar')}
       podeEditarDados={restrito !== true}
     />
   )

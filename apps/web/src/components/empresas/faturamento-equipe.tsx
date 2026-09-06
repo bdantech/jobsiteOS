@@ -420,12 +420,6 @@ export interface FaturamentoEquipeProps {
    * teve chance de acontecer.
    */
   dominio: string | null
-  /**
-   * Se a pessoa tem o módulo `radar`. Enriquecer, resolver domínio e atualizar
-   * headcount continuam sendo do Radar, que é o dono do orçamento — e a barra some
-   * para quem não o tem, em vez de oferecer três botões que respondem "sem acesso".
-   */
-  temRadar: boolean
   /** Só clientes ganham os campos de declaração (§5). */
   eCliente: boolean
 }
@@ -548,8 +542,13 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
            * "Enriquecer tudo" roda a cadeia inteira na ordem certa e reaproveita o que já
            * foi obtido há menos de 30 dias. Os avulsos ficam: quem quer só o domínio não
            * deve ter de pagar o resto.
+           *
+           * A barra aparece para quem consegue ABRIR a ficha, e não para quem tem o
+           * módulo Radar: as actions autorizam pela empresa (`autorizarPelaFicha`), do
+           * mesmo jeito que a busca de contatos. Lote, orçamento e supressão continuam
+           * no Radar — o que mora aqui é o clique sobre UMA empresa que a pessoa já
+           * trabalha.
            */}
-          {props.temRadar && (
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button
               size="sm"
@@ -614,7 +613,6 @@ export function FaturamentoEquipe(props: FaturamentoEquipeProps) {
               {atualizando === 'funcionarios' ? 'Disparando…' : 'Atualizar funcionários'}
             </Button>
           </div>
-          )}
         </div>
         {!props.dominio && (
           <p className="text-xs text-muted-foreground">
