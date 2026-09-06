@@ -27,7 +27,14 @@ no outro. E ninguém vai notar, porque o número continuará com a mesma cara.
 
 ## Hierarquia de origens
 
-`declarado_cliente` > `apollo` > `apollo_search` > `lista` > `modelo` > `bracket_simples`
+`analise_credito` > `declarado_cliente` > `publicacao` > `apollo` > `apollo_search` >
+`lista` > `modelo` > `bracket_simples`
+
+**`analise_credito` é a receita do balanço** que o cliente entregou na esteira de crédito,
+com a extração revisada por uma pessoa. Fica no topo porque declarar é dizer um número e um
+balanço é o número com o documento atrás. Só extração **revisada** entra: um modelo lendo
+PDF acerta quase sempre e erra o suficiente, e este valor passa a mandar na régua de 5.109
+empresas.
 
 O cache só é atualizado se a leitura nova tem origem **melhor ou igual** à vigente. Igual
 conta porque a mesma fonte falando de novo é informação nova.
@@ -172,10 +179,46 @@ errados, e plausível é exatamente o que ninguém questiona.
 
 ## Tipo da empresa: quatro valores
 
-`construtora | incorporadora | fornecedor | subempreiteiro`. **Nada foi reclassificado** e
-`construtora` continua sendo o default. A distinção incorporadora/subempreiteiro é
-refinada à mão porque inferir por CNAE erraria justamente nas empresas que fazem as duas
-coisas — que são as maiores e as que mais importam.
+`construtora | incorporadora | fornecedor | subempreiteiro`. `construtora` continua sendo o
+default da coluna. A distinção incorporadora/subempreiteiro é refinada à mão porque inferir
+por CNAE erraria justamente nas empresas que fazem as duas coisas — que são as maiores e as
+que mais importam.
+
+**O lead do formulário respeita o que a pessoa respondeu.** O formulário tem um campo
+obrigatório "Tipo de empresa", e por muito tempo a resposta morria em
+`formulario_submissoes.dados`: `app_processar_submissao` inseria a empresa sem `tipo` e
+todo lead inbound virava construtora. Nove das quatorze submissões com o campo respondido
+divergiam da ficha — sete fornecedores e uma incorporadora, entre elas a TS PINTURAS LTDA.
+Corrigido na criação e retroagido para os nove. Empresa que já existe mantém o que está na
+ficha: cadastro curado por gente não cai por resposta de landing page. "outro", que o
+formulário oferece e o CHECK não aceita, fica sem destino de propósito.
+
+## A revista, e por que ela rende menos amostra do que parece
+
+`usar_amostras_publicadas` decide se o Ranking da Engenharia entra na calibração ao lado dos
+declarantes. Ele mora em `radar_config.faturamento` e **está desligado**.
+
+Duas coisas justificam:
+
+1. **A medição de agosto/2026** (15 declarantes, 9 empresas do ranking): incluir a revista
+   PIOROU o erro fora da amostra — 1,34x → 1,47x nos declarantes e 1,29x → 1,41x nas
+   próprias empresas da revista. O suspeito é uso parcial do ERP: uma construtora de R$ 1,5
+   bi com 3 usuários paga um MRR que não fala do tamanho dela.
+2. **Das 141 empresas importadas, só 11 viram amostra.** Uma amostra precisa do rótulo E de
+   um sinal. Nenhuma das 141 tem headcount aproveitável — o ranking publica *pessoal
+   graduado* e a base é medida pelo Apollo, que conta perfis do LinkedIn; nas 4 empresas
+   onde temos as duas medidas a razão deu 3,43, com p10 em 1,98 e p90 em 5,75, o que é
+   espalhamento e não fator de conversão. Sobram as 11 que são clientes do ERP.
+
+Ligá-lo hoje somaria 11 amostras e deslocaria `fat_por_usuario_erp` de R$ 4,9 mi para
+R$ 6,2 mi (+26%) — cerca de 20% para cima em toda estimativa que dependa de sinal de ERP.
+É um `update` no jsonb, sem deploy.
+
+> **O flag esteve desligado por acidente, não por decisão.** O padrão no código é `true`, a
+> linha `faturamento` no banco nunca teve a chave, e `ler()` substituía o objeto padrão
+> inteiro pelo salvo em vez de mesclar — então a chave chegava como `undefined`. `ler()`
+> agora mescla, e o valor foi escrito explicitamente para que a mescla não LIGASSE a revista
+> em silêncio, que seria a troca oposta e igualmente sem decisão.
 
 ## Fora de escopo
 

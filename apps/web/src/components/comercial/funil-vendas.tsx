@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { atribuirVendaAction, moverVendaAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
+import { AbaFormulario, FichaDoCard, ehInbound } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
@@ -334,6 +335,11 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
                             />
                             </div>
                           )}
+                          {/* A ficha da empresa no card. Quem varre a coluna escolhe em
+                              qual negócio mexer ANTES de abrir qualquer um, e escolhia
+                              pelo nome e pela UF — score, tamanho, o que a empresa é e
+                              como ela chegou estavam todos a dois cliques. */}
+                          <FichaDoCard venda={v} />
                           {/* O limite aprovado no CARD, e não só no modal: é o número que
                               decide se vale seguir, e quem varre a coluna precisa dele sem
                               abrir oito negócios. */}
@@ -449,6 +455,7 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
           cabecalho={
             <div className="flex flex-wrap items-center gap-2">
               {aberto.empresas?.uf ? <Badge variant="outline">{aberto.empresas.uf}</Badge> : null}
+              <Badge variant="outline">{ehInbound(aberto) ? 'Inbound' : 'Outbound'}</Badge>
               {aberto.situacao !== 'em_andamento' ? (
                 <Badge variant={aberto.situacao === 'perdido' ? 'destructive' : 'default'}>
                   {SITUACAO_VENDA_LABELS[aberto.situacao as SituacaoVenda]}
@@ -528,6 +535,16 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
               ),
             },
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
+            /*
+             * O que a PESSOA escreveu. A aba Empresa mostra o que o sistema descobriu
+             * sozinho — CNAE, porte, score; esta mostra o que o lead se deu ao trabalho de
+             * digitar, que é a única parte com a intenção dele dentro.
+             */
+            {
+              id: 'formulario',
+              label: 'Formulário',
+              conteudo: <AbaFormulario empresaId={aberto.empresas?.id ?? null} />,
+            },
             {
               id: 'mensagens',
               label: 'Mensagens',

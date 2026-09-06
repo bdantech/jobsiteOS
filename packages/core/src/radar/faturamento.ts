@@ -18,6 +18,7 @@
 // ─── Hierarquia de origem (§2) ──────────────────────────────────────────────
 
 export const ORIGENS_METRICA = [
+  'analise_credito',
   'declarado_cliente',
   'publicacao',
   'apollo',
@@ -29,6 +30,7 @@ export const ORIGENS_METRICA = [
 export type OrigemMetrica = (typeof ORIGENS_METRICA)[number]
 
 export const ORIGEM_METRICA_LABELS: Record<OrigemMetrica, string> = {
+  analise_credito: 'Balanço auditado',
   declarado_cliente: 'Declarado',
   publicacao: 'Ranking publicado',
   apollo: 'Apollo',
@@ -39,7 +41,13 @@ export const ORIGEM_METRICA_LABELS: Record<OrigemMetrica, string> = {
 }
 
 /**
- * Menor é melhor. `declarado_cliente` vence tudo — estimativa nunca sobrescreve.
+ * Menor é melhor. Estimativa nunca sobrescreve.
+ *
+ * `analise_credito` fica ACIMA do declarado, e é a única coisa que fica: é a receita
+ * extraída do balanço e do DRE que o cliente entregou na esteira, com a extração
+ * REVISADA por uma pessoa. Declarar é dizer um número; um balanço é o número com o
+ * documento atrás. A CAPRETZ mostra a diferença: o modelo estimava R$ 385 mi e o balanço
+ * auditado diz R$ 521 mi — 35% abaixo, e ela não entrava na calibração.
  *
  * `publicacao` fica ACIMA do Apollo, e isso não é preferência: um ranking setorial
  * publica o número que a própria empresa informou à revista, enquanto o Apollo conta
@@ -53,13 +61,14 @@ export const ORIGEM_METRICA_LABELS: Record<OrigemMetrica, string> = {
  * a alternativa seria a função do banco importar TypeScript.
  */
 const RANK_ORIGEM: Record<OrigemMetrica, number> = {
-  declarado_cliente: 0,
-  publicacao: 1,
-  apollo: 2,
-  apollo_search: 3,
-  lista: 4,
-  modelo: 5,
-  bracket_simples: 6,
+  analise_credito: 0,
+  declarado_cliente: 1,
+  publicacao: 2,
+  apollo: 3,
+  apollo_search: 4,
+  lista: 5,
+  modelo: 6,
+  bracket_simples: 7,
 }
 
 /**

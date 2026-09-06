@@ -31,7 +31,7 @@ export interface LinhaAmostra {
 const CONTAGENS_COMPATIVEIS = new Set(['apollo', 'apollo_search', 'declarado_cliente'])
 
 export interface AmostraComOrigem extends AmostraCalibracao {
-  origem_faturamento: 'declarado_cliente' | 'publicacao'
+  origem_faturamento: 'analise_credito' | 'declarado_cliente' | 'publicacao'
 }
 
 /**
@@ -64,6 +64,10 @@ export function montarAmostra(linha: LinhaAmostra): AmostraComOrigem {
     funcionarios: contagemServe ? linha.funcionarios : null,
     erp_mrr: linha.erp_mrr === null ? null : Number(linha.erp_mrr),
     qtd_usuarios_erp: linha.qtd_usuarios_erp,
-    origem_faturamento: publicada ? 'publicacao' : 'declarado_cliente',
+    origem_faturamento: publicada
+      ? 'publicacao'
+      : linha.origem === 'analise_credito'
+        ? 'analise_credito'
+        : 'declarado_cliente',
   }
 }

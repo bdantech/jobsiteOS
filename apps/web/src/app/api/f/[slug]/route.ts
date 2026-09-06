@@ -188,6 +188,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       criar_lead: destino.criarLead,
       sdr_id: rota.vendedorId,
       tipagem_antecipacao: rotulo.tipagemAntecipacao,
+      /*
+       * O tipo que a PESSOA respondeu. Ele ficava só em `dados`, e a empresa nascia com o
+       * default da coluna — construtora. Nove dos quatorze leads com o campo respondido
+       * divergiam da ficha, sete deles fornecedores. `tipo` calibra o estimador por tipo,
+       * entra no scorecard e escolhe o pitch: uma distribuidora de aço avaliada com a
+       * régua de construtora é avaliada com a régua errada em silêncio.
+       */
+      tipo: tipoDeEmpresa(entrada.dados.tipo),
       razao_social: texto(entrada.dados.razao_social),
       uf: texto(entrada.dados.uf)?.toUpperCase().slice(0, 2) ?? null,
       municipio: texto(entrada.dados.municipio),
@@ -291,6 +299,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   )
 
   return NextResponse.json({ ok: true, submissao: submissaoId }, { status: 200, headers: CORS })
+}
+
+/**
+ * O formulário oferece "outro"; a coluna não o aceita.
+ *
+ * `empresas.tipo` tem CHECK em construtora/incorporadora/fornecedor/subempreiteiro. Quem
+ * responde "outro" fica sem destino, e o certo é devolver `null` — a função de banco cai
+ * no default e alguém classifica depois. Traduzir "outro" para um dos quatro seria
+ * inventar um dado que a pessoa se recusou a dar.
+ */
+const TIPOS_DE_EMPRESA = new Set(['construtora', 'incorporadora', 'fornecedor', 'subempreiteiro'])
+
+function tipoDeEmpresa(v: unknown): string | null {
+  const t = texto(v)?.toLowerCase() ?? null
+  return t && TIPOS_DE_EMPRESA.has(t) ? t : null
 }
 
 function texto(v: unknown): string | null {

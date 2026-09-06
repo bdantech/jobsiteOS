@@ -244,8 +244,17 @@ export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
   const [destino, setDestino] = React.useState<EstagioFunil | null>(null)
   const [semInteresse, setSemInteresse] = React.useState(false)
 
+  /*
+   * "Em prospecção" não é escolha de quem olha o card: a nota entra lá sozinha quando a
+   * primeira mensagem sai para o fornecedor (trigger em `comunicacoes`), ou quando a
+   * conversa do celular é vinculada à empresa. O banco recusa a transição manual — deixar
+   * a opção no menu só entregaria um erro a quem clicasse.
+   */
   const estagios: readonly EstagioFunil[] = [...ESTAGIOS_ABERTOS, ...ESTAGIOS_ENCERRADOS].filter(
-    (e) => e !== nota.estagio_funil && e !== 'expirada',
+    (e) =>
+      e !== nota.estagio_funil &&
+      e !== 'expirada' &&
+      !(nota.estagio_funil === 'a_prospectar' && e === 'em_prospeccao'),
   )
 
   return (

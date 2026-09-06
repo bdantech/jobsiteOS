@@ -68,10 +68,13 @@ test('a ordem antiga continua valendo entre as origens que já existiam', () => 
   assert.equal(origemVence('bracket_simples', 'modelo'), false)
 })
 
-test('ORIGENS_METRICA cobre o que o CHECK do banco aceita (0081)', () => {
+test('ORIGENS_METRICA cobre o que o CHECK do banco aceita', () => {
+  // A lista espelha o CHECK VIVO de empresa_metricas.origem, não o da 0081: migrações
+  // posteriores acrescentaram valores, e `analise_credito` é o mais recente deles.
   assert.deepEqual(
     [...ORIGENS_METRICA].sort(),
     [
+      'analise_credito',
       'apollo',
       'apollo_search',
       'bracket_simples',
@@ -81,4 +84,13 @@ test('ORIGENS_METRICA cobre o que o CHECK do banco aceita (0081)', () => {
       'publicacao',
     ],
   )
+})
+
+test('o balanço auditado vence a declaração do cliente, e nada o vence', () => {
+  // Declarar é dizer um número; um balanço é o número com o documento atrás. A CAPRETZ
+  // é o caso: modelo estimava R$ 385 mi, o balanço revisado diz R$ 521 mi.
+  assert.equal(origemVence('analise_credito', 'declarado_cliente'), true)
+  assert.equal(origemVence('analise_credito', 'modelo'), true)
+  assert.equal(origemVence('declarado_cliente', 'analise_credito'), false)
+  assert.equal(origemVence('publicacao', 'analise_credito'), false)
 })

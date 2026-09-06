@@ -494,6 +494,31 @@ mostra o número mudando. `comissao.estornada` notifica — é dinheiro saindo d
 realizada → qualificada. A ordem é a do que acontece: no-show vem depois de agendar e
 antes de sentar, não numa caixa de descarte no fim.
 
+### "Em conversa" e "em prospecção" são fato, não opinião
+
+O primeiro passo dos dois funis — `a_contatar → em_conversa` no SDR, `a_prospectar →
+em_prospeccao` nas NFs — **anda sozinho e não se move à mão**. Quem sabe que uma mensagem
+saiu é o ledger de comunicação, não o vendedor; e é esta coluna que a régua de "NF não
+prospectada" do Meu Dia lê para montar o dia do originador.
+
+| gatilho | onde |
+|---|---|
+| a mensagem SAI | trigger `comunicacoes__move_o_card_trg` — pelo card do funil, ou por todos os cards abertos da empresa quando a mensagem sai da ficha |
+| a conversa é VINCULADA a uma empresa | `app_conversa_vincular` → `app__primeiro_contato_empresa()` |
+| a empresa RESPONDE a uma abordagem feita fora do sistema | `triarEntradas`, via `PRIMEIRO_CONTATO_MOVE` |
+
+`app_mover_estagio_nf` e `app_mover_lead_sdr` recusam essa transição com `42501`, e o menu
+do card não a oferece.
+
+O **vínculo** é o gatilho do caminho do celular: 592 mensagens enviadas de lá não têm funil
+nem empresa no instante do envio, e o vínculo é o primeiro momento em que o sistema sabe com
+quem se falou.
+
+> **A régua existia e estava invertida.** `PRIMEIRO_CONTATO_MOVE` só era consultado por
+> `triarEntradas`, que filtra `direcao = 'entrada'` — ou seja, o funil dizia "ninguém falou
+> com esta empresa" até ela responder. Quem nunca responde ficava eternamente em
+> "a prospectar" depois de cinco abordagens. Duas notas estavam exatamente nesse estado.
+
 **Fit não é etapa.** É um julgamento sobre a empresa (`fit boolean`, null = não
 avaliado), feito depois do contato, e que continua valendo em qualquer estágio seguinte.
 Como coluna, ele apagava a informação de até onde o lead tinha chegado: quem morreu antes
@@ -624,6 +649,28 @@ distinguir os dois diria a quem tropeçou no link que ele existiu, e para quem.
 
 A navegação do módulo é montada pelo TIPO do vendedor logado, e a **primeira aba é sempre
 o funil**:
+
+### O card do funil de vendas
+
+O card traz a **ficha da empresa**, e não só o nome: barra e número do score de crédito com
+o rótulo da faixa ao lado, faturamento (marcado como *declarado* ou *est.*, porque os dois
+não valem o mesmo), o **tipo** da empresa e se ela é **inbound ou outbound**.
+
+Quem varre uma coluna decide em qual negócio mexer *antes* de abrir qualquer um, e decidia
+pelo nome e pela UF — as quatro coisas que mudam essa decisão estavam todas a dois cliques.
+Construtora paga fornecedor e fornecedor cede recebível: são conversas opostas, e o card não
+dizia qual era.
+
+Inbound sai de `sdr_leads.origem = 'inbound'`, com `empresas.origem = 'formulario'` como
+segunda leitura — um negócio criado à mão sobre uma empresa que chegou pelo formulário
+continua sendo um negócio que começou com a pessoa nos procurando.
+
+A aba **Formulário** mostra o que o lead escreveu, palavra por palavra, com os rótulos que
+ele viu. Os rótulos vêm de `campos_snapshot`, a cópia do formulário no instante do envio: o
+formulário é editável e a submissão não, então ler as perguntas de hoje mostraria a pergunta
+errada para uma resposta antiga. Estava gravado desde o primeiro dia e não aparecia em lugar
+nenhum do Comercial — quem ia atender lia tudo o que o sistema descobriu sozinho e nada do
+que a pessoa se deu ao trabalho de digitar.
 
 | tipo | abas, nesta ordem |
 |---|---|

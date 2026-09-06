@@ -54,9 +54,11 @@ interface LinhaSinais {
  * porque parear "faturamento de 2023" com "headcount de agora" produziria um ratio
  * que não descreve nenhum dos dois momentos.
  *
- * O faturamento pode vir do cliente (`declarado_cliente`) ou de ranking publicado
- * (`publicacao`, ligado por `usar_amostras_publicadas`). Qual sinal cada procedência
- * pode emprestar é decidido por `montarAmostra`, que é testado — ver amostras.ts.
+ * O faturamento pode vir do BALANÇO AUDITADO da esteira de crédito (`analise_credito`,
+ * a melhor fonte que existe: número com documento atrás e extração revisada por gente),
+ * do próprio cliente (`declarado_cliente`) ou de ranking publicado (`publicacao`, ligado
+ * por `usar_amostras_publicadas`). Qual sinal cada procedência pode emprestar é decidido
+ * por `montarAmostra`, que é testado — ver amostras.ts.
  */
 async function amostrasDeCalibracao(usarPublicadas: boolean): Promise<AmostraComOrigem[]> {
   const { rows } = await pool.query<LinhaAmostra>(
@@ -74,10 +76,14 @@ async function amostrasDeCalibracao(usarPublicadas: boolean): Promise<AmostraCom
     join empresas e on e.id = m.empresa_id
     where m.metrica = 'faturamento_anual'
       and m.valor > 0
-      and (m.origem = 'declarado_cliente' or ($1 and m.origem = 'publicacao'))
-    -- Declarado vence publicado no mesmo CNPJ: o cliente falando de si é a melhor
-    -- verdade que existe, e o distinct on pega a primeira linha da ordenação.
-    order by m.cnpj, (m.origem = 'declarado_cliente') desc, m.capturado_em desc
+      and (m.origem in ('analise_credito', 'declarado_cliente')
+           or ($1 and m.origem = 'publicacao'))
+    -- A ordem é a da hierarquia: balanço auditado vence declaração, declaração vence
+    -- ranking publicado. O distinct on fica com a primeira linha, e é por isso que a
+    -- receita do balanço não é apagada por uma declaração mais recente do mesmo CNPJ.
+    order by m.cnpj,
+             case m.origem when 'analise_credito' then 0 when 'declarado_cliente' then 1 else 2 end,
+             m.capturado_em desc
   `,
     [usarPublicadas],
   )
@@ -146,6 +152,7 @@ export async function calibrarEstimadorJob(): Promise<ResultadoCalibracaoJob> {
     resumo:
       `Versão ${versao}, calibrada em ${amostras.length} empresa(s): ` +
       `${porOrigem.declarado_cliente ?? 0} declaradas pelo cliente` +
+      (porOrigem.analise_credito ? `, ${porOrigem.analise_credito} de balanço auditado` : '') +
       (porOrigem.publicacao ? `, ${porOrigem.publicacao} de ranking publicado` : '') +
       '.',
     url: '/radar/estimador',
@@ -195,7 +202,7 @@ async function cnpjsComValorReal(ano: number): Promise<Set<string>> {
     select distinct m.cnpj
     from empresa_metricas m
     where m.metrica = 'faturamento_anual'
-      and m.origem in ('declarado_cliente', 'publicacao')
+      and m.origem in ('analise_credito', 'declarado_cliente', 'publicacao')
       and public.app_ano_referencia_metrica(m.detalhes, m.capturado_em, m.origem) = $1
   `,
     [ano],

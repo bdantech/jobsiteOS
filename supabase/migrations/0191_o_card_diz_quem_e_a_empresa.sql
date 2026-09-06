@@ -1,0 +1,65 @@
+-- 0191 — O card diz quem é a empresa, o funil anda sozinho, e o balanço volta para a régua.
+--
+-- Três frentes independentes que a mesma rodada de auditoria destravou. O corpo canônico
+-- de cada função está em `supabase_migrations.schema_migrations`, gravado pelo nome de
+-- cada migração; `supabase db pull` reconcilia este arquivo. Não colamos as ~600 linhas de
+-- plpgsql aqui à mão: uma cópia digitada é uma cópia que já nasce podendo divergir.
+--
+-- ─── §1 O lead do formulário respeita o tipo declarado ──────────────────────
+--   lead_do_formulario_respeita_o_tipo_declarado
+--
+--     `app_processar_submissao` inseria empresa com (cnpj, razao_social, estagio, origem) e
+--     nada mais, então `tipo` caía no default da coluna: 'construtora'. O formulário tem um
+--     campo OBRIGATÓRIO "Tipo de empresa", e a resposta morria em `dados`.
+--
+--     Nove das quatorze submissões com o campo respondido divergiam da ficha. A TS PINTURAS
+--     LTDA respondeu "fornecedor" e entrou como construtora; junto dela, mais seis
+--     fornecedores e uma incorporadora. `tipo` calibra o estimador por tipo, entra no
+--     scorecard e escolhe o pitch — uma distribuidora de aço avaliada com a régua de
+--     construtora é avaliada com a régua errada em silêncio.
+--
+--     A escrita só vale na CRIAÇÃO: empresa que já existe mantém a ficha, porque cadastro
+--     curado por gente não cai por resposta de landing page. "outro", que o formulário
+--     oferece e o CHECK não aceita, fica sem destino de propósito.
+--
+-- ─── §2 O card anda quando a mensagem SAI ───────────────────────────────────
+--   primeiro_contato_move_o_card_ao_enviar
+--   primeiro_contato_regulariza_os_cards_atrasados
+--
+--     A régua existia e estava invertida: `PRIMEIRO_CONTATO_MOVE` só era consultado por
+--     `triarEntradas`, que filtra `direcao = 'entrada'`. O funil dizia "ninguém falou com
+--     esta empresa" até ela RESPONDER — e quem nunca responde ficava eternamente em
+--     "a prospectar" depois de cinco abordagens.
+--
+--       app__primeiro_contato_empresa(uuid)      a régua, num lugar só
+--       comunicacoes__move_o_card_trg            a mensagem sai → o card anda
+--       app_conversa_vincular                    o vínculo → o card anda (caminho do celular:
+--                                                592 mensagens enviadas de lá não têm funil
+--                                                nem empresa na hora do envio)
+--       app_mover_estagio_nf / app_mover_lead_sdr  recusam a transição manual
+--
+--     "Em prospecção" e "em conversa" passam a ser FATO, não opinião: quem sabe que uma
+--     mensagem saiu é o ledger de comunicação, não o vendedor. E é esta coluna que a régua
+--     de "NF não prospectada" do Meu Dia lê.
+--
+-- ─── §3 A esteira de crédito realimenta o faturamento ───────────────────────
+--   esteira_de_credito_realimenta_o_faturamento
+--   rank_de_origem_conhece_o_balanco_auditado
+--   radar_config_grava_a_decisao_das_amostras_publicadas
+--
+--     A esteira extrai a DRE, uma pessoa revisa a extração, e o número morria em
+--     `analises_proprietarias.dados_extraidos`:
+--
+--       CAPRETZ   balanço R$ 521.751.985 · ficha dizia R$ 385.561.400 (modelo), 35% abaixo
+--       ANTONINI  balanço R$  54.746.367 · ficha dizia NULO
+--
+--     Origem nova `analise_credito`, no TOPO da hierarquia — declarar é dizer um número, um
+--     balanço é o número com o documento atrás. Só extração revisada por gente entra: um
+--     modelo lendo PDF acerta quase sempre e erra o suficiente, e este valor passa a mandar
+--     na régua de 5.109 empresas.
+--
+--     `radar_config.faturamento` ganhou `usar_amostras_publicadas` explícito. O padrão do
+--     código é `true`, a linha nunca teve a chave, e `ler()` substituía o padrão inteiro em
+--     vez de mesclar — o flag valia `undefined`, ou seja desligado, sem que ninguém tivesse
+--     decidido isso. Corrigir só a mescla LIGARIA a revista em silêncio, que é a troca
+--     oposta e igualmente sem decisão; o valor entra escrito, mantendo o que está no ar.

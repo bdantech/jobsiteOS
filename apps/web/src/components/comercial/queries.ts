@@ -24,6 +24,7 @@ export const comercialKeys = {
   carteira: (vendedorId?: string | null) => ['comercial', 'carteira', vendedorId ?? 'eu'] as const,
   visiveis: () => ['comercial', 'visiveis'] as const,
   pitch: (leadId: string) => ['comercial', 'pitch', leadId] as const,
+  submissoes: (empresaId: string) => ['comercial', 'submissoes', empresaId] as const,
 }
 
 /**
@@ -123,7 +124,21 @@ export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa
 }
 
 export interface VendaComEmpresa extends Tables<'vendas'> {
-  empresas: { id: string; razao_social: string | null; uf: string | null } | null
+  empresas: {
+    id: string
+    razao_social: string | null
+    uf: string | null
+    /** construtora / incorporadora / fornecedor / subempreiteiro. */
+    tipo: string | null
+    faturamento_anual: number | null
+    /** `declarado_cliente` é o único que não é estimativa — a tela precisa distinguir. */
+    faturamento_origem: string | null
+    score_credito: number | null
+    score_faixa: string | null
+    origem: string | null
+  } | null
+  /** De onde o negócio veio. `inbound` é quem chegou sozinho pelo formulário. */
+  sdr_leads: { origem: string | null } | null
   /** `null` quando não há análise ligada — ou quando a RLS não deixa esta pessoa ver. */
   analises_credito: {
     id: string
@@ -147,8 +162,13 @@ export async function buscarVendas(vendedorId?: string | null): Promise<VendaCom
      *
      * A RLS decide o que volta: quem não é dono do negócio recebe `null` aqui, sem erro.
      */
+    /*
+     * O `select` é UM literal, e não uma soma de pedaços: o supabase-js tipa a string em
+     * tempo de compilação, e uma concatenação vira `GenericStringError` — com o erro
+     * aparecendo nas linhas de USO, longe daqui.
+     */
     .select(
-      '*, empresas(id, razao_social, uf), analises_credito(id, estagio, limite_solicitado, limite_aprovado, moeda, motivo, decidida_em)',
+      '*, empresas(id, razao_social, uf, tipo, faturamento_anual, faturamento_origem, score_credito, score_faixa, origem), sdr_leads(origem), analises_credito(id, estagio, limite_solicitado, limite_aprovado, moeda, motivo, decidida_em)',
     )
     .order('atualizada_em', { ascending: false })
     .limit(500)
@@ -362,4 +382,84 @@ export async function buscarAgenda(
   const { data, error } = await q
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as EventoAgenda[]
+}
+
+// ─── O que o lead preencheu no formulário ───────────────────────────────────
+
+export interface RespostaFormulario {
+  chave: string
+  label: string
+  valor: string
+}
+
+export interface SubmissaoDoLead {
+  id: string
+  formulario: string | null
+  intencao: string | null
+  criada_em: string
+  /** utm_source/medium/campaign, quando a campanha carimbou. */
+  campanha: { rotulo: string; valor: string }[]
+  pagina_url: string | null
+  respostas: RespostaFormulario[]
+}
+
+interface CampoSnapshot {
+  key?: string
+  label?: string
+  ordem?: number
+}
+
+/**
+ * O que a PESSOA escreveu, com os rótulos que ela viu.
+ *
+ * `campos_snapshot` é a cópia do formulário no instante do envio, e é ela que dá a ordem
+ * e o texto de cada pergunta. Ler os rótulos do formulário de HOJE mostraria a pergunta
+ * errada para uma resposta antiga — o formulário é editável, a submissão não.
+ *
+ * Campo respondido que não está no snapshot ainda aparece, com a chave crua como rótulo:
+ * sumir com uma resposta porque o formulário mudou seria perder o que o lead disse.
+ */
+export async function buscarSubmissoesDaEmpresa(empresaId: string): Promise<SubmissaoDoLead[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('formulario_submissoes')
+    .select(
+      'id, dados, campos_snapshot, intencao, criada_em, pagina_url, utm_source, utm_medium, utm_campaign, formularios(nome)',
+    )
+    .eq('empresa_id', empresaId)
+    .order('criada_em', { ascending: false })
+    .limit(10)
+  if (error) throw new Error(error.message)
+
+  return (data ?? []).map((s) => {
+    const dados = (s.dados ?? {}) as Record<string, unknown>
+    const campos = (Array.isArray(s.campos_snapshot) ? s.campos_snapshot : []) as CampoSnapshot[]
+    const rotulos = new Map(campos.map((c) => [c.key ?? '', c.label ?? c.key ?? '']))
+    const ordem = new Map(campos.map((c, i) => [c.key ?? '', c.ordem ?? i]))
+
+    const respostas = Object.entries(dados)
+      .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+      .map(([chave, v]) => ({ chave, label: rotulos.get(chave) ?? chave, valor: String(v) }))
+      .sort((a, b) => (ordem.get(a.chave) ?? 999) - (ordem.get(b.chave) ?? 999))
+
+    const campanha = (
+      [
+        ['Origem', s.utm_source],
+        ['Meio', s.utm_medium],
+        ['Campanha', s.utm_campaign],
+      ] as const
+    )
+      .filter(([, v]) => Boolean(v))
+      .map(([rotulo, valor]) => ({ rotulo, valor: String(valor) }))
+
+    return {
+      id: s.id,
+      formulario: (s.formularios as { nome: string | null } | null)?.nome ?? null,
+      intencao: s.intencao,
+      criada_em: s.criada_em,
+      campanha,
+      pagina_url: s.pagina_url,
+      respostas,
+    }
+  })
 }

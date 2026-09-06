@@ -84,10 +84,17 @@ export const FUNIL_LABELS: Record<Funil, string> = {
 }
 
 /**
- * O estágio de "ninguém falou com esta pessoa ainda" e o de "alguém falou", por
- * funil. É o que a triagem move quando chega a PRIMEIRA resposta (§6): sem este
- * mapa, cada funil precisaria de um caso especial no worker, e o funil que
- * alguém esquecesse continuaria mentindo que ninguém foi contatado.
+ * O estágio de "ninguém falou com esta pessoa ainda" e o de "alguém falou", por funil.
+ *
+ * O gatilho PRINCIPAL é o envio, e ele mora no banco: o trigger
+ * `comunicacoes__move_o_card_trg` move o card quando a mensagem sai, e
+ * `app_conversa_vincular` faz o mesmo quando a conversa do celular é vinculada a uma
+ * empresa. Este mapa cobre o caso restante — a empresa responde a uma abordagem feita
+ * FORA do sistema, e a triagem descobre o contato pela resposta.
+ *
+ * Por muito tempo este mapa foi o único caminho, e por isso o funil só reconhecia contato
+ * quando havia resposta: quem nunca responde ficava eternamente em "a prospectar" depois
+ * de cinco abordagens.
  */
 export const PRIMEIRO_CONTATO_MOVE: Partial<Record<Funil, { de: string; para: string; tabela: string; coluna: string }>> = {
   fornecedores: { de: 'a_cadastrar', para: 'em_prospeccao', tabela: 'fornecedores_funil', coluna: 'estagio' },

@@ -63,9 +63,24 @@ export interface ApolloCfg {
   bulk_size: number
 }
 
+/**
+ * A linha do banco COMPLETA o padrão; ela não o substitui.
+ *
+ * Era `data?.valor ?? padrao`, e isso significa que toda chave acrescentada ao código
+ * DEPOIS de a linha ter sido gravada chega como `undefined` — em silêncio, sem erro e sem
+ * log. Foi o que aconteceu com `usar_amostras_publicadas`: o default no código é `true`,
+ * a linha `faturamento` no banco não tem a chave, e o estimador vinha rodando como se
+ * fosse `false`. Um flag documentado como ligado, desligado por acidente de forma.
+ *
+ * O objeto do banco continua vencendo campo a campo — quem configurou manda. O que muda é
+ * que campo NÃO configurado passa a valer o padrão, em vez de virar `undefined`.
+ */
 async function ler<T>(chave: string, padrao: T): Promise<T> {
   const { data } = await supabaseAdmin.from('radar_config').select('valor').eq('chave', chave).maybeSingle()
-  return (data?.valor as T | undefined) ?? padrao
+  const salvo = data?.valor
+  if (salvo === null || salvo === undefined) return padrao
+  if (typeof salvo !== 'object' || Array.isArray(salvo)) return salvo as T
+  return { ...padrao, ...(salvo as object) } as T
 }
 
 export const lerCustos = (): Promise<CustosRadar> =>
