@@ -4,14 +4,45 @@ A home do vendedor: **Comercial → Meu Dia**. Não é um dashboard — é uma l
 finita e completável. Cada item responde três coisas num olhar: **por que está aqui**,
 **quanto vale** e **qual o botão que resolve**.
 
-Três regras governam a tela inteira, e cada uma resolve um jeito conhecido de matar a
+Quatro regras governam a tela inteira, e cada uma resolve um jeito conhecido de matar a
 adoção de um painel:
 
+- **É uma grade de WIDGETS, não uma pilha de cards.** Pouca informação no menor espaço;
+  rolagem interna é aceitável, ler dez cards para achar o dinheiro não é. A primeira
+  versão listava tudo e o resultado foi o previsível: confusa e sem foco.
 - **Bloco vazio some.** A página encolhe conforme o dia é trabalhado, e o fim dela é
   "Tudo em dia por aqui", não uma lista de zeros.
 - **Indicador abre modal, nunca navega.** Perder a página é perder o contexto do dia.
-- **O gráfico é o navegador, e é o único.** Clicar numa fatia filtra os cards; ele
-  responde "meu dia é feito de quê", não repete a lista logo abaixo.
+- **Todo gráfico é clicável — ele É a lista.** Não decora o bloco; é o índice dele.
+  Clicar numa fatia, numa bolha ou numa barra abre os itens daquele recorte.
+
+## A forma de cada widget
+
+Cada bloco declara no catálogo o seu `visual`, e é essa declaração que a tela lê — não há
+um `if` por tipo de bloco na UI, e um bloco novo nasce com o widget certo por dizer qual é.
+
+| `visual` | Responde | Onde |
+|---|---|---|
+| `pizza` | de quem é o volume parado | NFs de alta, por cedente |
+| `bolhas` | duas grandezas ao mesmo tempo | certificados, inbound |
+| `barras` | ranking por uma grandeza | carteira ociosa, conversas esperando |
+| `rolagem` | lista longa num cartão só | fornecedores a cadastrar |
+| `lista` | poucos itens, cada um com a sua ação | o padrão |
+
+**A paleta não foi escolhida no olho.** São os slots categóricos validados do sistema de
+dataviz, rodados no validador para as duas superfícies: pior par adjacente em ΔE 9,1
+(claro) e 8,4 (escuro) sob simulação de daltonismo, acima do piso de 8. O modo escuro tem
+os seus próprios passos, não uma inversão do claro. Onde a cor clara fica abaixo de 3:1
+contra a superfície, a regra de alívio está cumprida: toda fatia tem rótulo direto e a
+legenda repete o valor em texto — nenhuma informação depende só de matiz.
+
+O **status do temperature report** (`operating_normally`, `low_operation`,
+`requires_attention`, `inoperative`) usa a paleta de status, que é reservada e nunca vira
+"série 4". Ela sempre aparece com rótulo ao lado.
+
+A cor da bolha do inbound (azul aos 0h → vermelho às 96h) é **codificação redundante**: o
+eixo X já diz quantas horas passaram e a cor repete. É o que torna legítimo usar dois tons
+numa grandeza que só cresce — ela não separa categorias, ela grita.
 
 ## Onde cada coisa mora
 
@@ -39,7 +70,6 @@ bloco que aparece na tela e não aparece nas configurações.
 | Antecipações travadas | `antecipacoes` em `DRAFT/REQUESTED/REPROVED/DENY_BY_CONTRACTED` sem conversão | dias parada (3) |
 | Cedentes que pararam | `antecipacoes` agrupadas por cedente da carteira | dias sem antecipar (45), mínimo de antecipações (2) |
 | Fornecedores a cadastrar | `fornecedores_funil` estágio `a_cadastrar` com contato | — |
-| Fornecedores sem contato | idem, sem contato encontrado | — |
 | Certificados a prospectar | `certificado_universo` das empresas da carteira | — |
 
 ### SDR
@@ -64,14 +94,24 @@ bloco que aparece na tela e não aparece nas configurações.
 | Reuniões pendentes de aceite | `sdr_aceites` pendentes com destino nele | — |
 | Crédito decidido | `vendas` + `analises_credito` aprovada/parcial/negada | — |
 | Propostas sem resposta | `vendas` em `proposta_enviada` | dias parada (4) |
-| Carteira passiva ociosa | `clientes_onepay` das empresas em `gestao_passiva` | dias sem antecipar (30), limite mínimo (50k) |
+| Carteira passiva ociosa | `clientes_onepay` das empresas em `gestao_passiva` — parada há N dias **ou** apontada pelo temperature report | dias sem antecipar (30), limite mínimo (50k) |
 | Novos clientes | `empresas.marco_ativacao` dentro da janela | janela em dias (60) |
 | Certificados vencendo | `certificados` das empresas da carteira | avisar faltando (30) |
 | Análises expirando | `analises_credito.expira_em` | avisar faltando (60) |
 
 ### De todos
-Conversas paradas, aguardando minha resposta, próximos passos do Agente (05A),
-conversas não identificadas e tarefas manuais.
+Conversas paradas, aguardando minha resposta, próximos passos do Agente (05A) e tarefas
+manuais.
+
+> **Nomes.** Nenhum item chega à tela como CNPJ ou como "Sem empresa". 183 dos 185
+> fornecedores do funil não têm ficha em `empresas` — mas todos têm nome na nota fiscal; e
+> 38 das 39 conversas não têm empresa vinculada — mas todas têm o número, que é o que a
+> pessoa reconhece. O CNPJ é o último recurso, nunca o primeiro.
+
+> **A régua de dias sozinha perdia conta boa.** A Halsten tem R$ 1,4 mi parados e
+> `requires_attention` no report, mas antecipou há dois dias — pela régua antiga ela sumia
+> justamente do dia de quem devia estar olhando para ela. O sinal da plataforma entra como
+> segunda porta, e a ordem é o limite ocioso, do maior para o menor.
 
 ## Comissão projetada
 

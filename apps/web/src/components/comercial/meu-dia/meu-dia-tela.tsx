@@ -4,10 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import {
-  AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, Clock, Coins,
-  ExternalLink, MoreHorizontal, Wallet,
-} from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, Clock, Coins, Wallet } from 'lucide-react'
 import {
   GRUPO_MEU_DIA_LABELS,
   blocoCatalogado,
@@ -21,38 +18,41 @@ import {
   type ItemMeuDia,
   type MeuDia,
 } from '@jobsiteos/core'
-import { ocultarItemAction, concluirTarefaAction } from '@/actions/meu-dia'
+import { concluirTarefaAction, ocultarItemAction } from '@/actions/meu-dia'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import {
+  BarrasRanking, GraficoBolhas, ListaRolagem, PizzaPorChave,
+  STATUS_CORES, STATUS_ROTULOS, type Bolha,
+} from './graficos'
+import { LinhaItem, ListaDeItens, Widget, destinoDoItem } from './widget'
 
 /**
- * Meu Dia — a lista de trabalho, e não um painel.
+ * Meu Dia — grade de WIDGETS, não pilha de cards.
  *
- * TRÊS REGRAS DE INTERAÇÃO governam o arquivo inteiro, e cada uma resolve um jeito
- * conhecido de matar a adoção de uma tela dessas:
+ * A primeira versão listava tudo, e o resultado foi o que uma lista longa sempre é:
+ * confusa, sem foco, e fechada em vez de trabalhada. A régua desta aqui é outra —
+ * POUCA INFORMAÇÃO NO MENOR ESPAÇO, e rolagem é aceitável; o que não é aceitável é a
+ * pessoa ter de ler dez cards para descobrir onde está o dinheiro.
  *
- *   INDICADOR ABRE MODAL, NUNCA NAVEGA. Clicar num número e perder a página é perder o
- *   contexto do dia; a pessoa volta e não sabe onde parou. Do modal ela age e fecha.
+ * Cada bloco declara no catálogo a FORMA que responde a pergunta dele (`visual`), e é
+ * essa declaração que a tela lê. Não há um `if` por tipo de bloco aqui embaixo: um bloco
+ * novo nasce com o widget certo por dizer qual é.
  *
- *   O GRÁFICO É O NAVEGADOR, e é o ÚNICO. Clicar numa fatia filtra os cards abaixo. Ele
- *   responde "meu dia é feito de quê" — e é por isso que não abre modal: quem clica ali
- *   está escolhendo o que trabalhar, não pedindo uma lista.
- *
- *   BLOCO VAZIO SOME. A página encolhe conforme o dia é feito, e o fim dela é uma tela
- *   comemorando, não uma lista de zeros.
+ * E TODO gráfico é clicável. Ele não decora a lista — ele é o índice dela: clicar numa
+ * fatia, numa bolha ou numa barra abre os itens daquele recorte, no mesmo lugar.
  */
 
 const brl = (n: number) =>
-  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
-
-const FAIXA_URGENCIA: Record<string, string> = {
-  alta: 'bg-red-500',
-  media: 'bg-amber-500',
-  baixa: 'bg-slate-300 dark:bg-slate-600',
-}
+  n >= 1_000_000
+    ? `R$ ${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+    : n >= 1000
+      ? `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')} mil`
+      : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 const COR_GRUPO: Record<GrupoMeuDia, string> = {
   funil: 'bg-sky-500',
@@ -62,9 +62,23 @@ const COR_GRUPO: Record<GrupoMeuDia, string> = {
   cadastro: 'bg-slate-400',
 }
 
+/**
+ * A cor da bolha do inbound: azul aos 0h, vermelho aos 96h.
+ *
+ * É uma codificação REDUNDANTE de propósito — o eixo X já diz quantas horas passaram, e
+ * a cor repete. Nada aqui depende só de matiz, o que é o que torna legítimo usar um par
+ * de dois tons numa grandeza que só cresce: ela não separa categorias, ela grita.
+ */
+function corPorEspera(horas: number): string {
+  const t = Math.min(Math.max(horas / 96, 0), 1)
+  const de = [42, 120, 214]
+  const para = [208, 59, 59]
+  const c = de.map((v, i) => Math.round(v + (para[i]! - v) * t))
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`
+}
+
 export interface MeuDiaTelaProps {
   dia: MeuDia & { comissao_projetada: number }
-  /** Vendedores que o gestor pode abrir. Vazio para quem só vê o próprio dia. */
   visiveis: { id: string; nome: string; tipo: string }[]
   ehGestor: boolean
 }
@@ -81,12 +95,12 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
   const composicao = composicaoDoDia(dia)
 
   const blocos = dia.blocos
-    .filter((b) => !filtro || blocoCatalogado(b.tipo)?.grupo === filtro)
     .filter((b) => b.itens.length > 0)
+    .filter((b) => !filtro || blocoCatalogado(b.tipo)?.grupo === filtro)
 
-  const compromissos = ordenarItens(
-    dia.blocos.flatMap((b) => b.itens).filter((i) => i.quando),
-  ).sort((a, b) => (a.quando ?? '').localeCompare(b.quando ?? ''))
+  const compromissos = ordenarItens(dia.blocos.flatMap((b) => b.itens).filter((i) => i.quando)).sort(
+    (a, b) => (a.quando ?? '').localeCompare(b.quando ?? ''),
+  )
 
   async function ocultar(bloco: string, item: ItemMeuDia, acao: 'adiado' | 'irrelevante', ate?: string) {
     const r = await ocultarItemAction({
@@ -95,6 +109,7 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
       acao,
       adiadoAte: ate ?? null,
       motivo: acao === 'irrelevante' ? 'Marcado como irrelevante na tela' : null,
+      empresaId: item.empresa_id,
     })
     if (!r.ok) return toast.error(r.message)
     toast.success(acao === 'adiado' ? 'Adiado — volta na data.' : 'Fora da lista.')
@@ -102,150 +117,344 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
     router.refresh()
   }
 
+  async function concluir(item: ItemMeuDia) {
+    const r = await concluirTarefaAction(String(item.meta.tarefa_id))
+    if (!r.ok) return toast.error(r.message)
+    toast.success('Feito.')
+    router.refresh()
+  }
+
   if (!dia.tem_acesso) {
     return (
-      <Card>
-        <CardContent className="py-16 text-center text-sm text-muted-foreground">
-          Este dia não é seu para ver.
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border border-border p-16 text-center text-sm text-muted-foreground">
+        Este dia não é seu para ver.
+      </div>
     )
   }
 
+  const acoes = {
+    onAdiar: (bloco: string) => (i: ItemMeuDia) => setAdiando({ bloco, item: i }),
+    onDescartar: (bloco: string) => (i: ItemMeuDia) => void ocultar(bloco, i, 'irrelevante'),
+    onConcluir: (i: ItemMeuDia) => void concluir(i),
+  }
+
   return (
-    <div className="space-y-6">
-      {/* ── Cabeçalho: de quem é o dia ───────────────────────────────────── */}
+    <div className="space-y-4">
+      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-xl font-semibold">
             {dia.espelhado ? `Carteira de ${dia.vendedor_nome ?? '—'}` : 'Meu Dia'}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {total === 0
               ? 'Nada esperando por você agora.'
-              : `${total} ${total === 1 ? 'item' : 'itens'} para hoje${
+              : `${total} ${total === 1 ? 'item' : 'itens'}${
                   urgentes.length > 0 ? `, ${urgentes.length} com relógio correndo` : ''
-                }.`}
+                }`}
           </p>
         </div>
 
         {ehGestor && visiveis.length > 0 && (
-          <div className="space-y-1">
-            <label htmlFor="ver-dia" className="text-xs text-muted-foreground">Ver o dia de</label>
-            <select
-              id="ver-dia"
-              value={dia.vendedor_id ?? ''}
-              onChange={(e) => router.push(`/comercial/meu-dia?vendedor=${e.target.value}`)}
-              className="h-9 w-56 rounded-md border border-input bg-background px-2 text-sm"
-            >
-              {visiveis.map((v) => (
-                <option key={v.id} value={v.id}>{v.nome}</option>
-              ))}
-            </select>
+          <select
+            aria-label="Ver o dia de"
+            value={dia.vendedor_id ?? ''}
+            onChange={(e) => router.push(`/comercial/meu-dia?vendedor=${e.target.value}`)}
+            className="h-8 w-52 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            {visiveis.map((v) => (
+              <option key={v.id} value={v.id}>{v.nome}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* ── Indicadores + composição, numa faixa só ───────────────────────── */}
+      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Indicador
+            icone={Wallet}
+            rotulo="Em jogo hoje"
+            valor={brl(emJogo)}
+            detalhe={`${total} ${total === 1 ? 'item' : 'itens'}`}
+            onClick={() =>
+              setModal({
+                titulo: 'Tudo o que está em jogo hoje',
+                itens: ordenarItens(dia.blocos.flatMap((b) => b.itens)),
+              })
+            }
+          />
+          <Indicador
+            icone={Coins}
+            rotulo="Comissão projetada"
+            valor={brl(dia.comissao_projetada)}
+            detalhe="se tudo converter"
+            onClick={() =>
+              setModal({
+                titulo: 'De onde vem a comissão projetada',
+                itens: ordenarItens(
+                  dia.blocos
+                    .filter((b) => b.tipo === 'nfs_alta_nao_prospectadas' || b.tipo === 'antecipacoes_travadas')
+                    .flatMap((b) => b.itens),
+                ),
+              })
+            }
+          />
+          <Indicador
+            icone={AlertTriangle}
+            rotulo="Urgentes"
+            valor={String(urgentes.length)}
+            detalhe={urgentes.length > 0 ? 'relógio correndo' : 'nada vencendo'}
+            alerta={urgentes.length > 0}
+            onClick={() => setModal({ titulo: 'O que tem relógio correndo', itens: urgentes })}
+          />
+          <IndicadorDoCargo dia={dia} onAbrir={setModal} />
+        </div>
+
+        {composicao.length > 0 && (
+          <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+            {composicao.map((f) => (
+              <button
+                key={f.grupo}
+                type="button"
+                onClick={() => setFiltro((a) => (a === f.grupo ? null : f.grupo))}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs transition-opacity',
+                  filtro && filtro !== f.grupo ? 'opacity-40' : 'opacity-100',
+                )}
+              >
+                <span className={cn('h-2 w-2 rounded-full', COR_GRUPO[f.grupo])} aria-hidden />
+                <span className="hidden font-medium sm:inline">{GRUPO_MEU_DIA_LABELS[f.grupo]}</span>
+                <span className="tabular-nums text-muted-foreground">{f.itens}</span>
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {/* ── Timeline: no mobile ela vem PRIMEIRO ─────────────────────────── */}
-      {compromissos.length > 0 && (
-        <div className="lg:order-last">
-          <Timeline itens={compromissos} />
-        </div>
-      )}
-
-      {/* ── Indicadores ──────────────────────────────────────────────────── */}
-      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
-        <Indicador
-          icone={Wallet}
-          rotulo="R$ em jogo hoje"
-          valor={brl(emJogo)}
-          detalhe={`${total} ${total === 1 ? 'item acionável' : 'itens acionáveis'}`}
-          onClick={() => setModal({ titulo: 'Tudo o que está em jogo hoje', itens: ordenarItens(dia.blocos.flatMap((b) => b.itens)) })}
-        />
-        <Indicador
-          icone={Coins}
-          rotulo="Comissão projetada"
-          valor={brl(dia.comissao_projetada)}
-          detalhe="se tudo converter"
-          onClick={() =>
-            setModal({
-              titulo: 'De onde vem a comissão projetada',
-              itens: ordenarItens(
-                dia.blocos
-                  .filter((b) => b.tipo === 'nfs_alta_nao_prospectadas' || b.tipo === 'antecipacoes_travadas')
-                  .flatMap((b) => b.itens),
-              ),
-            })
-          }
-        />
-        <Indicador
-          icone={AlertTriangle}
-          rotulo="Itens urgentes"
-          valor={String(urgentes.length)}
-          detalhe={urgentes.length > 0 ? 'com relógio correndo' : 'nada vencendo'}
-          alerta={urgentes.length > 0}
-          onClick={() => setModal({ titulo: 'O que tem relógio correndo', itens: urgentes })}
-        />
-        <IndicadorDoCargo dia={dia} onAbrir={setModal} />
-      </div>
-
-      {/* ── O gráfico: o navegador da página ─────────────────────────────── */}
-      {composicao.length > 0 && (
-        <Composicao
-          fatias={composicao}
-          total={total}
-          filtro={filtro}
-          onFiltrar={(g) => setFiltro((atual) => (atual === g ? null : g))}
-        />
-      )}
-
-      {/* ── Os cards ─────────────────────────────────────────────────────── */}
+      {/* ── A grade de widgets ────────────────────────────────────────────── */}
       {blocos.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <CheckCircle2 className="h-10 w-10 text-emerald-600" aria-hidden />
-            <p className="text-lg font-medium">Tudo em dia por aqui</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              {filtro
-                ? 'Nada pendente nesta fatia. Tire o filtro para ver o resto.'
-                : 'Nenhum item pedindo ação agora. O que aparecer chega aqui sozinho.'}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-border py-16 text-center">
+          <CheckCircle2 className="h-9 w-9 text-emerald-600" aria-hidden />
+          <p className="text-base font-medium">Tudo em dia por aqui</p>
+          <p className="max-w-sm text-xs text-muted-foreground">
+            {filtro
+              ? 'Nada pendente nesta fatia. Tire o filtro para ver o resto.'
+              : 'Nenhum item pedindo ação agora.'}
+          </p>
+        </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid gap-3 xl:grid-cols-2">
           {blocos.map((bloco) => (
-            <BlocoDeCards
+            <WidgetDoBloco
               key={bloco.tipo}
               bloco={bloco}
-              onAdiar={(item) => setAdiando({ bloco: bloco.tipo, item })}
-              onDescartar={(item) => void ocultar(bloco.tipo, item, 'irrelevante')}
-              onConcluir={async (item) => {
-                const r = await concluirTarefaAction(String(item.meta.tarefa_id))
-                if (!r.ok) return toast.error(r.message)
-                toast.success('Feito.')
-                router.refresh()
-              }}
-              onVerTodos={() =>
-                setModal({ titulo: blocoCatalogado(bloco.tipo)?.rotulo ?? bloco.tipo, itens: bloco.itens })
-              }
+              dia={dia}
+              onAbrirLista={(titulo, itens) => setModal({ titulo, itens })}
+              onAdiar={acoes.onAdiar(bloco.tipo)}
+              onDescartar={acoes.onDescartar(bloco.tipo)}
+              onConcluir={acoes.onConcluir}
             />
           ))}
+
+          {dia.mapa_carteira.length > 0 && <MapaCarteira clientes={dia.mapa_carteira} />}
+          {dia.funil_semana.length > 0 && <FunilSemana etapas={dia.funil_semana} />}
+          {dia.evolucao.length > 0 && <Evolucao serie={dia.evolucao} />}
+          {compromissos.length > 0 && <Timeline itens={compromissos} />}
         </div>
       )}
 
-      {/* ── Rodapé: o contexto do cargo ──────────────────────────────────── */}
-      {dia.mapa_carteira.length > 0 && <MapaCarteira clientes={dia.mapa_carteira} />}
-      {dia.funil_semana.length > 0 && <FunilSemana etapas={dia.funil_semana} />}
-      {dia.evolucao.length > 0 && <Evolucao serie={dia.evolucao} />}
-
-      <ModalDeItens aberto={modal} onFechar={() => setModal(null)} />
+      <ModalDeItens
+        aberto={modal}
+        onFechar={() => setModal(null)}
+        onAdiar={(bloco, item) => setAdiando({ bloco, item })}
+      />
       <DialogAdiar
         alvo={adiando}
         onFechar={() => setAdiando(null)}
         onConfirmar={(ate) => adiando && void ocultar(adiando.bloco, adiando.item, 'adiado', ate)}
       />
     </div>
+  )
+}
+
+// ─── O widget de um bloco, escolhido pelo catálogo ──────────────────────────
+
+function WidgetDoBloco({
+  bloco, dia, onAbrirLista, onAdiar, onDescartar, onConcluir,
+}: {
+  bloco: BlocoMeuDia
+  dia: MeuDia
+  onAbrirLista: (titulo: string, itens: ItemMeuDia[]) => void
+  onAdiar: (i: ItemMeuDia) => void
+  onDescartar: (i: ItemMeuDia) => void
+  onConcluir: (i: ItemMeuDia) => void
+}) {
+  const cat = blocoCatalogado(bloco.tipo)
+  const [fatia, setFatia] = React.useState<string | null>(null)
+  const rotulo = cat?.rotulo ?? bloco.tipo
+  const contexto = bloco.valor_total > 0 ? brl(bloco.valor_total) : `${bloco.total}`
+  const restantes = bloco.total - bloco.itens.length
+  const rodape =
+    restantes > 0 ? (
+      <button type="button" className="underline" onClick={() => onAbrirLista(rotulo, bloco.itens)}>
+        e mais {restantes} — ver todos
+      </button>
+    ) : null
+
+  // ── Pizza: composição por cedente, e a fatia abre as notas dela ──────────
+  if (cat?.visual === 'pizza') {
+    const daFatia = fatia
+      ? bloco.itens.filter((i) => String(i.meta.cedente_nome ?? i.titulo) === fatia)
+      : bloco.itens
+    return (
+      <Widget
+        titulo={rotulo}
+        descricao="Por cedente — doze notas do mesmo fornecedor são uma conversa, não doze"
+        contexto={contexto}
+        rodape={
+          fatia ? (
+            <button type="button" className="underline" onClick={() => onAbrirLista(fatia, daFatia)}>
+              ver as {daFatia.length} nota(s) de {fatia}
+            </button>
+          ) : (
+            rodape
+          )
+        }
+      >
+        <PizzaPorChave
+          itens={bloco.itens}
+          chave="cedente_nome"
+          fatiaAtiva={fatia}
+          onFatia={setFatia}
+        />
+      </Widget>
+    )
+  }
+
+  // ── Bolhas: certificados e inbound ──────────────────────────────────────
+  if (cat?.visual === 'bolhas' && bloco.tipo === 'certificados_a_prospectar') {
+    const bolhas: Bolha[] = bloco.itens.map((i) => ({
+      id: i.referencia_id,
+      nome: i.titulo,
+      x: Number(i.meta.faltantes ?? 0),
+      y: Number(i.meta.limite_ocioso ?? 0),
+      tamanho: Number(i.meta.limite_ocioso ?? 0),
+      cor: '#2a78d6',
+      detalhe: `${i.meta.faltantes} CNPJ(s) sem certificado · ${brl(Number(i.meta.limite_ocioso ?? 0))} ociosos`,
+    }))
+    return (
+      <Widget
+        titulo={rotulo}
+        descricao="Quanto está parado × quantos CNPJs estão cegos. Bolha grande e à direita é o maior potencial não atacado."
+        contexto={contexto}
+        rodape={rodape}
+      >
+        <GraficoBolhas
+          bolhas={bolhas}
+          rotuloX="CNPJs sem certificado"
+          rotuloY="Limite ocioso"
+          formatarX={(n) => String(Math.round(n))}
+          onBolha={(id) => {
+            const item = bloco.itens.find((i) => i.referencia_id === id)
+            if (item) onAbrirLista(item.titulo, [item])
+          }}
+        />
+      </Widget>
+    )
+  }
+
+  if (cat?.visual === 'bolhas' && bloco.tipo === 'inbound_nao_contatado') {
+    const bolhas: Bolha[] = bloco.itens.map((i) => ({
+      id: i.referencia_id,
+      nome: i.titulo,
+      x: Number(i.meta.horas ?? i.dias ?? 0),
+      y: i.valor ?? 0,
+      tamanho: i.valor ?? 1,
+      cor: corPorEspera(Number(i.meta.horas ?? 0)),
+      detalhe: `${i.meta.horas}h sem resposta · ${brl(i.valor ?? 0)}/mês de potencial`,
+    }))
+    return (
+      <Widget
+        titulo={rotulo}
+        descricao="Tamanho pelo faturamento, cor pela espera — azul agora, vermelho às 96h"
+        contexto={`${bloco.total}`}
+        rodape={rodape}
+      >
+        <GraficoBolhas
+          bolhas={bolhas}
+          rotuloX="Horas sem contato"
+          rotuloY="Potencial mensal"
+          dominioX={[0, 96]}
+          formatarX={(n) => `${Math.round(n)}h`}
+          onBolha={(id) => {
+            const item = bloco.itens.find((i) => i.referencia_id === id)
+            if (item) onAbrirLista(item.titulo, [item])
+          }}
+        />
+      </Widget>
+    )
+  }
+
+  // ── Barras: ranking por uma grandeza ────────────────────────────────────
+  if (cat?.visual === 'barras') {
+    const ehEspera = bloco.tipo === 'conversas_aguardando_resposta'
+    const itens = ordenarItens(bloco.itens)
+      .slice(0, 8)
+      .map((i) => ({
+        id: i.referencia_id,
+        nome: i.titulo,
+        valor: ehEspera ? Number(i.meta.horas ?? 0) : (i.valor ?? 0),
+        detalhe: i.motivo,
+        cor: ehEspera
+          ? corPorEspera(Number(i.meta.horas ?? 0))
+          : STATUS_CORES[String(i.meta.operation_status ?? '')],
+      }))
+    return (
+      <Widget
+        titulo={rotulo}
+        descricao={ehEspera ? 'Do que espera há mais tempo para o mais recente' : cat.descricao}
+        contexto={contexto}
+        rodape={rodape}
+      >
+        <BarrasRanking
+          itens={itens}
+          formatar={ehEspera ? (n) => `${n}h` : brl}
+          onItem={(id) => {
+            const item = bloco.itens.find((i) => i.referencia_id === id)
+            if (item) onAbrirLista(item.titulo, [item])
+          }}
+        />
+      </Widget>
+    )
+  }
+
+  // ── Rolagem: a lista longa que cabe num cartão ──────────────────────────
+  if (cat?.visual === 'rolagem') {
+    return (
+      <Widget
+        titulo={rotulo}
+        descricao={`${bloco.total} no total, do que mais emite para o que menos`}
+        contexto={contexto}
+      >
+        <ListaRolagem
+          itens={bloco.itens}
+          onItem={(i) => onAbrirLista(i.titulo, [i])}
+        />
+      </Widget>
+    )
+  }
+
+  // ── Lista: o padrão ─────────────────────────────────────────────────────
+  return (
+    <Widget titulo={rotulo} descricao={cat?.descricao} contexto={contexto} rodape={rodape}>
+      <ListaDeItens
+        bloco={bloco}
+        onAdiar={onAdiar}
+        onDescartar={onDescartar}
+        onConcluir={onConcluir}
+      />
+    </Widget>
   )
 }
 
@@ -266,26 +475,21 @@ function Indicador({
       type="button"
       onClick={onClick}
       className={cn(
-        'min-w-[15rem] snap-start rounded-lg border bg-card p-4 text-left transition-colors',
-        'hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary/50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         alerta ? 'border-red-500/40' : 'border-border',
       )}
     >
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-        <Icone className={cn('h-3.5 w-3.5', alerta && 'text-red-600')} aria-hidden />
-        {rotulo}
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <Icone className={cn('h-3 w-3', alerta && 'text-red-600')} aria-hidden />
+        <span className="truncate">{rotulo}</span>
       </div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums">{valor}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{detalhe}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{valor}</div>
+      <div className="truncate text-[11px] text-muted-foreground">{detalhe}</div>
     </button>
   )
 }
 
-/**
- * O quarto indicador muda com o cargo (§2.1) — e cada um é a pergunta que aquela pessoa
- * faz primeiro de manhã: quanto de nota boa está parada, quantos leads esfriando, quanto
- * limite aprovado não está sendo usado.
- */
 function IndicadorDoCargo({
   dia, onAbrir,
 }: {
@@ -298,11 +502,11 @@ function IndicadorDoCargo({
     const b = bloco('nfs_alta_nao_prospectadas')
     return (
       <Indicador
-        icone={ArrowUpRight}
-        rotulo="NF alta não prospectada"
+        icone={Wallet}
+        rotulo="NF alta parada"
         valor={brl(b?.valor_total ?? 0)}
-        detalhe={`${b?.total ?? 0} nota(s) esperando`}
-        onClick={() => onAbrir({ titulo: 'NFs de alta probabilidade não prospectadas', itens: b?.itens ?? [] })}
+        detalhe={`${b?.total ?? 0} nota(s)`}
+        onClick={() => onAbrir({ titulo: 'NFs de alta probabilidade', itens: b?.itens ?? [] })}
       />
     )
   }
@@ -317,7 +521,7 @@ function IndicadorDoCargo({
         valor={String(b?.total ?? 0)}
         detalhe={maisAntigo > 0 ? `o mais antigo há ${maisAntigo}h` : 'nada esperando'}
         alerta={(b?.total ?? 0) > 0}
-        onClick={() => onAbrir({ titulo: 'Inbound novo não contatado', itens: b?.itens ?? [] })}
+        onClick={() => onAbrir({ titulo: 'Inbound não contatado', itens: b?.itens ?? [] })}
       />
     )
   }
@@ -328,223 +532,162 @@ function IndicadorDoCargo({
       icone={Wallet}
       rotulo="Limite ocioso"
       valor={brl(b?.valor_total ?? 0)}
-      detalhe={`${b?.total ?? 0} cliente(s) parados`}
+      detalhe={`${b?.total ?? 0} cliente(s)`}
       onClick={() => onAbrir({ titulo: 'Carteira passiva ociosa', itens: b?.itens ?? [] })}
     />
   )
 }
 
-// ─── O gráfico de composição ────────────────────────────────────────────────
+// ─── Rodapé ─────────────────────────────────────────────────────────────────
 
-function Composicao({
-  fatias, total, filtro, onFiltrar,
-}: {
-  fatias: { grupo: GrupoMeuDia; itens: number; valor: number }[]
-  total: number
-  filtro: GrupoMeuDia | null
-  onFiltrar: (g: GrupoMeuDia) => void
-}) {
+function Timeline({ itens }: { itens: ItemMeuDia[] }) {
   return (
-    <div className="space-y-2">
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" role="presentation">
-        {fatias.map((f) => (
-          <button
-            key={f.grupo}
-            type="button"
-            onClick={() => onFiltrar(f.grupo)}
-            style={{ width: `${(f.itens / Math.max(total, 1)) * 100}%` }}
-            aria-label={`${GRUPO_MEU_DIA_LABELS[f.grupo]}: ${f.itens} itens`}
-            className={cn(
-              'h-full transition-opacity',
-              COR_GRUPO[f.grupo],
-              filtro && filtro !== f.grupo && 'opacity-25',
-            )}
-          />
+    <Widget titulo="A agenda de hoje" descricao="Reuniões, prazos e tarefas com data">
+      <ol className="max-h-56 space-y-2.5 overflow-y-auto border-l border-border pl-3">
+        {itens.slice(0, 10).map((i) => (
+          <li key={`${i.referencia_id}-${i.quando}`} className="relative">
+            <span
+              className={cn(
+                'absolute -left-[1.05rem] top-1.5 h-1.5 w-1.5 rounded-full',
+                i.urgencia === 'alta' ? 'bg-red-500' : 'bg-amber-500',
+              )}
+              aria-hidden
+            />
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {i.quando
+                ? new Date(i.quando).toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                  })
+                : '—'}
+            </p>
+            <p className="truncate text-xs font-medium">{i.titulo}</p>
+          </li>
         ))}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {fatias.map((f) => (
-          <button
-            key={f.grupo}
-            type="button"
-            onClick={() => onFiltrar(f.grupo)}
-            className={cn(
-              'flex items-center gap-1.5 text-xs transition-opacity',
-              filtro && filtro !== f.grupo ? 'opacity-40' : 'opacity-100',
-            )}
-          >
-            <span className={cn('h-2 w-2 rounded-full', COR_GRUPO[f.grupo])} aria-hidden />
-            <span className="font-medium">{GRUPO_MEU_DIA_LABELS[f.grupo]}</span>
-            <span className="tabular-nums text-muted-foreground">{f.itens}</span>
-          </button>
-        ))}
-        {filtro && (
-          <button type="button" onClick={() => onFiltrar(filtro)} className="text-xs underline text-muted-foreground">
-            limpar filtro
-          </button>
-        )}
-      </div>
-    </div>
+      </ol>
+    </Widget>
   )
 }
 
-// ─── Cards ──────────────────────────────────────────────────────────────────
+/**
+ * O mapa da carteira passiva: tamanho pelo limite, COR PELO TEMPERATURE REPORT.
+ *
+ * A cor era a ociosidade em dias, que é um proxy. O report é a leitura da plataforma
+ * sobre a saúde da conta — usar o proxy existindo a leitura direta é escolher o pior dos
+ * dois. E cada quadrado leva o nome: um mapa de retângulos sem rótulo é bonito e mudo.
+ */
+function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
+  const ordenados = [...clientes].sort((a, b) => b.limite - a.limite)
+  const maior = Math.max(...ordenados.map((c) => c.limite), 1)
 
-function BlocoDeCards({
-  bloco, onAdiar, onDescartar, onConcluir, onVerTodos,
-}: {
-  bloco: BlocoMeuDia
-  onAdiar: (i: ItemMeuDia) => void
-  onDescartar: (i: ItemMeuDia) => void
-  onConcluir: (i: ItemMeuDia) => void
-  onVerTodos: () => void
-}) {
-  const cat = blocoCatalogado(bloco.tipo)
-  const restantes = bloco.total - bloco.itens.length
-
-  return (
-    <section className="space-y-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold">{cat?.rotulo ?? bloco.tipo}</h2>
-          {cat?.descricao && <p className="text-xs text-muted-foreground">{cat.descricao}</p>}
-        </div>
-        {bloco.valor_total > 0 && (
-          <span className="text-sm tabular-nums text-muted-foreground">{brl(bloco.valor_total)}</span>
-        )}
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-2">
-        {ordenarItens(bloco.itens).map((item) => (
-          <CardDeItem
-            key={item.referencia_id}
-            item={item}
-            bloco={bloco.tipo}
-            onAdiar={() => onAdiar(item)}
-            onDescartar={() => onDescartar(item)}
-            onConcluir={() => onConcluir(item)}
-          />
-        ))}
-      </div>
-
-      {restantes > 0 && (
-        <button type="button" onClick={onVerTodos} className="text-xs underline text-muted-foreground">
-          e mais {restantes} — ver todos
-        </button>
-      )}
-    </section>
-  )
-}
-
-/** Para onde o botão primário leva. O agregador diz o tipo da ação; aqui vira rota. */
-function destino(bloco: string, item: ItemMeuDia): string | null {
-  const cat = blocoCatalogado(bloco)
-  const meta = item.meta as Record<string, string | undefined>
-  switch (cat?.acao) {
-    case 'abrir_empresa':
-    case 'abrir_certificado':
-      return item.empresa_id ? `/empresas/${item.empresa_id}` : null
-    case 'abrir_card_nf':
-      return '/comercial/nfs'
-    case 'abrir_card_venda':
-      return '/comercial/vendas'
-    case 'abrir_card_lead':
-      return '/comercial/sdr'
-    case 'abrir_fornecedor':
-      return '/comercial/fornecedores'
-    case 'decidir_aceite':
-      return '/comercial/comissoes'
-    case 'abrir_conversa':
-    case 'enviar_sugestao':
-      return meta.conversa_id ? `/comunicacao/${meta.conversa_id}` : '/comunicacao'
-    case 'vincular_conversa':
-      return '/comunicacao/nao-vinculadas'
-    default:
-      return null
+  const porStatus = new Map<string, number>()
+  for (const c of ordenados) {
+    const s = String((c as { operation_status?: string }).operation_status ?? 'operating_normally')
+    porStatus.set(s, (porStatus.get(s) ?? 0) + 1)
   }
-}
-
-function CardDeItem({
-  item, bloco, onAdiar, onDescartar, onConcluir,
-}: {
-  item: ItemMeuDia
-  bloco: string
-  onAdiar: () => void
-  onDescartar: () => void
-  onConcluir: () => void
-}) {
-  const cat = blocoCatalogado(bloco)
-  const href = destino(bloco, item)
-  const [menu, setMenu] = React.useState(false)
 
   return (
-    <div className="relative flex overflow-hidden rounded-lg border border-border bg-card">
-      <div className={cn('w-1 shrink-0', FAIXA_URGENCIA[item.urgencia] ?? FAIXA_URGENCIA.baixa)} aria-hidden />
-      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{item.titulo}</p>
-            {item.subtitulo && <p className="truncate text-xs text-muted-foreground">{item.subtitulo}</p>}
-          </div>
-          {item.valor !== null && item.valor > 0 && (
-            <span className="shrink-0 text-sm font-semibold tabular-nums">{brl(item.valor)}</span>
-          )}
-        </div>
-
-        <p className="text-xs text-muted-foreground">{item.motivo}</p>
-
-        <div className="flex items-center gap-2">
-          {cat?.acao === 'concluir_tarefa' ? (
-            <Button size="sm" onClick={onConcluir}>
-              <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden />
-              {cat.acaoRotulo}
-            </Button>
-          ) : href ? (
-            <Button size="sm" asChild>
-              {/* Nova aba de propósito: agir sem perder o contexto do dia (§1). */}
-              <Link href={href} target="_blank" rel="noopener noreferrer">
-                {cat?.acaoRotulo ?? 'Abrir'}
-                <ExternalLink className="ml-1 h-3 w-3" aria-hidden />
-              </Link>
-            </Button>
-          ) : null}
-
-          <div className="relative ml-auto">
-            <Button variant="ghost" size="sm" onClick={() => setMenu((v) => !v)} aria-label="Mais ações">
-              <MoreHorizontal className="h-4 w-4" aria-hidden />
-            </Button>
-            {menu && (
-              <div className="absolute right-0 top-9 z-10 w-44 overflow-hidden rounded-md border border-border bg-popover shadow-md">
-                <button
-                  type="button"
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={() => { setMenu(false); onAdiar() }}
-                >
-                  Adiar até…
-                </button>
-                <button
-                  type="button"
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={() => { setMenu(false); onDescartar() }}
-                >
-                  Não é relevante
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+    <Widget
+      titulo="Minha carteira passiva"
+      descricao="Tamanho pelo limite, cor pelo temperature report"
+      contexto={`${ordenados.length}`}
+      rodape={
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
+          {[...porStatus.entries()].map(([s, n]) => (
+            <span key={s} className="flex items-center gap-1">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: STATUS_CORES[s] ?? '#94a3b8' }}
+                aria-hidden
+              />
+              {STATUS_ROTULOS[s] ?? s} · {n}
+            </span>
+          ))}
+        </span>
+      }
+    >
+      <div className="flex max-h-56 flex-wrap content-start gap-1 overflow-y-auto">
+        {ordenados.map((c) => {
+          const status = String((c as { operation_status?: string }).operation_status ?? 'operating_normally')
+          const lado = Math.max(40, Math.round(Math.sqrt(c.limite / maior) * 92))
+          return (
+            <Link
+              key={c.cnpj}
+              href={c.empresa_id ? `/empresas/${c.empresa_id}` : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ width: lado, height: lado, backgroundColor: STATUS_CORES[status] ?? '#94a3b8' }}
+              title={`${c.nome} — ${brl(c.limite_disponivel)} disponíveis · ${STATUS_ROTULOS[status] ?? status}`}
+              className="flex items-end overflow-hidden rounded p-1 transition-transform hover:scale-105"
+            >
+              <span className="line-clamp-2 text-[9px] font-medium leading-tight text-white/95">
+                {c.nome}
+              </span>
+            </Link>
+          )
+        })}
       </div>
-    </div>
+    </Widget>
+  )
+}
+
+function FunilSemana({ etapas }: { etapas: MeuDia['funil_semana'] }) {
+  return (
+    <Widget titulo="A sua semana" descricao="Contatados → com fit → agendados → realizados">
+      <div className="grid grid-cols-4 gap-2">
+        {etapas.map((e, i) => {
+          const anterior = etapas[i - 1]?.total ?? null
+          const taxa = anterior && anterior > 0 ? Math.round((e.total / anterior) * 100) : null
+          return (
+            <div key={e.etapa} className="rounded-md border border-border p-2">
+              <p className="truncate text-[10px] text-muted-foreground">{e.etapa}</p>
+              <p className="text-lg font-semibold tabular-nums">{e.total}</p>
+              {taxa !== null && <p className="text-[10px] text-muted-foreground">{taxa}% da anterior</p>}
+            </div>
+          )
+        })}
+      </div>
+    </Widget>
+  )
+}
+
+function Evolucao({ serie }: { serie: MeuDia['evolucao'] }) {
+  const maior = Math.max(...serie.map((s) => s.total), 1)
+  return (
+    <Widget titulo="Conversões do mês" descricao="Contra a média dos três meses anteriores">
+      <div className="space-y-2">
+        {serie.map((s) => (
+          <div key={s.competencia} className="space-y-1">
+            <div className="flex justify-between text-[11px]">
+              <span className="tabular-nums text-muted-foreground">
+                {new Date(s.competencia).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+              </span>
+              <span className="tabular-nums">
+                {brl(s.total)}
+                {s.media_3m ? (
+                  <span className={cn('ml-2', s.total >= s.media_3m ? 'text-emerald-600' : 'text-amber-600')}>
+                    {s.total >= s.media_3m ? '↑' : '↓'} {brl(s.media_3m)}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${(s.total / maior) * 100}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Widget>
   )
 }
 
 // ─── Modais ─────────────────────────────────────────────────────────────────
 
 function ModalDeItens({
-  aberto, onFechar,
+  aberto, onFechar, onAdiar,
 }: {
   aberto: { titulo: string; itens: ItemMeuDia[] } | null
   onFechar: () => void
+  onAdiar: (bloco: string, item: ItemMeuDia) => void
 }) {
   return (
     <Dialog open={Boolean(aberto)} onOpenChange={(v) => !v && onFechar()}>
@@ -614,153 +757,5 @@ function DialogAdiar({
         </div>
       </DialogContent>
     </Dialog>
-  )
-}
-
-// ─── Rodapé ─────────────────────────────────────────────────────────────────
-
-/**
- * A timeline do dia: reuniões, prazos de aceite e tarefas com data, na ordem do relógio.
- * No mobile ela sobe para o topo (a classe `lg:order-last` no container) porque é a
- * primeira pergunta de quem abre o app no café: "o que eu tenho hoje?".
- */
-function Timeline({ itens }: { itens: ItemMeuDia[] }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <CalendarClock className="h-4 w-4" aria-hidden />
-          A agenda de hoje
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-0">
-        <ol className="relative space-y-3 border-l border-border pl-4">
-          {itens.slice(0, 8).map((i) => (
-            <li key={`${i.referencia_id}-${i.quando}`} className="relative">
-              <span
-                className={cn(
-                  'absolute -left-[1.3rem] top-1.5 h-2 w-2 rounded-full',
-                  FAIXA_URGENCIA[i.urgencia] ?? FAIXA_URGENCIA.baixa,
-                )}
-                aria-hidden
-              />
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {i.quando
-                  ? new Date(i.quando).toLocaleString('pt-BR', {
-                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                    })
-                  : '—'}
-              </p>
-              <p className="text-sm font-medium">{i.titulo}</p>
-              <p className="text-xs text-muted-foreground">{i.motivo}</p>
-            </li>
-          ))}
-        </ol>
-      </CardContent>
-    </Card>
-  )
-}
-
-/**
- * O mapa de calor da carteira passiva: um quadrado por cliente, TAMANHO pelo limite e
- * COR pela ociosidade. Substitui uma lista inteira — e responde de relance a pergunta
- * que a lista só responde depois de rolar: onde está o dinheiro parado.
- */
-function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
-  const maior = Math.max(...clientes.map((c) => c.limite), 1)
-
-  const cor = (dias: number | null) => {
-    const d = dias ?? 0
-    if (d >= 90) return 'bg-red-500/80'
-    if (d >= 45) return 'bg-amber-500/80'
-    if (d >= 15) return 'bg-sky-500/70'
-    return 'bg-emerald-500/70'
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Mapa da carteira passiva</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Tamanho pelo limite, cor pela ociosidade. Vermelho é limite aprovado que não opera há 90 dias.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap gap-1.5">
-          {clientes.map((c) => {
-            const lado = Math.max(28, Math.round(Math.sqrt(c.limite / maior) * 72))
-            return (
-              <Link
-                key={c.cnpj}
-                href={c.empresa_id ? `/empresas/${c.empresa_id}` : '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ width: lado, height: lado }}
-                title={`${c.nome} — ${brl(c.limite_disponivel)} disponíveis, ${c.dias_sem_antecipar ?? 0} dias sem antecipar`}
-                className={cn('rounded transition-transform hover:scale-105', cor(c.dias_sem_antecipar))}
-              />
-            )
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function FunilSemana({ etapas }: { etapas: MeuDia['funil_semana'] }) {
-  const primeiro = etapas[0]?.total ?? 0
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">A sua semana</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-4 gap-2">
-        {etapas.map((e, i) => {
-          const anterior = etapas[i - 1]?.total ?? null
-          const taxa = anterior && anterior > 0 ? Math.round((e.total / anterior) * 100) : null
-          return (
-            <div key={e.etapa} className="rounded-md border border-border p-2">
-              <p className="text-xs text-muted-foreground">{e.etapa}</p>
-              <p className="text-xl font-semibold tabular-nums">{e.total}</p>
-              {taxa !== null && <p className="text-[11px] text-muted-foreground">{taxa}% da etapa anterior</p>}
-              {i === 0 && primeiro > 0 && <p className="text-[11px] text-muted-foreground">nesta semana</p>}
-            </div>
-          )
-        })}
-      </CardContent>
-    </Card>
-  )
-}
-
-function Evolucao({ serie }: { serie: MeuDia['evolucao'] }) {
-  const maior = Math.max(...serie.map((s) => s.total), 1)
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Conversões do mês contra o seu normal</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {serie.map((s) => (
-          <div key={s.competencia} className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="tabular-nums text-muted-foreground">
-                {new Date(s.competencia).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
-              </span>
-              <span className="tabular-nums">
-                {brl(s.total)}
-                {s.media_3m ? (
-                  <span className={cn('ml-2', s.total >= s.media_3m ? 'text-emerald-600' : 'text-amber-600')}>
-                    {s.total >= s.media_3m ? '↑' : '↓'} média {brl(s.media_3m)}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${(s.total / maior) * 100}%` }} />
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   )
 }

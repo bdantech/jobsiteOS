@@ -44,7 +44,6 @@ export const BLOCOS_MEU_DIA = [
   'antecipacoes_travadas',
   'cedentes_que_pararam',
   'fornecedores_a_cadastrar',
-  'fornecedores_sem_contato',
   'certificados_a_prospectar',
   // SDR — o dia dele é relógio.
   'inbound_nao_contatado',
@@ -66,7 +65,6 @@ export const BLOCOS_MEU_DIA = [
   'conversas_paradas',
   'conversas_aguardando_resposta',
   'proximos_passos_agente',
-  'conversas_nao_vinculadas',
   'tarefas_manuais',
 ] as const
 
@@ -99,6 +97,22 @@ export type AcaoMeuDia =
  */
 export type GrupoMeuDia = 'funil' | 'conversa' | 'carteira' | 'credito' | 'cadastro'
 
+/**
+ * COMO o bloco se desenha. É o que transforma a tela de uma pilha de cards numa grade
+ * de widgets: cada bloco declara a forma que responde a pergunta dele, e a tela não
+ * precisa de um `if` por tipo.
+ *
+ *   `pizza`   composição — de quem é o volume que está parado
+ *   `bolhas`  duas grandezas ao mesmo tempo — tamanho e cor carregam a terceira
+ *   `barras`  ranking por uma grandeza só, do maior para o menor
+ *   `rolagem` lista longa que cabe num cartão só, com scroll interno
+ *   `lista`   poucos itens, cada um com a sua ação
+ *
+ * A escolha não é estética: uma lista de 185 fornecedores em cards separados é a tela
+ * que o vendedor fecha. A mesma lista num cartão com rolagem é um widget.
+ */
+export type VisualMeuDia = 'pizza' | 'bolhas' | 'barras' | 'rolagem' | 'lista'
+
 export const GRUPO_MEU_DIA_LABELS: Record<GrupoMeuDia, string> = {
   funil: 'Funil',
   conversa: 'Conversas',
@@ -115,6 +129,8 @@ export interface BlocoCatalogado {
   /** Quem vê. Vazio nunca — bloco sem cargo é bloco morto. */
   cargos: readonly TipoVendedorId[]
   grupo: GrupoMeuDia
+  /** A forma do widget. Ausente = `lista`. */
+  visual?: VisualMeuDia
   acao: AcaoMeuDia
   acaoRotulo: string
   /** Teto de itens. Lista infinita mata a adoção — o topo é o que se trabalha hoje. */
@@ -143,6 +159,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'Nota em faixa alta que ninguém tocou. É o topo da fila por receita esperada.',
     cargos: ['originador'],
     grupo: 'funil',
+    visual: 'pizza',
     acao: 'abrir_card_nf',
     acaoRotulo: 'Abrir a nota',
     maxPadrao: 10,
@@ -169,6 +186,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'Recorrente que antecipava e sumiu. A régua é a distância da última cessão.',
     cargos: ['originador'],
     grupo: 'carteira',
+    visual: 'barras',
     acao: 'abrir_empresa',
     acaoRotulo: 'Abrir o cedente',
     maxPadrao: 10,
@@ -184,19 +202,9 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'Funil de cadastro (04l), pelo maior potencial mensal.',
     cargos: ['originador'],
     grupo: 'cadastro',
+    visual: 'rolagem',
     acao: 'abrir_fornecedor',
     acaoRotulo: 'Abrir o fornecedor',
-    maxPadrao: 8,
-    limiaresPadrao: {},
-  },
-  {
-    tipo: 'fornecedores_sem_contato',
-    rotulo: 'Fornecedores sem contato',
-    descricao: 'No funil e sem ninguém para falar. A ação é disparar a descoberta.',
-    cargos: ['originador'],
-    grupo: 'cadastro',
-    acao: 'abrir_fornecedor',
-    acaoRotulo: 'Buscar contatos',
     maxPadrao: 8,
     limiaresPadrao: {},
   },
@@ -208,6 +216,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
       + 'notas dela — o valor ao lado é o que está cego por isso.',
     cargos: ['originador'],
     grupo: 'cadastro',
+    visual: 'bolhas',
     acao: 'abrir_certificado',
     acaoRotulo: 'Abrir no funil',
     maxPadrao: 8,
@@ -221,6 +230,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'Chegou sozinho e ninguém respondeu. Aqui minutos importam, não dias.',
     cargos: ['sdr'],
     grupo: 'funil',
+    visual: 'bolhas',
     acao: 'abrir_card_lead',
     acaoRotulo: 'Abrir o lead',
     maxPadrao: 15,
@@ -347,6 +357,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
       + 'foi aprovado — não é potencial, é limite ocioso.',
     cargos: ['vendedor'],
     grupo: 'carteira',
+    visual: 'barras',
     acao: 'abrir_empresa',
     acaoRotulo: 'Abrir o cliente',
     maxPadrao: 12,
@@ -400,6 +411,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'Objetivo aberto, sem toque. A conversa esfria mais rápido que o lead.',
     cargos: ['originador', 'sdr', 'vendedor'],
     grupo: 'conversa',
+    visual: 'rolagem',
     acao: 'abrir_conversa',
     acaoRotulo: 'Abrir a conversa',
     maxPadrao: 10,
@@ -412,6 +424,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     descricao: 'A última mensagem foi deles. Enquanto não responder, a bola está com você.',
     cargos: ['originador', 'sdr', 'vendedor'],
     grupo: 'conversa',
+    visual: 'barras',
     acao: 'abrir_conversa',
     acaoRotulo: 'Responder',
     maxPadrao: 15,
@@ -428,17 +441,6 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     maxPadrao: 10,
     limiaresPadrao: { confianca_minima: 0 },
     limiarRotulos: { confianca_minima: 'Confiança mínima da sugestão (0 a 100)' },
-  },
-  {
-    tipo: 'conversas_nao_vinculadas',
-    rotulo: 'Conversas não identificadas',
-    descricao: 'Chegou mensagem de um número que ninguém sabe de quem é.',
-    cargos: ['originador', 'sdr', 'vendedor'],
-    grupo: 'conversa',
-    acao: 'vincular_conversa',
-    acaoRotulo: 'Identificar',
-    maxPadrao: 8,
-    limiaresPadrao: {},
   },
   {
     tipo: 'tarefas_manuais',

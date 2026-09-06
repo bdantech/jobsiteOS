@@ -55,6 +55,13 @@ test('não há tipo de bloco repetido', () => {
   }
 })
 
+test('todo bloco declara um visual que a tela sabe desenhar', () => {
+  const conhecidos = new Set(['pizza', 'bolhas', 'barras', 'rolagem', 'lista'])
+  for (const b of CATALOGO_MEU_DIA) {
+    if (b.visual) assert.ok(conhecidos.has(b.visual), `${b.tipo} pede um visual que não existe`)
+  }
+})
+
 test('todo limiar do catálogo tem rótulo para a tela de settings', () => {
   for (const b of CATALOGO_MEU_DIA) {
     for (const chave of Object.keys(b.limiaresPadrao)) {
