@@ -29,7 +29,7 @@ import {
 } from './graficos-report'
 import { ConfigEnvio } from './config-envio'
 import {
-  buscarExecucao, buscarExecucoes, buscarReport, relatoriosKeys, urlDoPdf,
+  buscarExecucao, buscarExecucoes, buscarReport, nomeDoPdf, relatoriosKeys, urlDoPdf,
 } from './queries'
 
 /**
@@ -85,10 +85,26 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
     void qc.invalidateQueries({ queryKey: relatoriosKeys.execucoes() })
   }
 
+  /*
+   * Baixar com uma ÂNCORA, não com `window.open`.
+   *
+   * O link assinado só existe depois de uma ida ao Storage, e `window.open` chamado depois
+   * do `await` já perdeu o gesto do usuário: o navegador o classifica como pop-up e bloqueia
+   * — sem erro, sem aba, o clique simplesmente não faz nada. Foi esse o sintoma de "o PDF
+   * foi gerado, só não consegui baixá-lo". O clique numa âncora `download` não passa por
+   * esse bloqueio, e como o link já vem com `Content-Disposition: attachment` o arquivo
+   * baixa sem tirar ninguém da página.
+   */
   async function baixar(caminho: string) {
-    const url = await urlDoPdf(caminho)
-    if (!url) return toast.error('Não foi possível abrir o arquivo.')
-    window.open(url, '_blank', 'noopener,noreferrer')
+    const r = await urlDoPdf(caminho)
+    if ('erro' in r) return toast.error(`Não foi possível abrir o arquivo: ${r.erro}`)
+    const a = document.createElement('a')
+    a.href = r.url
+    a.download = nomeDoPdf(caminho)
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   return (

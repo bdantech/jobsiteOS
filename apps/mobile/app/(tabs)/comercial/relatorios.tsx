@@ -1,4 +1,6 @@
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import {
+  ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, View,
+} from 'react-native'
 import { FileText } from 'lucide-react-native'
 import { brlCurto, direcaoDa, textoDaRegua, variacaoTexto, type IndicadorReport } from '@jobsiteos/core'
 
@@ -43,10 +45,21 @@ export default function RelatoriosScreen() {
   const r = data.report
   const k = r.operacao.kpis
 
+  /*
+   * No celular o PDF ABRE, não baixa — e o rótulo diz isso.
+   *
+   * `Linking.openURL` entrega ao visualizador do sistema, de onde dá para salvar, mandar
+   * por WhatsApp ou imprimir. Forçar `Content-Disposition: attachment` daria um arquivo
+   * escondido na pasta de downloads, que é o pior dos dois mundos numa mão só.
+   */
   async function abrirPdf() {
     if (!data?.pdf) return
-    const url = await urlDoPdf(data.pdf)
-    if (url) void Linking.openURL(url)
+    const r = await urlDoPdf(data.pdf)
+    if ('erro' in r) {
+      Alert.alert('Não foi possível abrir o PDF', r.erro)
+      return
+    }
+    void Linking.openURL(r.url)
   }
 
   return (
@@ -95,7 +108,7 @@ export default function RelatoriosScreen() {
           <Card className="flex-row items-center justify-between p-4">
             <View className="flex-row items-center gap-2">
               <FileText size={16} color={colors.mutedForeground} />
-              <Text className="font-medium">Baixar o PDF completo</Text>
+              <Text className="font-medium">Abrir o PDF completo</Text>
             </View>
             <Text variant="muted" className="text-xs">3 páginas</Text>
           </Card>

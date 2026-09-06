@@ -81,20 +81,33 @@ export async function buscarExecucao(id: string): Promise<ReportSemanal | null> 
   return d && typeof d === 'object' && 'periodo' in d ? (d as ReportSemanal) : null
 }
 
+/** O nome do arquivo salvo, tirado do caminho no bucket. */
+export function nomeDoPdf(caminho: string): string {
+  return caminho.split('/').pop() || 'report-semanal.pdf'
+}
+
 /**
  * O link do PDF é ASSINADO e curto.
  *
  * O bucket é privado porque o arquivo traz a carteira inteira e a comissão nominal de cada
  * vendedor. Uma URL pública seria um vazamento para quem adivinhasse o caminho — e o
  * caminho é `{ano}/report-semanal-oneos-{ano}-S{semana}.pdf`, que não é difícil de adivinhar.
+ *
+ * `download` faz o Storage responder com `Content-Disposition: attachment`. Sem ele o link
+ * ABRE o PDF no visualizador do navegador em vez de baixar — que é outra coisa do que o
+ * botão promete, e some se a aba for fechada.
+ *
+ * E o erro volta como TEXTO. Devolver `null` reduzia sessão expirada, arquivo apagado e
+ * recusa de RLS à mesma frase genérica na tela — justamente a informação que faltaria para
+ * descobrir por que o download não veio.
  */
-export async function urlDoPdf(caminho: string): Promise<string | null> {
+export async function urlDoPdf(caminho: string): Promise<{ url: string } | { erro: string }> {
   const supabase = createClient()
   const { data, error } = await supabase.storage
     .from('reports-semanais')
-    .createSignedUrl(caminho, 300)
-  if (error) return null
-  return data?.signedUrl ?? null
+    .createSignedUrl(caminho, 300, { download: nomeDoPdf(caminho) })
+  if (error || !data) return { erro: error?.message ?? 'O Storage não devolveu o link.' }
+  return { url: data.signedUrl }
 }
 
 export interface DestinatarioReport {

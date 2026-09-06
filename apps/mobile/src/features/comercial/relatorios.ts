@@ -67,10 +67,12 @@ export function useReportSemanal() {
  * vendedor — e o caminho (`{ano}/report-semanal-oneos-{ano}-S{semana}.pdf`) não é difícil
  * de adivinhar.
  */
-export async function urlDoPdf(caminho: string): Promise<string | null> {
+export async function urlDoPdf(caminho: string): Promise<{ url: string } | { erro: string }> {
   const { data, error } = await supabase.storage
     .from('reports-semanais')
     .createSignedUrl(caminho, 300)
-  if (error) return null
-  return data?.signedUrl ?? null
+  // O erro volta como TEXTO: `null` transformava sessão expirada, arquivo apagado e recusa
+  // de RLS na mesma tela muda, que é o que impede de descobrir por que o PDF não abriu.
+  if (error || !data) return { erro: error?.message ?? 'O Storage não devolveu o link.' }
+  return { url: data.signedUrl }
 }
