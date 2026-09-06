@@ -531,14 +531,22 @@ export interface MeuDia {
   espelhado: boolean
   gerado_em: string
   blocos: BlocoMeuDia[]
-  /** Clientes da carteira passiva, para o mapa de calor. Só para o closer. */
+  /** Clientes da carteira passiva, para o mapa. Só para o closer. */
   mapa_carteira: {
     empresa_id: string | null
     cnpj: string
     nome: string
     limite: number
     limite_disponivel: number
+    consumido_pct: number | null
     dias_sem_antecipar: number | null
+    /*
+     * O veredito da plataforma sobre a saúde da conta. É a COR do mapa nas duas
+     * plataformas — e estava sendo lido por casting, apesar de o agregador sempre o
+     * devolver. Tipo que existe no dado e não no contrato é tipo que alguém apaga sem
+     * saber que apagou.
+     */
+    operation_status: string | null
   }[]
   /** Série do rodapé: conversões do mês contra a média dos 3 anteriores (originador). */
   evolucao: { competencia: string; total: number; media_3m: number | null }[]

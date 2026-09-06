@@ -1,6 +1,7 @@
 export * from './comissao.js'
 export * from './comissao-v2.js'
 export * from './meu-dia.js'
+export * from './meu-dia-visual.js'
 export * from './mutations.js'
 export * from './pitch.js'
 export * from './roteamento.js'

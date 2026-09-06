@@ -74,12 +74,24 @@ numa grandeza que só cresce — ela não separa categorias, ela grita.
 | Peça | Arquivo |
 |---|---|
 | Catálogo dos blocos (fonte da verdade) | `packages/core/src/comercial/meu-dia.ts` |
+| **Régua visual** (paleta, status, treemap) | `packages/core/src/comercial/meu-dia-visual.ts` |
 | Agregador | `meu_dia()` + `app__md_originador/sdr/closer/comuns` no banco |
-| Carga e projeção de comissão | `apps/web/src/components/comercial/meu-dia/queries.ts` |
+| Carga | `apps/web/src/components/comercial/meu-dia/queries.ts` |
 | Tela (web) | `apps/web/src/components/comercial/meu-dia/meu-dia-tela.tsx` |
+| Desenho (web) | `.../meu-dia/graficos.tsx` — recharts |
 | Tela (celular) | `apps/mobile/app/(tabs)/comercial/index.tsx` |
+| Desenho (celular) | `apps/mobile/src/features/comercial/components/graficos.tsx` — `react-native-svg` |
 | Ações | `app_meu_dia_ocultar` / `_reexibir` / `_concluir_tarefa` no banco |
 | Tabelas | migração `0190_meu_dia.sql` |
+
+A **régua visual** mora no core pelo mesmo motivo do catálogo: paleta categórica, cores de
+status, o gradiente da espera, a tinta legível e a geometria do treemap são *regra*, não
+desenho. As duas plataformas desenham com bibliotecas diferentes — recharts na web,
+`react-native-svg` no celular — mas leem os mesmos valores. Duplicá-los significaria que o
+vermelho de `inoperative` pudesse ser um hex numa tela e outro na outra, e a mesma conta ser
+"parada" aqui e "atenção" lá sem ninguém perceber até comparar as duas lado a lado. O
+`squarify` tem dez testes no core, incluindo os degenerados (carteira vazia, um cliente só,
+tudo zero, largura ainda não medida).
 
 O **catálogo** é a única lista de blocos que existe. Ele dirige, ao mesmo tempo, os
 limiares que o agregador aplica, o rótulo e a ação de cada card, e a tela de settings.
@@ -248,10 +260,39 @@ pedindo um limiar diferente.
 
 ## No celular
 
-É onde a tela mais importa: é a primeira coisa aberta no café, antes do computador. A
-**ordem muda** — a timeline abre a tela, e não os indicadores, porque quem pega o telefone
-de manhã pergunta "o que eu tenho hoje", não "quanto vale o meu dia". Os indicadores vêm
-logo abaixo, em carrossel horizontal.
+É onde a tela mais importa: é a primeira coisa aberta no café, antes do computador.
+
+**Os mesmos widgets da web**, escolhidos pelo mesmo campo `visual` do catálogo — um bloco
+novo nasce com o widget certo nas duas plataformas por dizer qual é. O filtro de grupo saiu
+aqui também, e num telefone ele era pior ainda: o que o filtro escondia sumia da tela
+inteira, sem nada dizendo que continuava existindo.
+
+Três coisas mudam no desenho, e todas pelo mesmo motivo — **não existe hover num telefone**:
+
+1. Onde a web mostra tooltip, aqui há **legenda em texto**. Ela não é enfeite: três dos seis
+   slots categóricos ficam abaixo de 3:1 contra o branco, e a regra de alívio do método
+   exige rótulo visível. No celular a legenda *é* o alívio.
+2. O toque leva direto para a tela de trabalho, em vez de abrir um detalhe.
+3. As bolhas pequenas ganham alvo de toque maior que a marca, pela legenda dos três maiores
+   abaixo do gráfico — um gráfico de bolhas mudo, sem hover, seria bonito e inútil.
+
+E duas coisas encolhem de propósito: o widget de **rolagem** vira os seis primeiros com "e
+mais N", porque rolagem dentro de rolagem é briga de gesto; e o **treemap** perde quase todos
+os rótulos, porque numa carteira de R$ 18 milhões o cliente de R$ 150 mil ganha um retângulo
+pequeno de verdade. A área honesta vale mais que o rótulo em todos — quem precisa da lista
+nominal tem a legenda de status e o toque em cada retângulo.
+
+> **A paleta foi revalidada contra as superfícies do celular** (`#ffffff` / `#18181b`), que
+> não são as da web. Os slots categóricos passam nas duas: pior par adjacente em ΔE 9,1
+> (claro) e 8,4 (escuro) sob simulação de daltonismo. As quatro cores de status são
+> reservadas do sistema e ficam abaixo do piso de separação para visão normal no par
+> `low_operation` × `requires_attention` (ΔE 13,6); a mitigação documentada é ícone + rótulo,
+> e por isso todo status nesta tela aparece **nomeado em texto**, nunca só pela cor.
+
+A **ordem muda** em relação à web — a timeline abre a tela, e não os indicadores, porque quem
+pega o telefone de manhã pergunta "o que eu tenho hoje", não "quanto vale o meu dia". Os
+indicadores vêm logo abaixo, em carrossel horizontal, e o mapa da carteira do closer abre os
+widgets.
 
 O que na web é menu de três pontos, aqui é **swipe**: arrastar para a direita adia, para a
 esquerda descarta, e o toque abre a tela onde o trabalho acontece. Adiar abre uma folha
@@ -259,9 +300,7 @@ com quatro opções (amanhã, depois de amanhã, semana que vem, 15 dias) em vez
 calendário — escolher data exata com uma mão, no metrô, é o atrito que faz a pessoa
 simplesmente não adiar, e item que não pode ser adiado acaba ignorado.
 
-Duas coisas ficam só na web, de propósito: a **comissão projetada** (o celular é onde se
-decide o que fazer agora, não onde se confere quanto o dia vale — e esse número tem tela
-própria em Comissão) e a **lista completa** quando um bloco estoura o teto. O painel do mês
+Uma coisa fica só na web: a **lista completa** quando um bloco estoura o teto. O painel do mês
 saiu da home e virou `/comercial/painel`, um toque abaixo: ele responde "como está o meu
 mês", que é consulta.
 

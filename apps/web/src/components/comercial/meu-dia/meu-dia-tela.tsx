@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, Clock, Wallet } from 'lucide-react'
 import {
   blocoCatalogado,
+  corPorEspera,
   itensUrgentes,
   ordenarItens,
   totalDeItens,
@@ -70,21 +71,6 @@ const NATUREZA_ROTULO: Record<Natureza, string> = {
   todas: 'Ambas',
   passivo: 'Passiva',
   prospeccao_ativa: 'Ativa',
-}
-
-/**
- * A cor da bolha do inbound: azul aos 0h, vermelho aos 96h.
- *
- * É uma codificação REDUNDANTE de propósito — o eixo X já diz quantas horas passaram, e
- * a cor repete. Nada aqui depende só de matiz, o que é o que torna legítimo usar um par
- * de dois tons numa grandeza que só cresce: ela não separa categorias, ela grita.
- */
-function corPorEspera(horas: number): string {
-  const t = Math.min(Math.max(horas / 96, 0), 1)
-  const de = [42, 120, 214]
-  const para = [208, 59, 59]
-  const c = de.map((v, i) => Math.round(v + (para[i]! - v) * t))
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`
 }
 
 export interface MeuDiaTelaProps {
@@ -657,7 +643,7 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
 
   const porStatus = new Map<string, number>()
   for (const c of ordenados) {
-    const s = String((c as { operation_status?: string }).operation_status ?? 'operating_normally')
+    const s = String(c.operation_status ?? 'operating_normally')
     porStatus.set(s, (porStatus.get(s) ?? 0) + 1)
   }
 
@@ -685,9 +671,7 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
         {ordenados.map((c, i) => {
           const r = caixas[i]
           if (!r || r.w <= 0 || r.h <= 0) return null
-          const status = String(
-            (c as { operation_status?: string }).operation_status ?? 'operating_normally',
-          )
+          const status = String(c.operation_status ?? 'operating_normally')
           const fundo = STATUS_CORES[status] ?? '#94a3b8'
           /* O nome só entra onde cabe inteiro o suficiente para ser lido; onde não cabe,
              o `title` e o clique continuam lá. Meio nome truncado num retângulo de 30px

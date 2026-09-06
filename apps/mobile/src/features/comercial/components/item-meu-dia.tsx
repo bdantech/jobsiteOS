@@ -59,7 +59,7 @@ function AcaoSwipe({
 }
 
 /** Para onde o toque leva. O mesmo mapa da web, com as rotas do app. */
-function destino(bloco: string, item: ItemMeuDia): string | null {
+export function destinoDoItem(bloco: string, item: ItemMeuDia): string | null {
   const cat = blocoCatalogado(bloco)
   const meta = item.meta as Record<string, string | undefined>
   switch (cat?.acao) {
@@ -112,7 +112,7 @@ export function ItemMeuDiaCard({ item, bloco, onAdiar, onDescartar, onConcluir }
   const [adiarAberto, setAdiarAberto] = useState(false)
 
   const cat = blocoCatalogado(bloco)
-  const rota = destino(bloco, item)
+  const rota = destinoDoItem(bloco, item)
   const ehTarefa = cat?.acao === 'concluir_tarefa'
 
   const fechar = useCallback(() => swipeRef.current?.close(), [])
