@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, Coins, Inbox, LayoutDashboard, Megaphone, PackageSearch,
+  Briefcase, CalendarDays, Coins, FileText, Inbox, LayoutDashboard, Megaphone, PackageSearch,
   Settings, ShieldCheck, Sparkles, Sunrise, Target, TrendingDown, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -53,6 +53,14 @@ interface ItemNav {
    * tela que decide como a casa aparece para FORA, não como ela trabalha por dentro.
    */
   somenteAdmin?: boolean
+  /**
+   * Mais estreito que `somenteGestor` do outro lado: nem um vendedor com perfil de gestão
+   * entra. O Relatório mostra o desempenho nominal e a comissão de cada pessoa, e a
+   * auxiliar do closer tem perfil "Comercial" — `app_gestor_comercial()` a incluiria.
+   * A mesma régua do `app_report_gestor()` no banco, para a aba não prometer uma tela
+   * que a RLS vai recusar.
+   */
+  somenteGestorNaoVendedor?: boolean
   /** Rótulo diferente por tipo, quando a mesma tela responde a perguntas diferentes. */
   labelPorTipo?: Record<string, string>
 }
@@ -110,6 +118,13 @@ const ITENS: readonly ItemNav[] = [
   { href: '/comercial/campanhas', label: 'Campanhas', icon: Megaphone, somenteAdmin: true },
   { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true },
   { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true },
+  /*
+   * Relatórios (04q) fica com o gestor e ao lado do Painel, porque responde a mesma
+   * pergunta num zoom diferente: o Painel é o mês de UM vendedor, e o Relatório é a
+   * semana da casa inteira — com o desempenho nominal de cada pessoa e a comissão de
+   * cada uma. É por isso que ele não aparece para vendedor nenhum.
+   */
+  { href: '/comercial/relatorios', label: 'Relatórios', icon: FileText, somenteGestorNaoVendedor: true },
   { href: '/comercial/admin', label: 'Configurações', icon: Settings, somenteGestor: true },
 ]
 
@@ -129,6 +144,7 @@ export function ComercialNav({
   const itens = ITENS.filter((i) => {
     if (i.somenteAdmin && !ehAdmin) return false
     if (i.somenteGestor && !ehGestor) return false
+    if (i.somenteGestorNaoVendedor && !(ehGestor && tipo === null)) return false
     if (!i.tipos) return true
     // Gestor enxerga todos os funis mesmo sem ser vendedor de nenhum tipo.
     return ehGestor || (tipoDeVisao !== null && i.tipos.includes(tipoDeVisao))

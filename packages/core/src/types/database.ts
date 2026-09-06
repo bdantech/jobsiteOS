@@ -11705,6 +11705,19 @@ export type Database = {
       app_gestor_comercial: { Args: never; Returns: boolean }
       app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
       app_is_admin: { Args: never; Returns: boolean }
+      app_report_gestor: { Args: never; Returns: boolean }
+      /*
+       * Os dois argumentos são `| null` de propósito: a aba chama sem período para pedir a
+       * semana fechada mais recente, e o gerador de tipos do Supabase não expressa isso —
+       * sem o `| null`, `p_inicio: null` vira erro de compilação num caminho que o banco
+       * aceita e que é o caminho PADRÃO.
+       */
+      app_report_semanal: {
+        Args: { p_inicio?: string | null; p_fim?: string | null }
+        Returns: Json
+      }
+      app__rp_montar: { Args: { p_inicio: string; p_fim: string }; Returns: Json }
+      app_report_materializar_series: { Args: { p_meses?: number }; Returns: Json }
       app_juridico_atualizar_processo: {
         Args: { p: Json }
         Returns: {

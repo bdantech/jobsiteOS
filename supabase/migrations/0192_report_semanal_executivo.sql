@@ -49,3 +49,17 @@
 --   reports_snapshot_semanal
 --     `app__rp_montar` (mecânica, sem sessão, para o worker) + `app_report_semanal`
 --     (autorizada). A aba, o PDF e o e-mail consomem esta estrutura e nenhum recalcula.
+--
+--   reports_bucket_semanais
+--     Bucket privado `reports-semanais`, separado de `report-anexos` (que é dos anexos de
+--     BUG REPORT — mesma palavra, domínios diferentes). Privado porque o PDF traz a
+--     carteira inteira e a comissão nominal de cada vendedor, e o caminho
+--     `{ano}/report-semanal-oneos-{ano}-S{semana}.pdf` não é difícil de adivinhar.
+--
+--   reports_janela_padrao_e_a_semana_fechada
+--     A janela padrão da aba passou a ser a MESMA do PDF. Estava `current_date - 1` com
+--     `date_trunc('week', ...)`, o que devolvia a semana CORRENTE parcial: num domingo
+--     06/09 a aba abria em 31/08–05/09, seis dias, enquanto o worker gerava 24/08–30/08.
+--     Duas réguas para "qual semana é esta" é exatamente o que o 04q §6 existe para não
+--     ter. Agora é `current_date - isodow(current_date)`, a mesma aritmética de
+--     `apps/worker/src/jobs/reports/janela.ts`.

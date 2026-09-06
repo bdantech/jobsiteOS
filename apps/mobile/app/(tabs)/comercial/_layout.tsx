@@ -33,6 +33,11 @@ export default function ComercialLayout() {
     <ModuleStack>
       <Stack.Screen name="index" options={{ title: 'Meu Dia' }} />
       <Stack.Screen name="painel" options={{ title: 'Meu Painel' }} />
+      {/* Relatórios (04q) é do GESTOR, e a própria RPC recusa quem não é: a tela cai no
+          estado vazio em vez de esconder a rota. Esconder daria um item de menu que some
+          e volta conforme o cadastro, e ninguém saberia se a tela sumiu ou se o acesso
+          mudou. */}
+      <Stack.Screen name="relatorios" options={{ title: 'Report semanal' }} />
       <Stack.Screen name="sdr" options={{ title: 'Reuniões' }} />
       <Stack.Screen name="vendas" options={{ title: 'Vendas' }} />
       <Stack.Screen name="comissoes" options={{ title: 'Comissão' }} />
