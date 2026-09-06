@@ -1,0 +1,51 @@
+-- 0192 — 04q: Report Semanal Executivo (camada de dados).
+--
+-- Corpo canônico das funções em `supabase_migrations.schema_migrations`, pelo nome de cada
+-- migração abaixo; `supabase db pull` reconcilia este arquivo.
+--
+--   reports_estrutura
+--     `report_config` (uma linha por tipo — dois agendamentos do mesmo report seriam dois
+--     e-mails iguais), `report_execucoes` (com o SNAPSHOT em `dados`, para um report de
+--     três meses atrás abrir com os números daquela época) e `report_series`.
+--
+--     `app_report_gestor()`: tem o módulo Comercial e NÃO é vendedor. `app_gestor_comercial()`
+--     não servia — é "perfil Admin ou Comercial", e a auxiliar do closer tem perfil
+--     Comercial. O report mostra a carteira inteira e o desempenho de cada pessoa.
+--
+--   reports_materializar_series
+--     Job diário. `peso` existe porque média de média não é média: o prazo médio de um
+--     trimestre não é a média dos três prazos mensais. Reescreve a janela em vez de fazer
+--     upsert — uma antecipação pode converter, regredir e converter de novo.
+--
+--   reports_regua_de_tres_janelas
+--     `app__rp_serie` e `app__rp_indicador`. A DECISÃO que define se o report mente: a
+--     média é sobre os meses QUE TÊM DADO, não sobre doze de calendário. A operação começou
+--     em 20/07/2026 — dividir por doze diluiria tudo por nove meses em que a empresa não
+--     existia, e toda semana apareceria como "180% acima da média".
+--     `subir_e_pior` viaja no indicador: metade deles é ruim quando cresce.
+--
+--   reports_bloco_operacao                  blocos 1, 3 e 4
+--   reports_bloco_comercial_credito_time    blocos 2, 5, 6 e 10
+--   reports_bloco_carteira_certificados_atencao   blocos 7, 8, 9 e 11
+--
+--     Tempo de esteira só sobre análises que NASCERAM aqui: 84 das 87 vieram do backfill da
+--     Atradius com a decisão datada de ANTES do registro, e a média sobre a base inteira
+--     dava −152 dias.
+--
+--   reports_certificado_invisivel_calibrado
+--   reports_certificado_invisivel_por_grupo
+--   reports_certificado_invisivel_agrupa_por_conta
+--     O "quanto está invisível" em três correções sucessivas, cada uma medida:
+--       `faturamento/12` dava R$ 2,36 BI/mês — o certificado mostra o CUSTO do cliente com
+--       fornecedores, não a receita dele. A razão real, medida nos 16 CNPJs que têm
+--       certificado, é 0,1011 (p25 0,044 · p75 0,207).
+--       Somar matriz + SPEs contava o mesmo grupo quarenta vezes.
+--       A chave do grupo é `empresa_id`, e não a raiz do CNPJ: a COSAMPA tem quatro raízes
+--       na mesma conta, e agrupar por raiz a repetia quatro vezes na lista.
+--       O total é o dos N MAIORES, e o campo se chama `total_mes_do_topo`: extrapolar 16
+--       observações para 600 grupos dava R$ 1,37 bi/mês, cem vezes o que a operação inteira
+--       converte — e um total impossível destrói a credibilidade da página inteira.
+--
+--   reports_snapshot_semanal
+--     `app__rp_montar` (mecânica, sem sessão, para o worker) + `app_report_semanal`
+--     (autorizada). A aba, o PDF e o e-mail consomem esta estrutura e nenhum recalcula.
