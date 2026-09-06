@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { AlertTriangle, CalendarClock, CheckCircle2, Clock, Coins, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Wallet } from 'lucide-react'
 import {
   GRUPO_MEU_DIA_LABELS,
   blocoCatalogado,
@@ -93,7 +93,7 @@ function corPorEspera(horas: number): string {
 }
 
 export interface MeuDiaTelaProps {
-  dia: MeuDia & { comissao_projetada: number }
+  dia: MeuDia
   visiveis: { id: string; nome: string; tipo: string }[]
   ehGestor: boolean
 }
@@ -186,7 +186,7 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
 
       {/* ── Indicadores + composição, numa faixa só ───────────────────────── */}
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Indicador
             icone={Wallet}
             rotulo="Em jogo hoje"
@@ -196,22 +196,6 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
               setModal({
                 titulo: 'Tudo o que está em jogo hoje',
                 itens: ordenarItens(dia.blocos.flatMap((b) => b.itens)),
-              })
-            }
-          />
-          <Indicador
-            icone={Coins}
-            rotulo="Comissão projetada"
-            valor={brl(dia.comissao_projetada)}
-            detalhe="se tudo converter"
-            onClick={() =>
-              setModal({
-                titulo: 'De onde vem a comissão projetada',
-                itens: ordenarItens(
-                  dia.blocos
-                    .filter((b) => b.tipo === 'nfs_alta_nao_prospectadas' || b.tipo === 'antecipacoes_travadas')
-                    .flatMap((b) => b.itens),
-                ),
               })
             }
           />

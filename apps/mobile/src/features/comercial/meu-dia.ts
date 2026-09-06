@@ -14,9 +14,9 @@ import { supabase } from '@/lib/supabase'
  * aberta no café. Timeline no topo, indicadores em carrossel, e o adiar/descartar no
  * swipe — porque a mão que segura o telefone é a mesma que trabalha o item.
  *
- * A comissão projetada NÃO vem para cá. Ela exige rodar o motor do 04k sobre os
- * parâmetros vigentes, e o celular é onde se decide o que fazer agora, não onde se
- * confere quanto o dia vale — esse número tem tela própria em Comissão.
+ * A comissão projetada não vem para cá — e desde então também saiu da web. O celular é
+ * onde se decide o que fazer agora, não onde se confere quanto o dia vale; esse número
+ * tem tela própria em Comissão.
  */
 
 export const meuDiaKeys = {

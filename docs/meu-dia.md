@@ -131,20 +131,20 @@ manuais.
 > carrega o `gestao_operacao`, e o widget filtra entre ambas / passiva / ativa. O teto do
 > bloco subiu de 12 para 20 porque um teto aplicado ANTES do filtro faz o filtro mentir.
 
-## Comissão projetada
+## Comissão projetada — fora da tela
 
-Calculada em `projetarComissao()`, que roda **o motor do 04k** — mesmo VOP
-(`valor × dias / N`), mesma fase, mesma taxa vigente, mesmo sunset. Uma segunda fórmula
-"só para a projeção" seria a tela prometendo o que a folha não paga.
+O indicador de comissão projetada **não existe mais**, em nenhum cargo. A faixa de
+indicadores tem três: em jogo hoje, urgentes, e o do cargo.
 
-Só dois blocos projetam: **NF de faixa alta** e **antecipação travada**. Nos dois,
-"converter" significa uma cessão de uma conta identificável. `cedentes_que_pararam` fica
-de fora de propósito — ali o item soma meses de várias contas, e a taxa depende da
-classificação de **uma**; escolher uma seria inventar o número.
+Com ele saiu o cálculo que só a ele servia: em `carregarMeuDia()` iam embora a leitura
+inteira de `commission_params`, a das contas dos itens projetáveis e a corrida do motor do
+04k a cada carregamento da página. Um número que ninguém lê continua custando as consultas
+que o produzem.
 
-O prazo presumido é **30 dias**, que é o denominador do VOP e portanto a ponderação
-neutra: a projeção não infla nem desconta por um prazo que ninguém negociou ainda. O
-rótulo na tela é honesto: *"se tudo converter"*.
+O motor continua de pé: `projetarComissao()` segue exportado do core e com os seus testes,
+rodando o mesmo VOP (`valor × dias / N`), a mesma fase e a mesma taxa vigente do 04k. **Ele
+ficou sem chamador** — o que saiu foi a chamada, não a régua, para que voltar a projetar em
+outra tela não signifique reescrever a fórmula. O celular nunca teve o indicador.
 
 ## Quem vê o dia de quem
 
