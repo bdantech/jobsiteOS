@@ -63,3 +63,62 @@
 --     Duas réguas para "qual semana é esta" é exatamente o que o 04q §6 existe para não
 --     ter. Agora é `current_date - isodow(current_date)`, a mesma aritmética de
 --     `apps/worker/src/jobs/reports/janela.ts`.
+
+--   reports_retrato_auxiliares
+--   reports_certificado_invisivel_na_data
+--   reports_operacao_retrato_da_janela
+--   reports_comercial_retrato_da_janela
+--   reports_comercial_retrato_parametrizado
+--   reports_carteira_retrato_parametrizado
+--   reports_montar_e_rpc_com_retrato
+--   reports_retrato_carteira_em_diz_a_verdade
+--   reports_carteira_em_hoje_e_a_tabela_viva
+--     O REPORT PASSOU A DIZER DE QUANDO É CADA NÚMERO.
+--
+--     O problema: metade da estrutura era FLUXO da janela (volume, VOP, receita, operações,
+--     comissão — presos por `convertida_em` e `evento_em`, e esses sempre estiveram certos)
+--     e metade era ESTADO lido no instante da emissão. O PDF de 24/08–30/08 gerado em 06/09
+--     imprimia a carteira de 06/09: limite ocioso de R$ 59,7 mi onde a semana 35 tinha
+--     R$ 62,6 mi, 40,3% de utilização virando 43,1%, 51 antecipações travadas virando 60.
+--
+--     `p_retrato` é a data em que os ESTOQUES são lidos. O PDF passa `p_fim` e congela; a
+--     tela passa `current_date` e fica ao vivo, que é o que se espera de uma tela. Os
+--     fluxos não mudam nos dois casos — a data do evento não depende de quando se pergunta.
+--
+--     De onde vem o passado:
+--       `clientes_onepay_snapshots` — captura diária desde 25/07/2026, 55 CNPJs, com os
+--       mesmos campos da tabela viva. `app__rp_carteira_em(data)` devolve a captura mais
+--       recente que não é posterior à data; HOJE ele lê a tabela viva, porque a captura é
+--       de madrugada e divergia dela em R$ 500 mil — um terceiro número para a pergunta que
+--       o Meu Dia já responde lendo `clientes_onepay` direto.
+--
+--       `funil_transicoes` — o log dos gatilhos `sdr_leads_transicao`/`vendas_transicao`.
+--       "Reuniões realizadas" e "MOUs" saíam de `atualizado_em`, que é carimbo de última
+--       EDIÇÃO e não data de evento: um lead tocado depois SAÍA da semana em que a reunião
+--       aconteceu, e um lead velho reeditado ENTRAVA numa semana em que nada ocorreu. O log
+--       começa em 30/08/2026: semanas anteriores vêm zeradas, e zero declarado é melhor que
+--       um número que se reescreve a cada leitura.
+--
+--     Também corrigido de passagem: `certificados vencendo em 30 dias` era
+--     `coberto AND expires_at < now() + 30d`, e `coberto` já exigia `> now() + 30d` — a
+--     condição era uma contradição e dava zero SEMPRE. Agora é "válido em `p_retrato` e
+--     expira nos 30 dias seguintes", que é a pergunta que alguém queria fazer.
+--
+--     E o time do ranking passou a incluir quem teve lançamento NA JANELA mesmo se hoje
+--     está inativo: filtrar só por `ativo` apagava de um report antigo a comissão de quem
+--     saiu depois, e comissão paga não desaparece do mês em que foi paga.
+--
+--     O que continua sendo de hoje, porque não existe histórico: `antecipacoes.status` e
+--     `analises_credito.estagio` (a plataforma e a esteira sobrescrevem), a composição dos
+--     grupos em `certificado_universo`, e `empresas.faturamento_anual` (saída do modelo do
+--     04c — recalibrar o estimador muda o "invisível" para trás). Nesses casos o que a
+--     linha afirma é a DATA que a colocou ali, não o rótulo que a acompanha.
+--
+--   reports_conversas_sem_resposta_pelo_log_de_mensagens
+--     A fila "conversas aguardando resposta" saía de `conversas.ultima_direcao` e
+--     `ultima_mensagem_em`, que são o estado de HOJE: quem respondeu ontem some da fila de
+--     uma semana atrás em que estava esperando. A fila da semana 35 dava 0 — falso, e não
+--     conservador. Agora sai de `comunicacoes_thread` (a mensagem individual, com `direcao`
+--     e `criado_em`), que responde "qual era a última mensagem naquele dia". Conferido: ao
+--     vivo reproduz exatamente o número da régua antiga (34). O log começa em 01/09/2026;
+--     janelas anteriores seguem em zero, agora por ausência de dado e não por régua errada.

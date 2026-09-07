@@ -6,6 +6,7 @@ import {
   maiorVazamento,
   nomeDoArquivo,
   textoDaRegua,
+  textoDoRetrato,
   variacaoTexto,
   type IndicadorReport,
   type ReportSemanal,
@@ -210,11 +211,16 @@ function rodape(doc: Doc, r: ReportSemanal, pagina: number, de: number): void {
   doc.page.margins.bottom = 0
   const y = PAG.altura - 30
   linha(doc, y, COR.line)
+  /* A DATA DE GERAÇÃO no rodapé de toda página.
+     Este arquivo circula por e-mail e é citado meses depois. Sem o carimbo, duas versões
+     da mesma semana — uma gerada na segunda, outra regerada em novembro — são
+     indistinguíveis na mesa de quem está lendo. */
   doc.font(FONTE.normal).fontSize(6.5).fillColor(COR.mut2)
-    .text(`ONE OS · Report semanal · semana ${r.periodo.semana_iso}/${r.periodo.ano}`,
-          PAG.lado, y + 5, { width: CONTEUDO / 2, lineBreak: false })
-    .text(`${pagina} de ${de}`, PAG.lado + CONTEUDO / 2, y + 5,
-          { width: CONTEUDO / 2, align: 'right', lineBreak: false })
+    .text(`ONE OS · Report semanal · semana ${r.periodo.semana_iso}/${r.periodo.ano}` +
+          ` · gerado em ${dataHora(r.periodo.gerado_em)}`,
+          PAG.lado, y + 5, { width: CONTEUDO * 0.72, lineBreak: false })
+    .text(`${pagina} de ${de}`, PAG.lado + CONTEUDO * 0.72, y + 5,
+          { width: CONTEUDO * 0.28, align: 'right', lineBreak: false })
   doc.page.margins.bottom = margem
 }
 
@@ -235,9 +241,15 @@ function cabecalho(doc: Doc, r: ReportSemanal): void {
     .text(`Base de comparação: ${mesAno(p.base_12m_de)} – ${mesAno(p.base_12m_ate)}`,
           PAG.lado + CONTEUDO / 2, y + 23, { width: CONTEUDO / 2, align: 'right' })
 
+  /* De quando é cada metade do documento. Metade dos números é FLUXO da janela (VOP,
+     volume, receita, comissão) e metade é ESTOQUE (carteira, filas, cobertura), e sem esta
+     linha as duas se leem como se fossem a mesma coisa. */
+  doc.font(FONTE.normal).fontSize(6.5).fillColor(COR.mut2)
+    .text(textoDoRetrato(p), PAG.lado, y + 32, { width: CONTEUDO, lineBreak: false })
+
   doc.save().lineWidth(1.4).strokeColor(COR.ink)
-    .moveTo(PAG.lado, y + 36).lineTo(PAG.largura - PAG.lado, y + 36).stroke().restore()
-  doc.y = y + 44
+    .moveTo(PAG.lado, y + 44).lineTo(PAG.largura - PAG.lado, y + 44).stroke().restore()
+  doc.y = y + 52
 }
 
 /**
@@ -260,6 +272,23 @@ const dm = (iso: string) => {
   const [a, m, d] = iso.split('-')
   return `${d}/${m}/${a?.slice(2) ?? ''}`
 }
+/**
+ * O instante da geração, no fuso de São Paulo.
+ *
+ * `toLocaleString` sem `timeZone` usa o do CONTÊINER, que roda em UTC — o report gerado às
+ * 6h de segunda sairia carimbado com 9h, e um leitor atento concluiria que o job atrasou
+ * três horas.
+ */
+const dataHora = (iso: string) => {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 const mesAno = (iso: string) => {
   const [a, m] = iso.split('-')
   const nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -324,7 +353,9 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
     {
       rotulo: 'Limite ocioso',
       valor: brlCurto(k.limite_ocioso.foto),
-      contexto: 'foto de hoje, sem série',
+      // Estoque, e a data junto: no PDF é o do FIM da janela, na tela é o de agora — e a
+      // diferença entre os dois foi de R$ 2,9 mi em uma semana.
+      contexto: `saldo em ${dm(k.limite_ocioso.em)}, sem série`,
       cor: COR.mut,
     },
   ])

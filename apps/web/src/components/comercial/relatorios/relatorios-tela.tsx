@@ -10,6 +10,7 @@ import {
   direcaoDa,
   maiorVazamento,
   textoDaRegua,
+  textoDoRetrato,
   variacaoTexto,
   type IndicadorReport,
   type ItemLista,
@@ -118,6 +119,12 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
                 ` · mês corrente parcial (${r.periodo.mes_dias_decorridos} de ${r.periodo.mes_dias_total} dias)`
               : 'Report semanal executivo'}
           </p>
+          {/* De quando é cada metade da página. Metade dos números é FLUXO da janela e
+              metade é ESTOQUE do momento da leitura; sem esta linha as duas se leem como se
+              fossem a mesma coisa, e é aí que a tela e o anexo "não batem". */}
+          {r ? (
+            <p className="text-[11px] text-muted-foreground">{textoDoRetrato(r.periodo)}</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -277,9 +284,13 @@ function FaixaKpis({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
         <CardContent className="p-3">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Limite ocioso</p>
           <p className="mt-1 text-xl font-semibold tabular-nums">{brlCurto(k.limite_ocioso.foto)}</p>
-          {/* Sem variação, e o rótulo diz por quê: a plataforma manda o estado de hoje e
-              sobrescreve o de ontem. Inventar uma série que não existe é pior que não ter. */}
-          <p className="text-[11px] text-muted-foreground">foto de hoje, sem série</p>
+          {/* Sem variação, e o rótulo diz por quê: a plataforma sobrescreve o estado a cada
+              sincronização, e inventar uma série que não existe é pior que não ter. A DATA
+              está aqui porque o mesmo campo carrega o saldo de agora na tela e o do fim da
+              janela no PDF — os dois certos, e nada além disto dizendo qual é qual. */}
+          <p className="text-[11px] text-muted-foreground">
+            saldo em {dm(k.limite_ocioso.em)}, sem série
+          </p>
         </CardContent>
       </Card>
     </div>

@@ -10,6 +10,7 @@ import {
   nomeDoArquivo,
   ritmoDoMes,
   textoDaRegua,
+  textoDoRetrato,
   variacaoTexto,
   type IndicadorReport,
   type JanelaFunil,
@@ -20,7 +21,9 @@ import {
 const periodo: PeriodoReport = {
   inicio: '2026-08-31', fim: '2026-09-06', semana_iso: 36, ano: 2026,
   mes_inicio: '2026-09-01', mes_dias_decorridos: 6, mes_dias_total: 30,
-  base_12m_de: '2025-10-01', base_12m_ate: '2026-09-01', gerado_em: '2026-09-06T21:00:00Z',
+  base_12m_de: '2025-10-01', base_12m_ate: '2026-09-01',
+  retrato_em: '2026-09-06', retrato_carteira_em: '2026-09-06', ao_vivo: false,
+  gerado_em: '2026-09-06T21:00:00Z',
 }
 
 const ind = (p: Partial<IndicadorReport> = {}): IndicadorReport => ({
@@ -133,6 +136,27 @@ test('template vazio cai no padrão em vez de mandar e-mail sem assunto', () => 
   assert.match(assuntoDoEmail(null, periodo), /^Report semanal ONE OS/)
 })
 
+test('no PDF, o retrato diz que os estoques são do fim da janela', () => {
+  const t = textoDoRetrato(periodo)
+  assert.match(t, /Retrato de 06\/09\/26/)
+  assert.match(t, /31\/08\/26 a 06\/09\/26/)
+  assert.doesNotMatch(t, /AGORA/)
+})
+
+test('na tela, o retrato diz que os estoques são de agora — e de que dia é a carteira', () => {
+  const t = textoDoRetrato({ ...periodo, ao_vivo: true, retrato_carteira_em: '2026-09-14' })
+  assert.match(t, /AGORA \(14\/09\/26\)/)
+  // A JANELA continua sendo a da semana mesmo ao vivo: é o que impede alguém de ler o
+  // estoque de hoje como se fosse o fluxo de hoje.
+  assert.match(t, /31\/08\/26 a 06\/09\/26/)
+})
+
+test('o retrato não formata com Date: a data ISO não pode andar um dia para trás', () => {
+  // `new Date('2026-09-01')` é meia-noite UTC, que em São Paulo é 31/08 às 21h. O report do
+  // dia 1º sairia carimbado com 31/08 — o erro clássico, e silencioso.
+  assert.match(textoDoRetrato({ ...periodo, fim: '2026-09-01' }), /Retrato de 01\/09\/26/)
+})
+
 test('o nome do arquivo tem a semana com dois dígitos, para ordenar em qualquer pasta', () => {
   assert.equal(nomeDoArquivo(periodo), 'report-semanal-oneos-2026-S36.pdf')
   assert.equal(nomeDoArquivo({ ...periodo, semana_iso: 7 }), 'report-semanal-oneos-2026-S07.pdf')
@@ -173,7 +197,10 @@ const vazio: ReportSemanal = {
       volume_convertido: ind(),
       vop_operado: ind({ metrica: 'vop_operado' }),
       receita: ind({ metrica: 'receita' }),
-      limite_ocioso: { metrica: 'limite_ocioso', unidade: 'brl', subir_e_pior: true, foto: 0, sem_serie: true },
+      limite_ocioso: {
+        metrica: 'limite_ocioso', unidade: 'brl', subir_e_pior: true,
+        foto: 0, em: '2026-09-06', sem_serie: true,
+      },
     },
     antecipacao: {
       volume: ind(), vop: ind(), receita: ind(),

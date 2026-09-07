@@ -11713,10 +11713,13 @@ export type Database = {
        * aceita e que é o caminho PADRÃO.
        */
       app_report_semanal: {
-        Args: { p_inicio?: string | null; p_fim?: string | null }
+        Args: { p_inicio?: string | null; p_fim?: string | null; p_ao_vivo?: boolean }
         Returns: Json
       }
-      app__rp_montar: { Args: { p_inicio: string; p_fim: string }; Returns: Json }
+      app__rp_montar: {
+        Args: { p_inicio: string; p_fim: string; p_retrato?: string | null }
+        Returns: Json
+      }
       app_report_materializar_series: { Args: { p_meses?: number }; Returns: Json }
       app_juridico_atualizar_processo: {
         Args: { p: Json }

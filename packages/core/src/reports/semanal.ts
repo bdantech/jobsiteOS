@@ -42,12 +42,22 @@ export interface IndicadorReport {
   var_mes_pct: number | null
 }
 
-/** FotoReport sem série: limite ocioso é estado de hoje, não fluxo de um período. */
+/**
+ * `FotoReport` é um ESTOQUE: um valor que existe a cada instante, não um fluxo que se soma
+ * ao longo da janela. Limite ocioso é o caso — ele não tem "o da semana passada", ele tem
+ * "o de tal dia".
+ *
+ * Por isso `em`: sem a data, o mesmo campo carregava o saldo do fim da semana no PDF e o
+ * saldo de agora na tela, e nada na página dizia qual era qual. Os dois estão certos; o
+ * que não pode é o leitor ter de adivinhar.
+ */
 export interface FotoReport {
   metrica: string
   unidade: 'brl' | 'unidades'
   subir_e_pior: boolean
   foto: number
+  /** O dia em que o estoque foi lido: fim da janela no PDF, hoje na tela. */
+  em: string
   sem_serie: true
 }
 
@@ -177,6 +187,19 @@ export interface PeriodoReport {
   mes_dias_total: number
   base_12m_de: string
   base_12m_ate: string
+  /**
+   * O dia em que os ESTOQUES foram lidos — carteira, filas, travadas, cobertura.
+   *
+   * Os FLUXOS (VOP, volume, receita, operações, comissão, leads, decisões de crédito) são
+   * sempre de `inicio`..`fim` e não dependem disto: a data do evento não muda conforme o
+   * momento da pergunta. `retrato_em` é o que separa as duas leituras da MESMA janela — o
+   * PDF congela em `fim`, a tela lê hoje.
+   */
+  retrato_em: string
+  /** De que captura veio a carteira. Pode não ser `retrato_em` se o sync falhou no dia. */
+  retrato_carteira_em: string
+  /** `true` quando os estoques são de hoje e não do fim da janela. */
+  ao_vivo: boolean
   gerado_em: string
 }
 
@@ -329,11 +352,14 @@ export function briefingParaIa(r: ReportSemanal): Record<string, unknown> {
       ate: r.periodo.fim,
       semana: r.periodo.semana_iso,
       mes_parcial: `${r.periodo.mes_dias_decorridos} de ${r.periodo.mes_dias_total} dias`,
+      estoques_em: r.periodo.retrato_em,
     },
     volume_convertido: ind(r.operacao.kpis.volume_convertido),
     vop_operado: ind(r.operacao.kpis.vop_operado),
     receita: ind(r.operacao.kpis.receita),
-    limite_ocioso_hoje: r.operacao.kpis.limite_ocioso.foto,
+    // Com a data: sem ela o modelo escreveria "o ocioso caiu" comparando um estoque do fim
+    // da janela com um fluxo da janela, que são grandezas de tempos diferentes.
+    limite_ocioso: { valor: r.operacao.kpis.limite_ocioso.foto, em: r.operacao.kpis.limite_ocioso.em },
     antecipacao: {
       operacoes: r.operacao.antecipacao.operacoes_semana,
       cedentes: r.operacao.antecipacao.cedentes_semana,
@@ -387,6 +413,24 @@ export function assuntoDoEmail(template: string | null, p: PeriodoReport): strin
 /** `report-semanal-oneos-2026-S36.pdf` (§4). */
 export function nomeDoArquivo(p: PeriodoReport): string {
   return `report-semanal-oneos-${p.ano}-S${String(p.semana_iso).padStart(2, '0')}.pdf`
+}
+
+/**
+ * De quando é cada metade do report, numa frase — a mesma nas três superfícies.
+ *
+ * Ela existe porque a tela e o PDF da MESMA semana mostram estoques diferentes de
+ * propósito: no dia em que isto foi medido, o limite ocioso era R$ 62,6 mi no fim da semana
+ * 35 e R$ 59,7 mi uma semana depois. Os dois números estão certos; quem lê só precisa saber
+ * qual deles está olhando, e é isso que esta linha diz.
+ */
+export function textoDoRetrato(p: PeriodoReport): string {
+  const janela = `${formatarDiaMes(p.inicio)} a ${formatarDiaMes(p.fim)}`
+  if (!p.ao_vivo) {
+    return `Retrato de ${formatarDiaMes(p.fim)} — carteira, filas e cobertura como estavam` +
+      ` no fim da janela. Operação e comissão são de ${janela}.`
+  }
+  return `Carteira, filas e cobertura de AGORA (${formatarDiaMes(p.retrato_carteira_em)}).` +
+    ` Operação e comissão são de ${janela}.`
 }
 
 function formatarDiaMes(iso: string): string {

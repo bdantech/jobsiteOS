@@ -19,11 +19,27 @@ export const relatoriosKeys = {
   config: () => ['relatorios', 'config'] as const,
 }
 
-export async function buscarReport(inicio?: string | null, fim?: string | null): Promise<ReportSemanal> {
+/**
+ * A TELA é ao vivo; o PDF é o retrato do fim da janela.
+ *
+ * Os FLUXOS (VOP, volume, receita, operações, comissão) são idênticos nos dois: a data do
+ * evento não muda conforme o momento da pergunta. O que difere são os ESTOQUES — carteira,
+ * filas, cobertura de certificados —, e a diferença é real: no fim da semana 35 o limite
+ * ocioso era R$ 62,6 mi e uma semana depois, R$ 59,7 mi.
+ *
+ * `aoVivo: false` reproduz na tela exatamente os números do anexo, para quando alguém
+ * perguntar por que a tela e o PDF divergem.
+ */
+export async function buscarReport(
+  inicio?: string | null,
+  fim?: string | null,
+  aoVivo = true,
+): Promise<ReportSemanal> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('app_report_semanal' as never, {
     p_inicio: inicio ?? null,
     p_fim: fim ?? null,
+    p_ao_vivo: aoVivo,
   } as never)
   if (error) throw new Error(error.message)
   return data as unknown as ReportSemanal

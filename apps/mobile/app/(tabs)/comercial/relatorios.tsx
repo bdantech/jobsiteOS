@@ -2,7 +2,10 @@ import {
   ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, View,
 } from 'react-native'
 import { FileText } from 'lucide-react-native'
-import { brlCurto, direcaoDa, textoDaRegua, variacaoTexto, type IndicadorReport } from '@jobsiteos/core'
+import {
+  brlCurto, direcaoDa, textoDaRegua, textoDoRetrato, variacaoTexto,
+  type IndicadorReport,
+} from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Card } from '@/components/ui/card'
@@ -73,6 +76,9 @@ export default function RelatoriosScreen() {
         <Text variant="muted" className="text-xs">
           Semana {r.periodo.semana_iso} · {dm(r.periodo.inicio)} a {dm(r.periodo.fim)}
         </Text>
+        {/* Metade dos números é fluxo da janela e metade é estoque do momento da leitura.
+            Sem esta linha, quem abre a tela depois de ler o PDF acha que um dos dois erra. */}
+        <Text variant="muted" className="text-[11px]">{textoDoRetrato(r.periodo)}</Text>
       </View>
 
       {data.resumo ? (
@@ -99,7 +105,9 @@ export default function RelatoriosScreen() {
         <Card className="gap-1 p-3">
           <Text variant="muted" className="text-[10px] uppercase tracking-wide">Limite ocioso</Text>
           <Text className="text-xl font-semibold">{brlCurto(k.limite_ocioso.foto)}</Text>
-          <Text variant="muted" className="text-[11px]">foto de hoje, sem série</Text>
+          <Text variant="muted" className="text-[11px]">
+            saldo em {dm(k.limite_ocioso.em)}, sem série
+          </Text>
         </Card>
       </View>
 

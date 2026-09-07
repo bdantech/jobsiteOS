@@ -56,6 +56,59 @@ e a segunda mente quando a primeira é a verdade.
 Comparar seis dias de setembro com a média de um mês inteiro sem avisar faria toda primeira
 semana parecer um desastre.
 
+## Fluxo e estoque: de quando é cada número
+
+O report tem duas naturezas de número, e confundi-las é o erro mais fácil de cometer aqui.
+
+**FLUXO** é o que aconteceu dentro da janela — volume convertido, VOP, receita, operações,
+cedentes, comissão de cada vendedor, leads distribuídos, decisões de crédito, notas
+capturadas. Preso pela data do evento (`convertida_em`, `evento_em`, `distribuido_em`,
+`decidida_em`, `criada_em`). **Não se move**: o mesmo período relido em janeiro dá o mesmo
+número.
+
+**ESTOQUE** é o que *existe* num instante — limite ocioso, carteira, filas, antecipações
+travadas, cobertura de certificados. Não tem "o da semana passada"; tem "o de tal dia".
+
+`periodo.retrato_em` é a data em que os estoques foram lidos, e as duas superfícies pedem
+coisas diferentes de propósito:
+
+| | Fluxos | Estoques |
+|---|---|---|
+| **PDF / e-mail** | da janela | do **fim da janela** (`ao_vivo: false`) |
+| **Tela** | da janela | de **agora** (`ao_vivo: true`) |
+
+O PDF circula por e-mail e é citado meses depois: um número que se reescreve sozinho dentro
+de um arquivo já lido é pior que um número errado. A tela responde "como está a carteira
+agora", e um saldo de uma semana atrás ali seria inútil.
+
+**Os dois estão certos, e vão divergir.** No fim da semana 35 o limite ocioso era R$ 62,6 mi;
+uma semana depois, R$ 59,7 mi. `textoDoRetrato()` escreve a frase que diz qual é qual, e ela
+aparece no cabeçalho do PDF, da aba e da tela do celular. `app_report_semanal(…, p_ao_vivo =>
+false)` reproduz na tela exatamente os números do anexo.
+
+### De onde vem o passado
+
+**`clientes_onepay_snapshots`** — captura diária desde 25/07/2026, com os mesmos campos da
+tabela viva. `app__rp_carteira_em(data)` devolve a captura mais recente que não é posterior à
+data pedida (`max`, e não `= data`: um dia de sync falho não pode zerar a carteira do report;
+`periodo.retrato_carteira_em` diz de que dia ela saiu). **Hoje ele lê a tabela viva**, não a
+captura — a captura é de madrugada e divergia dela em R$ 500 mil, e o Meu Dia lê
+`clientes_onepay` direto.
+
+**`funil_transicoes`** — o log dos gatilhos de mudança de estágio, e a fonte de "reuniões
+realizadas" e "MOUs". Antes esses dois saíam de `atualizado_em`, que é carimbo de última
+*edição*: um lead tocado depois **saía** da semana em que a reunião aconteceu, e um lead
+velho reeditado **entrava** numa semana em que nada ocorreu. O log começa em 30/08/2026 —
+semanas anteriores vêm zeradas, e zero declarado é melhor que um número que se reescreve.
+
+### O que continua sendo de hoje
+
+Porque não existe histórico: `antecipacoes.status` e `analises_credito.estagio` (a plataforma
+e a esteira sobrescrevem), a composição dos grupos em `certificado_universo`, e
+`empresas.faturamento_anual` (saída do modelo do 04c — recalibrar o estimador muda o
+"invisível" para trás). Nesses casos o que a linha afirma é a **data** que a colocou ali; o
+rótulo que a acompanha é o de agora.
+
 **A janela padrão é a semana ISO fechada** — segunda a domingo, já terminada. Abrir na semana
 corrente compararia três dias com sete. A aritmética está em dois lugares (`app_report_semanal`
 no banco e `janela.ts` no worker) e **precisa concordar**: uma primeira versão do SQL devolvia
