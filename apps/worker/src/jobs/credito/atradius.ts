@@ -377,7 +377,29 @@ async function chamar<T>(
       },
       'Chamada à Atradius falhou.',
     )
-    return { ok: false, erro: `Atradius respondeu com erro${recuperavel ? ' temporário' : ''}.`, recuperavel }
+    /*
+     * O STATUS E O CORPO ENTRAM NA MENSAGEM, e não só no log.
+     *
+     * Enquanto isto dizia apenas "Atradius respondeu com erro", o log tinha a causa e
+     * quem lia a tela não tinha nada — e desde que a falha de envio virou evento e
+     * notificação (`analise.envio_falhou`), essa string é o que a pessoa lê no sino.
+     * Mandá-la genérica é tornar a falha visível sem torná-la acionável: parâmetro
+     * ausente, escopo, apólice fora do alcance da credencial e moeda divergente
+     * chegavam todas idênticas, e cada uma tem conserto diferente.
+     *
+     * 200 caracteres do corpo, e não os 500 do log: isto vai para o sino e para a
+     * timeline da empresa, onde o texto compete com o resto da tela. O log continua
+     * sendo o lugar da resposta inteira.
+     */
+    const detalhe = http
+      ? `${http.status}${http.corpo ? `: ${http.corpo.slice(0, 200)}` : ''}`
+      : String(e).slice(0, 200)
+
+    return {
+      ok: false,
+      erro: `Atradius respondeu com erro${recuperavel ? ' temporário' : ''} (${detalhe})`,
+      recuperavel,
+    }
   }
 }
 
