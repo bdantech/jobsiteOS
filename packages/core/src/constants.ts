@@ -103,6 +103,15 @@ export const EVENTO_TIPOS = {
   ANALISE_SOLICITADA: 'analise.solicitada',
   ANALISE_MOVIDA: 'analise.movida',
   ANALISE_ENVIADA: 'analise.enviada',
+  /**
+   * O envio à seguradora falhou.
+   *
+   * Existe porque a falha era INVISÍVEL: a action da web responde `ok` só por ter
+   * enfileirado o trabalho, e o erro nascia dentro do worker, num campo `detalhes`
+   * que ninguém persistia. Uma análise ficava parada em `solicitada` sem nada na
+   * tela dizer por quê — e a única forma de descobrir era ler o log do container.
+   */
+  ANALISE_ENVIO_FALHOU: 'analise.envio_falhou',
   ANALISE_APROVADA: 'analise.aprovada',
   ANALISE_APROVADA_PARCIAL: 'analise.aprovada_parcial',
   ANALISE_NEGADA: 'analise.negada',
@@ -306,6 +315,7 @@ export const EVENTO_LABELS: Record<string, string> = {
   'analise.solicitada': 'Análise de crédito solicitada',
   'analise.movida': 'Análise de crédito movida',
   'analise.enviada': 'Análise enviada à seguradora',
+  'analise.envio_falhou': 'Falha ao enviar à seguradora',
   'analise.aprovada': 'Análise de crédito aprovada',
   'analise.aprovada_parcial': 'Análise aprovada parcialmente',
   'analise.negada': 'Análise de crédito negada',

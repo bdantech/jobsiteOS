@@ -87,6 +87,31 @@ export async function enviarAnalises(
   const acc = { enviadas: 0, falharam: 0, analises_disparadas: 0, documentos_enviados: 0 }
   const detalhes: Array<{ id: string; erro: string }> = []
 
+  /**
+   * Registra a falha ONDE ALGUÉM VÊ, e não só em `detalhes`.
+   *
+   * `detalhes` volta na resposta do job e morre ali: a action da web responde `ok`
+   * assim que o worker aceita o trabalho — ela não espera o resultado, e nem
+   * deveria, porque o envio pode demorar. O efeito era uma análise parada em
+   * `solicitada` sem nada na tela dizendo por quê, e o motivo só no log do
+   * container.
+   *
+   * O evento resolve isso por dois caminhos de uma vez: entra na timeline da
+   * empresa e, pela regra de fan-out da 0193, vira notificação no sino de quem
+   * cuida da esteira. O texto do erro vai no resumo — é ele que diz se foi
+   * credencial, apólice ou recusa da seguradora.
+   */
+  const registrarFalha = async (analiseId: string, erro: string): Promise<void> => {
+    acc.falharam++
+    detalhes.push({ id: analiseId, erro })
+    await emitirEventoAnalise(
+      analiseId,
+      EVENTO_TIPOS.ANALISE_ENVIO_FALHOU,
+      'Falha ao enviar à seguradora',
+      erro,
+    )
+  }
+
   for (const a of pendentes ?? []) {
     // Buyer já resolvido numa tentativa anterior não é resolvido de novo: a chamada
     // pode ser cobrada, e um retry que recobra transforma uma instabilidade de rede em
@@ -95,13 +120,11 @@ export async function enviarAnalises(
     if (!buyerId) {
       const r = await seguradora.resolverBuyer(a.cnpj)
       if (!r.ok) {
-        acc.falharam++
-        detalhes.push({ id: a.id, erro: r.erro })
+        await registrarFalha(a.id, r.erro)
         continue
       }
       if (!r.dados) {
-        acc.falharam++
-        detalhes.push({ id: a.id, erro: 'CNPJ não encontrado como buyer na seguradora.' })
+        await registrarFalha(a.id, 'CNPJ não encontrado como buyer na seguradora.')
         continue
       }
       buyerId = r.dados.buyer_id
@@ -118,8 +141,7 @@ export async function enviarAnalises(
       referencia_externa: a.id,
     })
     if (!pedido.ok) {
-      acc.falharam++
-      detalhes.push({ id: a.id, erro: pedido.erro })
+      await registrarFalha(a.id, pedido.erro)
       continue
     }
 
