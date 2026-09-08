@@ -194,7 +194,7 @@ async function moverEstagioVenda(input: MoverVendaInput, ctx: ToolContext) {
 export const comercialModule: AppModule = {
   id: 'comercial',
   name: 'Comercial',
-  icon: 'Handshake',
+  icon: 'handshake',
   route: '/comercial',
   group: 'operacoes',
   tools: [
