@@ -339,7 +339,10 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
                               qual negócio mexer ANTES de abrir qualquer um, e escolhia
                               pelo nome e pela UF — score, tamanho, o que a empresa é e
                               como ela chegou estavam todos a dois cliques. */}
-                          <FichaDoCard venda={v} />
+                          <FichaDoCard
+                            empresa={v.empresas}
+                            origem={ehInbound(v) ? 'inbound' : 'outbound'}
+                          />
                           {/* O limite aprovado no CARD, e não só no modal: é o número que
                               decide se vale seguir, e quem varre a coluna precisa dele sem
                               abrir oito negócios. */}

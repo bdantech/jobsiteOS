@@ -59,20 +59,45 @@ export function ehInbound(v: Pick<VendaComEmpresa, 'empresas' | 'sdr_leads'>): b
   return v.sdr_leads?.origem === 'inbound' || v.empresas?.origem === 'formulario'
 }
 
+/** Os campos que a tira lê. Tanto `vendas.empresas` quanto `sdr_leads.empresas` os têm. */
+export interface EmpresaDaFicha {
+  tipo: string | null
+  faturamento_anual: number | null
+  faturamento_origem: string | null
+  score_credito: number | null
+  score_faixa: string | null
+}
+
+export interface FichaDoCardProps {
+  empresa: EmpresaDaFicha | null
+  /**
+   * O badge Inbound/Outbound. Ligado no Funil de Vendas, DESLIGADO no de Reuniões.
+   *
+   * Não é preferência: no card de reuniões já existe a <TagOrigem>, que diz a mesma
+   * coisa com mais precisão — ela distingue as TRÊS origens do lead (Outbound,
+   * Formulário, Manual), enquanto este badge colapsa tudo em dois. Mostrar os dois
+   * juntos seria repetir a informação, e repetir pela versão mais pobre.
+   */
+  origem?: 'inbound' | 'outbound' | null
+}
+
 /**
  * A tira compacta do card: barra e número do score, faturamento, o que a empresa é, e de
  * onde ela veio. Uma linha e meia — o card do funil não comporta mais que isso, e o
  * detalhe continua nas abas.
+ *
+ * Recebe a EMPRESA, e não a venda: o Funil de Reuniões usa a mesma tira, e lá o que
+ * existe é um `sdr_leads`. Amarrá-la a `VendaComEmpresa` obrigaria a inventar uma venda
+ * falsa para desenhar o card de um lead.
  */
-export function FichaDoCard({ venda }: { venda: VendaComEmpresa }) {
-  const e = venda.empresas
+export function FichaDoCard({ empresa: e, origem }: FichaDoCardProps) {
   if (!e) return null
 
   const faixa = e.score_faixa ?? 'dados_insuficientes'
   const score = e.score_credito === null ? null : Number(e.score_credito)
   const pct = score === null ? 0 : Math.max(0, Math.min(100, score))
   const declarado = e.faturamento_origem === 'declarado_cliente'
-  const inbound = ehInbound(venda)
+  const inbound = origem === 'inbound'
 
   return (
     <div className="space-y-1.5 border-t border-border/60 pt-1.5">
@@ -109,15 +134,17 @@ export function FichaDoCard({ venda }: { venda: VendaComEmpresa }) {
             {TIPO_LABEL[e.tipo] ?? e.tipo}
           </Badge>
         ) : null}
-        <Badge
-          variant="outline"
-          className={cn(
-            'px-1.5 py-0 text-[10px] font-normal',
-            inbound && 'border-sky-500/40 text-sky-700 dark:text-sky-300',
-          )}
-        >
-          {inbound ? 'Inbound' : 'Outbound'}
-        </Badge>
+        {origem ? (
+          <Badge
+            variant="outline"
+            className={cn(
+              'px-1.5 py-0 text-[10px] font-normal',
+              inbound && 'border-sky-500/40 text-sky-700 dark:text-sky-300',
+            )}
+          >
+            {inbound ? 'Inbound' : 'Outbound'}
+          </Badge>
+        ) : null}
       </div>
     </div>
   )

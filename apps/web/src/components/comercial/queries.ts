@@ -98,7 +98,14 @@ export async function buscarVendedores(): Promise<Tables<'vendedores'>[]> {
   return data ?? []
 }
 
-/** Um lead com o nome da empresa — a lista é inútil sem ele. */
+/**
+ * Um lead com a ficha da empresa.
+ *
+ * Os quatro campos de baixo (tipo, origem do faturamento e o par de score) entraram
+ * para a <FichaDoCard> poder ser desenhada no card do Funil de Reuniões, como já é
+ * no de Vendas. Sem eles a tira renderiza travessão em tudo — e um card que mostra
+ * "—" em quatro lugares é pior do que um card que não mostra nada.
+ */
 export interface LeadComEmpresa extends Tables<'sdr_leads'> {
   empresas: {
     id: string
@@ -106,6 +113,10 @@ export interface LeadComEmpresa extends Tables<'sdr_leads'> {
     uf: string | null
     valor_esperado_mensal: number | null
     faturamento_anual: number | null
+    tipo: string | null
+    faturamento_origem: string | null
+    score_credito: number | null
+    score_faixa: string | null
   } | null
 }
 
@@ -113,7 +124,11 @@ export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa
   const supabase = createClient()
   let q = supabase
     .from('sdr_leads')
-    .select('*, empresas(id, razao_social, uf, valor_esperado_mensal, faturamento_anual)')
+    // Literal ÚNICO, sem concatenação: um select montado com `+` vira
+    // GenericStringError e o erro aparece nas linhas de uso, não aqui.
+    .select(
+      '*, empresas(id, razao_social, uf, valor_esperado_mensal, faturamento_anual, tipo, faturamento_origem, score_credito, score_faixa)',
+    )
     // Melhor empresa primeiro dentro do funil: a ordem da lista é a ordem de trabalho.
     .order('distribuido_em', { ascending: false })
     .limit(500)

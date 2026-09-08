@@ -41,6 +41,7 @@ import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { AbaPitch } from './aba-pitch'
+import { FichaDoCard } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
@@ -420,6 +421,19 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                           <p className="text-xs tabular-nums text-muted-foreground">
                             {brl(l.empresas?.valor_esperado_mensal)}/mês esperado
                           </p>
+
+                          {/*
+                            A ficha da empresa, a mesma tira do Funil de Vendas: quem
+                            varre a coluna escolhe para quem ligar ANTES de abrir
+                            qualquer card, e escolhia pelo nome, pela UF e pelo valor
+                            esperado — score, tamanho e o que a empresa é estavam todos
+                            a dois cliques, na aba Empresa.
+
+                            SEM o badge de origem: a <TagOrigem> logo acima já diz isso,
+                            e melhor — ela separa as três origens do lead (Outbound,
+                            Formulário, Manual), enquanto o da ficha colapsa em dois.
+                          */}
+                          <FichaDoCard empresa={l.empresas} />
                           {/*
                             O dono só aparece na lista NÃO filtrada: com o filtro
                             ligado ele repetiria em cada card o que o seletor no topo
