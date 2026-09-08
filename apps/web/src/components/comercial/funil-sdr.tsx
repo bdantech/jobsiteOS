@@ -405,7 +405,6 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                           </p>
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                             {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
-                            <TagOrigem origem={l.origem} />
                             {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
                             {l.fit === true ? (
                               <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
@@ -418,9 +417,6 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                               <Badge variant="secondary" className="text-[10px]">Expirado</Badge>
                             ) : null}
                           </div>
-                          <p className="text-xs tabular-nums text-muted-foreground">
-                            {brl(l.empresas?.valor_esperado_mensal)}/mês esperado
-                          </p>
 
                           {/*
                             A ficha da empresa, a mesma tira do Funil de Vendas: quem
@@ -429,11 +425,18 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                             esperado — score, tamanho e o que a empresa é estavam todos
                             a dois cliques, na aba Empresa.
 
-                            SEM o badge de origem: a <TagOrigem> logo acima já diz isso,
-                            e melhor — ela separa as três origens do lead (Outbound,
-                            Formulário, Manual), enquanto o da ficha colapsa em dois.
+                            COM o badge de origem, no canto inferior direito. A
+                            <TagOrigem> saiu do card: ela separa três origens
+                            (Outbound, Formulário, Manual) e o card não tinha altura
+                            para essa nuance — quem varre a coluna precisa saber se
+                            a pessoa procurou a gente ou se a régua a escolheu, e
+                            isso são dois estados. A distinção fina continua na
+                            tabela e no cabeçalho do modal, onde há espaço.
                           */}
-                          <FichaDoCard empresa={l.empresas} />
+                          <FichaDoCard
+                            empresa={l.empresas}
+                            origem={l.origem === 'inbound' ? 'inbound' : 'outbound'}
+                          />
                           {/*
                             O dono só aparece na lista NÃO filtrada: com o filtro
                             ligado ele repetiria em cada card o que o seletor no topo

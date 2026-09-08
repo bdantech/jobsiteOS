@@ -135,11 +135,23 @@ export function FichaDoCard({ empresa: e, origem }: FichaDoCardProps) {
           </Badge>
         ) : null}
         {origem ? (
+          /*
+           * `ml-auto`: empurra para a DIREITA da última linha do card, que é o
+           * canto inferior direito. Vira o lugar fixo de "por onde este lead
+           * entrou" — o olho aprende o canto e para de reler a linha inteira.
+           *
+           * Cor nos DOIS estados, não só no inbound. Um badge colorido ao lado de
+           * um cinza faz o cinza parecer desligado, e outbound não é ausência de
+           * nada: é a régua tendo escolhido a empresa. São duas procedências, e
+           * cada uma muda a primeira frase da ligação.
+           */
           <Badge
             variant="outline"
             className={cn(
-              'px-1.5 py-0 text-[10px] font-normal',
-              inbound && 'border-sky-500/40 text-sky-700 dark:text-sky-300',
+              'ml-auto shrink-0 px-1.5 py-0 text-[10px] font-normal',
+              inbound
+                ? 'border-sky-500/40 bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+                : 'border-amber-500/40 bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
             )}
           >
             {inbound ? 'Inbound' : 'Outbound'}
