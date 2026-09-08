@@ -231,6 +231,22 @@ const envSchema = z.object({
    */
   RESEND_FROM_EMAIL: z.string().optional(),
   /**
+   * O remetente do que sai PARA DENTRO DE CASA: o report semanal e a senha
+   * temporária de um usuário novo.
+   *
+   * Separado do `RESEND_REMETENTE` porque aquele fala com CLIENTE — a fila da
+   * Comunicação carrega base legal e link de descadastro, e o que ela envia é
+   * proposta e cobrança. Um endereço que a equipe lê sem estranhar (`internal@`,
+   * `no-reply@`) chegando a um fornecedor parece e-mail vazado por engano, e
+   * provedores tratam nomes assim com mais desconfiança — o custo cai em
+   * entregabilidade, justamente no canal onde perder e-mail dói.
+   *
+   * Opcional: sem ela, o interno sai pelo remetente do sistema, que é o
+   * comportamento de antes. Ninguém precisa cadastrá-la para nada voltar a
+   * funcionar.
+   */
+  RESEND_REMETENTE_INTERNO: z.string().optional(),
+  /**
    * O remetente da IA, em SUBDOMÍNIO DEDICADO. A persona nunca escreve do domínio
    * principal: volume de máquina e e-mail escrito à mão não podem dividir
    * reputação, porque quando um queima o outro cai junto.

@@ -187,9 +187,16 @@ async function enviarReport(
   nome: string,
   teste?: Destinatario[],
 ): Promise<{ enviados: number; falhas: number; motivo?: string }> {
-  if (!env.RESEND_API_KEY || !env.RESEND_REMETENTE) {
+  /*
+   * O report é INTERNO: sai pelo remetente interno quando ele existe, e cai no do
+   * sistema quando não. O `RESEND_REMETENTE` da fila da Comunicação fala com
+   * cliente, e esta lista aqui é a diretoria — não precisam ser o mesmo endereço.
+   */
+  const remetente = env.RESEND_REMETENTE_INTERNO ?? env.RESEND_REMETENTE
+
+  if (!env.RESEND_API_KEY || !remetente) {
     const motivo =
-      'RESEND_API_KEY ou RESEND_REMETENTE (ou RESEND_FROM_EMAIL) ausentes no worker — o PDF foi gerado e guardado, mas nada saiu.'
+      'RESEND_API_KEY ou um remetente (RESEND_REMETENTE_INTERNO, RESEND_REMETENTE ou RESEND_FROM_EMAIL) ausentes no worker — o PDF foi gerado e guardado, mas nada saiu.'
     logger.warn(motivo)
     await supabaseAdmin.from('report_execucoes').update({ erro: motivo }).eq('id', execucaoId)
     return { enviados: 0, falhas: 0, motivo: 'sem_credencial' }
@@ -224,7 +231,7 @@ async function enviarReport(
      * vendedor por vendedor, e um "responder a todos" com a caixa de todo mundo à vista é
      * o tipo de vazamento que ninguém planeja.
      */
-    const r2 = await enviarComRetry(assunto, corpo, d.email, anexo)
+    const r2 = await enviarComRetry(assunto, corpo, d.email, anexo, remetente)
     if (r2.ok) enviados.push(d.email)
     else falharam.push({ email: d.email, erro: r2.erro })
   }
@@ -266,6 +273,8 @@ async function enviarComRetry(
   corpo: string,
   para: string,
   anexo: { filename: string; content: string },
+  /** Resolvido em `enviarReport` — interno com fallback para o do sistema. */
+  remetente: string,
 ): Promise<{ ok: true } | { ok: false; erro: string }> {
   let ultimo = 'sem tentativa'
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
@@ -277,7 +286,7 @@ async function enviarComRetry(
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          from: env.RESEND_REMETENTE,
+          from: remetente,
           to: [para],
           subject: assunto,
           text: corpo,

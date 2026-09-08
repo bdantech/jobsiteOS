@@ -216,10 +216,18 @@ async function enviarEmailSenhaTemporaria(
   dados: EnvioEmail,
 ): Promise<{ ok: true } | { ok: false; erro: string }> {
   const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.RESEND_FROM_EMAIL
+  /*
+   * A senha temporária vai para um COLEGA, não para um cliente — então sai pelo
+   * remetente interno, o mesmo do report semanal, com fallback para o de sempre.
+   * Sem a variável nova nada muda: continua saindo por RESEND_FROM_EMAIL.
+   */
+  const from = process.env.RESEND_REMETENTE_INTERNO ?? process.env.RESEND_FROM_EMAIL
 
   if (!apiKey || !from) {
-    return { ok: false, erro: 'Envio de e-mail não configurado (RESEND_API_KEY / RESEND_FROM_EMAIL).' }
+    return {
+      ok: false,
+      erro: 'Envio de e-mail não configurado (RESEND_API_KEY / RESEND_REMETENTE_INTERNO ou RESEND_FROM_EMAIL).',
+    }
   }
 
   const nome = escapeHtml(dados.nome)
