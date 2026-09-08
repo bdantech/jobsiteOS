@@ -12,42 +12,32 @@
     "declarationMap": false,
     "lib": ["ES2022", "DOM"],
     "types": ["react", "nativewind/types"],
-    "baseUrl": ".",
+    // Sem `baseUrl`: o TypeScript 6 (que veio com o SDK 57) o depreciou, e ele
+    // para de funcionar na 7. Não faz falta — desde a 5.0 um `paths` cujos
+    // destinos são relativos ("./src/*") resolve a partir da pasta deste
+    // arquivo, que é exatamente o que baseUrl "." significava aqui.
     "paths": {
-      "@/*": ["./src/*"],
+      "@/*": ["./src/*"]
 
-      // ─── Duplicate React types. Read metro.config.js before touching this. ───
-      // This workspace contains two Reacts on purpose: mobile is React 18 (RN
-      // 0.76), web is React 19 (Next 15). pnpm keeps ONE shared fallback copy of
-      // @types/react in node_modules/.pnpm/node_modules, and the winner is 19.
-      // expo-router, lucide-react-native, react-native-safe-area-context and
-      // @react-navigation/* declare no @types/react peer, so pnpm nests none for
-      // them and their .d.ts files walk up to that shared copy and bind to React
-      // 19 — while this app binds to its own React 18. Two incompatible
-      // ReactNode types (19 added `bigint`) => TS2786 "cannot be used as a JSX
-      // component" on every library component in the app.
+      // ─── Havia aqui um alias de `react` para @types/react ────────────────────
+      // Ele existia porque o workspace tinha DUAS versões de React: mobile na 18
+      // (RN 0.76) e web na 19 (Next 15). A cópia compartilhada de @types/react que
+      // o pnpm deixa em node_modules/.pnpm/node_modules era a 19, e as libs sem
+      // peer declarado de @types/react (expo-router, lucide-react-native,
+      // react-native-safe-area-context, @react-navigation/*) se ligavam a ela
+      // enquanto o app se ligava à 18 — TS2786 em todo componente de biblioteca.
       //
-      // No global lever fixes this: web's own `next` relies on that same
-      // fallback BEING 19, so hoisting rules / root deps / pnpm.overrides fix one
-      // app by breaking the other. It has to be scoped to this compilation, which
-      // is what `paths` does — it governs `react` even inside node_modules .d.ts.
-      //
-      // ⚠️ Expo also feeds these `paths` to Metro, which would then resolve the
-      // RUNTIME `react` import to this types-only package and fail to bundle
-      // ("main module field could not be resolved"). metro.config.js intercepts
-      // `react` / `react/*` and resolves them to the real package; that
-      // interception is what makes this line safe. Do not remove one without the
-      // other. If mobile ever moves to React 19, delete both.
-      "react": ["./node_modules/@types/react"],
-      "react/*": ["./node_modules/@types/react/*"]
+      // Desde o SDK 57 o mobile também é React 19, então há UMA versão só e o
+      // conflito deixou de existir. O alias saiu daqui e a interceptação de
+      // `react` que ele exigia saiu do metro.config.js, junto — eram um par.
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "nativewind-env.d.ts",
-    "expo-env.d.ts",
-    ".expo/types/**/*.ts"
-  ],
+  // ⚠️ Esta lista é NORMALIZADA pelo `expo start`. Se ela divergir do que o SDK
+  // espera, ele reescreve o arquivo inteiro por um round-trip de JSON — e leva
+  // junto TODOS os comentários acima. Ela está exatamente no formato do SDK 57,
+  // e é por isso que "expo-env.d.ts" e ".expo/types/**/*.ts" saíram daqui no
+  // upgrade: o primeiro já é coberto por "**/*.ts", e o segundo é anulado pelo
+  // "exclude" logo abaixo. Antes de editar, confira o que o `expo start` faz.
+  "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"],
   "exclude": ["node_modules", ".expo", "dist"]
 }

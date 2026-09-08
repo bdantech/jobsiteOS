@@ -14,10 +14,18 @@ import { ensurePushRegistration, resetPushRegistration } from './push'
  * is open is delivered silently to JS and never shown — which reads as "push is
  * broken" to the user. Set once, at module scope: it is global to the process,
  * not per component.
+ *
+ * `shouldShowAlert` era um booleano só até o SDK 52; a partir do 53 ele virou
+ * dois, porque são de fato duas decisões: `shouldShowBanner` é a tarja que passa
+ * na frente do app, e `shouldShowList` é a permanência na central de notificações
+ * do sistema. Aqui as duas são `true` — a mesma coisa que o booleano antigo
+ * fazia. Deixar só o banner faria o alerta sumir para sempre quando a pessoa não
+ * olhasse na hora, que é justamente quando ela mais precisa dele depois.
  */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),

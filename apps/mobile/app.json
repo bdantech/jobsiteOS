@@ -6,7 +6,6 @@
     "orientation": "portrait",
     "scheme": "jobsiteos",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "assetBundlePatterns": [
       "**/*"
     ],
