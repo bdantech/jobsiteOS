@@ -15,12 +15,14 @@ import {
   ArrowLeft, Building2, Mail, MessageSquare, Phone, Star, ThumbsDown,
 } from 'lucide-react-native'
 import {
-  ActivityIndicator, Linking, Modal, Pressable, RefreshControl, ScrollView, View,
+  ActivityIndicator, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, View,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import {
@@ -54,6 +56,20 @@ function exibirTelefone(v: string): string {
   const m = /^\+55(\d{2})(\d{4,5})(\d{4})$/.exec(v)
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : v
 }
+
+/**
+ * Estágio: exclusivo, com "Todos" como primeiro segmento — o mesmo desenho de
+ * Empresas, Crédito, Jurídico e Comunicação. Antes era um <Chip> local montado
+ * com <Badge> dentro de <Pressable>, que era exatamente o que a padronização
+ * tinha saído para eliminar; esta tela passou batido naquela varredura.
+ */
+const OPCOES_ESTAGIO: readonly OpcaoFiltro<string>[] = [
+  { valor: 'todos', label: 'Todos' },
+  ...ESTAGIOS_FORNECEDOR_ATIVOS.map((e) => ({
+    valor: e as string,
+    label: ESTAGIO_FORNECEDOR_LABELS[e],
+  })),
+]
 
 export default function FornecedoresScreen() {
   const { colors } = useTheme()
@@ -96,18 +112,15 @@ export default function FornecedoresScreen() {
           </Card>
         ) : null}
 
-        {/* Filtro por estágio. Rolagem horizontal porque são cinco e a tela é estreita. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1.5">
-          <Chip rotulo="Todos" ativo={estagio === 'todos'} onPress={() => setEstagio('todos')} />
-          {ESTAGIOS_FORNECEDOR_ATIVOS.map((e) => (
-            <Chip
-              key={e}
-              rotulo={ESTAGIO_FORNECEDOR_LABELS[e]}
-              ativo={estagio === e}
-              onPress={() => setEstagio(e)}
-            />
-          ))}
-        </ScrollView>
+        {/* Filtro por estágio, no padrão das demais telas: a escolha é exclusiva
+            (um estágio ou todos), então é controle segmentado. `sangra` porque
+            esta faixa vive dentro do `p-4` da lista. */}
+        <FiltroSegmentado
+          opcoes={OPCOES_ESTAGIO}
+          valor={estagio}
+          onChange={(v) => setEstagio(v as EstagioFornecedor | 'todos')}
+          sangra
+        />
 
         {lista.length === 0 ? (
           <EmptyState
@@ -149,16 +162,6 @@ export default function FornecedoresScreen() {
   )
 }
 
-function Chip({ rotulo, ativo, onPress }: { rotulo: string; ativo: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress}>
-      <Badge variant={ativo ? 'default' : 'outline'}>
-        <Text className="text-[11px]">{rotulo}</Text>
-      </Badge>
-    </Pressable>
-  )
-}
-
 // ─── Ficha ──────────────────────────────────────────────────────────────────
 
 function FichaModal({
@@ -172,6 +175,7 @@ function FichaModal({
   const contatos = useContatosDoFornecedor(fornecedor?.fornecedor_cnpj ?? null)
   const acoes = useAcoesFornecedor()
   const [descartando, setDescartando] = React.useState(false)
+  const insets = useSafeAreaInsets()
 
   if (!fornecedor) return null
 
@@ -201,9 +205,44 @@ function FichaModal({
   }
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onFechar}>
-      <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-4">
-        <Pressable onPress={onFechar} className="flex-row items-center gap-2 pb-1">
+    /*
+     * `pageSheet`, e não o modal de tela cheia que estava aqui.
+     *
+     * Dois bugs saíam do modal cheio, e os dois desta mesma escolha:
+     *
+     *  1. ele cobria a tela inteira A PARTIR DE y=0, status bar inclusive. O
+     *     "Voltar" era a primeira coisa do ScrollView, então nascia embaixo do
+     *     relógio e do notch — visível, e intocável;
+     *  2. não havia como voltar pelo gesto. Isto é um <Modal>, não uma rota: o
+     *     swipe-back do navegador não alcança o que está por cima dele.
+     *
+     * O pageSheet resolve os dois de uma vez, e com o comportamento nativo: no
+     * iOS ele já entra abaixo da status bar e já arrasta para baixo para fechar —
+     * e é justamente nesse caso que o RN chama `onRequestClose` no iOS, então o
+     * estado da tela acompanha o gesto em vez de ficar preso em "aberto".
+     *
+     * No Android `presentationStyle` é ignorado e o modal volta a ser de tela
+     * cheia; lá o inset de topo entra à mão, e o botão de voltar continua sendo o
+     * caminho (junto do botão físico, que já chamava onRequestClose).
+     */
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onFechar}
+    >
+      <ScrollView
+        className="flex-1 bg-background"
+        contentContainerClassName="gap-3 p-4"
+        style={Platform.OS === 'android' ? { paddingTop: insets.top } : undefined}
+      >
+        <Pressable
+          onPress={onFechar}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar para a lista de fornecedores"
+          hitSlop={8}
+          className="flex-row items-center gap-2 pb-1"
+        >
           <ArrowLeft size={18} color={colors.mutedForeground} />
           <Text variant="muted">Voltar</Text>
         </Pressable>
