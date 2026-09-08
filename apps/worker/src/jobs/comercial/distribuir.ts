@@ -81,8 +81,22 @@ async function sdrsDisponiveis(cotaPadrao: number): Promise<SdrDisponivel[]> {
       direcao: (s.direcao === 'in' || s.direcao === 'out' ? s.direcao : 'both') as 'in' | 'out' | 'both',
       cota: Number(s.empresas_por_semana ?? cotaPadrao),
       ufs: (t?.ufs ?? []) as string[],
-      faturamento_min: t?.faturamento_min === undefined ? null : Number(t.faturamento_min),
-      faturamento_max: t?.faturamento_max === undefined ? null : Number(t.faturamento_max),
+      /*
+       * `== null`, e não `=== undefined`: a coluna é NULLABLE, e uma linha de
+       * território salva com os campos de faturamento em branco traz `null` — que
+       * passava pelo teste de `undefined` e caía em `Number(null)`, ou seja ZERO.
+       *
+       * O efeito era um território "de 0 a 0": `cabeNoTerritorio` recusava toda
+       * candidata com faturamento acima de zero E toda candidata sem faturamento,
+       * o que é o conjunto inteiro. O SDR ficava elegível, as candidatas
+       * apareciam, e a distribuição terminava com zero — sem erro em lugar nenhum.
+       *
+       * Só quebrava para quem TEM linha de território: sem linha, `t` é undefined
+       * e o fallback já funcionava. Ou seja, salvar o território em branco pela
+       * tela era o que desligava a distribuição da pessoa.
+       */
+      faturamento_min: t?.faturamento_min == null ? null : Number(t.faturamento_min),
+      faturamento_max: t?.faturamento_max == null ? null : Number(t.faturamento_max),
       carga: carga.get(v.id) ?? 0,
     }
   })
