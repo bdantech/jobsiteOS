@@ -1,8 +1,6 @@
 import { ESTAGIOS, ESTAGIO_LABELS, type Estagio } from '@jobsiteos/core'
-import { Pressable, ScrollView, View } from 'react-native'
 
-import { Text } from '@/components/ui/text'
-import { cn } from '@/lib/utils'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 
 export interface EstagioFiltroProps {
   /** undefined = "Todas". */
@@ -10,59 +8,32 @@ export interface EstagioFiltroProps {
   onChange: (estagio: Estagio | undefined) => void
 }
 
-interface Chip {
-  key: string
-  label: string
-  estagio: Estagio | undefined
-}
+/**
+ * O funil como controle segmentado, no mesmo padrão da Antecipação.
+ *
+ * ── Por que segmentado, e não os chips que estavam aqui ────────────────────
+ * A escolha É exclusiva: a lista mostra um estágio ou mostra todos, nunca dois.
+ * Como chips soltos, ela prometia o que não cumpria — chip solto sugere que dá
+ * para combinar, e combinar não existia. E o "Todas" convivia com o
+ * tocar-no-ativo-para-limpar, dois caminhos para o mesmo estado.
+ *
+ * O "Todas" continua sendo o primeiro segmento, que é como se diz "sem filtro"
+ * num controle onde sempre há um selecionado.
+ */
+const TODAS = '__todas__'
 
-const CHIPS: Chip[] = [
-  { key: 'todas', label: 'Todas', estagio: undefined },
-  ...ESTAGIOS.map((estagio) => ({
-    key: estagio,
-    label: ESTAGIO_LABELS[estagio],
-    estagio,
-  })),
+const OPCOES: readonly OpcaoFiltro<string>[] = [
+  { valor: TODAS, label: 'Todas' },
+  ...ESTAGIOS.map((estagio) => ({ valor: estagio as string, label: ESTAGIO_LABELS[estagio] })),
 ]
 
-/** The funnel as a row of toggles. Tapping the active chip clears the filter. */
 export function EstagioFiltro({ value, onChange }: EstagioFiltroProps) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      contentContainerClassName="gap-2 px-4"
-    >
-      {CHIPS.map((chip) => {
-        const active = chip.estagio === value
-
-        return (
-          <Pressable
-            key={chip.key}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`Filtrar por ${chip.label}`}
-            // Re-tapping the active chip resets to "Todas"; "Todas" itself is idempotent.
-            onPress={() => onChange(active ? undefined : chip.estagio)}
-            className={cn(
-              'rounded-full border px-3 py-1.5 active:opacity-70',
-              active ? 'border-primary bg-primary' : 'border-border bg-transparent',
-            )}
-          >
-            <View>
-              <Text
-                className={cn(
-                  'text-sm font-medium',
-                  active ? 'text-primary-foreground' : 'text-muted-foreground',
-                )}
-              >
-                {chip.label}
-              </Text>
-            </View>
-          </Pressable>
-        )
-      })}
-    </ScrollView>
+    <FiltroSegmentado
+      opcoes={OPCOES}
+      valor={value ?? TODAS}
+      onChange={(valor) => onChange(valor === TODAS ? undefined : (valor as Estagio))}
+      rotulo={(label) => `Filtrar por ${label}`}
+    />
   )
 }

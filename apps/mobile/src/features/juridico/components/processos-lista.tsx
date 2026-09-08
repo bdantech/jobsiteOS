@@ -10,10 +10,11 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import * as React from 'react'
-import { FlatList, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Badge } from '@/components/ui/badge'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
@@ -29,6 +30,21 @@ import { buscarCarteira, buscarConfig, juridicoKeys, type LinhaCarteira } from '
  * O que não some aqui é o BADGE DE LENTIDÃO. Quem abre o Jurídico no celular está fora
  * do escritório e tem tempo para uma coisa só; a lentidão é o que diz qual é ela.
  */
+
+/**
+ * O filtro de situação, no padrão da Antecipação: controle segmentado, porque a
+ * escolha é exclusiva — a lista mostra uma situação ou mostra todas.
+ *
+ * Antes eram <Badge> dentro de <Pressable>, o que dava um controle mais quadrado
+ * que o das outras telas, sem feedback de toque e sem accessibilityState — um
+ * leitor de tela anunciava "botão" e nunca "selecionado".
+ */
+const TODOS = '__todos__'
+
+const OPCOES_SITUACAO: readonly OpcaoFiltro<string>[] = [
+  { valor: TODOS, label: 'Todos' },
+  ...COLUNAS_JURIDICO.map((s) => ({ valor: s as string, label: SITUACAO_INTERNA_LABELS[s] })),
+]
 
 function moeda(v: number | string | null): string {
   if (v === null || !Number.isFinite(Number(v))) return '—'
@@ -64,24 +80,13 @@ export function ProcessosLista() {
 
   return (
     <View className="flex-1">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="gap-2 px-4 py-3"
-      >
-        <Pressable onPress={() => setFiltro(null)}>
-          <Badge variant={filtro === null ? 'default' : 'outline'}>
-            <Text>Todos</Text>
-          </Badge>
-        </Pressable>
-        {COLUNAS_JURIDICO.map((s) => (
-          <Pressable key={s} onPress={() => setFiltro(s)}>
-            <Badge variant={filtro === s ? 'default' : 'outline'}>
-              <Text>{SITUACAO_INTERNA_LABELS[s]}</Text>
-            </Badge>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <View className="py-3">
+        <FiltroSegmentado
+          opcoes={OPCOES_SITUACAO}
+          valor={filtro ?? TODOS}
+          onChange={(valor) => setFiltro(valor === TODOS ? null : (valor as SituacaoInterna))}
+        />
+      </View>
 
       <FlatList
         data={linhas}

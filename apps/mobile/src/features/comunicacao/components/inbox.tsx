@@ -3,18 +3,33 @@ import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { Bot, Link2Off, Mail, MessageCircle } from 'lucide-react-native'
 import * as React from 'react'
-import { FlatList, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Badge, EmptyState, ErrorState, Skeleton, Text } from '@/components/ui'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import {
   buscarConversas,
-  buscarNaoVinculadas,
   comunicacaoKeys,
   type AbaMobile,
   type ConversaInbox,
 } from '../api'
 import { desde, identificadorLegivel, intencaoLabel } from '../format'
+import { useEscopoFila, useNaoVinculadas } from '../hooks'
+
+/**
+ * As duas abas do inbox, como controle segmentado — o padrão da Antecipação.
+ *
+ * Aqui isto corrigiu um BUG, não só a aparência: o <Badge> recebia a string do
+ * rótulo como filho direto, e Badge renderiza uma <View>. Texto solto dentro de
+ * <View> derruba o React Native com "Text strings must be rendered within a
+ * <Text> component" — todo o resto do app embrulha o rótulo em <Text>, e só este
+ * ponto não embrulhava.
+ */
+const ABAS: readonly OpcaoFiltro<AbaMobile>[] = [
+  { valor: 'nao_lidas', label: 'Não lidas' },
+  { valor: 'todas', label: 'Todas' },
+]
 
 /**
  * O inbox no celular.
@@ -37,10 +52,13 @@ export function Inbox() {
     queryKey: comunicacaoKeys.inbox(aba),
     queryFn: () => buscarConversas(aba),
   })
-  const pendentes = useQuery({
-    queryKey: comunicacaoKeys.naoVinculadas(),
-    queryFn: buscarNaoVinculadas,
-  })
+  /*
+   * A tarja conta a MESMA fila que a tela de identificação lista — pelo mesmo
+   * hook, e não por uma segunda consulta. Duas resoluções independentes de "de
+   * quem é a fila" acabariam com a tarja dizendo 8 e a tela abrindo com 3.
+   */
+  const escopo = useEscopoFila()
+  const pendentes = useNaoVinculadas(escopo.vendedorId)
 
   if (conversas.isPending) {
     return (
@@ -62,19 +80,9 @@ export function Inbox() {
 
   return (
     <View className="flex-1">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="gap-2 px-4 py-3"
-      >
-        {(['nao_lidas', 'todas'] as const).map((a) => (
-          <Pressable key={a} onPress={() => setAba(a)}>
-            <Badge variant={aba === a ? 'default' : 'outline'}>
-              {a === 'nao_lidas' ? 'Não lidas' : 'Todas'}
-            </Badge>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <View className="py-3">
+        <FiltroSegmentado opcoes={ABAS} valor={aba} onChange={setAba} />
+      </View>
 
       {naoVinculadas > 0 ? (
         <Pressable
