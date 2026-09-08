@@ -215,6 +215,22 @@ const envSchema = z.object({
   /** "ONE OS <contato@oneos.com.br>" — o remetente do SISTEMA. */
   RESEND_REMETENTE: z.string().optional(),
   /**
+   * O MESMO remetente, com o nome que a web usa.
+   *
+   * `apps/web` lê `RESEND_FROM_EMAIL` (actions/admin.ts) e o worker lê
+   * `RESEND_REMETENTE`. Dois nomes para a mesma coisa é uma pegadinha que morde a
+   * cada ambiente novo: quem copia a configuração da Vercel para o Railway — o
+   * movimento natural — leva `RESEND_FROM_EMAIL`, e o worker segue dizendo que o
+   * remetente está ausente. Foi exatamente assim que o report semanal ficou sem
+   * sair, gerando o PDF e não enviando nada.
+   *
+   * Aceitar os dois é mais barato que renomear em produção. `RESEND_REMETENTE`
+   * continua sendo o nome canônico e vence quando ambos existem; este é o
+   * sinônimo, resolvido uma vez em `carregar()` para que nenhum ponto de leitura
+   * precise lembrar da existência dele.
+   */
+  RESEND_FROM_EMAIL: z.string().optional(),
+  /**
    * O remetente da IA, em SUBDOMÍNIO DEDICADO. A persona nunca escreve do domínio
    * principal: volume de máquina e e-mail escrito à mão não podem dividir
    * reputação, porque quando um queima o outro cai junto.
@@ -239,7 +255,11 @@ function carregar(): Env {
     // Names only. A value is never printed: half of these are secrets.
     throw new Error(`Variáveis de ambiente inválidas:\n${linhas.join('\n')}`)
   }
-  return r.data
+
+  // O sinônimo é resolvido AQUI, e não em cada `env.RESEND_REMETENTE ?? …` espalhado:
+  // são quatro pontos de leitura hoje, e o quinto que alguém escrever amanhã não vai
+  // lembrar de fazer o fallback.
+  return { ...r.data, RESEND_REMETENTE: r.data.RESEND_REMETENTE ?? r.data.RESEND_FROM_EMAIL }
 }
 
 export const env: Env = carregar()

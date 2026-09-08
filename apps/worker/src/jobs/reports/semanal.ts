@@ -188,7 +188,8 @@ async function enviarReport(
   teste?: Destinatario[],
 ): Promise<{ enviados: number; falhas: number; motivo?: string }> {
   if (!env.RESEND_API_KEY || !env.RESEND_REMETENTE) {
-    const motivo = 'RESEND_API_KEY ou RESEND_REMETENTE ausentes no worker — o PDF foi gerado e guardado, mas nada saiu.'
+    const motivo =
+      'RESEND_API_KEY ou RESEND_REMETENTE (ou RESEND_FROM_EMAIL) ausentes no worker — o PDF foi gerado e guardado, mas nada saiu.'
     logger.warn(motivo)
     await supabaseAdmin.from('report_execucoes').update({ erro: motivo }).eq('id', execucaoId)
     return { enviados: 0, falhas: 0, motivo: 'sem_credencial' }
