@@ -144,3 +144,21 @@ export const NAV_THEME: Record<'light' | 'dark', Theme> = {
     },
   },
 }
+
+/**
+ * As opções de header compartilhadas por TODO stack do app.
+ *
+ * Elas moram aqui, e não dentro do <ModuleStack>, porque não são só dos módulos:
+ * o stack RAIZ também empilha telas com header (Configurações e o report aberto
+ * por deep link). Enquanto isto vivia só no ModuleStack, essas duas telas caíam
+ * no tema padrão do React Navigation em vez dos tokens da casa — o header saía
+ * com outro fundo e outro tom, e era visível ao lado de qualquer tela de módulo.
+ */
+export function opcoesDeHeader(colors: ColorTokens) {
+  return {
+    headerStyle: { backgroundColor: colors.background },
+    headerTintColor: colors.foreground,
+    headerTitleStyle: { color: colors.foreground },
+    contentStyle: { backgroundColor: colors.background },
+  } as const
+}

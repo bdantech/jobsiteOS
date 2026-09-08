@@ -19,6 +19,20 @@ export const unstable_settings = {
 const MAX_MODULE_TABS = 4
 
 /**
+ * A espessura do traço dos ícones da barra.
+ *
+ * O Lucide desenha com strokeWidth 2 por padrão, que é calibrado para os 16px de
+ * um ícone ao lado de texto. Aqui eles saem a 24-28px, e o mesmo traço de 2px vira
+ * proporcionalmente muito mais grosso — a barra inteira ficava pesada, ainda mais
+ * depois que o rótulo desceu para peso 400. 1,5 devolve a proporção.
+ *
+ * O mesmo valor para o ícone ativo e o inativo, de propósito: quem distingue os
+ * dois é a COR. Engrossar o ativo seria um segundo canal dizendo a mesma coisa, e
+ * um ícone que muda de espessura ao ser tocado parece que mudou de forma.
+ */
+const TRACO_ICONE = 1.5
+
+/**
  * Every module that has a mobile UI, granted or not.
  *
  * webOnly modules (admin) are filtered out at the registry level and therefore
@@ -70,7 +84,12 @@ export default function TabsLayout() {
             backgroundColor: colors.background,
             borderTopColor: colors.border,
           },
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+          // Peso 400, igual à sidebar da web: o SidebarMenuButton não aplica
+          // font-* nenhum, então o rótulo de módulo lá é normal. O 500 daqui
+          // deixava a barra mais pesada que a navegação equivalente na web, e a
+          // cor do item ativo já é o canal que distingue selecionado de não
+          // selecionado — o peso era um segundo canal dizendo a mesma coisa.
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '400' },
           sceneStyle: { backgroundColor: colors.background },
         }}
       >
@@ -84,7 +103,9 @@ export default function TabsLayout() {
               options={{
                 title: module.name,
                 href: inBar.has(module.id) ? module.route : null,
-                tabBarIcon: ({ color, size }) => <Icon color={color} size={size} />,
+                tabBarIcon: ({ color, size }) => (
+                  <Icon color={color} size={size} strokeWidth={TRACO_ICONE} />
+                ),
               }}
             />
           )
@@ -94,7 +115,9 @@ export default function TabsLayout() {
           name="mais"
           options={{
             title: 'Mais',
-            tabBarIcon: ({ color, size }) => <LayoutGrid color={color} size={size} />,
+            tabBarIcon: ({ color, size }) => (
+              <LayoutGrid color={color} size={size} strokeWidth={TRACO_ICONE} />
+            ),
           }}
         />
       </Tabs>

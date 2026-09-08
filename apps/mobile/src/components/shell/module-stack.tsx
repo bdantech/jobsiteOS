@@ -5,6 +5,7 @@ import { View } from 'react-native'
 import { useTheme } from '@/components/color-scheme-provider'
 import { HeaderActions } from '@/components/shell/header-actions'
 import { BannerBeta } from '@/features/reports'
+import { opcoesDeHeader } from '@/lib/theme'
 
 export interface ModuleStackProps {
   /** The module's <Stack.Screen> declarations. */
@@ -31,10 +32,7 @@ export function ModuleStack({ children, bell = true }: ModuleStackProps) {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.foreground,
-        headerTitleStyle: { color: colors.foreground },
-        contentStyle: { backgroundColor: colors.background },
+        ...opcoesDeHeader(colors),
         headerRight: bell ? () => <HeaderActions /> : undefined,
       }}
       screenLayout={({ children: tela }) => (

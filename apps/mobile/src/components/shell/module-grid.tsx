@@ -36,6 +36,13 @@ function ModuleCard({
       onPress={onPress}
       className="min-w-[45%] flex-1 active:opacity-80"
     >
+      {/*
+        SEM `flex-1` aqui. Ele já esteve neste Card e foi o que deixou a grade
+        gigante: `flex: 1` é flexBasis 0 + flexGrow 1, então o Card parava de se
+        medir pelo conteúdo e passava a esticar até o espaço que a ScrollView
+        oferecia. Os cards ficam do mesmo tamanho pelo CONTEÚDO ser do mesmo
+        tamanho — ver o espaçador do badge abaixo —, não por flex.
+      */}
       <Card className={disabled ? 'gap-3 p-4 opacity-60' : 'gap-3 p-4'}>
         <View
           className={
@@ -48,12 +55,38 @@ function ModuleCard({
         </View>
 
         <View className="gap-1">
-          <Text variant="label">{module.name}</Text>
+          {/* Uma linha sempre: "Administração" quebrando em duas deixaria aquele
+              card mais alto que os outros, e a altura voltaria a divergir. */}
+          <Text variant="label" numberOfLines={1}>
+            {module.name}
+          </Text>
+
+          {/*
+            Todos os cards têm a altura do card com badge, e a linha do badge é
+            SEMPRE reservada — invisível quando o módulo abre no celular.
+
+            Um `min-h` em pixels resolveria a mesma coisa em uma linha, mas
+            quebraria no primeiro usuário que aumenta o tamanho da fonte do
+            sistema: a caixa do badge cresce com a fonte e o número fixo não. O
+            espaçador é o próprio badge, então cresce junto, por construção.
+
+            Fora da árvore de acessibilidade: um leitor de tela anunciando
+            "Somente na web" em Empresas seria uma informação falsa.
+          */}
           {disabled ? (
             <Badge variant="secondary">
               <Text>Somente na web</Text>
             </Badge>
-          ) : null}
+          ) : (
+            <Badge
+              variant="secondary"
+              className="opacity-0"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Text>Somente na web</Text>
+            </Badge>
+          )}
         </View>
       </Card>
     </Pressable>

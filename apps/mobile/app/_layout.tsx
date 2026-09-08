@@ -13,7 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { ColorSchemeProvider, useTheme } from '@/components/color-scheme-provider'
 import { SessionProvider, useSession } from '@/lib/auth'
 import { canOpenOnMobile, landingRoute } from '@/lib/linking'
-import { NAV_THEME } from '@/lib/theme'
+import { NAV_THEME, opcoesDeHeader } from '@/lib/theme'
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -84,13 +84,19 @@ function RootGate({ children }: { children: ReactNode }) {
 }
 
 function RootNavigator() {
-  const { scheme } = useTheme()
+  const { scheme, colors } = useTheme()
 
   return (
     <ThemeProvider value={NAV_THEME[scheme]}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <RootGate>
-        <Stack screenOptions={{ headerShown: false }}>
+        {/*
+          `opcoesDeHeader` aqui também, e não só no <ModuleStack>: as telas com
+          header deste stack (Configurações e o report do deep link) ficavam com o
+          tema PADRÃO do React Navigation, e o header saía com outro fundo e outro
+          tom ao lado de qualquer tela de módulo.
+        */}
+        <Stack screenOptions={{ headerShown: false, ...opcoesDeHeader(colors) }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
           {/* No back gesture, no header: it is a wall, not a step. */}
@@ -98,7 +104,20 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
             name="configuracoes"
-            options={{ headerShown: true, title: 'Configurações', presentation: 'card' }}
+            options={{
+              headerShown: true,
+              title: 'Configurações',
+              presentation: 'card',
+              /*
+                Sem isto o botão de voltar dizia "(tabs)".
+                No iOS o rótulo do botão é o TÍTULO DA ROTA ANTERIOR, e a rota
+                anterior aqui é o próprio grupo de abas — que não tem título,
+                então o React Navigation caía no nome da rota e imprimia o
+                literal `(tabs)`. Configurações só é alcançável pela aba "Mais",
+                então é isso que o rótulo diz.
+              */
+              headerBackTitle: 'Mais',
+            }}
           />
           {/*
             O destino do deep link de report (04m §4). Fora de (tabs) de propósito:
@@ -107,7 +126,18 @@ function RootNavigator() {
           */}
           <Stack.Screen
             name="reports/[id]"
-            options={{ headerShown: true, title: 'Report', presentation: 'card' }}
+            options={{
+              headerShown: true,
+              title: 'Report',
+              presentation: 'card',
+              /*
+                Genérico de propósito, ao contrário do de Configurações: esta tela
+                se alcança por deep link de notificação, e de onde a pessoa "veio"
+                depende de onde o app estava quando o push chegou. "Voltar" é a
+                única coisa verdadeira em todos os casos.
+              */
+              headerBackTitle: 'Voltar',
+            }}
           />
         </Stack>
       </RootGate>

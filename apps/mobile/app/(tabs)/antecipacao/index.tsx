@@ -1,8 +1,8 @@
 import { ESTAGIO_FUNIL_LABELS, type EstagioFunil } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { Building2, Search, Sparkles } from 'lucide-react-native'
+import { Building2, Handshake, Search, Sparkles } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ import {
   type NotaFunil,
 } from '@/features/antecipacao'
 import { useDebouncedValue } from '@/features/empresas'
+import { useSession } from '@/lib/auth'
+import { canOpenOnMobile } from '@/lib/linking'
 
 /**
  * O FUNIL É A TELA PRINCIPAL DO MÓDULO no mobile (§9) — não um dashboard.
@@ -33,6 +35,7 @@ import { useDebouncedValue } from '@/features/empresas'
  */
 export default function FunilScreen() {
   const router = useRouter()
+  const { grantedModuleIds } = useSession()
   const { colors } = useTheme()
 
   const [estagio, setEstagio] = useState<string>('a_prospectar')
@@ -82,6 +85,14 @@ export default function FunilScreen() {
   // A busca e os filtros ficam FORA da FlatList: dentro de ListHeaderComponent o
   // TextInput remonta a cada re-render e perde o foco, o que faz a digitação comer
   // caracteres.
+  /**
+   * `canOpenOnMobile` e não `grantedModuleIds.includes('comercial')`: é a mesma
+   * função que o gate do root usa para decidir, então o botão e a guarda não têm
+   * como discordar. Ela também recusa módulo webOnly, que é o outro jeito de uma
+   * rota existir e mesmo assim não abrir aqui.
+   */
+  const podeVerFornecedores = canOpenOnMobile('/comercial/fornecedores', grantedModuleIds)
+
   const header = (
     <View className="gap-3 pb-3 pt-3">
       <View className="justify-center px-4">
@@ -110,12 +121,23 @@ export default function FunilScreen() {
         onTipagem={setTipagem}
       />
 
-      <View className="flex-row items-center justify-between px-4">
-        <Text variant="muted" className="text-xs tabular-nums">
+      <View className="gap-1.5">
+        <Text variant="muted" className="px-4 text-xs tabular-nums">
           {isPending ? '…' : `${total.toLocaleString('pt-BR')} notas`}
           {notas.length > 0 ? ` · ${formatarMoeda(valorPagina)} carregados` : ''}
         </Text>
-        <View className="flex-row gap-1">
+
+        {/*
+          Os atalhos ganharam a própria linha, rolável.
+          Eles dividiam a linha com a contagem, e a contagem — "1.234 notas ·
+          R$ 3,2 mi carregados" — já ocupava metade da largura. Com o terceiro
+          atalho, um telefone de 390px espremeria os três em cima do texto.
+        */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-1 px-4"
+        >
           <Button
             variant="ghost"
             size="sm"
@@ -134,7 +156,28 @@ export default function FunilScreen() {
             <Sparkles size={16} color={colors.mutedForeground} />
             <Text className="text-xs">Prospectar</Text>
           </Button>
-        </View>
+
+          {/*
+            Fornecedores a cadastrar vive no Comercial, e o atalho aparece aqui
+            porque é o mesmo movimento de trabalho: quem varre o funil atrás de
+            nota nova varre a mesma carteira atrás de quem ainda não cadastrou.
+
+            GUARDADO pelo registry, e não só oferecido: a rota é de OUTRO módulo.
+            Para quem não tem `comercial`, o gate do root devolveria a pessoa para
+            a tela inicial — um botão que pisca e volta é pior que um botão ausente.
+          */}
+          {podeVerFornecedores ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => router.push('/comercial/fornecedores')}
+              accessibilityLabel="Ver fornecedores a cadastrar"
+            >
+              <Handshake size={16} color={colors.mutedForeground} />
+              <Text className="text-xs">Fornecedores</Text>
+            </Button>
+          ) : null}
+        </ScrollView>
       </View>
     </View>
   )
