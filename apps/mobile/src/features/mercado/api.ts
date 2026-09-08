@@ -45,126 +45,165 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // ─── Mapa do Mercado ────────────────────────────────────────────────────────
 
+/** Uma linha da amostra que `mercado_amostra_camada` devolve dentro de `mercado_mapa`. */
+interface LinhaAmostra {
+  capital_social: number | null
+  data_inicio_atividade: string | null
+  erp_atual: string | null
+  tem_contato: boolean | null
+  obras_ativas: number | null
+}
+
 interface IndicadorDefinicao {
   id: IndicadorId
   label: string
   descricao: string
-  arvore: ArvoreFiltro
+  /** Avaliado sobre a AMOSTRA, em memória — veja a nota de fetchResumoPiramide. */
+  combina: (linha: LinhaAmostra) => boolean
 }
 
+const MS_POR_ANO = 365.25 * 24 * 60 * 60 * 1000
+const IDADE_MADURA_ANOS = 10
+const CAPITAL_ALTO = 2_000_000
+
 /**
- * The layer indicators, expressed as filter TREES rather than hand-written
- * PostgREST — so they run through the same catalog, the same zod validation and
- * the same compiler as the rules and the Explorador, and cannot drift from them.
- * `idade_anos` and `erp_conhecido` are derived variables: the engine rewrites
- * them onto `data_inicio_atividade` and `erp_atual is not null`.
+ * Os cinco sinais comerciais de cada camada.
  *
- * All five are COUNTS, and that is a deliberate limit, not an oversight — see
- * `contar()` below.
+ * ── Por que deixaram de ser árvores de filtro ───────────────────────────────
+ * Até aqui cada indicador era uma ArvoreFiltro compilada para PostgREST, o que
+ * os fazia passar pelo mesmo catálogo e pelo mesmo compilador das regras de
+ * camada — uma propriedade boa, e é uma pena perdê-la. Mas ela custava uma query
+ * por indicador por camada, e essa conta não fecha (veja fetchResumoPiramide).
+ *
+ * Agora eles são predicados sobre as linhas da amostra. A equivalência com o
+ * catálogo tem que ser mantida À MÃO, e é literal:
+ *   com_erp        ⇔ erp_conhecido = true      ⇔ erp_atual is not null
+ *   com_contato    ⇔ tem_contato = true
+ *   com_obra_ativa ⇔ obras_ativas >= 1
+ *   madura         ⇔ idade_anos >= 10          ⇔ data_inicio_atividade <= hoje - 10 anos
+ *   capital_alto   ⇔ capital_social >= 2000000
+ * As duas derivações (idade_anos e erp_conhecido) são as mesmas que
+ * packages/core/src/mercado/filters.ts aplica. Se o catálogo mudar, isto muda
+ * junto — não há mais compilador para garantir isso.
  */
 export const INDICADORES_MAPA: readonly IndicadorDefinicao[] = [
   {
     id: 'com_erp',
     label: 'Com ERP identificado',
     descricao: 'Sabemos qual ERP a empresa usa hoje.',
-    arvore: {
-      operador: 'e',
-      condicoes: [{ variavel: 'erp_conhecido', operador: 'igual', valor: true }],
-    },
+    combina: (l) => l.erp_atual !== null,
   },
   {
     id: 'com_contato',
     label: 'Com contato conhecido',
     descricao: 'Já temos ao menos um contato na empresa.',
-    arvore: {
-      operador: 'e',
-      condicoes: [{ variavel: 'tem_contato', operador: 'igual', valor: true }],
-    },
+    combina: (l) => l.tem_contato === true,
   },
   {
     id: 'com_obra_ativa',
     label: 'Com obra ativa',
     descricao: 'Ao menos uma obra ativa no CNO.',
-    arvore: {
-      operador: 'e',
-      condicoes: [{ variavel: 'obras_ativas', operador: 'maior_ou_igual', valor: 1 }],
-    },
+    combina: (l) => (l.obras_ativas ?? 0) >= 1,
   },
   {
     id: 'madura',
     label: 'Com 10 anos ou mais',
     descricao: 'Idade desde o início de atividade na Receita.',
-    arvore: {
-      operador: 'e',
-      condicoes: [{ variavel: 'idade_anos', operador: 'maior_ou_igual', valor: 10 }],
+    combina: (l) => {
+      if (!l.data_inicio_atividade) return false
+      const inicio = Date.parse(l.data_inicio_atividade)
+      if (Number.isNaN(inicio)) return false
+      return (Date.now() - inicio) / MS_POR_ANO >= IDADE_MADURA_ANOS
     },
   },
   {
     id: 'capital_alto',
     label: 'Capital ≥ R$ 2 mi',
     descricao: 'Capital social declarado na Receita.',
-    arvore: {
-      operador: 'e',
-      condicoes: [{ variavel: 'capital_social', operador: 'maior_ou_igual', valor: 2_000_000 }],
-    },
+    combina: (l) => (l.capital_social ?? 0) >= CAPITAL_ALTO,
   },
 ]
 
 /**
- * Counts, and ONLY counts.
- *
- * The Mapa in §5.2 also asks for averages (idade média, capital médio) and sums
- * (obras ativas, m² em execução). Those are not reachable from a client:
- * PostgREST aggregate functions are DISABLED on this project (a select with
- * `capital_social.avg()` answers `PGRST123 — Use of aggregate functions is not
- * allowed`), and migrations 0011–0014 ship no summary RPC. Fetching ~2M rows to
- * average them on a phone is not an option, and averaging a page of them would
- * be a number that looks true and isn't.
- *
- * So the Mapa reports what it can compute EXACTLY: how many companies are in
- * each layer, and how many of them carry each signal. See the report — this
- * wants an `app_resumo_piramide()` RPC in the foundation.
+ * O tamanho da amostra por camada. Igual ao da web (LIMITE_AMOSTRA), de propósito:
+ * as duas telas mostram os mesmos percentuais e não podem discordar por causa de
+ * uma constante.
  */
-async function contar(camada: Camada, arvore?: ArvoreFiltro): Promise<number> {
-  let query = supabase
-    .from('mercado_explorador')
-    .select('cnpj', { count: 'exact', head: true })
-    .eq('camada', camada)
+export const LIMITE_AMOSTRA = 1000
 
-  // `.eq()` and `.or()` are separate query params, and PostgREST ANDs them.
-  if (arvore) query = query.or(compileToPostgrest(arvore))
-
-  const { count, error } = await query
-  if (error) throw error
-  return count ?? 0
+interface RespostaCamada {
+  camada: Camada
+  total: number
+  linhas: LinhaAmostra[] | null
 }
 
+/**
+ * O Mapa: quantas empresas há em cada camada, e quantas delas carregam cada sinal.
+ *
+ * ── Por que uma RPC, e não 24 contagens ─────────────────────────────────────
+ * Esta função disparava 4 camadas × (1 total + 5 indicadores) = 24 queries
+ * `count: 'exact'` sobre `mercado_explorador`, todas em paralelo. Com as 903 mil
+ * linhas que o universo tem hoje isso não tinha como funcionar: a view é um
+ * LEFT JOIN de sete tabelas mais um LATERAL sobre `contatos`, e UMA contagem
+ * sozinha media 5,3s. Vinte e quatro delas competindo pelo mesmo buffer
+ * estouravam o `statement_timeout` de 8s do papel `authenticated`, o Promise.all
+ * rejeitava e a tela caía inteira no estado de erro — que é como ela chegou ao
+ * primeiro teste em aparelho: sem nunca carregar.
+ *
+ * `mercado_mapa` é a RPC que a WEB já usava para o mesmo problema; o mobile
+ * simplesmente nunca foi migrado para ela. Ela conta em `mercado_universo` (a
+ * tabela base, não a view) por index-only scan — 955ms para as quatro camadas —
+ * e traz junto uma amostra de cada uma. Um round trip, ~1s.
+ *
+ * ── O que isso custa em precisão, e por que vale ────────────────────────────
+ * Os TOTAIS de cada camada continuam EXATOS: são um group by sobre o universo.
+ * Os cinco indicadores passam a ser ESTIMATIVAS, extrapoladas da amostra — e a
+ * amostra é `limit N` sem order by, ou seja, é a ordem física da tabela, não uma
+ * amostra aleatória. Ela pode ser enviesada. `estimado` viaja no resultado para
+ * a tela poder dizer isso em vez de exibir um número exato que não é.
+ *
+ * É a mesma troca que a web fez, e é uma troca boa: um percentual aproximado que
+ * aparece vale mais que um percentual exato que nunca carrega.
+ */
 export async function fetchResumoPiramide(): Promise<ResumoPiramide> {
-  const camadas = await Promise.all(
-    CAMADAS.map(async (camada): Promise<Omit<ResumoCamada, 'participacao'>> => {
-      const [total, ...contagens] = await Promise.all([
-        contar(camada),
-        ...INDICADORES_MAPA.map((indicador) => contar(camada, indicador.arvore)),
-      ])
+  const { data, error } = await supabase.rpc('mercado_mapa', { p_limite: LIMITE_AMOSTRA })
+  if (error) throw error
 
-      const indicadores: IndicadorCamada[] = INDICADORES_MAPA.map((indicador, i) => ({
+  const porCamada = new Map<Camada, { total: number; linhas: LinhaAmostra[] }>()
+  for (const linha of (data ?? []) as unknown as RespostaCamada[]) {
+    porCamada.set(linha.camada, { total: linha.total ?? 0, linhas: linha.linhas ?? [] })
+  }
+
+  const camadas = CAMADAS.map((camada): Omit<ResumoCamada, 'participacao'> => {
+    const { total, linhas } = porCamada.get(camada) ?? { total: 0, linhas: [] }
+    const amostra = linhas.length
+
+    const indicadores: IndicadorCamada[] = INDICADORES_MAPA.map((indicador) => {
+      // Proporção na amostra, extrapolada para a camada. Sem amostra não há o que
+      // extrapolar: zero, e `estimado` conta o resto da história.
+      const proporcao = amostra > 0 ? linhas.filter(indicador.combina).length / amostra : 0
+
+      return {
         id: indicador.id,
         label: indicador.label,
         descricao: indicador.descricao,
-        total: contagens[i] ?? 0,
-        // Share of the LAYER: "38% do SAM tem ERP identificado".
-        participacao: participacao(contagens[i] ?? 0, total),
-      }))
-
-      return {
-        camada,
-        label: CAMADA_LABELS[camada],
-        descricao: CAMADA_DESCRICOES[camada],
-        total,
-        indicadores,
+        total: Math.round(proporcao * total),
+        // Participação DA CAMADA: "38% do SAM tem ERP identificado".
+        participacao: proporcao * 100,
       }
-    }),
-  )
+    })
+
+    return {
+      camada,
+      label: CAMADA_LABELS[camada],
+      descricao: CAMADA_DESCRICOES[camada],
+      total,
+      amostra,
+      // A amostra cobriu a camada inteira? Então os indicadores são exatos.
+      estimado: total > amostra,
+      indicadores,
+    }
+  })
 
   const total = camadas.reduce((soma, c) => soma + c.total, 0)
 

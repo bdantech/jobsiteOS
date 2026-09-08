@@ -36,7 +36,10 @@ export interface IndicadorCamada {
   id: IndicadorId
   label: string
   descricao: string
-  /** Absolute count of companies in this layer that match the indicator. */
+  /**
+   * Quantas empresas da camada carregam o sinal. ESTIMADO a partir da amostra
+   * quando `ResumoCamada.estimado` é true — veja fetchResumoPiramide.
+   */
   total: number
   /** Share of the LAYER (not of the universe), 0–100. */
   participacao: number
@@ -46,9 +49,18 @@ export interface ResumoCamada {
   camada: Camada
   label: string
   descricao: string
+  /** EXATO: um group by sobre `mercado_universo`, não uma estimativa. */
   total: number
   /** Share of the whole universe, 0–100 — so the four layers read as a pyramid. */
   participacao: number
+  /** Quantas linhas a amostra trouxe desta camada (até LIMITE_AMOSTRA). */
+  amostra: number
+  /**
+   * `total > amostra`: os indicadores foram extrapolados e são aproximados. Quando
+   * a amostra cobre a camada inteira eles são exatos. A tela PRECISA distinguir os
+   * dois casos — um percentual estimado apresentado como exato é pior que nenhum.
+   */
+  estimado: boolean
   indicadores: IndicadorCamada[]
 }
 

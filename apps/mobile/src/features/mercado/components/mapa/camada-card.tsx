@@ -25,11 +25,21 @@ function ShareBar({ participacao }: { participacao: number }) {
   )
 }
 
-function Indicador({ indicador, total }: { indicador: IndicadorCamada; total: number }) {
+function Indicador({
+  indicador,
+  total,
+  estimado,
+}: {
+  indicador: IndicadorCamada
+  total: number
+  estimado: boolean
+}) {
   return (
     <View className="w-[47%] gap-0.5" accessibilityLabel={indicador.descricao}>
       <Text className="text-base font-semibold text-foreground">
-        {total > 0 ? formatPercentual(indicador.participacao) : '—'}
+        {total > 0
+          ? `${estimado ? '≈' : ''}${formatPercentual(indicador.participacao)}`
+          : '—'}
       </Text>
       <Text variant="muted" className="text-xs">
         {indicador.label}
@@ -45,9 +55,11 @@ function Indicador({ indicador, total }: { indicador: IndicadorCamada; total: nu
  * One layer of the pyramid: how many companies are in it, what share of the
  * universe that is, and how many of them carry each commercial signal.
  *
- * Every number here is an exact count. The indicators are shares OF THE LAYER
- * ("38% do SAM tem ERP identificado"), not of the universe — a percentage of a
- * percentage would be unreadable.
+ * O TOTAL da camada é exato. Os indicadores são shares OF THE LAYER ("38% do SAM
+ * tem ERP identificado"), não do universo — percentual de percentual não se lê. E
+ * eles são ESTIMADOS a partir de uma amostra quando a camada é maior que ela, o
+ * que numa base de 900 mil CNPJs é quase sempre. Daí o "≈" e a nota de rodapé:
+ * mostrar "38%" com a mesma cara de um número exato seria mentir com precisão.
  */
 export function CamadaCard({ resumo, onPress }: CamadaCardProps) {
   const { colors } = useTheme()
@@ -90,10 +102,23 @@ export function CamadaCard({ resumo, onPress }: CamadaCardProps) {
           Nenhuma empresa nesta camada ainda.
         </Text>
       ) : (
-        <View className="flex-row flex-wrap gap-3 pt-1">
-          {resumo.indicadores.map((indicador) => (
-            <Indicador key={indicador.id} indicador={indicador} total={resumo.total} />
-          ))}
+        <View className="gap-2 pt-1">
+          <View className="flex-row flex-wrap gap-3">
+            {resumo.indicadores.map((indicador) => (
+              <Indicador
+                key={indicador.id}
+                indicador={indicador}
+                total={resumo.total}
+                estimado={resumo.estimado}
+              />
+            ))}
+          </View>
+
+          {resumo.estimado ? (
+            <Text variant="muted" className="text-[10px] opacity-70">
+              Percentuais estimados sobre {formatInteiro(resumo.amostra)} empresas.
+            </Text>
+          ) : null}
         </View>
       )}
     </Pressable>
