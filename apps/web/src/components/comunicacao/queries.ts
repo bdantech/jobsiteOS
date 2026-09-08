@@ -163,24 +163,56 @@ export async function buscarOcultas(): Promise<ConversaOculta[]> {
   return (data ?? []) as unknown as ConversaOculta[]
 }
 
-export async function buscarNaoVinculadas(): Promise<NaoVinculada[]> {
+/**
+ * O vendedor do usuário atual, ou null se ele não tem cadastro (gestor puro).
+ * `app_vendedor_atual()` resolve por auth.uid() — a mesma noção de "meu" que as
+ * RPCs do Comercial usam como padrão.
+ */
+export async function meuVendedorId(): Promise<string | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_vendedor_atual')
+  if (error) throw new Error(error.message)
+  return (data as string | null) ?? null
+}
+
+/**
+ * A fila de identificação DE UMA PESSOA.
+ *
+ * ── O que "minha" quer dizer aqui ───────────────────────────────────────────
+ * Estas conversas CHEGARAM de um número desconhecido; ninguém as iniciou do
+ * nosso lado, e não há coluna de autor. O que há é `vendedor_sugerido_id`, que o
+ * worker preenche com o DONO DO NÚMERO QUE ATENDEU — essa é a noção honesta de
+ * "é minha para resolver".
+ *
+ * ── É filtro de VISÃO, não fronteira de segurança ──────────────────────────
+ * A policy da tabela é `app_tem_modulo('comunicacao')`: quem tem o módulo lê a
+ * fila inteira, e continua podendo. O filtro existe para a tela não despejar a
+ * fila da empresa sobre quem só precisa da própria. Para IMPEDIR a leitura, e
+ * não só escondê-la, o lugar é a policy.
+ */
+export async function buscarNaoVinculadas(vendedorId: string | null): Promise<NaoVinculada[]> {
+  if (!vendedorId) return []
   const supabase = createClient()
   const { data, error } = await supabase
     .from('conversas_nao_vinculadas')
     .select('*')
     .eq('status', 'pendente')
+    .eq('vendedor_sugerido_id', vendedorId)
     .order('ultima_mensagem_em', { ascending: false })
     .limit(100)
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
-export async function contarNaoVinculadas(): Promise<number> {
+/** O contador das tarjas e do menu. Mesmo escopo da lista, pelo mesmo motivo. */
+export async function contarNaoVinculadas(vendedorId: string | null): Promise<number> {
+  if (!vendedorId) return 0
   const supabase = createClient()
   const { count, error } = await supabase
     .from('conversas_nao_vinculadas')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'pendente')
+    .eq('vendedor_sugerido_id', vendedorId)
   if (error) throw new Error(error.message)
   return count ?? 0
 }

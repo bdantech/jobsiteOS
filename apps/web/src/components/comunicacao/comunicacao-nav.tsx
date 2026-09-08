@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { contarNaoVinculadas } from './queries'
+import { useEscopoFila } from './use-escopo-fila'
 
 /**
  * Navegação interna da Comunicação. Mesmo padrão do Jurídico, do Crédito e do Radar.
@@ -65,9 +66,13 @@ export function ComunicacaoNav({ ehAdmin }: { ehAdmin: boolean }) {
    * não olhar nenhum. Aqui o número e o clique são a mesma coisa: quem vê "3"
    * sabe exatamente onde estão os três.
    */
+  // Mesmo escopo da lista de identificação: o contador não pode falar de
+  // uma fila diferente da que a página abre.
+  const escopo = useEscopoFila()
+
   const naoVinculadas = useQuery({
-    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem'],
-    queryFn: contarNaoVinculadas,
+    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem', escopo.vendedorId],
+    queryFn: () => contarNaoVinculadas(escopo.vendedorId),
     refetchOnWindowFocus: true,
     staleTime: 60_000,
   })

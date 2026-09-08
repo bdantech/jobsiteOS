@@ -6,15 +6,16 @@ import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Badge, Button, EmptyState, Input, Skeleton, Text } from '@/components/ui'
+import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
 import {
   buscarEmpresas,
-  buscarNaoVinculadas,
   comunicacaoKeys,
   ignorar,
   vincular,
   type NaoVinculada,
 } from '../api'
 import { desde, identificadorLegivel } from '../format'
+import { useEscopoFila, useNaoVinculadas } from '../hooks'
 
 /**
  * A fila de identificação no celular (§4).
@@ -25,11 +26,28 @@ import { desde, identificadorLegivel } from '../format'
  */
 export function FilaNaoVinculadas() {
   const qc = useQueryClient()
-  const fila = useQuery({ queryKey: comunicacaoKeys.naoVinculadas(), queryFn: buscarNaoVinculadas })
+  const escopo = useEscopoFila()
+  const fila = useNaoVinculadas(escopo.vendedorId)
+
+  const seletor = escopo.podeTrocar ? (
+    <View className="pb-3">
+      <SeletorVendedor
+        vendedores={escopo.visiveis}
+        valor={escopo.escolhido}
+        onChange={escopo.escolher}
+        nomeAtual={
+          escopo.visiveis.find((v) => v.id === escopo.vendedorId)?.nome ??
+          (escopo.temFilaPropria ? 'Minha fila' : null)
+        }
+        temPainelProprio={escopo.temFilaPropria}
+      />
+    </View>
+  ) : null
 
   if (fila.isPending) {
     return (
       <View className="gap-3 p-4">
+        {seletor}
         <Skeleton className="h-32 w-full rounded-xl" />
         <Skeleton className="h-32 w-full rounded-xl" />
       </View>
@@ -38,6 +56,7 @@ export function FilaNaoVinculadas() {
 
   return (
     <FlatList
+      ListHeaderComponent={seletor}
       data={fila.data ?? []}
       keyExtractor={(n) => n.id}
       contentContainerClassName="p-4 gap-3 pb-8"
@@ -45,10 +64,20 @@ export function FilaNaoVinculadas() {
         <RefreshControl refreshing={fila.isFetching} onRefresh={() => void fila.refetch()} />
       }
       ListEmptyComponent={
-        <EmptyState
-          title="Ninguém esperando identificação"
-          description="Toda conversa recebida está vinculada a uma empresa."
-        />
+        // Vazio por não haver fila e vazio por não ter escolhido de quem ver são
+        // coisas diferentes, e dizer "está tudo identificado" para quem ainda não
+        // escolheu seria mentira.
+        escopo.vendedorId === null ? (
+          <EmptyState
+            title="Escolha uma pessoa"
+            description="Seu usuário administra o módulo e não tem fila própria. Toque acima para ver a fila de alguém da equipe."
+          />
+        ) : (
+          <EmptyState
+            title="Ninguém esperando identificação"
+            description="Toda conversa recebida está vinculada a uma empresa."
+          />
+        )
       }
       renderItem={({ item }) => (
         <Cartao n={item} onResolvida={() => qc.invalidateQueries({ queryKey: comunicacaoKeys.all })} />

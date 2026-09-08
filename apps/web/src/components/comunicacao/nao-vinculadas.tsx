@@ -16,7 +16,8 @@ import {
   ocultarConversaAction,
   vincularConversaAction,
 } from '@/actions/comunicacao'
-import { buscarNaoVinculadas, type NaoVinculada } from './queries'
+import { type NaoVinculada } from './queries'
+import { useEscopoFila, useNaoVinculadas } from './use-escopo-fila'
 import { desde, identificadorLegivel } from './format'
 
 /**
@@ -36,11 +37,42 @@ import { desde, identificadorLegivel } from './format'
  */
 export function FilaNaoVinculadas() {
   const qc = useQueryClient()
-  const fila = useQuery({ queryKey: ['comunicacao', 'nao-vinculadas'], queryFn: buscarNaoVinculadas })
+  const escopo = useEscopoFila()
+  const fila = useNaoVinculadas(escopo.vendedorId)
+
+  /**
+   * O seletor só aparece para quem enxerga mais de uma pessoa. Um vendedor comum
+   * recebe uma lista de um em `comercial_vendedores_visiveis` e continua vendo
+   * exatamente o que via — a própria fila, sem controle nenhum a mais na tela.
+   */
+  const seletor = escopo.podeTrocar ? (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-muted-foreground">Fila de</span>
+      <select
+        aria-label="Ver a fila de identificação de outra pessoa"
+        className="h-9 rounded-md border bg-background px-2 text-sm"
+        value={escopo.escolhido ?? (escopo.temFilaPropria ? '' : '__nenhum__')}
+        onChange={(e) => escopo.escolher(e.target.value === '' ? null : e.target.value)}
+      >
+        {escopo.temFilaPropria ? <option value="">Minha fila</option> : null}
+        {!escopo.temFilaPropria ? (
+          <option value="__nenhum__" disabled>
+            Escolha uma pessoa
+          </option>
+        ) : null}
+        {escopo.visiveis.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.nome}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : null
 
   if (fila.isLoading) {
     return (
       <div className="space-y-2">
+        {seletor}
         <Skeleton className="h-24" />
         <Skeleton className="h-24" />
       </div>
@@ -50,9 +82,27 @@ export function FilaNaoVinculadas() {
   const linhas = fila.data ?? []
   if (linhas.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">Ninguém esperando identificação.</p>
-        <p className="mt-1">Toda conversa recebida está vinculada a uma empresa.</p>
+      <div className="space-y-4">
+        {seletor}
+        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          {/* Vazio por não haver fila e vazio por não ter escolhido de quem ver
+              são coisas diferentes; dizer "está tudo identificado" para quem
+              ainda não escolheu seria mentira. */}
+          {escopo.vendedorId === null ? (
+            <>
+              <p className="font-medium text-foreground">Escolha uma pessoa.</p>
+              <p className="mt-1">
+                Seu usuário administra o módulo e não tem fila própria. Escolha acima para ver a
+                fila de alguém da equipe.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-foreground">Ninguém esperando identificação.</p>
+              <p className="mt-1">Toda conversa recebida está vinculada a uma empresa.</p>
+            </>
+          )}
+        </div>
       </div>
     )
   }

@@ -38,6 +38,7 @@ import {
   type ConversaOculta,
 } from './queries'
 import { desde, identificadorLegivel, intencaoLabel } from './format'
+import { useEscopoFila } from './use-escopo-fila'
 
 /**
  * COMO CHAMAR QUEM ESTÁ DO OUTRO LADO, na ordem em que a certeza cai.
@@ -186,9 +187,13 @@ export function Inbox({
     queryFn: buscarResponsaveisInbox,
   })
 
+  // Mesmo escopo da lista de identificação: o contador não pode falar de
+  // uma fila diferente da que a página abre.
+  const escopo = useEscopoFila()
+
   const pendentes = useQuery({
-    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem'],
-    queryFn: contarNaoVinculadas,
+    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem', escopo.vendedorId],
+    queryFn: () => contarNaoVinculadas(escopo.vendedorId),
   })
 
   const lista = React.useMemo(() => {

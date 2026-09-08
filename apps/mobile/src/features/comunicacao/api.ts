@@ -17,7 +17,13 @@ export const comunicacaoKeys = {
   all: ['comunicacao'] as const,
   inbox: (aba: string) => [...comunicacaoKeys.all, 'inbox', aba] as const,
   thread: (id: string) => [...comunicacaoKeys.all, 'thread', id] as const,
-  naoVinculadas: () => [...comunicacaoKeys.all, 'nao-vinculadas'] as const,
+  /**
+   * O vendedor entra na chave: o gestor troca de pessoa no seletor, e sem isto
+   * a fila do anterior voltaria do cache sob o nome novo.
+   */
+  naoVinculadas: (vendedorId?: string | null) =>
+    [...comunicacaoKeys.all, 'nao-vinculadas', vendedorId ?? null] as const,
+  meuVendedor: () => [...comunicacaoKeys.all, 'meu-vendedor'] as const,
   templates: (canal: string) => [...comunicacaoKeys.all, 'templates', canal] as const,
   contatos: (empresaId: string) => [...comunicacaoKeys.all, 'contatos', empresaId] as const,
 }
@@ -55,11 +61,47 @@ export async function buscarThread(conversaId: string): Promise<MensagemThread[]
   return (data ?? []) as MensagemThread[]
 }
 
-export async function buscarNaoVinculadas(): Promise<NaoVinculada[]> {
+/**
+ * O vendedor do usuário atual, ou null se ele não tem cadastro (gestor puro).
+ *
+ * `app_vendedor_atual()` é SECURITY DEFINER e resolve por `auth.uid()` — é a
+ * mesma função que as RPCs do Comercial usam como padrão, então "meu" significa
+ * a mesma coisa nos dois módulos.
+ */
+export async function meuVendedorId(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('app_vendedor_atual')
+  if (error) throw new Error(error.message)
+  return (data as string | null) ?? null
+}
+
+/**
+ * A fila de identificação DE UMA PESSOA.
+ *
+ * ── O que "minha" quer dizer aqui ───────────────────────────────────────────
+ * Estas conversas são mensagens que CHEGARAM de um número desconhecido; ninguém
+ * as iniciou do nosso lado, e não existe coluna de autor. O que existe é
+ * `vendedor_sugerido_id`, que o worker preenche com o DONO DO NÚMERO QUE ATENDEU
+ * (`apps/worker/src/jobs/comunicacao/webhooks.ts`) — e é essa a noção honesta de
+ * "é minha para resolver".
+ *
+ * ── Isto é um filtro de VISÃO, não uma fronteira de segurança ───────────────
+ * A policy da tabela é `app_tem_modulo('comunicacao')`: quem tem o módulo pode
+ * ler a fila inteira, e continua podendo — pelo PostgREST, por exemplo. O filtro
+ * aqui existe para a tela não despejar a fila da empresa sobre quem só precisa
+ * da própria. Se um dia isso precisar ser IMPEDIDO, e não só escondido, o lugar
+ * é a policy, não este arquivo.
+ */
+export async function buscarNaoVinculadas(vendedorId: string | null): Promise<NaoVinculada[]> {
+  // Sem vendedor não há fila própria: um gestor sem cadastro escolhe de quem ver
+  // antes de haver o que listar. Devolver a fila inteira aqui seria voltar ao
+  // comportamento que o filtro veio corrigir.
+  if (!vendedorId) return []
+
   const { data, error } = await supabase
     .from('conversas_nao_vinculadas')
     .select('*')
     .eq('status', 'pendente')
+    .eq('vendedor_sugerido_id', vendedorId)
     .order('ultima_mensagem_em', { ascending: false })
     .limit(50)
   if (error) throw new Error(error.message)

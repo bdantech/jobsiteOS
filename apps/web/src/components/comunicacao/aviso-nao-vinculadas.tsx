@@ -7,6 +7,7 @@ import { Link2Off, X } from 'lucide-react'
 import { CONFIG_COMUNICACAO_PADRAO } from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import { buscarConfig, contarNaoVinculadas } from './queries'
+import { useEscopoFila } from './use-escopo-fila'
 
 /**
  * A fila de identificação, destacada AO LOGAR e ao voltar depois de um tempo
@@ -57,9 +58,13 @@ function gravarUltimoFoco(): void {
 export function AvisoNaoVinculadas({ temModulo }: { temModulo: boolean }) {
   const [alertaAberto, setAlertaAberto] = React.useState(false)
 
+  // Mesmo escopo da lista de identificação: o contador não pode falar de
+  // uma fila diferente da que a página abre.
+  const escopo = useEscopoFila()
+
   const contagem = useQuery({
-    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem'],
-    queryFn: contarNaoVinculadas,
+    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem', escopo.vendedorId],
+    queryFn: () => contarNaoVinculadas(escopo.vendedorId),
     enabled: temModulo,
     // Volta a perguntar quando a aba ganha foco: é o mesmo gatilho do alerta.
     refetchOnWindowFocus: true,
