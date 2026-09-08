@@ -5,6 +5,7 @@ import {
   type TipoVendedorId,
 } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
+import { useState } from 'react'
 import { CalendarDays, Clock, Coins, Inbox, PackageSearch, Target, Users } from 'lucide-react-native'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
@@ -13,7 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
-import { useResumoComercial } from '@/features/comercial'
+import { useResumoComercial, useVendedoresVisiveis } from '@/features/comercial'
+import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
 import { usePainelFornecedores } from '@/features/comercial/fornecedores'
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -29,7 +31,16 @@ const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', curren
 export default function PainelComercialScreen() {
   const router = useRouter()
   const { colors } = useTheme()
-  const { data, isPending, isError, refetch, isRefetching } = useResumoComercial()
+
+  /**
+   * `null` = o painel do próprio usuário, que é o default da RPC. Um gestor sem
+   * cadastro de vendedor começa aqui e cai no estado "escolha uma pessoa" até
+   * escolher — não há painel próprio para mostrar a ele.
+   */
+  const [vendedorId, setVendedorId] = useState<string | null>(null)
+
+  const { data, isPending, isError, refetch, isRefetching } = useResumoComercial(vendedorId)
+  const vendedores = useVendedoresVisiveis()
   const fornecedores = usePainelFornecedores()
 
   if (isPending) {
@@ -41,12 +52,44 @@ export default function PainelComercialScreen() {
   }
   if (isError) return <ErrorState onRetry={() => void refetch()} />
   if (!data.tem_acesso) return <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
+
+  const visiveis = vendedores.data ?? []
+  // Cadastro de vendedor próprio: a RPC responde `sem_vendedor` para quem não tem,
+  // e é isso que separa o gestor puro do vendedor.
+  const temPainelProprio = !(data.sem_vendedor === true && vendedorId === null)
+  // Só faz sentido oferecer a troca para quem enxerga mais de uma pessoa. Um
+  // vendedor comum recebe uma lista de um e nem vê o seletor.
+  const podeTrocar = visiveis.length > 1 || (visiveis.length === 1 && !temPainelProprio)
+
+  const seletor = podeTrocar ? (
+    <SeletorVendedor
+      vendedores={visiveis}
+      valor={vendedorId}
+      onChange={setVendedorId}
+      nomeAtual={data.vendedor?.nome ?? null}
+      temPainelProprio={temPainelProprio}
+    />
+  ) : null
+
   if (data.sem_vendedor) {
+    /*
+     * Gestor sem cadastro de vendedor. A RPC trata isto como caso NORMAL — o
+     * comentário dela diz, literalmente, que ele "vê os painéis dos outros pelo
+     * seletor". Esta tela mandava essa pessoa para a web; agora ela dá o seletor,
+     * que é o que faltava.
+     */
     return (
-      <EmptyState
-        title="Você não é vendedor"
-        description="Seu usuário administra o módulo. Os painéis por pessoa ficam na web."
-      />
+      <ScrollView className="flex-1" contentContainerClassName="gap-3 p-4">
+        {seletor}
+        <EmptyState
+          title={podeTrocar ? 'Escolha uma pessoa' : 'Você não é vendedor'}
+          description={
+            podeTrocar
+              ? 'Seu usuário administra o módulo e não tem painel próprio. Toque acima para ver o painel de alguém da equipe.'
+              : 'Seu usuário administra o módulo e ainda não enxerga nenhum vendedor.'
+          }
+        />
+      </ScrollView>
     )
   }
 
@@ -58,6 +101,7 @@ export default function PainelComercialScreen() {
       contentContainerClassName="gap-3 p-4"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
+      {seletor}
       <View className="gap-1">
         <Text className="text-xl font-semibold">{data.vendedor?.nome}</Text>
         <Text variant="muted" className="text-xs">

@@ -21,9 +21,45 @@ import { supabase } from '@/lib/supabase'
  */
 
 export const comercialKeys = {
-  resumo: () => ['comercial', 'resumo'] as const,
+  /**
+   * O vendedor entra NA CHAVE, e não é detalhe: sem ele, o gestor que trocasse de
+   * pessoa no seletor leria o painel do anterior servido do cache — com o nome
+   * novo no cabeçalho e os números velhos embaixo. `null` é "eu mesmo".
+   */
+  resumo: (vendedorId?: string | null) => ['comercial', 'resumo', vendedorId ?? null] as const,
+  vendedores: () => ['comercial', 'vendedores'] as const,
   leads: () => ['comercial', 'leads'] as const,
   vendas: () => ['comercial', 'vendas'] as const,
+}
+
+/** Uma pessoa que o usuário atual tem permissão de enxergar no módulo. */
+export interface VendedorVisivel {
+  id: string
+  nome: string
+  tipo: string
+  is_ia: boolean | null
+}
+
+/**
+ * Quem o usuário atual pode ver.
+ *
+ * A RPC já resolve a autorização inteira: filtra por `app_tem_modulo('comercial')`,
+ * por `app_pode_ver_vendedor` linha a linha, e só devolve os ativos. Um vendedor
+ * comum recebe uma lista de um — ele mesmo —, e o seletor nem aparece. Não há
+ * decisão de permissão do lado do cliente aqui, e não pode haver.
+ */
+export function useVendedoresVisiveis() {
+  return useQuery({
+    queryKey: comercialKeys.vendedores(),
+    queryFn: async (): Promise<VendedorVisivel[]> => {
+      const { data, error } = await supabase.rpc('comercial_vendedores_visiveis')
+      if (error) throw new Error(error.message)
+      return (data ?? []) as unknown as VendedorVisivel[]
+    },
+    // A lista de vendedores muda quando alguém entra ou sai da equipe, não durante
+    // uma sessão de consulta.
+    staleTime: 5 * 60 * 1000,
+  })
 }
 
 export interface ResumoMobile {
@@ -46,12 +82,20 @@ export interface ResumoMobile {
   aceites_pendentes: number
 }
 
-export function useResumoComercial() {
+/**
+ * O painel de uma pessoa. Sem argumento, a do próprio usuário.
+ *
+ * `vendedorId` é o que permite ao gestor abrir o painel de quem ele escolher no
+ * seletor. Passá-lo NÃO é uma decisão de permissão do app: a RPC chama
+ * `app_pode_ver_vendedor(id)` e devolve `tem_acesso: false` para quem não pode —
+ * um id forjado aqui não vira leitura no banco.
+ */
+export function useResumoComercial(vendedorId?: string | null) {
   return useQuery({
-    queryKey: comercialKeys.resumo(),
+    queryKey: comercialKeys.resumo(vendedorId),
     queryFn: async (): Promise<ResumoMobile> => {
       const { data, error } = await supabase.rpc('comercial_resumo_vendedor', {
-        p_vendedor_id: undefined,
+        p_vendedor_id: vendedorId ?? undefined,
       })
       if (error) throw new Error(error.message)
       const r = (data ?? {}) as Partial<ResumoMobile>

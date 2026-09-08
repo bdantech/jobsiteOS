@@ -26,6 +26,8 @@ import { useTheme } from '@/components/color-scheme-provider'
 import { Card } from '@/components/ui/card'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { useVendedoresVisiveis } from '@/features/comercial'
+import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
 import { useConcluirTarefa, useMeuDia, useOcultarItem } from '@/features/comercial/meu-dia'
 import { ItemMeuDiaCard, destinoDoItem } from '@/features/comercial/components/item-meu-dia'
 import {
@@ -67,7 +69,11 @@ export default function MeuDiaScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const { width } = useWindowDimensions()
-  const { data, isPending, isError, refetch, isRefetching } = useMeuDia()
+  /** `null` = o dia do próprio usuário. Um gestor sem cadastro escolhe de quem ver. */
+  const [vendedorId, setVendedorId] = useState<string | null>(null)
+
+  const { data, isPending, isError, refetch, isRefetching } = useMeuDia(vendedorId)
+  const vendedores = useVendedoresVisiveis()
   const ocultar = useOcultarItem()
   const concluir = useConcluirTarefa()
 
@@ -99,12 +105,45 @@ export default function MeuDiaScreen() {
       />
     )
   }
-  if (!data.vendedor_id) {
-    return (
-      <EmptyState
-        title="Você não é vendedor"
-        description="Seu usuário administra o módulo. O Meu Dia de cada pessoa fica na web."
+  const visiveis = vendedores.data ?? []
+  // Cadastro próprio: a RPC devolve vendedor_id nulo para quem não tem.
+  const temPainelProprio = !(data.vendedor_id === null && vendedorId === null)
+  const podeTrocar = visiveis.length > 1 || (visiveis.length === 1 && !temPainelProprio)
+
+  const seletor = podeTrocar ? (
+    <View className="px-4 pt-3">
+      <SeletorVendedor
+        vendedores={visiveis}
+        valor={vendedorId}
+        onChange={setVendedorId}
+        nomeAtual={data.vendedor_nome}
+        temPainelProprio={temPainelProprio}
       />
+    </View>
+  ) : null
+
+  if (!data.vendedor_id) {
+    /*
+     * Gestor sem cadastro de vendedor.
+     *
+     * Este estado vazio era um BECO: ele mandava a pessoa para a web e, por vir de
+     * um return antecipado, engolia junto o link para o Meu Painel lá embaixo — o
+     * admin não tinha como sequer CHEGAR na tela que tem o seletor. O espelhamento
+     * já existia no banco (`meu_dia` sempre aceitou p_vendedor_id e sempre
+     * devolveu `espelhado`); o que faltava era esta tela oferecê-lo.
+     */
+    return (
+      <ScrollView className="flex-1" contentContainerClassName="pb-8">
+        {seletor}
+        <EmptyState
+          title={podeTrocar ? 'Escolha uma pessoa' : 'Você não é vendedor'}
+          description={
+            podeTrocar
+              ? 'Seu usuário administra o módulo e não tem dia próprio. Toque acima para ver o dia de alguém da equipe.'
+              : 'Seu usuário administra o módulo e ainda não enxerga nenhum vendedor.'
+          }
+        />
+      </ScrollView>
     )
   }
 
@@ -142,6 +181,18 @@ export default function MeuDiaScreen() {
       contentContainerClassName="gap-4 p-4"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
+      {/* Já dentro do padding da lista: o seletor do estado vazio traz o seu
+          próprio px-4 porque lá não há. */}
+      {podeTrocar ? (
+        <SeletorVendedor
+          vendedores={visiveis}
+          valor={vendedorId}
+          onChange={setVendedorId}
+          nomeAtual={data.vendedor_nome}
+          temPainelProprio={temPainelProprio}
+        />
+      ) : null}
+
       <View className="gap-0.5">
         <Text className="text-xl font-semibold">
           {data.espelhado ? `Carteira de ${data.vendedor_nome ?? '—'}` : 'Meu Dia'}

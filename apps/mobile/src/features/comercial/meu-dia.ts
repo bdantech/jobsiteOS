@@ -20,12 +20,35 @@ import { supabase } from '@/lib/supabase'
  */
 
 export const meuDiaKeys = {
-  dia: () => ['comercial', 'meu-dia'] as const,
+  /**
+   * O vendedor entra na chave. Sem isso, o gestor que trocasse de pessoa leria o
+   * dia do anterior servido do cache, com o nome novo no cabeçalho.
+   */
+  dia: (vendedorId?: string | null) => ['comercial', 'meu-dia', vendedorId ?? null] as const,
+  /**
+   * O PREFIXO, para invalidar. `dia()` virou chave completa quando o vendedor
+   * entrou nela, então invalidar por `dia()` só derrubaria o dia próprio — o dia
+   * espelhado que estivesse na tela continuaria mostrando o item que a pessoa
+   * acabou de concluir.
+   */
+  todos: () => ['comercial', 'meu-dia'] as const,
 }
 
-export function useMeuDia() {
+/**
+ * O Meu Dia de uma pessoa. Sem argumento, o do próprio usuário.
+ *
+ * `vendedorId` é o que liga o ESPELHAMENTO, que já existia no banco e nunca tinha
+ * sido ligado aqui: a RPC `meu_dia` sempre aceitou `p_vendedor_id`, e sempre
+ * devolveu `espelhado` e `vendedor_nome` para a tela poder dizer de quem é o dia
+ * que está mostrando. O mobile passava `null` fixo nas duas chamadas.
+ *
+ * Autorização é do banco: `meu_dia` valida o id contra `app_pode_ver_vendedor`.
+ * O cargo vai junto porque é ele que decide QUAIS blocos existem — pedir o cargo
+ * do usuário e os blocos de outra pessoa montaria um dia com as seções erradas.
+ */
+export function useMeuDia(vendedorId?: string | null) {
   return useQuery({
-    queryKey: meuDiaKeys.dia(),
+    queryKey: meuDiaKeys.dia(vendedorId),
     queryFn: async (): Promise<MeuDia> => {
       /*
        * As duas leituras baratas vão juntas: o cargo (que decide QUAIS blocos existem) e
@@ -33,7 +56,7 @@ export function useMeuDia() {
        * de celular, que é onde a viagem a mais se nota.
        */
       const [cargoRes, cfgRes] = await Promise.all([
-        supabase.rpc('app_meu_dia_cargo' as never, { p_vendedor_id: null } as never),
+        supabase.rpc('app_meu_dia_cargo' as never, { p_vendedor_id: vendedorId ?? null } as never),
         supabase.from('meu_dia_config').select('tipo_vendedor, blocos'),
       ])
       if (cargoRes.error) throw new Error(cargoRes.error.message)
@@ -43,7 +66,7 @@ export function useMeuDia() {
       const config = resolverConfig(cargo, (linha?.blocos ?? {}) as Record<string, OverrideBloco>)
 
       const { data, error } = await supabase.rpc('meu_dia' as never, {
-        p_vendedor_id: null,
+        p_vendedor_id: vendedorId ?? null,
         p_config: config,
       } as never)
       if (error) throw new Error(error.message)
@@ -100,7 +123,7 @@ export function useOcultarItem() {
       } as never)
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.dia() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.todos() }),
   })
 }
 
@@ -111,6 +134,6 @@ export function useConcluirTarefa() {
       const { error } = await supabase.rpc('app_meu_dia_concluir_tarefa' as never, { p_id: id } as never)
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.dia() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.todos() }),
   })
 }
