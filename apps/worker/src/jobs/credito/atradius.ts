@@ -115,6 +115,9 @@ const ROTAS = {
 }
 
 /** CONFIRMADO: `Atradius-App-Key`, e não o `x-application-key` que eu tinha suposto. */
+/** Limite do campo `customerRefNumber` no gateway da Atradius. */
+const MAX_CUSTOMER_REF = 25
+
 const CABECALHO_APP_KEY = 'Atradius-App-Key'
 
 /**
@@ -1215,9 +1218,18 @@ export const atradius: Seguradora = {
         // Hoje: a cobertura vale a partir de hoje. Data futura é um recurso da API que a
         // esteira não usa — quem pede limite aqui quer operar agora.
         effectFromDate: new Date().toISOString().slice(0, 10),
-        // A NOSSA referência. É por ela que a decisão volta a encontrar a linha da esteira
-        // quando o coverId se perde.
-        customerRefNumber: pedido.referencia_externa,
+        // A NOSSA referência, TRUNCADA em 25 caracteres.
+        //
+        // O campo tem limite de 25 na Atradius e o id da análise é um UUID de 36. O
+        // pedido voltava 400 com `Value must have 25 characters or fewer.` — e como
+        // isso acontecia em TODA tentativa, nenhuma análise jamais saiu por este
+        // caminho: as aprovadas da base vieram todas do backfill.
+        //
+        // 25 caracteres de um UUID cobrem os 21 primeiros dígitos hex, ou seja 84 bits:
+        // colisão não é uma preocupação real. O prefixo continua reconhecível como o id
+        // e casa com `where id::text like <ref> || '%'`, que é o que alguém vai precisar
+        // fazer olhando a referência no portal da seguradora.
+        customerRefNumber: pedido.referencia_externa.slice(0, MAX_CUSTOMER_REF),
       },
     })
     if (!r.ok) return r
