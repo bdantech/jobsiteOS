@@ -66,6 +66,7 @@ export function ModalDoCard({
   cabecalho,
   etapas,
   abas,
+  abaInicial,
   acoes,
   largura = 'max-w-4xl',
 }: {
@@ -78,18 +79,30 @@ export function ModalDoCard({
   /** A trilha de etapas do funil. Fica logo abaixo do cabeçalho. */
   etapas?: React.ReactNode
   abas: AbaModal[]
+  /**
+   * Em qual aba abrir. Sem ela, a primeira — que é o certo quando todo card do
+   * funil faz a mesma pergunta.
+   *
+   * Existe para quando NÃO faz: um lead que chegou por formulário abre com o que a
+   * pessoa escreveu, e um que a régua escolheu abre com o pitch, porque para esse
+   * não há formulário nenhum. A ORDEM das abas não muda — trocar o lugar delas de
+   * card para card obrigaria a reprocurar a mesma aba a cada abertura.
+   */
+  abaInicial?: string
   /** As decisões sobre o item inteiro (ganhar, perder, fit). Vão no canto superior direito. */
   acoes?: React.ReactNode
   largura?: string
 }) {
-  const primeira = abas[0]?.id ?? ''
-  const [ativa, setAtiva] = React.useState(primeira)
+  // A aba pedida só vale se ela existe: um id que não casa deixaria o modal sem
+  // nenhuma aba marcada, e o corpo em branco.
+  const inicial = abas.some((a) => a.id === abaInicial) ? (abaInicial as string) : (abas[0]?.id ?? '')
+  const [ativa, setAtiva] = React.useState(inicial)
 
-  // Ao trocar de card, volta para a primeira aba: herdar "Mensagens" do card anterior
+  // Ao trocar de card, volta para a aba inicial: herdar "Mensagens" do card anterior
   // faria o próximo abrir numa aba que não é a resposta da pergunta que se fez.
   React.useEffect(() => {
-    if (aberto) setAtiva(primeira)
-  }, [aberto, primeira])
+    if (aberto) setAtiva(inicial)
+  }, [aberto, inicial])
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>

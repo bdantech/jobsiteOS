@@ -347,6 +347,16 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
   const [erro, setErro] = React.useState<string | null>(null)
   const [tipo, setTipo] = React.useState<TipoVendedorId>((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
   const [superiorId, setSuperiorId] = React.useState<string>(vendedor?.superior_id ?? '')
+  /**
+   * CONTROLADO, como o superior — e não `defaultValue`, que era o que estava aqui.
+   *
+   * As opções deste select vêm de um useQuery. Na montagem, `usuarios.data` ainda é
+   * undefined e a única <option> é a vazia: o `defaultValue` não encontra a opção do
+   * vendedor, o browser cai na primeira, e quando a lista chega o defaultValue não é
+   * reaplicado — porque ele só vale na montagem. O resultado era editar um vendedor
+   * salvo e ver "Selecione…", com o risco de salvar por cima apagando o vínculo.
+   */
+  const [usuarioId, setUsuarioId] = React.useState<string>(vendedor?.usuario_id ?? '')
   const [ehIa, setEhIa] = React.useState(vendedor?.is_ia ?? false)
   const [escolhidas, setEscolhidas] = React.useState<EmpresaEscolhida[]>([])
   const [passivas, setPassivas] = React.useState<EmpresaEscolhida[]>([])
@@ -361,6 +371,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
     if (!aberto) return
     setTipo((vendedor?.tipo as TipoVendedorId) ?? 'sdr')
     setSuperiorId(vendedor?.superior_id ?? '')
+    setUsuarioId(vendedor?.usuario_id ?? '')
     setEhIa(vendedor?.is_ia ?? false)
     setErro(null)
 
@@ -622,7 +633,8 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
                 <select
                   id="usuario_id"
                   name="usuario_id"
-                  defaultValue={vendedor?.usuario_id ?? ''}
+                  value={usuarioId}
+                  onChange={(e) => setUsuarioId(e.target.value)}
                   required
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >

@@ -41,7 +41,7 @@ import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { AbaPitch } from './aba-pitch'
-import { FichaDoCard } from './ficha-do-card'
+import { AbaFormulario, FichaDoCard } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
@@ -120,6 +120,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   // Encerrados escondidos por padrão: o kanban é a fila de trabalho, e o que morreu não
   // pede trabalho. O toggle existe porque revisar as mortes é o uso da semana seguinte.
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
+  /**
+   * Procedência: 'todos' | 'inbound' | 'outbound'.
+   *
+   * Dois estados e não três, apesar de `sdr_leads.origem` ter três valores:
+   * `distribuicao` e `manual` são ambos saída — a diferença entre "a régua
+   * escolheu" e "alguém escolheu à mão" importa no card, não na hora de decidir o
+   * que trabalhar agora. Quem filtra aqui está separando quem procurou a gente de
+   * quem ainda não sabe que existimos, porque as duas ligações são outras.
+   */
+  const [procedencia, setProcedencia] = React.useState<'todos' | 'inbound' | 'outbound'>('todos')
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
   // Quem eu posso ABRIR — não é a mesma lista de quem existe. O seletor sai daqui para
@@ -269,8 +279,15 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   }
 
   const todos = leads.data ?? []
-  const visiveis = todos.filter((l) => mostrarEncerrados || !l.encerrado_em)
-  const encerrados = todos.filter((l) => l.encerrado_em).length
+  const naProcedencia = todos.filter(
+    (l) =>
+      procedencia === 'todos' ||
+      (procedencia === 'inbound' ? l.origem === 'inbound' : l.origem !== 'inbound'),
+  )
+  const visiveis = naProcedencia.filter((l) => mostrarEncerrados || !l.encerrado_em)
+  // Contado dentro da procedência escolhida: "mostrar 3 encerrados" precisa bater
+  // com o que aparece ao marcar a caixa.
+  const encerrados = naProcedencia.filter((l) => l.encerrado_em).length
 
   const porEstagio = new Map<string, LeadComEmpresa[]>()
   for (const l of visiveis) {
@@ -312,6 +329,19 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Select
+                value={procedencia}
+                onValueChange={(v) => setProcedencia(v as 'todos' | 'inbound' | 'outbound')}
+              >
+                <SelectTrigger className="w-40" aria-label="Filtrar por procedência">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Toda procedência</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                </SelectContent>
+              </Select>
               {encerrados > 0 && (
                 <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <input
@@ -565,6 +595,18 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               onIr={(id) => void mover(aberto, id as EstagioSdr)}
             />
           }
+          /*
+            Inbound abre no FORMULÁRIO: a pessoa procurou a gente e escreveu o
+            porquê — é o contexto mais valioso que existe sobre ela, e o que muda a
+            primeira frase da ligação.
+
+            Outbound abre no PITCH, que é o padrão. Não é preferência: `origem` de
+            distribuição significa que a régua escolheu a empresa, e ela nunca
+            preencheu formulário nenhum. Abrir na aba do formulário levaria a um
+            painel vazio em todos os casos — hoje, 50 de 50 leads distribuídos não
+            têm submissão, contra 27 de 27 dos inbound que têm.
+          */
+          abaInicial={aberto.origem === 'inbound' ? 'formulario' : 'pitch'}
           abas={[
             /*
               O pitch vem PRIMEIRO: o card do funil de reuniões é aberto para ligar, e
@@ -575,6 +617,16 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               id: 'pitch',
               label: 'Pitch',
               conteudo: <AbaPitch leadId={aberto.id} vivo={!aberto.encerrado_em} />,
+            },
+            /*
+              O que a PESSOA escreveu. Só existe para quem chegou por formulário —
+              lead de distribuição nunca preencheu um, e a aba diz isso em vez de
+              abrir vazia.
+            */
+            {
+              id: 'formulario',
+              label: 'Formulário',
+              conteudo: <AbaFormulario empresaId={aberto.empresas?.id ?? null} />,
             },
             {
               id: 'lead',
