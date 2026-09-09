@@ -8,6 +8,7 @@ import {
   normalizarUtm,
   rotuloDaIntencao,
   submissaoSchema,
+  tipoDeEmpresaPorCnae,
   validarSubmissao,
   type CandidatoInbound,
   type Campo,
@@ -173,6 +174,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     : { vendedorId: null, aviso: null }
   const rotulo = rotuloDaIntencao(entrada.intencao ?? null)
 
+  /*
+   * O CNAE da Receita, do universo. Uma leitura barata por chave — e a única forma de
+   * saber o que a empresa FAZ, em vez do que ela diz que faz.
+   */
+  const { data: doUniverso } = await supabase
+    .from('mercado_universo')
+    .select('cnae_principal')
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+  const tipoPorCnae = tipoDeEmpresaPorCnae(doUniverso?.cnae_principal ?? null)
+
   const { data: resultado, error: erroRpc } = await supabase.rpc('app_processar_submissao', {
     p: {
       formulario_id: form.id,
@@ -189,13 +201,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       sdr_id: rota.vendedorId,
       tipagem_antecipacao: rotulo.tipagemAntecipacao,
       /*
-       * O tipo que a PESSOA respondeu. Ele ficava só em `dados`, e a empresa nascia com o
-       * default da coluna — construtora. Nove dos quatorze leads com o campo respondido
-       * divergiam da ficha, sete deles fornecedores. `tipo` calibra o estimador por tipo,
-       * entra no scorecard e escolhe o pitch: uma distribuidora de aço avaliada com a
-       * régua de construtora é avaliada com a régua errada em silêncio.
+       * O CNAE MANDA; a resposta da pessoa é o plano B.
+       *
+       * `tipo` calibra o estimador, entra no scorecard e escolhe o pitch — uma
+       * distribuidora de aço avaliada com a régua de construtora é avaliada com a régua
+       * errada, em silêncio. Por isso ele não pode sair de auto-declaração: quem preenche
+       * formulário se descreve pelo que VENDE, não pela nossa taxonomia. "H.S. Serviços de
+       * Construções" respondeu construtora e tem CNAE de obras de alvenaria; e quem
+       * responde "outro" — opção que o formulário oferece — caía direto no default.
+       *
+       * A resposta dela não se perde: continua em `formulario_submissoes.dados`, que é o
+       * registro do que ela declarou. O que muda é qual dos dois vira a ficha.
+       *
+       * Sem CNAE (empresa fora do universo, cadastral ainda não consultada) vale o que ela
+       * disse, e só então o default da coluna.
        */
-      tipo: tipoDeEmpresa(entrada.dados.tipo),
+      tipo: tipoPorCnae ?? tipoDeEmpresa(entrada.dados.tipo),
       razao_social: texto(entrada.dados.razao_social),
       uf: texto(entrada.dados.uf)?.toUpperCase().slice(0, 2) ?? null,
       municipio: texto(entrada.dados.municipio),

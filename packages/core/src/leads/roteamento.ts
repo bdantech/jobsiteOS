@@ -35,6 +35,31 @@ export function inferirPapel(cnaePrincipal: string | null | undefined): PapelInf
   return 'prestador'
 }
 
+/**
+ * O `empresas.tipo` que o CNAE implica.
+ *
+ * Mesma régua do `inferirPapel` — mesmos prefixos, uma fonte só —, mas devolvendo o
+ * vocabulário da coluna em vez do de papel: 68.1 é incorporação, 41 e 42 constroem,
+ * o resto fornece ou presta serviço.
+ *
+ * `null` quando não há CNAE, e isso é resposta: sem cadastral não se sabe, e chutar
+ * um tipo é o que fazia uma pintora de edifícios nascer construtora.
+ *
+ * Por que o CNAE manda e não o que a pessoa respondeu: quem preenche formulário se
+ * descreve pelo que VENDE, não pela taxonomia da nossa régua — e não deveria mesmo
+ * precisar conhecê-la. "H.S. Serviços de Construções" respondeu construtora e tem CNAE
+ * de obras de alvenaria; é subempreiteira. A resposta dela continua guardada na
+ * submissão, que é o registro do que ela declarou.
+ */
+export function tipoDeEmpresaPorCnae(
+  cnaePrincipal: string | null | undefined,
+): 'construtora' | 'incorporadora' | 'fornecedor' | null {
+  const digitos = (cnaePrincipal ?? '').replace(/\D/g, '')
+  if (digitos.length < 2) return null
+  if (digitos.startsWith('6810')) return 'incorporadora'
+  return inferirPapel(digitos) === 'contratante' ? 'construtora' : 'fornecedor'
+}
+
 /** O papel que a INTENÇÃO declarada implica. */
 export function papelDaIntencao(intencao: Intencao | null | undefined): PapelInferido {
   if (intencao === 'sacado') return 'contratante'
