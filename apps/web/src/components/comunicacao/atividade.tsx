@@ -12,10 +12,11 @@ import { createClient } from '@/lib/supabase/client'
 import type { PainelAtividade } from '@jobsiteos/core'
 import {
   CartaoGrafico,
-  GraficoEmpresasPorDia,
+  GraficoPorPeriodo,
   MapaDeCalorPorHora,
-  type PontoDia,
+  type Granularidade,
   type PontoHora,
+  type PontoPeriodo,
 } from './atividade-graficos'
 
 /**
@@ -33,6 +34,13 @@ import {
  * componente: a view não tem grant para `authenticated`, então não há consulta
  * direta possível.
  */
+/** O título do cartão acompanha o balde escolhido, porque o eixo mudou junto. */
+const SUFIXO: Record<Granularidade, string> = {
+  dia: 'por dia',
+  semana: 'por semana',
+  mes: 'por mês',
+}
+
 /**
  * Os canais são os quatro tipos de comunicação do ledger — o pedido é explícito
  * em valer "para qualquer tipo (msg, ligação, reunião)". `interno` fica fora
@@ -48,15 +56,26 @@ const CANAIS: { valor: string; label: string }[] = [
 
 interface SeriesAtividade {
   tem_acesso: boolean
-  por_dia: PontoDia[]
+  por_periodo: PontoPeriodo[]
   por_hora: PontoHora[]
 }
+
+/**
+ * Os baldes da série. O rótulo diz o que a linha PASSA A SER, não o que ela
+ * agrupa: "por semana" descreve o eixo, que é o que a pessoa está escolhendo.
+ */
+const GRANULARIDADES: { valor: Granularidade; label: string }[] = [
+  { valor: 'dia', label: 'Por dia' },
+  { valor: 'semana', label: 'Por semana' },
+  { valor: 'mes', label: 'Por mês' },
+]
 
 export function PainelDeAtividade() {
   const [dias, setDias] = React.useState('30')
   const [canal, setCanal] = React.useState('todos')
   const [direcao, setDirecao] = React.useState('todas')
   const [metrica, setMetrica] = React.useState<'empresas' | 'mensagens'>('empresas')
+  const [granularidade, setGranularidade] = React.useState<Granularidade>('dia')
 
   const consulta = useQuery({
     queryKey: ['comunicacao', 'atividade', dias, canal],
@@ -72,7 +91,7 @@ export function PainelDeAtividade() {
   })
 
   const series = useQuery({
-    queryKey: ['comunicacao', 'atividade', 'series', dias, canal, direcao],
+    queryKey: ['comunicacao', 'atividade', 'series', dias, canal, direcao, granularidade],
     queryFn: async (): Promise<SeriesAtividade> => {
       const de = new Date(Date.now() - Number(dias) * 86_400_000).toISOString().slice(0, 10)
       const { data, error } = await createClient().rpc('app_comunicacao_atividade_series', {
@@ -80,13 +99,14 @@ export function PainelDeAtividade() {
           de,
           canal: canal === 'todos' ? null : canal,
           direcao: direcao === 'todas' ? null : direcao,
+          granularidade,
         } as never,
       })
       if (error) throw new Error(error.message)
       const corpo = (data ?? {}) as Partial<SeriesAtividade>
       return {
         tem_acesso: corpo.tem_acesso ?? false,
-        por_dia: corpo.por_dia ?? [],
+        por_periodo: corpo.por_periodo ?? [],
         por_hora: corpo.por_hora ?? [],
       }
     },
@@ -121,6 +141,13 @@ export function PainelDeAtividade() {
             <SelectItem value="7">Últimos 7 dias</SelectItem>
             <SelectItem value="30">Últimos 30 dias</SelectItem>
             <SelectItem value="90">Últimos 90 dias</SelectItem>
+            {/*
+              Seis meses e um ano entraram junto com a visão mensal: "por mês"
+              dentro de uma janela de 30 dias desenha um ponto, e um ponto não é
+              uma série. A granularidade só vira pergunta quando a janela cabe.
+            */}
+            <SelectItem value="180">Últimos 6 meses</SelectItem>
+            <SelectItem value="365">Últimos 12 meses</SelectItem>
           </SelectContent>
         </Select>
         <Select value={canal} onValueChange={setCanal}>
@@ -158,15 +185,15 @@ export function PainelDeAtividade() {
         aba está olhando a operação, não conferindo um número.
       */}
       <CartaoGrafico
-        titulo={metrica === 'empresas' ? 'Empresas tocadas por dia' : 'Mensagens por dia'}
+        titulo={`${metrica === 'empresas' ? 'Empresas tocadas' : 'Mensagens'} ${SUFIXO[granularidade]}`}
         descricao={
           metrica === 'empresas'
-            ? 'Empresas distintas por dia, empilhadas por vendedor. Conversa ainda não identificada conta como uma — é trabalho feito.'
-            : 'Volume de mensagens por dia, empilhado por vendedor.'
+            ? 'Empresas distintas, uma linha por vendedor. Conversa ainda não identificada conta como uma — é trabalho feito.'
+            : 'Volume de mensagens, uma linha por vendedor. O ponto abre o detalhe de enviadas e recebidas.'
         }
       >
         <div className="space-y-3">
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {(['empresas', 'mensagens'] as const).map((m) => (
               <Button
                 key={m}
@@ -177,11 +204,36 @@ export function PainelDeAtividade() {
                 {m === 'empresas' ? 'Empresas' : 'Mensagens'}
               </Button>
             ))}
+            {/*
+              O balde fica AQUI, e não na barra de filtros do topo: ele é do eixo
+              deste gráfico, e o mapa de calor por hora ao lado não tem o que
+              fazer com ele. Filtro que muda um desenho mora junto do desenho.
+            */}
+            <Select
+              value={granularidade}
+              onValueChange={(v) => setGranularidade(v as Granularidade)}
+            >
+              <SelectTrigger className="ml-auto h-8 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GRANULARIDADES.map((g) => (
+                  <SelectItem key={g.valor} value={g.valor}>
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {series.isLoading ? (
             <Skeleton className="h-52" />
           ) : (
-            <GraficoEmpresasPorDia pontos={series.data?.por_dia ?? []} metrica={metrica} />
+            <GraficoPorPeriodo
+              pontos={series.data?.por_periodo ?? []}
+              metrica={metrica}
+              granularidade={granularidade}
+              direcao={direcao as 'todas' | 'saida' | 'entrada'}
+            />
           )}
         </div>
       </CartaoGrafico>

@@ -5,28 +5,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { cn } from '@/lib/utils'
 
 /**
- * Os dois desenhos do painel de atividade: a série por dia e o mapa de calor por
- * hora. Sem biblioteca de gráfico, como o resto do repo (ver `GraficoBarras` do
- * Mercado) — o que estes dois precisam é de escala compartilhada e de um tooltip,
- * e nenhuma das duas coisas justifica 40 kB no bundle.
+ * Os dois desenhos do painel de atividade: a série por período e o mapa de calor
+ * por hora. Sem biblioteca de gráfico, como o resto do repo (ver `GraficoBarras`
+ * do Mercado) — o que estes dois precisam é de escala compartilhada e de um
+ * tooltip, e nenhuma das duas coisas justifica 40 kB no bundle.
  *
- * ─── POR QUE EMPILHADO, E NÃO UMA LINHA POR PESSOA ──────────────────────────
- * O pedido tem duas perguntas dentro: "quantas empresas o vendedor toca no dia" e
- * "consigo ver todos os vendedores no mesmo gráfico". Linhas sobrepostas
- * respondem bem à primeira e mal à segunda: com quatro pessoas elas viram um
- * emaranhado, e a soma do time — que é o que se olha primeiro — não aparece em
- * lugar nenhum. Empilhado, a altura da coluna é o dia do TIME e cada faixa é uma
- * pessoa, com a cor estável entre os dois gráficos.
+ * ─── ERA EMPILHADO, VIROU UMA LINHA POR PESSOA ──────────────────────────────
+ * O desenho anterior era de barras empilhadas: a altura da coluna era o dia do
+ * TIME e cada faixa uma pessoa. Ele respondia bem "quanto o time fez hoje" e mal
+ * "como o Fabio vem se comportando" — seguir alguém exigia comparar a espessura
+ * de uma faixa que muda de posição conforme os outros sobem e descem.
+ *
+ * A linha inverte a prioridade: cada pessoa tem uma trajetória própria, contínua,
+ * na cor dela. O total do time, que a coluna dava de graça, passa a viver no
+ * tooltip — onde ele continua a uma passada de mouse de distância.
  */
 
-export interface PontoDia {
-  dia: string
+export interface PontoPeriodo {
+  /** Início do balde: o dia, a segunda-feira da semana ou o dia 1º do mês. */
+  periodo: string
   vendedor_id: string
   vendedor_nome: string
   is_ia: boolean
   empresas: number
   mensagens: number
+  enviadas: number
+  recebidas: number
 }
+
+export type Granularidade = 'dia' | 'semana' | 'mes'
 
 export interface PontoHora {
   vendedor_id: string
@@ -40,14 +47,17 @@ export interface PontoHora {
  * A cor é derivada do NOME, com a mesma função do inbox: a mesma pessoa tem a
  * mesma cor nos dois gráficos, na legenda e na lista de conversas. Cor por
  * posição na lista mudaria a cada filtro, e a legenda deixaria de ser memorizável.
+ *
+ * `traco` existe porque SVG não lê `bg-*`: a linha e o ponto pintam com
+ * `currentColor`, e é o `text-*` no grupo que decide qual cor é essa.
  */
 const PALETA = [
-  { barra: 'bg-sky-500', ponto: 'bg-sky-500' },
-  { barra: 'bg-emerald-500', ponto: 'bg-emerald-500' },
-  { barra: 'bg-amber-500', ponto: 'bg-amber-500' },
-  { barra: 'bg-violet-500', ponto: 'bg-violet-500' },
-  { barra: 'bg-rose-500', ponto: 'bg-rose-500' },
-  { barra: 'bg-teal-500', ponto: 'bg-teal-500' },
+  { barra: 'bg-sky-500', ponto: 'bg-sky-500', traco: 'text-sky-500' },
+  { barra: 'bg-emerald-500', ponto: 'bg-emerald-500', traco: 'text-emerald-500' },
+  { barra: 'bg-amber-500', ponto: 'bg-amber-500', traco: 'text-amber-500' },
+  { barra: 'bg-violet-500', ponto: 'bg-violet-500', traco: 'text-violet-500' },
+  { barra: 'bg-rose-500', ponto: 'bg-rose-500', traco: 'text-rose-500' },
+  { barra: 'bg-teal-500', ponto: 'bg-teal-500', traco: 'text-teal-500' },
 ] as const
 
 export function corDoVendedor(nome: string): (typeof PALETA)[number] {
@@ -56,49 +66,91 @@ export function corDoVendedor(nome: string): (typeof PALETA)[number] {
   return PALETA[soma % PALETA.length]!
 }
 
-const diaCurto = (iso: string) => {
-  const d = new Date(`${iso}T12:00:00`)
+const emData = (iso: string) => new Date(`${iso}T12:00:00`)
+
+/** O rótulo do eixo: curto, porque ele se repete uma vez por ponto. */
+function rotuloEixo(iso: string, g: Granularidade): string {
+  const d = emData(iso)
+  if (g === 'mes') return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-// ─── Empresas tocadas por dia ───────────────────────────────────────────────
+/**
+ * O rótulo do tooltip, por extenso. "07/09" sozinho num gráfico semanal não diz
+ * se é o começo ou o fim da semana — e a diferença muda a leitura do número.
+ */
+function rotuloCheio(iso: string, g: Granularidade): string {
+  const d = emData(iso)
+  if (g === 'mes') return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  if (g === 'semana') {
+    const fim = new Date(d.getTime() + 6 * 86_400_000)
+    return `Semana de ${rotuloEixo(iso, 'dia')} a ${fim.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`
+  }
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
 
-export function GraficoEmpresasPorDia({
+// ─── A série por período ────────────────────────────────────────────────────
+
+/*
+ * Geometria em constantes e não espalhada pelo JSX: a linha, o ponto, a área de
+ * captura do mouse e o tooltip precisam concordar sobre onde fica cada x, e três
+ * cópias do mesmo cálculo é como um deles fica meio pixel fora e ninguém acha.
+ */
+const ALTURA = 180
+const TOPO = 10
+const GUTTER = 36
+const PASSO_MIN = 46
+
+export function GraficoPorPeriodo({
   pontos,
   metrica,
+  granularidade,
+  direcao,
 }: {
-  pontos: PontoDia[]
-  /** O que a altura mede. Empresas por padrão; mensagens quando se quer volume. */
+  pontos: PontoPeriodo[]
+  /** O que a linha mede. Empresas por padrão; mensagens quando se quer volume. */
   metrica: 'empresas' | 'mensagens'
+  granularidade: Granularidade
+  /** O filtro de direção em vigor — decide o que o tooltip pode afirmar. */
+  direcao: 'todas' | 'saida' | 'entrada'
 }) {
-  const [foco, setFoco] = React.useState<{ dia: string; texto: string[] } | null>(null)
+  const [foco, setFoco] = React.useState<number | null>(null)
 
-  const { dias, vendedores, maximo } = React.useMemo(() => {
-    const porDia = new Map<string, PontoDia[]>()
+  const { periodos, porPeriodo, vendedores, maximo } = React.useMemo(() => {
+    const mapa = new Map<string, PontoPeriodo[]>()
     const nomes = new Map<string, string>()
     for (const p of pontos) {
-      porDia.set(p.dia, [...(porDia.get(p.dia) ?? []), p])
+      mapa.set(p.periodo, [...(mapa.get(p.periodo) ?? []), p])
       nomes.set(p.vendedor_id, p.vendedor_nome)
     }
-    const lista = [...porDia.entries()].sort(([a], [b]) => a.localeCompare(b))
-    const max = lista.reduce(
-      (maior, [, ps]) => Math.max(maior, ps.reduce((s, p) => s + p[metrica], 0)),
-      0,
-    )
+    const chaves = [...mapa.keys()].sort((a, b) => a.localeCompare(b))
+    // A escala é do MAIOR PONTO de uma pessoa, e não da soma do time: numa linha
+    // por pessoa, escalar pelo total deixaria todas as trajetórias achatadas no
+    // rodapé do gráfico.
+    const max = pontos.reduce((maior, p) => Math.max(maior, p[metrica]), 0)
     return {
-      dias: lista,
+      periodos: chaves,
+      porPeriodo: mapa,
       vendedores: [...nomes.entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')),
       maximo: max,
     }
   }, [pontos, metrica])
 
-  if (dias.length === 0) {
+  if (periodos.length === 0) {
     return (
       <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
         Nenhuma atividade no período.
       </p>
     )
   }
+
+  const passo = Math.max(PASSO_MIN, Math.min(96, Math.round(720 / periodos.length)))
+  const largura = GUTTER + periodos.length * passo
+  const x = (i: number) => GUTTER + i * passo + passo / 2
+  const y = (v: number) => TOPO + (1 - (maximo > 0 ? v / maximo : 0)) * (ALTURA - TOPO)
+
+  const linhaDoFoco = foco !== null ? periodos[foco] : null
+  const doFoco = linhaDoFoco ? (porPeriodo.get(linhaDoFoco) ?? []) : []
 
   return (
     <div className="space-y-3">
@@ -112,62 +164,178 @@ export function GraficoEmpresasPorDia({
       </div>
 
       {/*
-        Rola no eixo x: 90 dias não cabem numa tela, e comprimir a coluna até
-        caber transforma o gráfico numa mancha. O contêiner rola; a página não.
+        Rola no eixo x: 90 pontos não cabem numa tela, e comprimir até caber
+        transforma o gráfico numa mancha. O contêiner rola; a página não.
       */}
-      <div className="relative overflow-x-auto pb-1">
-        <div className="flex h-52 items-end gap-1" style={{ minWidth: `${dias.length * 28}px` }}>
-          {dias.map(([dia, ps]) => {
-            const total = ps.reduce((s, p) => s + p[metrica], 0)
-            return (
-              <div
-                key={dia}
-                className="flex min-w-0 flex-1 flex-col items-center gap-1"
-                onMouseEnter={() =>
-                  setFoco({
-                    dia,
-                    texto: [...ps]
-                      .sort((a, b) => b[metrica] - a[metrica])
-                      .map((p) => `${p.vendedor_nome}: ${p[metrica]}`),
-                  })
-                }
-                onMouseLeave={() => setFoco(null)}
-              >
-                <span className="text-[10px] tabular-nums text-muted-foreground">{total || ''}</span>
-                <div className="flex w-full flex-1 flex-col-reverse justify-start">
-                  {[...ps]
-                    .sort((a, b) => a.vendedor_nome.localeCompare(b.vendedor_nome, 'pt-BR'))
-                    .map((p) => (
-                      <div
-                        key={p.vendedor_id}
-                        className={cn('w-full', corDoVendedor(p.vendedor_nome).barra)}
-                        style={{
-                          // `maximo` é do dia mais cheio: as colunas são
-                          // comparáveis entre si, e não cada uma consigo mesma.
-                          height: `${maximo > 0 ? (p[metrica] / maximo) * 100 : 0}%`,
-                        }}
-                        title={`${p.vendedor_nome} — ${p[metrica]} em ${diaCurto(dia)}`}
+      <div className="overflow-x-auto pb-1">
+        <div className="relative" style={{ width: `${largura}px`, minWidth: '100%' }}>
+          <svg
+            viewBox={`0 0 ${largura} ${ALTURA + 20}`}
+            width={largura}
+            height={ALTURA + 20}
+            role="img"
+            aria-label={`${metrica === 'empresas' ? 'Empresas' : 'Mensagens'} por ${granularidade}, uma linha por pessoa`}
+            onMouseLeave={() => setFoco(null)}
+          >
+            {/* Três referências horizontais. Sem elas, uma linha sem eixo vira desenho. */}
+            <g className="text-muted-foreground">
+              {[0, 0.5, 1].map((f) => (
+                <g key={f}>
+                  <line
+                    x1={GUTTER}
+                    x2={largura}
+                    y1={y(maximo * f)}
+                    y2={y(maximo * f)}
+                    stroke="currentColor"
+                    strokeOpacity={0.18}
+                    strokeDasharray={f === 0 ? undefined : '3 3'}
+                  />
+                  <text
+                    x={GUTTER - 6}
+                    y={y(maximo * f) + 3}
+                    textAnchor="end"
+                    fill="currentColor"
+                    className="text-[9px] tabular-nums"
+                  >
+                    {Math.round(maximo * f)}
+                  </text>
+                </g>
+              ))}
+            </g>
+
+            {/* A guia vertical do ponto em foco, atrás das linhas. */}
+            {foco !== null ? (
+              <line
+                x1={x(foco)}
+                x2={x(foco)}
+                y1={TOPO}
+                y2={ALTURA}
+                className="text-foreground"
+                stroke="currentColor"
+                strokeOpacity={0.25}
+              />
+            ) : null}
+
+            {vendedores.map(([id, nome]) => {
+              /*
+               * PERÍODO SEM LINHA DA PESSOA É ZERO, e não um buraco. O banco só
+               * devolve linha quando houve atividade; sem completar com zero, a
+               * trajetória saltaria por cima do dia parado como se ele não
+               * existisse — que é exatamente o dia que se quer enxergar.
+               */
+              const serie = periodos.map((per, i) => {
+                const achado = (porPeriodo.get(per) ?? []).find((p) => p.vendedor_id === id)
+                return { i, v: achado ? achado[metrica] : 0 }
+              })
+              const cor = corDoVendedor(nome)
+              return (
+                <g key={id} className={cor.traco}>
+                  <polyline
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    points={serie.map((s) => `${x(s.i)},${y(s.v)}`).join(' ')}
+                  />
+                  {serie.map((s) => (
+                    <circle
+                      key={s.i}
+                      cx={x(s.i)}
+                      cy={y(s.v)}
+                      r={foco === s.i ? 4.5 : 2.5}
+                      fill="currentColor"
+                    />
+                  ))}
+                </g>
+              )
+            })}
+
+            {/*
+              A captura do mouse é uma faixa por período, e não o círculo: acertar
+              um alvo de 2,5 px com o ponteiro é o tipo de tooltip que ninguém
+              consegue abrir. A faixa inteira do período responde.
+            */}
+            {periodos.map((per, i) => (
+              <rect
+                key={per}
+                x={GUTTER + i * passo}
+                y={0}
+                width={passo}
+                height={ALTURA}
+                fill="transparent"
+                onMouseEnter={() => setFoco(i)}
+              />
+            ))}
+
+            <g className="text-muted-foreground">
+              {periodos.map((per, i) => (
+                <text
+                  key={per}
+                  x={x(i)}
+                  y={ALTURA + 14}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  className="text-[9px]"
+                >
+                  {rotuloEixo(per, granularidade)}
+                </text>
+              ))}
+            </g>
+          </svg>
+
+          {linhaDoFoco && foco !== null ? (
+            <div
+              className="pointer-events-none absolute z-10 w-56 rounded-md border bg-popover p-2 text-xs shadow-md"
+              style={{
+                // Preso às bordas do desenho: perto do fim da série, um balão
+                // centrado no ponto sairia pela direita e ficaria ilegível.
+                left: `${Math.min(Math.max(x(foco) - 112, 0), Math.max(largura - 224, 0))}px`,
+                top: '4px',
+              }}
+            >
+              <p className="mb-1 font-medium text-foreground">
+                {rotuloCheio(linhaDoFoco, granularidade)}
+              </p>
+              <ul className="space-y-0.5">
+                {[...doFoco]
+                  .sort((a, b) => b[metrica] - a[metrica])
+                  .map((p) => (
+                    <li key={p.vendedor_id} className="flex items-start gap-1.5">
+                      <span
+                        className={cn(
+                          'mt-1 h-2 w-2 shrink-0 rounded-sm',
+                          corDoVendedor(p.vendedor_nome).ponto,
+                        )}
+                        aria-hidden
                       />
-                    ))}
-                </div>
-                <span className="w-full truncate text-center text-[9px] text-muted-foreground">
-                  {diaCurto(dia)}
-                </span>
-              </div>
-            )
-          })}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-foreground">{p.vendedor_nome}</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {metrica === 'empresas'
+                            ? `${p.empresas} ${p.empresas === 1 ? 'empresa' : 'empresas'}`
+                            : direcao === 'todas'
+                              ? `${p.enviadas} enviadas · ${p.recebidas} recebidas`
+                              : `${p.mensagens} ${direcao === 'saida' ? 'enviadas' : 'recebidas'}`}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+              {/* O total do time — o que a barra empilhada mostrava sem pedir. */}
+              <p className="mt-1 border-t pt-1 tabular-nums text-muted-foreground">
+                Time: {doFoco.reduce((s, p) => s + p[metrica], 0)}
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {foco ? (
-        <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground">{diaCurto(foco.dia)}</strong> — {foco.texto.join(' · ')}
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Passe o mouse numa coluna para ver a divisão do dia.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {maximo === 0
+          ? 'Nenhum registro no período.'
+          : 'Passe o mouse sobre o gráfico para ver o detalhe do ponto. A escala é do maior valor individual — as linhas são comparáveis entre si.'}
+      </p>
     </div>
   )
 }
