@@ -53,6 +53,16 @@ export function Inbox() {
     queryFn: () => buscarConversas(aba),
   })
   /*
+   * Desde a 0196 a thread é do par (nossa conta, contato): o mesmo contato pode
+   * ocupar duas linhas, uma por número nosso. A etiqueta só entra quando há mais
+   * de uma conta na lista — com um número só ela não distingue nada e ocuparia a
+   * linha da empresa em toda conversa.
+   */
+  const variasContas = React.useMemo(
+    () => new Set((conversas.data ?? []).map((c) => c.conta_rotulo).filter(Boolean)).size > 1,
+    [conversas.data],
+  )
+  /*
    * A tarja conta a MESMA fila que a tela de identificação lista — pelo mesmo
    * hook, e não por uma segunda consulta. Duas resoluções independentes de "de
    * quem é a fila" acabariam com a tarja dizendo 8 e a tela abrindo com 3.
@@ -117,7 +127,7 @@ export function Inbox() {
             onPress={() => router.push(`/comunicacao/${item.id}`)}
             className="rounded-xl border border-border bg-card p-3"
           >
-            <LinhaConversa c={item} />
+            <LinhaConversa c={item} mostrarConta={variasContas} />
           </Pressable>
         )}
       />
@@ -125,7 +135,7 @@ export function Inbox() {
   )
 }
 
-function LinhaConversa({ c }: { c: ConversaInbox }) {
+function LinhaConversa({ c, mostrarConta }: { c: ConversaInbox; mostrarConta: boolean }) {
   const { colors } = useTheme()
   const Icone = c.canal === 'email' ? Mail : MessageCircle
   const intencao = intencaoLabel(c.ultima_triagem)
@@ -147,6 +157,7 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
 
       <Text variant="muted" className="text-xs" numberOfLines={1}>
         {c.empresa_nome ?? 'Empresa não identificada'}
+        {mostrarConta && c.conta_rotulo ? ` · por ${c.conta_rotulo}` : ''}
       </Text>
 
       <View className="flex-row items-center gap-2">

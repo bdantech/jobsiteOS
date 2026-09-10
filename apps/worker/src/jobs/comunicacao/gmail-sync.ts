@@ -181,6 +181,10 @@ async function ingerir(email: EmailRecebido, conta: ContaGmail): Promise<void> {
   const conversaId = await conversaPara({
     canal: 'email',
     identificador: email.de,
+    // A caixa que recebeu é a nossa ponta da thread (0196). Duas pessoas da casa
+    // falando com o mesmo cliente são duas conversas — no e-mail isso ainda não
+    // tinha acontecido só porque nenhuma caixa estava conectada.
+    conta: conta.endereco,
     empresaId: r.empresaId,
     contatoId: r.contatoId,
     vendedorId: r.vendedorId ?? donoDaCaixa,

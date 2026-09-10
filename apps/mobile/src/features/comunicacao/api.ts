@@ -33,7 +33,7 @@ export type MensagemThread = Views<'comunicacoes_thread'>
 export type NaoVinculada = Tables<'conversas_nao_vinculadas'>
 
 const COLUNAS_INBOX =
-  'id, canal, identificador_externo, empresa_id, contato_id, objetivo, modo_agente, status, ultima_mensagem_em, ultima_direcao, nao_lidas, empresa_nome, contato_nome, contato_cargo, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
+  'id, canal, identificador_externo, conta_remetente, conta_rotulo, empresa_id, contato_id, objetivo, modo_agente, status, ultima_mensagem_em, ultima_direcao, nao_lidas, empresa_nome, contato_nome, contato_cargo, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
 
 export type AbaMobile = 'nao_lidas' | 'todas'
 

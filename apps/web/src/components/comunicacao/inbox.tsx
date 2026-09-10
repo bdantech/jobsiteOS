@@ -210,6 +210,22 @@ export function Inbox({
     )
   }, [conversas.data, busca])
 
+  /*
+   * POR QUAL NÚMERO NOSSO, e só quando houver mais de um.
+   *
+   * Desde a 0196 a thread é do par (nossa conta, contato), então o mesmo contato
+   * pode aparecer duas vezes na lista — uma por número. Sem dizer qual, as duas
+   * linhas ficam idênticas e quem olha conclui que é duplicata.
+   *
+   * Com um número só, o rótulo não informa nada e vira ruído em cada linha. Daí a
+   * conta ser feita sobre a lista carregada: a etiqueta aparece exatamente quando
+   * passa a fazer diferença, sem ninguém ter de ligá-la.
+   */
+  const variasContas = React.useMemo(
+    () => new Set((conversas.data ?? []).map((c) => c.conta_rotulo).filter(Boolean)).size > 1,
+    [conversas.data],
+  )
+
   const ocultas = useQuery({ queryKey: ['comunicacao', 'ocultas'], queryFn: buscarOcultas })
 
   /*
@@ -352,7 +368,7 @@ export function Inbox({
                       selecionada === c.id && 'bg-muted',
                     )}
                   >
-                    <LinhaConversa c={c} />
+                    <LinhaConversa c={c} mostrarConta={variasContas} />
                   </button>
                 </li>
               ))}
@@ -381,7 +397,7 @@ export function Inbox({
   )
 }
 
-function LinhaConversa({ c }: { c: ConversaInbox }) {
+function LinhaConversa({ c, mostrarConta }: { c: ConversaInbox; mostrarConta: boolean }) {
   const Icone = c.canal === 'email' ? Mail : MessageCircle
   const intencao = intencaoLabel(c.ultima_triagem)
   return (
@@ -397,7 +413,10 @@ function LinhaConversa({ c }: { c: ConversaInbox }) {
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground">{desde(c.ultima_mensagem_em)}</span>
       </div>
-      <p className="truncate text-xs text-muted-foreground">{c.empresa_nome ?? 'Empresa não identificada'}</p>
+      <p className="truncate text-xs text-muted-foreground">
+        {c.empresa_nome ?? 'Empresa não identificada'}
+        {mostrarConta && c.conta_rotulo ? <span> · por {c.conta_rotulo}</span> : null}
+      </p>
       <div className="mt-1 flex items-center gap-1.5">
         {/*
           A última mensagem saiu do aparelho? Um ícone, e não uma linha a mais: o
@@ -459,6 +478,13 @@ function Conversa({ c, onOcultada }: { c: ConversaInbox; onOcultada: () => void 
           */}
           <p className="truncate text-xs text-muted-foreground">
             {identificadorLegivel(c.canal ?? '', c.identificador_externo ?? '')}
+            {/*
+              Aqui o rótulo aparece SEMPRE, e não só quando há vários números: é a
+              tela em que a pessoa vai responder, e saber por qual ponta nossa esta
+              conversa corre é o que decide se a resposta continua a mesma thread do
+              outro lado ou abre uma segunda.
+            */}
+            {c.conta_rotulo ? <span> · por {c.conta_rotulo}</span> : null}
           </p>
           <p className="truncate text-sm text-muted-foreground">
             {c.empresa_id ? (

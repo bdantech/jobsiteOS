@@ -16,11 +16,45 @@ A mesma pessoa fala com o SDR, com o originador e com o closer. Se a thread mora
 card, a segunda conversa começaria do zero e a terceira também: o vendedor abriria o card
 de vendas sem enxergar o que o SDR combinou na semana passada.
 
-A thread mora em `conversas`, chaveada por **(canal, identificador em forma canônica)**.
-Os cards dos cinco funis **apontam** para ela: `comunicacoes.funil` e
+A thread mora em `conversas`, chaveada por **(canal, identificador em forma canônica,
+conta nossa)**. Os cards dos cinco funis **apontam** para ela: `comunicacoes.funil` e
 `comunicacoes.funil_card_id` dizem de onde a mensagem partiu, e isso é filtro de leitura e
 destaque na tela — nunca dono do histórico. A aba "Mensagens" de qualquer card mostra a
 thread inteira da empresa, com o que partiu daquele card marcado.
+
+### A conta nossa entra na chave (0196)
+
+Ela não estava lá, e enquanto havia um número só ninguém notou. No dia em que o terceiro
+número entrou, uma mensagem que chegou no WhatsApp do Viktor caiu na thread que o mesmo
+contato tinha com o Rodrigo — as duas conversas intercaladas por hora, na mesma tela.
+Cinco threads da base estavam nesse estado, e quatro já misturavam Rodrigo e Fabio havia
+uma semana.
+
+O dano visível é a thread embaralhada. O outro é mais sério: `app__donos_da_conversa`
+inclui o dono de toda `conta_remetente` que aparece no ledger da thread, então uma
+conversa com mensagens de dois números fica visível para as duas pessoas. Isso é
+vazamento entre carteiras.
+
+`conversas.conta_remetente` guarda a NOSSA ponta — número E.164 da conta de WhatsApp, ou
+endereço da caixa. É texto e não FK porque a ponta é uma linha de `whatsapp_contas`, uma
+de `gmail_contas` ou **nenhuma** (e-mail do sistema pelo Resend); e é o mesmo nome e o
+mesmo valor de `comunicacoes.conta_remetente`, que já significava "a nossa conta" mesmo
+nas mensagens de entrada.
+
+Três consequências que valem lembrar:
+
+- **O e-mail vinha pelo mesmo caminho.** `conversas` é a mesma tabela para
+  `canal = 'email'`. Nada colidiu ainda só porque nenhuma caixa estava conectada.
+- **O LID também é por conta.** O mesmo cliente gera o mesmo identificador de privacidade
+  nos dois números nossos; `conversas_lid_idx` é único em `(lid, conta_remetente)`.
+- **Identificar um contato é um fato sobre a PESSOA.** `app_conversa_vincular` desce
+  empresa e contato para todas as threads daquele identificador — deixar a irmã na fila
+  devolveria o trabalho que alguém acabou de fazer. O responsável, não: ele é de cada
+  thread, porque quem falou pelo celular do Fabio é o Fabio.
+
+Na tela, `inbox_conversas` expõe `conta_rotulo` (apelido da conta, ou o número cru quando
+a RLS esconde a ficha). O inbox só mostra a etiqueta quando há mais de uma conta na lista
+carregada — com um número só ela não distingue nada e viraria ruído em cada linha.
 
 A forma canônica é uma função só, escrita duas vezes de propósito e testada nas duas:
 `app__identificador_canonico` no banco e `identificadorCanonico()` no core. O mesmo celular

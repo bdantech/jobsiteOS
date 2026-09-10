@@ -63,7 +63,7 @@ export async function buscarResponsaveisInbox(): Promise<ResponsavelInbox[]> {
 }
 
 const COLUNAS_INBOX =
-  'id, canal, identificador_externo, lid, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, nao_lidas, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, contato_base_legal, contato_nao_e_o_decisor, nome_sugerido, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_origem, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
+  'id, canal, identificador_externo, conta_remetente, conta_rotulo, lid, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, nao_lidas, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, contato_base_legal, contato_nao_e_o_decisor, nome_sugerido, responsavel_nome, responsavel_is_ia, ultima_preview, ultima_por_ia, ultima_origem, ultima_triagem, sugestao_id, sugestao_acao, sugestao_conteudo, sugestao_justificativa, sugestao_confianca'
 
 export async function buscarConversas(
   filtros: FiltrosInbox,

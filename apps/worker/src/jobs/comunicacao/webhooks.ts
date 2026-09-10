@@ -122,10 +122,13 @@ async function registrarEntrada(
    */
   const soLid = m.lid !== null && m.de === m.lid
   const conversaId =
-    (soLid ? await conversaPorLid(m.lid) : null) ??
+    (soLid ? await conversaPorLid(m.lid, contaRecebedora) : null) ??
     (await conversaPara({
       canal: 'whatsapp',
       identificador: m.de,
+      // A ponta NOSSA da thread (0196). O mesmo contato falando com dois números
+      // nossos são duas conversas, e sem isto a segunda cairia dentro da primeira.
+      conta: contaRecebedora,
       empresaId: r.empresaId,
       contatoId: r.contatoId,
       // `app__conversa_para` grava com coalesce: a thread que já tem dono não
@@ -228,10 +231,12 @@ async function registrarEnvioPeloCelular(
   const donoDoNumero = await vendedorDaConta(conta?.id, conta?.numero ?? null)
   const soLid = e.lid !== null && e.para === e.lid
   const conversaId =
-    (soLid ? await conversaPorLid(e.lid) : null) ??
+    (soLid ? await conversaPorLid(e.lid, conta?.numero ?? null) : null) ??
     (await conversaPara({
       canal: 'whatsapp',
       identificador: e.para,
+      // Aqui a conta é a que ENVIOU, e é a mesma coisa: a thread é do par.
+      conta: conta?.numero ?? null,
       empresaId: r.empresaId,
       contatoId: r.contatoId,
       vendedorId: donoDoNumero ?? r.vendedorId,

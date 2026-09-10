@@ -74,10 +74,11 @@ interface ConversaParaDecidir {
   ultima_mensagem_em: string | null
   ultima_direcao: string | null
   proxima_acao_em: string | null
+  conta_remetente: string | null
 }
 
 const COLUNAS =
-  'id, canal, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em'
+  'id, canal, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, conta_remetente'
 
 /**
  * A varredura por SILÊNCIO e por agendamento. É o que roda de hora em hora.
@@ -541,6 +542,10 @@ async function trocarContato(conversa: ConversaParaDecidir, d: DecisaoAgente): P
     p_empresa: conversa.empresa_id,
     p_contato: novo.id,
     p_vendedor: conversa.responsavel_vendedor_id,
+    // A thread nova herda a NOSSA ponta da que a originou (0196): trocar de
+    // interlocutor do lado do cliente não troca o número por onde falamos, e
+    // abrir a thread sem conta a deixaria fora da chave do par.
+    p_conta: conversa.conta_remetente,
   })
 
   if (conversaNova) {

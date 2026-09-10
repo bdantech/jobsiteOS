@@ -2881,6 +2881,7 @@ export type Database = {
         Row: {
           atualizada_em: string
           canal: string
+          conta_remetente: string | null
           contato_id: string | null
           criada_em: string
           empresa_id: string | null
@@ -2900,6 +2901,7 @@ export type Database = {
         Insert: {
           atualizada_em?: string
           canal: string
+          conta_remetente?: string | null
           contato_id?: string | null
           criada_em?: string
           empresa_id?: string | null
@@ -2919,6 +2921,7 @@ export type Database = {
         Update: {
           atualizada_em?: string
           canal?: string
+          conta_remetente?: string | null
           contato_id?: string | null
           criada_em?: string
           empresa_id?: string | null
@@ -9495,6 +9498,8 @@ export type Database = {
       inbox_conversas: {
         Row: {
           canal: string | null
+          conta_remetente: string | null
+          conta_rotulo: string | null
           contato_base_legal: string | null
           contato_cargo: string | null
           contato_id: string | null
@@ -10115,6 +10120,7 @@ export type Database = {
       app__conversa_para: {
         Args: {
           p_canal: string
+          p_conta: string | null
           p_contato: string | null
           p_empresa: string | null
           p_identificador: string
@@ -10126,7 +10132,7 @@ export type Database = {
         Args: { p_lid: string; p_conversa: string | null }
         Returns: undefined
       }
-      app__conversa_por_lid: { Args: { p_lid: string }; Returns: string | null }
+      app__conversa_por_lid: { Args: { p_lid: string; p_conta: string | null }; Returns: string | null }
       app__identificador_canonico: {
         Args: { p_canal: string; p_valor: string }
         Returns: string
@@ -13672,9 +13678,11 @@ export const Constants = {
  *   1. O helper `Views<>` abaixo. O gerador novo dobra as views dentro de
  *      `Tables<>`, e o repo inteiro importa `Views<'nome'>`.
  *
- *   2. `| null` nos argumentos anuláveis de `app__conversa_para` (busque pelo
- *      comentário "PATCH DO REPO" acima). O gerador emite todo argumento de RPC
- *      como obrigatório e não-anulável, mesmo quando a função aceita null.
+ *   2. `| null` nos argumentos anuláveis de `app__conversa_para` e de
+ *      `app__conversa_por_lid` (busque pelo comentário "PATCH DO REPO" acima). O
+ *      gerador emite todo argumento de RPC como obrigatório e não-anulável, mesmo
+ *      quando a função aceita null — e `p_conta`, que a 0196 acrescentou, é
+ *      justamente o argumento cujo null tem significado ("não sei de qual conta").
  *
  * Sem (1) o build da web quebra; sem (2) o worker não compila.
  */

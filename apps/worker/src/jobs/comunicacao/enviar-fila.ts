@@ -29,6 +29,7 @@ import {
   transporteGmail,
   transporteResend,
   transporteWhatsapp,
+  type ContaGmail,
   type ContaWhatsapp,
 } from '../../comunicacao/transportes.js'
 import { supabaseAdmin } from '../../db.js'
@@ -193,16 +194,6 @@ async function processar(
   const contato = await buscarContato(linha.destinatario_contato_id)
   const empresaId = linha.empresa_id ?? linha.fornecedor_empresa_id ?? contato?.empresa_id ?? null
 
-  const conversaId =
-    linha.conversa_id ??
-    (await conversaPara({
-      canal,
-      identificador: linha.destinatario,
-      empresaId,
-      contatoId: linha.destinatario_contato_id,
-      vendedorId: linha.vendedor_id,
-    }))
-
   // ── A conta que envia ────────────────────────────────────────────────────
   /*
    * A ORDEM É: a conta que a linha escolheu → o NÚMERO DE QUEM ESCREVEU → o
@@ -215,6 +206,11 @@ async function processar(
    *
    * A IA continua no round-robin: a persona não é de ninguém, e um número de IA
    * atrelado a uma pessoa é exatamente a mistura que `tipo` existe para impedir.
+   *
+   * ── ISTO SUBIU DE POSIÇÃO (0196) ─────────────────────────────────────────
+   * A conta era escolhida DEPOIS da thread. Agora a thread é do par (nossa
+   * conta, contato), então ela não pode ser resolvida antes de sabermos por qual
+   * ponta a mensagem sai — resolver antes escolheria a thread de outro número.
    */
   let conta: ContaWhatsapp | null = null
   if (canal === 'whatsapp') {
@@ -228,6 +224,24 @@ async function processar(
       return { desfecho: 'falhas' }
     }
   }
+
+  /*
+   * Quem assina, decidido aqui e usado em três lugares: a thread, o transporte e
+   * a linha do ledger. Uma decisão só, para os três não divergirem — foi assim
+   * que o remetente do report acabou com dois nomes.
+   */
+  const escolha = await remetenteDe(linha, canal, conta)
+
+  const conversaId =
+    linha.conversa_id ??
+    (await conversaPara({
+      canal,
+      identificador: linha.destinatario,
+      conta: escolha.remetente,
+      empresaId,
+      contatoId: linha.destinatario_contato_id,
+      vendedorId: linha.vendedor_id,
+    }))
 
   // ── O portão, metade do worker ───────────────────────────────────────────
   const fatos: FatosDoEnvio = {
@@ -285,7 +299,7 @@ async function processar(
   }
 
   // ── O transporte ─────────────────────────────────────────────────────────
-  const { transporte, remetente, motivo } = await montarTransporte(linha, canal, conta)
+  const { transporte, remetente, motivo } = await montarTransporte(linha, canal, conta, escolha)
   if (!transporte) {
     // O MOTIVO, não o rótulo. "Credencial ausente" mandou alguém conferir uma
     // credencial que estava certa enquanto o que faltava era uma variável de
@@ -413,15 +427,34 @@ async function processar(
   return { desfecho: 'enviadas', conta }
 }
 
-async function montarTransporte(
+/** Quem assina, e por onde. O transporte em si vem depois, e só se o portão deixar. */
+interface EscolhaDeRemetente {
+  /** Vai para `conversas.conta_remetente` e `comunicacoes.conta_remetente`. */
+  remetente: string | null
+  /** Presente quando o e-mail sai pela caixa de uma pessoa. */
+  gmail: ContaGmail | null
+  motivo: string | null
+}
+
+/**
+ * A DECISÃO de quem assina, separada da CONSTRUÇÃO do transporte.
+ *
+ * Estavam juntas, e não podiam continuar: a thread agora depende do remetente
+ * (0196) e o remetente ficava conhecido só depois do portão. Separar é o que
+ * permite decidir cedo sem pagar cedo — montar o transporte do Gmail renova o
+ * access token, e renovar para uma mensagem que a janela vai adiar é trabalho
+ * jogado fora.
+ */
+async function remetenteDe(
   linha: LinhaFila,
   canal: CanalThread,
   conta: ContaWhatsapp | null,
-): Promise<{ transporte: Transporte | null; remetente: string | null; motivo: string | null }> {
+): Promise<EscolhaDeRemetente> {
   if (canal === 'whatsapp') {
-    if (!conta) return { transporte: null, remetente: null, motivo: 'Nenhuma conta de WhatsApp escolhida.' }
-    const { transporte, motivo } = await transporteWhatsapp(conta)
-    return { transporte, remetente: conta.numero, motivo }
+    if (!conta) {
+      return { remetente: null, gmail: null, motivo: 'Nenhuma conta de WhatsApp escolhida.' }
+    }
+    return { remetente: conta.numero, gmail: null, motivo: null }
   }
 
   /*
@@ -437,20 +470,53 @@ async function montarTransporte(
    */
   if (linha.criada_por && !linha.por_ia) {
     const contaGmail = await contaGmailDoUsuario(linha.criada_por)
-    if (contaGmail) {
-      const { data: u } = await supabaseAdmin
-        .from('usuarios')
-        .select('nome')
-        .eq('id', linha.criada_por)
-        .maybeSingle()
-      const t = await transporteGmail(contaGmail, u?.nome ?? null)
-      if (t) return { transporte: t, remetente: contaGmail.endereco, motivo: null }
-    }
+    if (contaGmail) return { remetente: contaGmail.endereco, gmail: contaGmail, motivo: null }
   }
 
   const remetente = linha.por_ia
     ? (env.RESEND_REMETENTE_IA ?? env.RESEND_REMETENTE ?? null)
     : (env.RESEND_REMETENTE ?? null)
+  if (!remetente) {
+    return {
+      remetente: null,
+      gmail: null,
+      motivo: 'Nenhum remetente de e-mail configurado (RESEND_REMETENTE) e o Gmail de quem enviou não está conectado.',
+    }
+  }
+  return { remetente, gmail: null, motivo: null }
+}
+
+async function montarTransporte(
+  linha: LinhaFila,
+  canal: CanalThread,
+  conta: ContaWhatsapp | null,
+  escolha: EscolhaDeRemetente,
+): Promise<{ transporte: Transporte | null; remetente: string | null; motivo: string | null }> {
+  if (escolha.motivo) return { transporte: null, remetente: null, motivo: escolha.motivo }
+
+  if (canal === 'whatsapp') {
+    if (!conta) return { transporte: null, remetente: null, motivo: 'Nenhuma conta de WhatsApp escolhida.' }
+    const { transporte, motivo } = await transporteWhatsapp(conta)
+    return { transporte, remetente: conta.numero, motivo }
+  }
+
+  if (escolha.gmail && linha.criada_por) {
+    const { data: u } = await supabaseAdmin
+      .from('usuarios')
+      .select('nome')
+      .eq('id', linha.criada_por)
+      .maybeSingle()
+    const t = await transporteGmail(escolha.gmail, u?.nome ?? null)
+    // Token revogado no meio do caminho: cai para o Resend em vez de não sair. A
+    // thread já foi resolvida pela caixa da pessoa, e é onde ela deve continuar.
+    if (t) return { transporte: t, remetente: escolha.gmail.endereco, motivo: null }
+  }
+
+  const remetente = escolha.gmail
+    ? (linha.por_ia
+        ? (env.RESEND_REMETENTE_IA ?? env.RESEND_REMETENTE ?? null)
+        : (env.RESEND_REMETENTE ?? null))
+    : escolha.remetente
   if (!remetente) {
     return {
       transporte: null,

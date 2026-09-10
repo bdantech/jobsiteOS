@@ -116,10 +116,22 @@ export async function escreverNoLedger(m: EscreverNoLedger): Promise<string | nu
  * (`app__conversa_para`) em vez de reimplementar o upsert aqui — duas definições
  * de "a mesma conversa" produzem duas conversas com a mesma pessoa, e é
  * exatamente o defeito que a 0144 existe para não ter.
+ *
+ * ── `conta` NÃO É OPCIONAL POR DESCUIDO ────────────────────────────────────
+ * A thread é do PAR (nossa conta, contato), e não do contato sozinho (0196). Sem
+ * a conta, uma mensagem que chega no número do Viktor cai na thread que o mesmo
+ * contato tem com o Rodrigo — foi o que aconteceu no dia em que o terceiro número
+ * entrou. O tipo obriga cada chamador a responder "por qual ponta nossa isto
+ * passou?", que é uma pergunta que todos eles sabem responder.
+ *
+ * `null` continua valendo, e significa o que diz: não sabemos. Aí a função do
+ * banco cai na thread que já existe em vez de abrir uma paralela.
  */
 export async function conversaPara(args: {
   canal: CanalThread
   identificador: string
+  /** A NOSSA ponta: número da conta de WhatsApp, ou endereço da caixa. */
+  conta: string | null
   empresaId?: string | null
   contatoId?: string | null
   vendedorId?: string | null
@@ -133,6 +145,7 @@ export async function conversaPara(args: {
     p_empresa: args.empresaId ?? null,
     p_contato: args.contatoId ?? null,
     p_vendedor: args.vendedorId ?? null,
+    p_conta: args.conta,
   })
   if (error) {
     logger.error({ erro: error.message, canal: args.canal }, 'Falha ao resolver a conversa.')
@@ -145,10 +158,20 @@ export async function conversaPara(args: {
  * A thread já conhecida por um LID. Chamada quando o provedor manda SÓ o
  * identificador de privacidade — sem isto, uma reação ou uma mídia sem telefone
  * recriaria a thread paralela que a absorção acabou de desfazer.
+ *
+ * A conta entra aqui pelo mesmo motivo do índice único: o mesmo cliente gera o
+ * MESMO LID nos dois números nossos, e procurar sem recorte devolveria a thread
+ * do colega.
  */
-export async function conversaPorLid(lid: string | null): Promise<string | null> {
+export async function conversaPorLid(
+  lid: string | null,
+  conta: string | null,
+): Promise<string | null> {
   if (!lid) return null
-  const { data, error } = await supabaseAdmin.rpc('app__conversa_por_lid', { p_lid: lid })
+  const { data, error } = await supabaseAdmin.rpc('app__conversa_por_lid', {
+    p_lid: lid,
+    p_conta: conta,
+  })
   if (error) {
     logger.error({ erro: error.message, lid }, 'Falha ao procurar a conversa pelo LID.')
     return null
@@ -163,6 +186,9 @@ export async function conversaPorLid(lid: string | null): Promise<string | null>
  * primeira: é barato (uma consulta por índice único quando não há o que fazer) e
  * é o único momento em que o par LID↔telefone existe. Guardá-lo para depois seria
  * guardar para nunca — o provedor não devolve esse mapeamento sob demanda.
+ *
+ * A conta não precisa vir por parâmetro: a função do banco lê a da própria thread
+ * que recebeu (`p_conversa`) e só absorve dentro dela.
  */
 export async function absorverLid(lid: string | null, conversaId: string | null): Promise<void> {
   if (!lid || !conversaId) return
