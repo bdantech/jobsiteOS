@@ -157,6 +157,16 @@ export const PARAMETROS_COMISSAO: readonly ParametroCatalogado[] = [
       + 'todos os papéis — é o parâmetro mais sensível do sistema.',
   },
   {
+    chave: 'prazo_maximo_vop',
+    rotulo: 'Prazo máximo considerado no VOP',
+    unidade: 'DAYS',
+    grupo: 'calculo',
+    aceitaOverride: false,
+    descricao:
+      'Teto de dias no numerador de `valor × dias / N`. Uma operação de 300 dias é '
+      + 'remunerada como se fosse de N dias no máximo. Ausente = sem teto.',
+  },
+  {
     chave: 'orig_prospeccao_ativa',
     rotulo: 'Originador — conta em prospecção ativa',
     unidade: 'BRL_PER_MM',
@@ -563,14 +573,35 @@ export function arredondar(v: number, casas = 2): number {
  * diferença não é acadêmica: vencimento prorrogado, feriado e antecipação parcial fazem
  * a conta por datas divergir da que a plataforma usou para precificar a operação — e a
  * comissão tem de falar do mesmo número que a receita.
+ *
+ * ── O TETO DE PRAZO ────────────────────────────────────────────────────────────
+ * A ponderação por prazo existe para pagar mais por imobilizar mais. Ela é linear, e a
+ * linearidade deixa de descrever o negócio quando o prazo estica: uma operação de 300
+ * dias não vale dez vezes uma de 30 para quem vende. Acima do teto, o VOP para de subir.
+ *
+ * `prazoMaximoDias` nulo = sem teto, que é o comportamento de antes — o parâmetro tem
+ * vigência, e uma cessão anterior a ela tem de continuar valendo o que valia.
  */
 export function calcularVOP(
   valorCedido: number,
   anticipationDays: number,
   diasReferenciaVop: number,
+  prazoMaximoDias: number | null = null,
 ): number {
   if (!(valorCedido > 0) || !(diasReferenciaVop > 0) || !(anticipationDays > 0)) return 0
-  return arredondar(valorCedido * (anticipationDays / diasReferenciaVop))
+  return arredondar(valorCedido * (diasDoVop(anticipationDays, prazoMaximoDias) / diasReferenciaVop))
+}
+
+/**
+ * Os dias que ENTRAM na conta, que não são necessariamente os da operação.
+ *
+ * Função própria porque três lugares precisam da mesma resposta — o cálculo, a
+ * explicação que a pessoa lê no extrato e o simulador — e três `Math.min` soltos é como
+ * um deles fica para trás no dia em que o teto mudar de forma.
+ */
+export function diasDoVop(anticipationDays: number, prazoMaximoDias: number | null): number {
+  if (prazoMaximoDias === null || !(prazoMaximoDias > 0)) return anticipationDays
+  return Math.min(anticipationDays, prazoMaximoDias)
 }
 
 /** O que o VOP paga a uma taxa em R$ por milhão, já com o share do titular. */
@@ -710,7 +741,8 @@ export function lancamentosDaCessao(
     faseManual: cessao.faseManual ?? null,
   })
   const idade = cessao.marcoAtivacao ? idadeEmMeses(cessao.marcoAtivacao, quando) : 0
-  const vop = calcularVOP(cessao.valorCedido, cessao.anticipationDays, diasRef)
+  const prazoMax = valorParametro(params, 'prazo_maximo_vop', null, quando)
+  const vop = calcularVOP(cessao.valorCedido, cessao.anticipationDays, diasRef, prazoMax)
   if (vop <= 0) return out
 
   const base = {
@@ -731,6 +763,13 @@ export function lancamentosDaCessao(
 
   const snapshotComum = {
     dias_referencia_vop: diasRef,
+    /*
+     * O TETO VAI PARA O SNAPSHOT mesmo quando não mordeu, e `anticipation_days` na linha
+     * continua sendo o prazo REAL da operação. Guardar só o prazo já limitado faria o
+     * extrato dizer que a operação foi de 180 dias — o que não é verdade, e é a primeira
+     * coisa que alguém confere ao contestar. O que a conta usou sai da explicação.
+     */
+    prazo_maximo_vop: prazoMax,
     marco_ativacao: cessao.marcoAtivacao,
     idade_meses: idade,
     fase,
@@ -1107,8 +1146,14 @@ export function explicarCalculo(l: {
   const share = l.share_pct ?? 100
   const mm = vop / 1_000_000
 
+  // O teto tem de aparecer quando morde: sem isto a conta escrita não fecha com o VOP
+  // ao lado, e uma conta que não fecha é pior que nenhuma — ela parece um erro.
+  const teto = snap.prazo_maximo_vop == null ? null : Number(snap.prazo_maximo_vop)
+  const diasUsados = diasDoVop(dias, teto)
+  const limite = diasUsados < dias ? ` (prazo de ${dias} dias limitado ao teto de ${teto})` : ''
+
   const conta =
-    `${brl(cedido)} × ${dias}/${ref} = ${num(vop)} VOP → ` +
+    `${brl(cedido)} × ${diasUsados}/${ref}${limite} = ${num(vop)} VOP → ` +
     `${num(mm, 2)} × ${brl(taxa)} = ${brl(arredondar(mm * taxa))}`
   return share >= 100 ? `${conta}.` : `${conta}, × ${num(share, 1)}% de share = ${brl(l.valor)}.`
 }
@@ -1153,7 +1198,9 @@ export function simularComissao(
   const quando = dia(data)
   const gestao = entrada.gestaoOperacao
   const diasRef = valorParametro(params, 'dias_referencia_vop', null, quando) ?? 30
-  const vop = calcularVOP(entrada.volume, entrada.dias, diasRef)
+  // Mesmo teto do motor: um simulador que ignora o limite promete o que a folha não paga.
+  const prazoMax = valorParametro(params, 'prazo_maximo_vop', null, quando)
+  const vop = calcularVOP(entrada.volume, entrada.dias, diasRef, prazoMax)
 
   // A idade entra como número, não como data: no simulador a pergunta é "e se a conta
   // tivesse 8 meses?", e obrigar quem simula a inventar um marco seria pedir a resposta

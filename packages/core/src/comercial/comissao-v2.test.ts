@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   agruparDerivaPorConta,
   calcularVOP,
+  diasDoVop,
   compararLancamentos,
   comissaoDoVop,
   competenciaSp,
@@ -101,6 +102,55 @@ test('VOP inválido (sem valor, sem prazo ou sem referência) é zero, não NaN'
   assert.equal(calcularVOP(0, 45, 30), 0)
   assert.equal(calcularVOP(500_000, 0, 30), 0)
   assert.equal(calcularVOP(500_000, 45, 0), 0)
+})
+
+test('o teto de prazo trava o numerador, e só quando morde', () => {
+  // 300 dias pagam como 180: a ponderação linear deixa de descrever o negócio quando o
+  // prazo estica, e acima do teto o VOP para de subir.
+  assert.equal(calcularVOP(100_000, 300, 30, 180), calcularVOP(100_000, 180, 30, 180))
+  assert.equal(calcularVOP(100_000, 300, 30, 180), 600_000)
+  // Abaixo do teto nada muda — a esmagadora maioria das operações passa por aqui.
+  assert.equal(calcularVOP(100_000, 45, 30, 180), calcularVOP(100_000, 45, 30))
+})
+
+test('sem teto o VOP é o de antes — a cessão anterior à vigência vale o que valia', () => {
+  assert.equal(calcularVOP(100_000, 300, 30, null), 1_000_000)
+  assert.equal(calcularVOP(100_000, 300, 30, 0), 1_000_000)
+})
+
+test('diasDoVop é a única resposta para "que prazo entrou na conta"', () => {
+  assert.equal(diasDoVop(300, 180), 180)
+  assert.equal(diasDoVop(45, 180), 45)
+  assert.equal(diasDoVop(300, null), 300)
+})
+
+test('a explicação denuncia o teto quando ele morde, e cala quando não', () => {
+  const comum = {
+    valor_cedido: 100_000,
+    taxa_brl_por_mm: 600,
+    share_pct: 100,
+    valor: 360,
+    origem_tipo: 'nf_convertida',
+  }
+  const limitado = explicarCalculo({
+    ...comum,
+    anticipation_days: 300,
+    vop: 600_000,
+    params_snapshot: { dias_referencia_vop: 30, prazo_maximo_vop: 180 },
+  })
+  assert.match(limitado, /180\/30/)
+  assert.match(limitado, /limitado ao teto de 180/)
+  // O prazo REAL continua legível: é a primeira coisa que alguém confere ao contestar.
+  assert.match(limitado, /300 dias/)
+
+  const solto = explicarCalculo({
+    ...comum,
+    anticipation_days: 45,
+    vop: 150_000,
+    params_snapshot: { dias_referencia_vop: 30, prazo_maximo_vop: 180 },
+  })
+  assert.match(solto, /45\/30/)
+  assert.doesNotMatch(solto, /teto/)
 })
 
 // ─── Resolução de parâmetro ─────────────────────────────────────────────────
