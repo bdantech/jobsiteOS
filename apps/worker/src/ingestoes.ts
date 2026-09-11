@@ -1,6 +1,9 @@
 import { notify } from '../../../packages/core/src/server/notify.js'
 import { EVENTO_TIPOS, type EventoTipo } from '../../../packages/core/src/constants.js'
-import type { FonteIngestao } from '../../../packages/core/src/mercado/schemas.js'
+import {
+  FONTE_INGESTAO_LABELS,
+  type FonteIngestao,
+} from '../../../packages/core/src/mercado/schemas.js'
 import { supabaseAdmin } from './db.js'
 import { env } from './env.js'
 import { logger } from './logger.js'
@@ -115,9 +118,7 @@ export async function falharIngestao(
   const titulo = `Ingestão falhou — ${rotuloFonte(fonte)}`
   const corpo =
     `${mensagem.slice(0, 300)}\n\n` +
-    `Todas as ${env.RETRY_TENTATIVAS} tentativas foram esgotadas. A fonte primária é sempre a ` +
-    `Receita Federal. Para reexecutar pelo espelho manual (${env.RECEITA_FALLBACK_URL}), abra a ` +
-    `ingestão em Mercado → Ingestões e use "Reexecutar com fallback". O fallback nunca é automático.`
+    `Todas as ${env.RETRY_TENTATIVAS} tentativas foram esgotadas. ${COMO_REEXECUTAR[fonte]}`
   const url = `/mercado/ingestoes/${id}`
 
   await registrarEvento(EVENTO_TIPOS.MERCADO_INGESTAO_FALHOU, { titulo, resumo: corpo, url })
@@ -167,8 +168,51 @@ async function idsAdmins(): Promise<string[]> {
   return (usuarios ?? []).map((u) => u.id)
 }
 
+/**
+ * O NOME DA FONTE NO ALERTA, e ele precisa ser o certo.
+ *
+ * Isto era uma escada de três degraus escrita aqui: `receita_cnpj`, `cno`, e
+ * "Importação de lista" para todo o resto. As quatro fontes da Onepay nasceram
+ * depois e caíram no `return` final — então treze falhas seguidas do sync de
+ * ANTECIPAÇÕES tocaram o sino dizendo "Ingestão falhou — Importação de lista".
+ * Quem recebeu não tinha como saber do que se tratava, e ninguém foi olhar.
+ *
+ * A lista completa já existia em `FONTE_INGESTAO_LABELS`, no core, e é a mesma
+ * que a tela de Ingestões usa. Duas listas para a mesma coisa é como uma delas
+ * envelhece sem que ninguém perceba.
+ */
 function rotuloFonte(fonte: FonteIngestao): string {
-  if (fonte === 'receita_cnpj') return 'Receita Federal (CNPJ)'
-  if (fonte === 'cno') return 'CNO (obras)'
-  return 'Importação de lista'
+  return FONTE_INGESTAO_LABELS[fonte] ?? fonte
+}
+
+/**
+ * O QUE FAZER, por fonte — e não a mesma frase para todas.
+ *
+ * O texto era único e falava em Receita Federal e espelho manual. Numa falha da
+ * Onepay isso não é só inútil: é desorientador, porque manda conferir uma fonte
+ * que não tem nada a ver com o que quebrou. Uma instrução que não se aplica
+ * ensina a ignorar o alerta inteiro.
+ */
+const REEXECUTAR_PELA_TELA =
+  'Abra a ingestão em Mercado → Ingestões para ver o erro completo e use "Sincronizar agora" ' +
+  'quando a origem voltar. A janela do próximo ciclo cobre os últimos dias, então uma ' +
+  'indisponibilidade curta se resolve sozinha — uma longa, não.'
+
+const COMO_REEXECUTAR: Record<FonteIngestao, string> = {
+  receita_cnpj:
+    `A fonte primária é sempre a Receita Federal. Para reexecutar pelo espelho manual ` +
+    `(${env.RECEITA_FALLBACK_URL}), abra a ingestão em Mercado → Ingestões e use ` +
+    `"Reexecutar com fallback". O fallback nunca é automático.`,
+  cno:
+    `A fonte primária é sempre a Receita Federal. Para reexecutar pelo espelho manual ` +
+    `(${env.RECEITA_FALLBACK_URL}), abra a ingestão em Mercado → Ingestões e use ` +
+    `"Reexecutar com fallback". O fallback nunca é automático.`,
+  lista: 'Reenvie o arquivo em Mercado → Ingestões.',
+  onepay_nf: REEXECUTAR_PELA_TELA,
+  onepay_certificados: REEXECUTAR_PELA_TELA,
+  onepay_antecipacoes:
+    'Enquanto isto não voltar, NENHUMA operação nova entra — e o que não entra não vira ' +
+    'cessão, não vira comissão e não aparece no relatório de ninguém. ' +
+    REEXECUTAR_PELA_TELA,
+  onepay_credit_analyses: REEXECUTAR_PELA_TELA,
 }

@@ -61,7 +61,26 @@ export async function requisitarJson<T = unknown>(url: string, opcoes: OpcoesHtt
 
       if (!res.ok) {
         const corpo = await res.text().catch(() => '')
-        const erro = new HttpError(`HTTP ${res.status}`, res.status, corpo)
+        /*
+         * O CORPO VAI NA MENSAGEM, e não só no campo ao lado.
+         *
+         * Quem registra a falha — `falharIngestao`, o outbox, a esteira — grava
+         * `erro.message`, e `corpo` ficava para trás. O resultado é a linha que
+         * diz "HTTP 500" e mais nada: não dá para distinguir a API do provedor
+         * fora do ar de um parâmetro que passamos errado, e as duas coisas se
+         * consertam em lugares diferentes.
+         *
+         * Foi exatamente o que custou caro no envio à seguradora, e de novo nas
+         * treze falhas seguidas do sync de antecipações. 300 caracteres bastam
+         * para o começo de um JSON de erro e evitam despejar uma página de HTML
+         * de gateway no banco.
+         */
+        const trecho = corpo.trim().replace(/\s+/g, ' ').slice(0, 300)
+        const erro = new HttpError(
+          trecho ? `HTTP ${res.status}: ${trecho}` : `HTTP ${res.status}`,
+          res.status,
+          corpo,
+        )
         if (!retryavel(res.status)) throw erro // 4xx (≠429): não retenta
         ultimoErro = erro
         logger.error({ url, tentativa, status: res.status }, 'HTTP retryável.')
