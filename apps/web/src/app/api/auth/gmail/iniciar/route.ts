@@ -1,6 +1,6 @@
 import { randomBytes, createHmac } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { ESCOPOS_GMAIL } from '@jobsiteos/core'
+import { ESCOPOS_GOOGLE } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
 
 /**
@@ -12,6 +12,15 @@ import { getSessionContext } from '@/lib/auth'
  * fazer o consentimento dela ser gravado como conexão de terceiro — que é a
  * versão de CSRF que importa aqui, porque o que se ganha é a caixa de e-mail de
  * alguém.
+ *
+ * ── O CONSENTIMENTO PASSOU A INCLUIR A AGENDA (0201) ───────────────────────
+ * `ESCOPOS_GOOGLE` = os três do Gmail + `calendar.events`. É o mesmo botão e o
+ * mesmo consentimento: separar em dois fluxos daria duas telas do Google para a
+ * mesma pessoa no mesmo dia, e a segunda é a que ninguém completa.
+ *
+ * Quem conectou ANTES disto continua com os três antigos, e é por isso que a
+ * 0201 §7 conserta a gravação de `escopos` — é ela que permite à tela dizer
+ * "reconecte" em vez de deixar a reunião falhar com um 403 silencioso.
  *
  * ── `access_type=offline` + `prompt=consent` ───────────────────────────────
  * O Google só devolve o refresh token no PRIMEIRO consentimento. Sem
@@ -49,7 +58,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     client_id: clientId,
     redirect_uri: `${origem}/api/auth/gmail/callback`,
     response_type: 'code',
-    scope: ESCOPOS_GMAIL.join(' '),
+    scope: ESCOPOS_GOOGLE.join(' '),
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',

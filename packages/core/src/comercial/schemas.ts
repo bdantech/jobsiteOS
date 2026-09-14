@@ -379,6 +379,30 @@ export type DesvincularCnpjContaInput = z.infer<typeof desvincularCnpjContaSchem
  * não move o card (o estágio é o que diz até onde ele chegou), e mover não obriga a
  * julgar.
  */
+export const MODALIDADES_REUNIAO = ['meet', 'presencial', 'telefone', 'a_definir'] as const
+export type ModalidadeReuniao = (typeof MODALIDADES_REUNIAO)[number]
+
+export const MODALIDADE_REUNIAO_LABELS: Record<ModalidadeReuniao, string> = {
+  meet: 'Google Meet',
+  presencial: 'Presencial',
+  telefone: 'Telefone',
+  a_definir: 'A definir',
+}
+
+/**
+ * Quem do lado do cliente foi convidado, COMO foi convidado.
+ *
+ * `contato_id` é a origem, não a fonte da verdade: o nome e o e-mail ficam
+ * gravados como estavam no instante do convite. Um contato que troca de e-mail
+ * depois não pode reescrever para onde o convite foi.
+ */
+export const participanteReuniaoSchema = z.object({
+  contato_id: uuid.nullable().optional(),
+  nome: z.string().trim().min(1).max(120).nullable().optional(),
+  email: z.string().trim().email('E-mail inválido.').max(200),
+})
+export type ParticipanteReuniao = z.infer<typeof participanteReuniaoSchema>
+
 export const moverLeadSchema = z
   .object({
     lead_id: uuid,
@@ -387,6 +411,9 @@ export const moverLeadSchema = z
     sem_fit_motivo: uuid.nullable().optional(),
     reuniao_em: z.string().datetime({ offset: true }).nullable().optional(),
     vendedor_destino_id: uuid.nullable().optional(),
+    modalidade: z.enum(MODALIDADES_REUNIAO).optional(),
+    local: z.string().trim().max(300).nullable().optional(),
+    participantes: z.array(participanteReuniaoSchema).max(20).optional(),
   })
   // As validações que o banco também faz. Aqui existem para a mensagem chegar ao
   // formulário no campo certo, em vez de voltar como exceção genérica do Postgres.
@@ -402,7 +429,33 @@ export const moverLeadSchema = z
     message: 'Agendar exige data e vendedor destino.',
     path: ['reuniao_em'],
   })
+  // Uma reunião presencial sem endereço é um compromisso que ninguém sabe cumprir.
+  .refine((v) => v.modalidade !== 'presencial' || !!v.local, {
+    message: 'Reunião presencial exige o local.',
+    path: ['local'],
+  })
 export type MoverLeadInput = z.infer<typeof moverLeadSchema>
+
+/**
+ * A aba da reunião escrevendo: horário, modalidade, local, convidados — ou o
+ * cancelamento, que é a única operação que dispensa o resto.
+ */
+export const salvarReuniaoSchema = z
+  .object({
+    id: uuid,
+    inicio_em: z.string().datetime({ offset: true }).optional(),
+    duracao_min: z.number().int().min(15).max(480).optional(),
+    modalidade: z.enum(MODALIDADES_REUNIAO).optional(),
+    local: z.string().trim().max(300).nullable().optional(),
+    descricao: z.string().trim().max(2000).nullable().optional(),
+    participantes: z.array(participanteReuniaoSchema).max(20).optional(),
+    cancelar: z.boolean().optional(),
+  })
+  .refine((v) => v.cancelar === true || v.modalidade !== 'presencial' || !!v.local, {
+    message: 'Reunião presencial exige o local.',
+    path: ['local'],
+  })
+export type SalvarReuniaoInput = z.infer<typeof salvarReuniaoSchema>
 
 /** Mover de estágio, mudar a situação, ou os dois. São coisas independentes. */
 export const moverVendaSchema = z

@@ -17,12 +17,14 @@ import {
   ESTAGIOS_SDR,
   ESTAGIO_SDR_LABELS,
   ORIGEM_LEAD_SDR_DESCRICOES,
+  MODALIDADE_REUNIAO_LABELS,
   TIPO_VENDEDOR_LABELS,
   closerParaConta,
   rotuloFit,
   rotuloOrigemLead,
   type CloserComTerritorio,
   type EstagioSdr,
+  type ModalidadeReuniao,
   type OrigemLeadSdr,
   type TipoVendedorId,
 } from '@jobsiteos/core'
@@ -38,8 +40,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { atribuirLeadSdrAction, moverLeadAction } from '@/actions/comercial'
+import { buscarContatos } from '@/components/comunicacao/queries'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
+import { AbaReuniao } from './aba-reuniao'
 import { AbaPitch } from './aba-pitch'
 import { AbaFormulario, FichaDoCard } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
@@ -114,6 +118,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   const [sdrId, setSdrId] = React.useState<string | null>(null)
   const [vista, setVista] = React.useState<'kanban' | 'tabela'>('kanban')
   const [agendando, setAgendando] = React.useState<LeadComEmpresa | null>(null)
+  /* Google Meet é o padrão porque é o caso comum e porque é o único que produz um
+     link sem ninguém digitar nada. Presencial e telefone pedem o campo de local. */
+  const [modalidade, setModalidade] = React.useState<ModalidadeReuniao>('meet')
+  /** Os e-mails marcados para receber o convite, em minúsculas. */
+  const [convidando, setConvidando] = React.useState<Set<string>>(new Set())
   const [semFit, setSemFit] = React.useState<LeadComEmpresa | null>(null)
   const [agindo, setAgindo] = React.useState(false)
   const [aberto, setAberto] = React.useState<LeadComEmpresa | null>(null)
@@ -140,6 +149,37 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     queryKey: comercialKeys.motivos('sdr_sem_fit'),
     queryFn: () => buscarMotivos('sdr_sem_fit'),
   })
+  /*
+   * Os contatos da empresa do lead que está sendo agendado — para escolher quem do
+   * cliente recebe o convite. Só busca quando o diálogo está aberto: o kanban
+   * inteiro carregaria contatos de dezenas de empresas que ninguém vai convidar.
+   */
+  const contatosDaEmpresa = useQuery({
+    queryKey: ['comunicacao', 'contatos', agendando?.empresas?.id ?? null],
+    queryFn: () => buscarContatos(agendando?.empresas?.id ?? ''),
+    enabled: Boolean(agendando?.empresas?.id),
+  })
+  const contatosComEmail = (contatosDaEmpresa.data ?? []).filter((c) => Boolean(c.email))
+
+  /*
+   * Abrir o diálogo zera as escolhas e já marca o PONTO FOCAL.
+   *
+   * Sem isto, o estado de um agendamento vazaria para o próximo: o SDR marca a
+   * reunião da empresa A convidando o contato dela, fecha, abre a empresa B — e os
+   * e-mails de A continuam marcados, prontos para irem para a reunião errada.
+   */
+  React.useEffect(() => {
+    if (!agendando) return
+    setModalidade('meet')
+    setConvidando(new Set())
+  }, [agendando])
+
+  React.useEffect(() => {
+    if (!agendando || !contatosDaEmpresa.data) return
+    const focal = contatosDaEmpresa.data.find((c) => c.ponto_focal && c.email)
+    if (focal?.email) setConvidando(new Set([focal.email.toLowerCase()]))
+  }, [agendando, contatosDaEmpresa.data])
+
   // Territórios dos closers: é com eles que a tela SUGERE o destino da reunião.
   const territorios = useQuery({
     queryKey: comercialKeys.territorios(),
@@ -665,6 +705,23 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                 </div>
               ),
             },
+            /*
+             * A aba Reunião só aparece quando existe uma — e existe a partir de
+             * `reuniao_agendada`. Uma aba permanentemente vazia num lead que
+             * ninguém marcou treina a pessoa a não clicar nela, e aí ela deixa de
+             * ser vista justamente no card em que passa a ter conteúdo.
+             */
+            ...(aberto.reuniao_em
+              ? [
+                  {
+                    id: 'reuniao',
+                    label: 'Reunião',
+                    conteudo: (
+                      <AbaReuniao sdrLeadId={aberto.id} empresaId={aberto.empresas?.id ?? null} />
+                    ),
+                  },
+                ]
+              : []),
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             {
               id: 'mensagens',
@@ -693,9 +750,22 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               const destino = String(fd.get('destino') ?? '')
               // datetime-local vem sem fuso; o banco quer ISO com offset.
               const iso = quando ? new Date(quando).toISOString() : ''
+              const local = String(fd.get('local') ?? '').trim()
+              /*
+               * Os convidados saem dos contatos COM E-MAIL desta empresa. Convite de
+               * agenda é um e-mail — não há como convidar um WhatsApp —, e é por isso
+               * que a lista pode vir vazia mesmo numa empresa cheia de contatos.
+               */
+              const convidados = (contatosDaEmpresa.data ?? [])
+                .filter((c) => c.email && convidando.has(c.email.toLowerCase()))
+                .map((c) => ({ contato_id: c.id, nome: c.nome, email: (c.email ?? '').toLowerCase() }))
+
               const ok = await mover(agendando, 'reuniao_agendada', {
                 reuniao_em: iso,
                 vendedor_destino_id: destino,
+                modalidade,
+                local: modalidade === 'meet' ? null : local || null,
+                participantes: convidados,
               })
               // Fecha os dois: o diálogo e o modal do card que o abriu.
               if (ok) {
@@ -707,8 +777,8 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
             <DialogHeader>
               <DialogTitle>Agendar reunião</DialogTitle>
               <DialogDescription>
-                Cria o card no funil do closer e o evento no calendário dos dois. O closer vê a
-                reunião como sua no mesmo instante.
+                Cria o card no funil do closer e uma reunião só, na agenda dos dois. Quem
+                for convidado recebe o convite do Google com o link.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3 py-4">
@@ -716,6 +786,73 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                 <Label htmlFor="quando">Quando</Label>
                 <Input id="quando" name="quando" type="datetime-local" required />
               </div>
+              <div className="space-y-1.5">
+                <Label>Onde</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(['meet', 'presencial', 'telefone'] as const).map((m) => (
+                    <Button
+                      key={m}
+                      type="button"
+                      size="sm"
+                      variant={modalidade === m ? 'secondary' : 'outline'}
+                      onClick={() => setModalidade(m)}
+                    >
+                      {MODALIDADE_REUNIAO_LABELS[m]}
+                    </Button>
+                  ))}
+                </div>
+                {modalidade === 'meet' ? (
+                  <p className="text-xs text-muted-foreground">
+                    A sala do Meet é criada pelo Google e vai dentro do convite.
+                  </p>
+                ) : (
+                  <Input
+                    name="local"
+                    placeholder={
+                      modalidade === 'presencial'
+                        ? 'Endereço da reunião'
+                        : 'Telefone que vai ser chamado'
+                    }
+                    required={modalidade === 'presencial'}
+                  />
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Convidar do cliente</Label>
+                {contatosComEmail.length === 0 ? (
+                  /* Marcar sem convidar ninguém é legítimo — o SDR pode combinar por
+                     WhatsApp e convidar depois pela aba Reunião. O que não pode é a
+                     tela deixar isso parecer um erro dela. */
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum contato desta empresa tem e-mail cadastrado. Dá para marcar assim
+                    mesmo e convidar depois, pela aba Reunião do card.
+                  </p>
+                ) : (
+                  contatosComEmail.map((c) => {
+                    const email = (c.email ?? '').toLowerCase()
+                    return (
+                      <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={convidando.has(email)}
+                          onChange={() =>
+                            setConvidando((atual) => {
+                              const proximo = new Set(atual)
+                              if (proximo.has(email)) proximo.delete(email)
+                              else proximo.add(email)
+                              return proximo
+                            })
+                          }
+                        />
+                        <span>{c.nome ?? email}</span>
+                        <span className="text-xs text-muted-foreground">{email}</span>
+                      </label>
+                    )
+                  })
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="destino">Vendedor destino</Label>
                 <select

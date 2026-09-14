@@ -530,9 +530,24 @@ Marcar **sem fit** exige motivo e **encerra o lead onde ele está** (`encerrado_
 por engano o reabre. Julgar fit em quem nunca foi contatado é recusado: não é julgamento,
 é descarte, e vira estatística que mente sobre a régua.
 
-Agendar cria, na mesma transação, o card no funil do closer e o evento de calendário dos
-dois. Uma reunião agendada que não aparece no funil de quem vai atendê-la é uma reunião
-que ninguém preparou.
+Agendar cria, na mesma transação, o card no funil do closer e **uma** reunião, na agenda
+dos dois. Uma reunião agendada que não aparece no funil de quem vai atendê-la é uma
+reunião que ninguém preparou.
+
+**Uma** e não duas: até a 0201, agendar inseria dois `vendedor_eventos` — o do closer e o
+"(agendada por mim)" do SDR. A intenção era certa e a modelagem estava errada: um fato
+virava dois registros, e nada conseguia mantê-los coerentes (remarcar mexia em dois,
+cancelar em dois, e o Google receberia dois). No calendário de quem não filtra por pessoa
+— o do gestor — as duas linhas apareciam lado a lado, mesmo horário, mesma empresa, o que
+se lia como duplicação porque era. Hoje o dono é quem atende e quem acompanha entra em
+`vendedor_eventos.acompanhantes`; a agenda de cada um lê "sou o dono OU estou nos
+acompanhantes", no calendário e no feed `.ics`.
+
+Agendar também é **idempotente**. Remarcar reaproveita a venda aberta do lead e atualiza a
+reunião; antes, cada chamada com `reuniao_agendada` criava um card novo no funil do closer
+e mais um par de eventos. Dois cards para uma negociação é pior que nenhum — um é
+trabalhado e o outro envelhece até ser perdido "por duplicidade", o que estraga o motivo
+de perda também.
 
 **A porta de entrada é tag no card** (`sdr_leads.origem`, três valores desde a 0091):
 `distribuicao` aparece como **Outbound**, `inbound` como **Formulário** e `manual` como
@@ -633,9 +648,51 @@ por isso que o badge "em campanha X" também aparece na ficha da empresa.
 
 Detalhes em [`campanhas.md`](campanhas.md).
 
-## Calendário
+## Calendário e Google Agenda
 
-Eventos dos funis, mais o feed `.ics` por vendedor em `/api/calendario/<token>`.
+Eventos dos funis, o **Google Agenda de quem organiza**, e o feed `.ics` por vendedor em
+`/api/calendario/<token>`.
+
+### A reunião no Google (0201)
+
+A reunião marcada aqui é escrita no Google Agenda do **anfitrião** (o closer dono do card),
+com sala do **Meet** e com os contatos escolhidos do cliente como **convidados** — é o
+Google que manda o convite por e-mail, em nome de quem organiza, com "Sim / Não / Talvez"
+dentro. O SDR e os contatos entram como `attendees`; não criamos cópia na agenda de
+ninguém, porque quem é convidado já recebe o evento na própria agenda.
+
+O caminho é `vendedor_eventos.google_pendente_em` → job `comercial-reunioes` →
+`events.insert`/`PUT`/`DELETE`. A fila é uma **coluna** e não uma tabela: o que se
+sincroniza é a reunião, e um registro separado só criaria a chance de os dois discordarem.
+Agendar e editar acordam o job na hora, pela action; o cron de dez em dez minutos é a rede
+para o disparo que falhou e para o erro transitório da API.
+
+Três coisas que o `.ics` nunca poderia fazer, e que são exatamente o que foi pedido:
+aparecer **agora** (um feed é puxado pelo Google de poucas em poucas horas), **ter link de
+Meet** (a sala nasce no `events.insert`; um `.ics` só carrega link que já exista) e
+**convidar** (ninguém é convidado para um feed). O feed continua existindo para quem não
+conectou o Google e para quem usa Outlook — e passou a carregar o link ou o endereço no
+`LOCATION`.
+
+**Escopo:** o consentimento do Google passou a incluir `calendar.events`. Quem conectou
+antes disso continua com os três do Gmail, e a aba Reunião do card diz isso com todas as
+letras em vez de deixar a sincronização falhar com um 403 silencioso. O e-mail continua
+funcionando enquanto a pessoa não reconecta.
+
+**Reunião no passado não vai para o Google.** Criar hoje um evento de ontem dispara
+convite retroativo — um e-mail dizendo "você foi convidado" para uma conversa que já teve.
+
+### A aba Reunião
+
+Nos dois funis: no de reuniões a partir de `reuniao_agendada`, no de vendas em todo card
+que veio de um lead (um negócio criado à mão nunca teve reunião marcada por aqui, e para
+ele a aba não aparece em vez de aparecer vazia para sempre). Mostra horário, modalidade,
+link do Meet ou endereço, quem é anfitrião, quem acompanha, quem do cliente foi convidado
+— e **o estado da sincronização**, que é metade do valor dela: "não apareceu no meu Google
+Agenda" tem três causas (ainda na fila, falhou por um motivo, ou o anfitrião não conectou /
+conectou sem o escopo de agenda) e cada uma se resolve num lugar diferente.
+
+### O feed .ics
 
 O feed é **público por natureza** (Google e Outlook buscam sem cabeçalho de
 autenticação), então o token É a credencial: aleatório, por vendedor, e gerar outro revoga

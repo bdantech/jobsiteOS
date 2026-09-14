@@ -102,11 +102,53 @@ export async function GET(request: Request): Promise<NextResponse> {
       return NextResponse.redirect(destino)
     }
 
+    /*
+     * QUEM ACABOU DE CONECTAR VOLTA PARA A FILA DO GOOGLE (0201).
+     *
+     * O job de sincronização tira da fila as reuniões cujo anfitrião não tinha o
+     * Google conectado — insistir de dez em dez minutos não conecta a conta de
+     * ninguém. Sem este passo, a pessoa conectaria, nada aconteceria, e a
+     * conclusão razoável seria que a integração não funciona.
+     *
+     * Só as FUTURAS e só as que nunca foram: criar hoje um evento de uma reunião
+     * de ontem dispara convite retroativo no e-mail do cliente.
+     */
+    await reenfileirarReunioes(admin, usuarioId)
+
     destino.searchParams.set('gmail', 'conectado')
     return NextResponse.redirect(destino)
   } catch (erro) {
     console.error('[comunicacao] erro no callback do Gmail', String(erro))
     destino.searchParams.set('gmail', 'erro')
     return NextResponse.redirect(destino)
+  }
+}
+
+async function reenfileirarReunioes(
+  admin: ReturnType<typeof createAdminClient>,
+  usuarioId: string,
+): Promise<void> {
+  try {
+    const { data: vendedor } = await admin
+      .from('vendedores')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .maybeSingle()
+    if (!vendedor?.id) return
+
+    await admin
+      .from('vendedor_eventos')
+      .update({ google_pendente_em: new Date().toISOString(), google_erro: null })
+      .eq('vendedor_id', vendedor.id)
+      .eq('tipo', 'reuniao')
+      .is('cancelado_em', null)
+      .is('google_evento_id', null)
+      .gte('inicio_em', new Date().toISOString())
+  } catch (erro) {
+    // A conexão deu certo; o reenfileiramento é bônus. Falhar aqui não pode
+    // mandar a pessoa de volta para a tela de erro de uma coisa que funcionou —
+    // o cron de dez em dez minutos não pega estas linhas, mas editar a reunião
+    // pega, e a próxima reunião marcada já nasce sincronizando.
+    console.error('[comunicacao] falha ao reenfileirar reuniões após conectar o Google', String(erro))
   }
 }

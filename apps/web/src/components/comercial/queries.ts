@@ -25,6 +25,7 @@ export const comercialKeys = {
   visiveis: () => ['comercial', 'visiveis'] as const,
   pitch: (leadId: string) => ['comercial', 'pitch', leadId] as const,
   submissoes: (empresaId: string) => ['comercial', 'submissoes', empresaId] as const,
+  reuniao: (alvo: string) => ['comercial', 'reuniao', alvo] as const,
 }
 
 /**
@@ -393,7 +394,14 @@ export async function buscarAgenda(
     .order('inicio_em')
     .limit(300)
   if (janela) q = q.lte('inicio_em', janela.ate)
-  if (vendedorId) q = q.eq('vendedor_id', vendedorId)
+  /*
+   * "Minha agenda" é o que eu ORGANIZO mais o que eu ACOMPANHO (0201).
+   *
+   * Desde que a reunião virou uma linha só, o SDR não é dono de nenhuma — ele
+   * entra em `acompanhantes`. Filtrar só por `vendedor_id` deixaria a agenda do
+   * SDR vazia, que é como se troca uma linha duplicada por uma linha invisível.
+   */
+  if (vendedorId) q = q.or(`vendedor_id.eq.${vendedorId},acompanhantes.cs.{${vendedorId}}`)
   const { data, error } = await q
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as EventoAgenda[]
@@ -477,4 +485,66 @@ export async function buscarSubmissoesDaEmpresa(empresaId: string): Promise<Subm
       respostas,
     }
   })
+}
+
+// ─── A reunião do card ──────────────────────────────────────────────────────
+
+export interface ParticipanteDaReuniao {
+  contato_id: string | null
+  nome: string | null
+  email: string
+}
+
+export interface PessoaDaCasa {
+  vendedor_id: string
+  nome: string
+}
+
+/** O estado da escrita no Google, que é metade do que a aba precisa dizer. */
+export interface EstadoGoogle {
+  evento_id: string | null
+  pendente: boolean
+  sincronizado_em: string | null
+  erro: string | null
+  /** O endereço da conta conectada do anfitrião, ou nulo se ele não conectou. */
+  conta: string | null
+  tem_escopo_agenda: boolean
+}
+
+export interface ReuniaoDoCard {
+  id: string
+  titulo: string
+  inicio_em: string
+  duracao_min: number
+  modalidade: string
+  local: string | null
+  meet_url: string | null
+  descricao: string | null
+  venda_id: string | null
+  sdr_lead_id: string | null
+  participantes: ParticipanteDaReuniao[]
+  anfitriao: PessoaDaCasa
+  acompanhantes: PessoaDaCasa[]
+  google: EstadoGoogle
+}
+
+/**
+ * A reunião viva de um card, pelos dois lados do funil.
+ *
+ * Uma RPC e não um `select` direto porque o que a aba mostra atravessa quatro
+ * tabelas (evento, vendedores, gmail_contas) e porque a decisão de "qual é a
+ * reunião deste card" — a viva, a mais recente — tem de ser a mesma nos dois
+ * funis. Duas telas montando essa consulta cada uma do seu jeito é como elas
+ * passam a discordar sobre qual reunião está marcada.
+ */
+export async function buscarReuniaoDoCard(alvo: {
+  vendaId?: string | null
+  sdrLeadId?: string | null
+}): Promise<ReuniaoDoCard | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_reuniao_do_card', {
+    p: { venda_id: alvo.vendaId ?? null, sdr_lead_id: alvo.sdrLeadId ?? null } as never,
+  })
+  if (error) throw new Error(error.message)
+  return (data as unknown as ReuniaoDoCard | null) ?? null
 }

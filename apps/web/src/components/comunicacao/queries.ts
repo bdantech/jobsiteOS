@@ -334,6 +334,12 @@ export interface GmailConectado {
   ultimo_erro: string | null
   watch_expira_em: string | null
   ativo: boolean
+  /**
+   * As permissões CONCEDIDAS. Desde a 0201 elas decidem se a agenda funciona —
+   * quem conectou antes do escopo `calendar.events` existir tem e-mail em pé e
+   * reunião que não sai, e a diferença só aparece se a tela olhar para cá.
+   */
+  escopos: string[] | null
 }
 
 export async function buscarMeuGmail(): Promise<GmailConectado | null> {
@@ -343,7 +349,7 @@ export async function buscarMeuGmail(): Promise<GmailConectado | null> {
   // errada de que ele é o que protege.
   const { data, error } = await supabase
     .from('gmail_contas')
-    .select('endereco, ultimo_sync_em, ultimo_erro, watch_expira_em, ativo')
+    .select('endereco, ultimo_sync_em, ultimo_erro, watch_expira_em, ativo, escopos')
     .maybeSingle()
   if (error) throw new Error(error.message)
   return (data as GmailConectado | null) ?? null

@@ -275,6 +275,14 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/comunicacao/gmail-sync',
   },
   {
+    path: '/api/cron/comercial-reunioes',
+    nome: 'Reuniões no Google Agenda',
+    moduloId: 'comercial',
+    descricao:
+      'Escreve no Google Agenda do anfitrião as reuniões marcadas aqui — com sala do Meet e com o cliente convidado por e-mail. É a REDE, não o caminho principal: agendar e editar já acordam o job na hora. De dez em dez minutos porque o que sobra para ele é o disparo que falhou, a reunião que esperava alguém conectar o Google e o erro transitório da API.',
+    destino: 'POST /jobs/comercial/reunioes-google',
+  },
+  {
     path: '/api/cron/comunicacao-lembretes',
     nome: 'Lembretes de reunião',
     moduloId: 'comunicacao',

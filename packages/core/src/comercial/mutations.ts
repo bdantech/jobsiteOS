@@ -20,6 +20,7 @@ import {
   definirGestaoSchema,
   moverLeadSchema,
   moverVendaSchema,
+  salvarReuniaoSchema,
   mudarStatusComissaoSchema,
   salvarParametroSchema,
   decidirAceiteSdrSchema,
@@ -117,6 +118,17 @@ export async function definirCarteiraPassiva(supabase: Supabase, input: unknown)
 export async function moverLeadSdr(supabase: Supabase, input: unknown) {
   const dados = moverLeadSchema.parse(input)
   const { data, error } = await supabase.rpc('app_mover_lead_sdr', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/**
+ * Salvar a reunião pela aba do card. O `app_salvar_reuniao` marca a linha como
+ * pendente no Google — inclusive no cancelamento, para o cliente ser avisado.
+ */
+export async function salvarReuniao(supabase: Supabase, input: unknown) {
+  const dados = salvarReuniaoSchema.parse(input)
+  const { data, error } = await supabase.rpc('app_salvar_reuniao', { p: dados as unknown as Json })
   if (error) throw new Error(error.message)
   return data
 }

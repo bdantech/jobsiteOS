@@ -36,6 +36,7 @@ import {
   titularidadesJob,
 } from './comercial/comissoes-v2.js'
 import { resumoMeuDiaJob } from './comercial/meu-dia-resumo.js'
+import { sincronizarReunioesGoogle } from './comercial/reunioes-google.js'
 import {
   gerarReportSemanal, materializarSeriesReport, type OpcoesReport,
 } from './reports/semanal.js'
@@ -143,6 +144,7 @@ export type TipoJob =
   | 'comercial-sdr-aceites'
   | 'comercial-reclassificacao'
   | 'comercial-meu-dia-resumo'
+  | 'comercial-reunioes'
   | 'reports-gerar-semanal'
   | 'reports-materializar-series'
   | 'comercial-rotear'
@@ -1554,6 +1556,14 @@ export function dispararGmailSync(): string {
 
 export function dispararLembretesReuniao(): string {
   return dispararAvulso('comunicacao-lembretes', async () => lembretesDeReuniao())
+}
+
+/**
+ * As reuniões pendentes vão para o Google Agenda — com Meet e com o cliente
+ * convidado. Ver `comercial/reunioes-google.ts`.
+ */
+export function dispararReunioesGoogle(limite?: number): string {
+  return dispararAvulso('comercial-reunioes', async () => sincronizarReunioesGoogle(limite))
 }
 
 export function dispararPlantao(): string {

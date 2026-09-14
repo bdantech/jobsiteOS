@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ESCOPO_CALENDAR } from '@jobsiteos/core'
 import { alternarKillSwitchAction, desconectarGmailAction, salvarConfigAction } from '@/actions/comunicacao'
 import { buscarConfig, buscarContasWhatsapp, buscarMeuGmail } from './queries'
 import { dataHora } from './format'
@@ -109,9 +110,11 @@ export function ConfigComunicacaoTela({ ehAdmin }: { ehAdmin: boolean }) {
           </CardTitle>
           <CardDescription>
             Conectar faz o e-mail sair COMO VOCÊ e entrar na mesma thread que o cliente já tinha
-            aberto. <strong>Só entram no sistema</strong> as mensagens cujo remetente ou
-            destinatário for um contato conhecido ou o domínio de uma empresa da base — nunca a
-            caixa inteira.
+            aberto, e põe as <strong>reuniões do funil no seu Google Agenda</strong> — com sala do
+            Meet e convite para o cliente. <strong>Só entram no sistema</strong> as mensagens cujo
+            remetente ou destinatário for um contato conhecido ou o domínio de uma empresa da base
+            — nunca a caixa inteira. A agenda é escrita, nunca lida: nada dos seus outros
+            compromissos entra aqui.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -129,6 +132,19 @@ export function ConfigComunicacaoTela({ ehAdmin }: { ehAdmin: boolean }) {
               {gmail.data.ultimo_erro ? (
                 <p className="text-xs text-destructive">
                   Última falha: {gmail.data.ultimo_erro}. Reconecte para renovar a autorização.
+                </p>
+              ) : null}
+              {/*
+                A conexão anterior à agenda funciona para e-mail e falha para reunião — e
+                esse é o estado em que TODAS as contas de hoje estão. Sem esta linha, a
+                pessoa vê "Conectado", marca uma reunião, e ela não aparece no Google: um
+                sucesso na tela e um silêncio na agenda é o pior par possível.
+              */}
+              {!gmail.data.escopos?.includes(ESCOPO_CALENDAR) ? (
+                <p className="rounded-md border border-amber-500/40 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                  Esta conexão é anterior à integração de agenda e não autoriza o Google
+                  Calendar. O e-mail funciona; as reuniões do funil não vão para o seu Google
+                  Agenda até você reconectar aqui.
                 </p>
               ) : null}
               <div className="flex gap-2">

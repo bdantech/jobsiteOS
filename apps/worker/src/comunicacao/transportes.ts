@@ -173,6 +173,8 @@ export function transporteResend(remetente: string, responderPara?: string | nul
 export interface ContaGmail {
   usuario_id: string
   endereco: string
+  /** As permissões CONCEDIDAS. Ver a 0201 §7: a coluna vinha sendo zerada. */
+  escopos: string[] | null
   refresh_token_secret_id: string | null
   access_token_secret_id: string | null
   access_token_expira_em: string | null
@@ -183,7 +185,7 @@ export interface ContaGmail {
 export async function contaGmailDoUsuario(usuarioId: string): Promise<ContaGmail | null> {
   const { data } = await supabaseAdmin
     .from('gmail_contas')
-    .select('usuario_id, endereco, refresh_token_secret_id, access_token_secret_id, access_token_expira_em, history_id, ativo')
+    .select('usuario_id, endereco, escopos, refresh_token_secret_id, access_token_secret_id, access_token_expira_em, history_id, ativo')
     .eq('usuario_id', usuarioId)
     .eq('ativo', true)
     .maybeSingle()

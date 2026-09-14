@@ -963,6 +963,12 @@ export async function dispararLembretesReuniao(): Promise<DispararJobResultado> 
   return postar('/jobs/comunicacao/lembretes', {}, 'comunicacao-lembretes')
 }
 
+export async function dispararReunioesGoogle(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/comercial/reunioes-google', input, 'comercial-reunioes')
+}
+
 export async function dispararPlantao(): Promise<DispararJobResultado> {
   return postar('/jobs/comunicacao/plantao', {}, 'comunicacao-plantao')
 }

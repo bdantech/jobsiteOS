@@ -93,6 +93,7 @@ import {
   dispararTriagem,
   dispararGmailSync,
   dispararLembretesReuniao,
+  dispararReunioesGoogle,
   dispararPlantao,
   dispararAgenteDecidir,
   dispararAgenteAgendados,
@@ -1356,6 +1357,15 @@ app.post('/jobs/comunicacao/gmail-sync', (_req: Request, res: Response, next: Ne
 app.post('/jobs/comunicacao/lembretes', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararLembretesReuniao(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comercial/reunioes-google', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararReunioesGoogle(limite), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

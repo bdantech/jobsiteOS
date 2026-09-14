@@ -552,7 +552,11 @@ Detalhes em [`campanhas.md`](campanhas.md).
    Comunicação → Outbox antes de mexer na credencial.
 2. **Gmail** — crie o app OAuth no Google Cloud com `redirect_uri`
    `https://<dominio>/api/auth/gmail/callback` e escopos `gmail.send`, `gmail.readonly`,
-   `gmail.modify`. Cada pessoa conecta a própria caixa em Comunicação → Configurações. Para
+   `gmail.modify` e `calendar.events` (este último desde a 0201: é o que põe a reunião do
+   funil no Google Agenda, com Meet e convite ao cliente — ver
+   [`comercial.md`](comercial.md)). **Habilite a Google Calendar API** no mesmo projeto do
+   Cloud, senão o consentimento passa e a primeira escrita volta 403. Quem conectou antes
+   precisa reconectar: o consentimento antigo não tem o escopo novo. Cada pessoa conecta a própria caixa em Comunicação → Configurações. Para
    o push, crie o tópico Pub/Sub, dê publish à conta de serviço do Gmail e aponte a
    subscription para `https://<dominio>/api/webhooks/gmail?token=<GOOGLE_PUBSUB_TOKEN>`.
 3. **Resend** — verifique o domínio e o subdomínio de automação, ponha `RESEND_API_KEY`,

@@ -51,10 +51,15 @@ export async function GET(
 
   const desde = new Date(Date.now() - 60 * 86_400_000).toISOString()
 
+  /*
+   * Dono OU acompanhante (0201): desde que a reunião virou uma linha só, o SDR
+   * que a marcou não é dono dela. Um feed que filtrasse só por `vendedor_id`
+   * pararia de entregar ao SDR as reuniões que ele mesmo agendou.
+   */
   const { data: eventos } = await supabase
     .from('vendedor_eventos')
-    .select('id, titulo, inicio_em, duracao_min')
-    .eq('vendedor_id', t.vendedor_id)
+    .select('id, titulo, inicio_em, duracao_min, modalidade, local, meet_url')
+    .or(`vendedor_id.eq.${t.vendedor_id},acompanhantes.cs.{${t.vendedor_id}}`)
     .is('cancelado_em', null)
     .gte('inicio_em', desde)
     .order('inicio_em')
@@ -108,8 +113,19 @@ export async function GET(
       `DTSTART:${carimbo(e.inicio_em)}`,
       `DTEND:${carimbo(fim)}`,
       `SUMMARY:${ics(e.titulo)}`,
-      'END:VEVENT',
     )
+    /*
+     * O link do Meet entra no feed; o endereço presencial também.
+     *
+     * A régua de discrição do 04g continua valendo — nada de valor de proposta,
+     * nada de conteúdo da negociação. Um link de sala e um endereço são o que a
+     * pessoa precisa ter no celular para chegar à reunião, e é exatamente o que um
+     * feed de agenda existe para carregar. Quem tiver o Google conectado nem vai
+     * usar esta linha: o evento de verdade já está lá, com o botão de entrar.
+     */
+    if (e.meet_url) linhas.push(`LOCATION:${ics(e.meet_url)}`)
+    else if (e.local) linhas.push(`LOCATION:${ics(e.local)}`)
+    linhas.push('END:VEVENT')
   }
   for (const p of prazos ?? []) {
     if (!p.inicio_em || !p.id) continue

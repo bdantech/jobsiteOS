@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { atribuirVendaAction, moverVendaAction } from '@/actions/comercial'
 import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
+import { AbaReuniao } from './aba-reuniao'
 import { AbaFormulario, FichaDoCard, ehInbound } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
@@ -537,6 +538,27 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
                 />
               ),
             },
+            /*
+             * A reunião que originou este card — e as que vierem depois dela.
+             *
+             * A condição é ter vindo do funil de reuniões (`sdr_leads`), e não
+             * estar no estágio de reunião: um card que já avançou para proposta
+             * continua tendo uma reunião marcada, e é meia hora antes dela que
+             * alguém procura o link. Um negócio criado à mão nunca teve reunião
+             * agendada por aqui, e para ele a aba não aparece em vez de aparecer
+             * vazia para sempre.
+             */
+            ...(aberto.sdr_leads
+              ? [
+                  {
+                    id: 'reuniao',
+                    label: 'Reunião',
+                    conteudo: (
+                      <AbaReuniao vendaId={aberto.id} empresaId={aberto.empresas?.id ?? null} />
+                    ),
+                  },
+                ]
+              : []),
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             /*
              * O que a PESSOA escreveu. A aba Empresa mostra o que o sistema descobriu

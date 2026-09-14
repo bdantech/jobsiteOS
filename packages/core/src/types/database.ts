@@ -8417,13 +8417,26 @@ export type Database = {
       }
       vendedor_eventos: {
         Row: {
+          acompanhantes: string[]
+          atualizado_em: string
           cancelado_em: string | null
           criado_em: string
           criado_por: string | null
+          descricao: string | null
           duracao_min: number
           empresa_id: string | null
+          google_calendar_id: string | null
+          google_conta_usuario_id: string | null
+          google_erro: string | null
+          google_evento_id: string | null
+          google_pendente_em: string | null
+          google_sincronizado_em: string | null
           id: string
           inicio_em: string
+          local: string | null
+          meet_url: string | null
+          modalidade: string
+          participantes: Json
           sdr_lead_id: string | null
           tipo: string
           titulo: string
@@ -8431,13 +8444,26 @@ export type Database = {
           vendedor_id: string
         }
         Insert: {
+          acompanhantes?: string[]
+          atualizado_em?: string
           cancelado_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          descricao?: string | null
           duracao_min?: number
           empresa_id?: string | null
+          google_calendar_id?: string | null
+          google_conta_usuario_id?: string | null
+          google_erro?: string | null
+          google_evento_id?: string | null
+          google_pendente_em?: string | null
+          google_sincronizado_em?: string | null
           id?: string
           inicio_em: string
+          local?: string | null
+          meet_url?: string | null
+          modalidade?: string
+          participantes?: Json
           sdr_lead_id?: string | null
           tipo?: string
           titulo: string
@@ -8445,13 +8471,26 @@ export type Database = {
           vendedor_id: string
         }
         Update: {
+          acompanhantes?: string[]
+          atualizado_em?: string
           cancelado_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          descricao?: string | null
           duracao_min?: number
           empresa_id?: string | null
+          google_calendar_id?: string | null
+          google_conta_usuario_id?: string | null
+          google_erro?: string | null
+          google_evento_id?: string | null
+          google_pendente_em?: string | null
+          google_sincronizado_em?: string | null
           id?: string
           inicio_em?: string
+          local?: string | null
+          meet_url?: string | null
+          modalidade?: string
+          participantes?: Json
           sdr_lead_id?: string | null
           tipo?: string
           titulo?: string
@@ -12109,6 +12148,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      app_reuniao_do_card: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      app_salvar_reuniao: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["vendedor_eventos"]["Row"]
       }
       app_mover_lead_sdr: {
         Args: { p: Json }

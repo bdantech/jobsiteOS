@@ -16,6 +16,7 @@ import {
   gerarTokenIcs,
   moverLeadSdr,
   moverVenda,
+  salvarReuniao,
   mudarStatusComissao,
   ajusteManualComissao,
   decidirAceiteSdr,
@@ -35,6 +36,7 @@ import {
   derivaComissao,
   dispararAceitesSdr,
   dispararPitchLead,
+  dispararReunioesGoogle,
   dispararRotearNotas,
   recalcularConta,
 } from '@/lib/mercado/worker'
@@ -249,7 +251,41 @@ export async function moverLeadAction(input: unknown): Promise<ActionResult<{ id
      */
     if (l?.estagio === 'reuniao_realizada') void dispararAceitesSdr()
 
+    /*
+     * Reunião marcada vai para o Google AGORA, não no próximo cron.
+     *
+     * A reclamação que originou isto é "marquei e não apareceu no meu Google
+     * Agenda" — e dez minutos de espera reproduzem exatamente essa sensação. O
+     * cron de dez em dez minutos continua existindo como rede: se este disparo
+     * falhar (worker reiniciando, rede), a linha continua marcada como pendente e
+     * a próxima rodada a pega. Falhar aqui não desfaz o agendamento, que já está
+     * gravado.
+     */
+    if (l?.estagio === 'reuniao_agendada') void dispararReunioesGoogle()
+
     return { ok: true, data: { id: l?.id ?? null } }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * A aba Reunião salvando: horário, modalidade, local, convidados, cancelamento.
+ *
+ * O disparo do Google vem junto pelo mesmo motivo do agendamento: quem acabou de
+ * colar o endereço da obra ou de adicionar o cliente ao convite espera que o
+ * convite saia, e não que saia em algum momento dos próximos dez minutos.
+ */
+export async function salvarReuniaoAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string | null }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await salvarReuniao(supabase, input)) as { id?: string } | null
+    void dispararReunioesGoogle()
+    revalidatePath('/comercial/calendario')
+    return { ok: true, data: { id: r?.id ?? null } }
   } catch (error) {
     return falha(error)
   }
