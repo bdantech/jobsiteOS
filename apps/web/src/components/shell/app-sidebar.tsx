@@ -86,7 +86,10 @@ export function AppSidebar({ usuario, grantedModuleIds }: AppSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      {/* `gap-0.5` e não o `gap-2` do componente: quem separa uma seção da outra é o
+          padding do próprio SidebarGroup (ver sidebar-nav.tsx), e os dois somados
+          davam 24px de ar entre seções vizinhas. */}
+      <SidebarContent className="gap-0.5">
         <SidebarNav grantedModuleIds={grantedModuleIds} />
       </SidebarContent>
 

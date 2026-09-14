@@ -15,12 +15,11 @@ import {
   Download,
   FileText,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { buscarThread, buscarThreadDaEmpresa, type MensagemThread } from './queries'
-import { dataHora, intencaoLabel } from './format'
+import { dataHora } from './format'
 
 /**
  * A thread, e é a mesma em todos os lugares: no inbox, na aba "Mensagens" do card
@@ -53,7 +52,19 @@ function IconeStatus({ status }: { status: string | null }) {
 function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
   const entrada = m.direcao === 'entrada'
   const Icone = ICONE_CANAL[(m.canal ?? 'whatsapp') as keyof typeof ICONE_CANAL] ?? MessageCircle
-  const intencao = intencaoLabel(m.triagem)
+
+  /*
+   * A ETIQUETA DE INTENÇÃO DA TRIAGEM NÃO ENTRA NA BOLHA.
+   *
+   * A triagem classifica CADA mensagem, então o badge aparecia em todas — "Dúvida",
+   * "Dúvida", "Dúvida" descendo a coluna ao lado de frases que já dizem isso melhor do
+   * que o rótulo. Lido de fio a pavio, um chat não precisa de um resumo de uma palavra
+   * por linha: o texto é mais curto que a explicação.
+   *
+   * Onde ela continua: no INBOX, uma por conversa (`ultima_triagem`). Lá ela responde
+   * uma pergunta que a lista não responde sozinha — em qual das quarenta conversas eu
+   * mexo primeiro — porque lá não dá para ler as mensagens.
+   */
 
   /*
    * A mensagem digitada no APARELHO não tem autor: o provedor não diz qual das
@@ -92,11 +103,6 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
           <span>·</span>
           <span>{dataHora(m.criado_em)}</span>
           {!entrada ? <IconeStatus status={m.status_envio} /> : null}
-          {intencao ? (
-            <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px]">
-              {intencao}
-            </Badge>
-          ) : null}
         </div>
 
         {m.assunto ? <p className="mb-1 font-medium">{m.assunto}</p> : null}

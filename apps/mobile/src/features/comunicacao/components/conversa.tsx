@@ -27,7 +27,7 @@ import {
   marcarLida,
   type MensagemThread,
 } from '../api'
-import { dataHora, intencaoLabel } from '../format'
+import { dataHora } from '../format'
 
 /**
  * A conversa no celular: sugestão do agente no topo, thread no meio, compositor
@@ -150,9 +150,14 @@ export function Conversa({ conversaId }: { conversaId: string }) {
   )
 }
 
+/*
+ * Sem etiqueta de intenção na bolha — a mesma decisão da web. A triagem classifica cada
+ * mensagem, e o badge repetido a cada linha diz em uma palavra o que a frase ao lado já
+ * diz melhor. Ela continua no inbox, uma por conversa, que é onde não dá para ler o
+ * texto e a pergunta "em qual eu mexo primeiro" existe de verdade.
+ */
 function Bolha({ m }: { m: MensagemThread }) {
   const entrada = m.direcao === 'entrada'
-  const intencao = intencaoLabel(m.triagem)
   const quem = entrada
     ? (m.contato_nome ?? 'Contato')
     : m.por_ia
@@ -169,7 +174,6 @@ function Bolha({ m }: { m: MensagemThread }) {
         <Text variant="muted" className="text-[11px]">
           {quem} · {dataHora(m.criado_em)}
         </Text>
-        {intencao ? <Badge variant="outline">{intencao}</Badge> : null}
       </View>
       {m.assunto ? <Text className="mb-1 font-medium text-sm">{m.assunto}</Text> : null}
       <Text className="text-sm">{m.corpo ?? m.preview ?? '(sem texto)'}</Text>

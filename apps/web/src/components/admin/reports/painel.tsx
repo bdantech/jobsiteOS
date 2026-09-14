@@ -88,17 +88,36 @@ export function PainelReports() {
   }, [doLink, router])
 
   /*
-   * O report do link pode não estar na lista: o filtro abre em "abertos e em
-   * andamento", e um report já resolvido não estaria lá. Buscá-lo à parte é o
-   * que impede o clique na notificação de abrir um modal vazio.
+   * O REPORT ABERTO É BUSCADO SOZINHO, SEMPRE — e é isso que impede o modal de piscar.
+   *
+   * Duas coisas precisavam dele. A primeira sempre esteve aqui: o sino aponta para um
+   * report que pode não estar na lista, porque o filtro abre em "abertos e em andamento"
+   * e um resolvido não estaria lá — sem esta consulta, o clique na notificação abria um
+   * modal vazio.
+   *
+   * A segunda apareceu depois. Mudar o status para "resolvido" invalida a lista, o report
+   * SAI dela (o filtro não o inclui mais), e `reports.find()` devolvia `undefined` por um
+   * instante. Como esta consulta só ligava quando o report não estava na lista, ela ainda
+   * não tinha nada em cache: `aberto` virava `null`, o `<Dialog open={report !== null}>`
+   * fechava, e um render depois reabria com o status novo. O "pisca" era exatamente isso.
+   *
+   * Ligada SEMPRE, ela vira a fonte do modal e o React Query faz o resto: invalidar uma
+   * chave que já tem dado dispara refetch em segundo plano SEM apagar o dado anterior.
+   * O modal continua mostrando o report — o de antes por um instante, o de depois em
+   * seguida — e nunca passa por `null`. Custa uma consulta por report aberto.
    */
   const doLinkQuery = useQuery({
     queryKey: reportsKeys.um(abertoId ?? ''),
     queryFn: () => buscarReport(abertoId as string),
-    enabled: abertoId !== null && !reports.some((r) => r.id === abertoId),
+    enabled: abertoId !== null,
   })
 
-  const aberto = reports.find((r) => r.id === abertoId) ?? doLinkQuery.data ?? null
+  /*
+   * A consulta individual GANHA da lista: ela é a mais específica e a mais nova. A lista
+   * é o fallback do primeiro instante, enquanto a outra ainda não respondeu — sem ela, o
+   * modal abriria vazio por um frame a cada clique.
+   */
+  const aberto = doLinkQuery.data ?? reports.find((r) => r.id === abertoId) ?? null
 
   return (
     <div className="space-y-4">

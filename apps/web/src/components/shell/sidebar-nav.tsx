@@ -51,11 +51,25 @@ export function SidebarNav({ grantedModuleIds }: SidebarNavProps) {
   return (
     <>
       {groups.map((group) => (
-        <SidebarGroup key={group.id}>
-          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+        /*
+         * O ESPAÇO VERTICAL DA NAV É APERTADO DE PROPÓSITO.
+         *
+         * O default do componente gastava 24px de ar entre duas seções — 8 do fim de um
+         * grupo, 8 do `gap` do conteúdo, 8 do começo do próximo — e mais 4 entre cada
+         * item. Com seis seções isso empurra os últimos módulos para fora da dobra em
+         * telas de notebook, e uma lista de navegação que precisa de rolagem perde a
+         * função de deixar tudo à vista.
+         *
+         * O que NÃO encolhe é a altura do botão (`h-8`): ela é o alvo do clique, e
+         * espremer alvo de clique para ganhar pixel é a troca errada. O que encolhe é o
+         * ar entre os alvos, que não é clicável e não é lido.
+         */
+        <SidebarGroup key={group.id} className="px-2 py-1">
+          {/* 24px em vez de 32: o rótulo da seção é uma legenda, não um item. */}
+          <SidebarGroupLabel className="h-6">{group.label}</SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-0.5">
               {group.modules.map((module) => {
                 const Icon = moduleIcon(module.icon)
                 // Longest-prefix semantics, same as the registry's route guard: /empresas/<id>
