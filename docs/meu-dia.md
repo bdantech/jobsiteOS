@@ -199,6 +199,28 @@ manuais.
 > continua no mapa (`is distinct from`, não `= 'passivo'`): sumir do mapa do dono por
 > causa de um campo em branco é pior que aparecer com a natureza desconhecida.
 
+## O indicador de identificação
+
+A faixa do topo tem três indicadores fixos — em jogo hoje, urgentes, e o do cargo — e um
+**quarto que só aparece quando há o que fazer**: o número de conversas esperando
+identificação, gente que falou com a gente e o sistema não soube quem era. Hoje são 82 do
+Rodrigo, 46 do Fabio e 6 do Viktor.
+
+Ele **navega**, e é a única exceção à regra de que indicador abre modal. O motivo não é
+preguiça: identificar uma conversa é escolher a empresa e nomear o contato — um formulário
+de outro módulo, que não cabe num modal de leitura. A regra continua honrada pelo
+`<LinkEmAba>`: a fila abre numa ABA do sistema, ao lado do dia, e ninguém perde o contexto
+para identificar três conversas.
+
+**Some no zero**, como todo o resto da tela. Um quarto indicador cravado em "0" todo dia é
+o que ensina o olho a pular aquele canto — e aí, no dia em que ele marca 12, ninguém vê.
+Os três primeiros são fixos porque são o retrato do dia; este é alerta, e alerta em zero é
+ruído.
+
+O escopo é `dados_vendedor_id` e não `vendedor_id`: a fila pertence a quem tem número e
+carteira, então a **auxiliar vê a do closer dela** — como vê a carteira dele. É o mesmo par
+da 0202, e foi para isso que a 0204 passou a devolver o campo.
+
 ## Comissão projetada — fora da tela
 
 O indicador de comissão projetada **não existe mais**, em nenhum cargo. A faixa de

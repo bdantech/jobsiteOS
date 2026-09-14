@@ -573,7 +573,17 @@ export interface BlocoMeuDia {
 
 export interface MeuDia {
   tem_acesso: boolean
+  /** De quem é o DIA. É o que o seletor do gestor mostra. */
   vendedor_id: string | null
+  /**
+   * De quem são os DADOS — o superior, quando quem abre é auxiliar (0202/0204).
+   *
+   * Existe porque nem toda pergunta do dia se responde pelo dono do dia: a carteira, as
+   * vendas e a fila de identificação são de quem tem número e cliente. Sem este campo, a
+   * tela refaria a regra do superior em TypeScript, que é a cópia que a 0202 apagou.
+   */
+  dados_vendedor_id: string | null
+  /** O nome de quem são os DADOS: é o que o cabeçalho anuncia. */
   vendedor_nome: string | null
   tipo: string | null
   /** Verdadeiro quando estou vendo o dia de OUTRA pessoa (gestor, ou auxiliar). */

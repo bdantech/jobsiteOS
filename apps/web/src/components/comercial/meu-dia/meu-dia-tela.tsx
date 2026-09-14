@@ -2,8 +2,9 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, CheckCircle2, Clock, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, Link2Off, Wallet } from 'lucide-react'
 import {
   blocoCatalogado,
   corPorEspera,
@@ -28,6 +29,7 @@ import {
   STATUS_CORES, STATUS_ROTULOS, squarify, tintaSobre, useLargura, type Bolha,
 } from './graficos'
 import { LinkEmAba } from '@/components/shell/link-em-aba'
+import { contarNaoVinculadas } from '@/components/comunicacao/queries'
 import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from './widget'
 
 /**
@@ -160,7 +162,7 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
 
       {/* ── Indicadores ───────────────────────────────────────────────────── */}
       <div className="grid gap-3">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           <Indicador
             icone={Wallet}
             rotulo="Em jogo hoje"
@@ -182,6 +184,7 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
             onClick={() => setModal({ titulo: 'O que tem relógio correndo', itens: urgentes })}
           />
           <IndicadorDoCargo dia={dia} onAbrir={setModal} />
+          <IndicadorSemIdentificacao vendedorId={dia.dados_vendedor_id ?? dia.vendedor_id} />
         </div>
       </div>
 
@@ -586,6 +589,60 @@ function IndicadorDoCargo({
       detalhe={`${b?.total ?? 0} cliente(s)`}
       onClick={() => onAbrir({ titulo: 'Carteira ociosa', itens: b?.itens ?? [] })}
     />
+  )
+}
+
+/**
+ * Quantas pessoas falaram com a gente sem o sistema saber quem são.
+ *
+ * ─── POR QUE ELE NAVEGA, NUMA TELA ONDE INDICADOR ABRE MODAL ───────────────
+ * A régua do Meu Dia é "indicador abre modal, nunca navega", e ela existe porque perder a
+ * página é perder o contexto do dia. Este é a exceção, e por um motivo simples: o que se
+ * faz com uma conversa não identificada — escolher a empresa, nomear o contato — é um
+ * formulário de outro módulo, que não cabe num modal de leitura.
+ *
+ * A régua continua honrada pelo <LinkEmAba>: a fila abre numa ABA do sistema, ao lado da
+ * que está aberta. Ninguém perde o dia de vista para identificar três conversas.
+ *
+ * ─── E POR QUE ELE SOME NO ZERO ────────────────────────────────────────────
+ * Mesma regra do resto da tela: bloco vazio some. Um quarto indicador cravado em "0" todo
+ * dia é o que ensina o olho a pular aquele canto — e aí, no dia em que ele marca 12,
+ * ninguém vê. Os três primeiros são fixos porque são o retrato do dia; este é um alerta,
+ * e alerta em zero é ruído.
+ *
+ * O escopo é de quem são os DADOS, não de quem é o dia: a fila de identificação pertence a
+ * quem tem número e carteira, então a auxiliar vê a do closer dela — como vê a carteira.
+ */
+function IndicadorSemIdentificacao({ vendedorId }: { vendedorId: string | null }) {
+  const contagem = useQuery({
+    // A MESMA chave do menu da Comunicação e do aviso do rodapé. Três contadores da
+    // mesma fila com chaves diferentes é como um deles passa a discordar dos outros.
+    queryKey: ['comunicacao', 'nao-vinculadas', 'contagem', vendedorId],
+    queryFn: () => contarNaoVinculadas(vendedorId),
+    enabled: Boolean(vendedorId),
+    staleTime: 60_000,
+  })
+
+  const total = contagem.data ?? 0
+  if (total === 0) return null
+
+  return (
+    <LinkEmAba
+      href="/comunicacao/nao-vinculadas"
+      className={cn(
+        'rounded-lg border border-amber-500/40 bg-card p-2.5 text-left transition-colors',
+        'hover:border-amber-500/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      )}
+    >
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <Link2Off className="h-3 w-3 text-amber-600" aria-hidden />
+        <span className="truncate">Sem identificação</span>
+      </div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{total}</div>
+      <div className="truncate text-[11px] text-muted-foreground">
+        {total === 1 ? 'conversa esperando' : 'conversas esperando'}
+      </div>
+    </LinkEmAba>
   )
 }
 

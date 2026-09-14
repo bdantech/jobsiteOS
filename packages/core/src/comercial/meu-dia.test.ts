@@ -35,7 +35,8 @@ function item(p: Partial<ItemMeuDia> = {}): ItemMeuDia {
 
 function dia(blocos: MeuDia['blocos']): MeuDia {
   return {
-    tem_acesso: true, vendedor_id: 'v1', vendedor_nome: 'Alguém', tipo: 'vendedor',
+    tem_acesso: true, vendedor_id: 'v1', dados_vendedor_id: 'v1',
+    vendedor_nome: 'Alguém', tipo: 'vendedor',
     espelhado: false, gerado_em: '2026-09-06T12:00:00Z', blocos,
     mapa_carteira: [], evolucao: [], funil_semana: [],
   }

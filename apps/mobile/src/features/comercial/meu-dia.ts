@@ -75,6 +75,7 @@ export function useMeuDia(vendedorId?: string | null) {
       return {
         tem_acesso: r.tem_acesso ?? false,
         vendedor_id: r.vendedor_id ?? null,
+        dados_vendedor_id: r.dados_vendedor_id ?? null,
         vendedor_nome: r.vendedor_nome ?? null,
         tipo: r.tipo ?? null,
         espelhado: r.espelhado ?? false,

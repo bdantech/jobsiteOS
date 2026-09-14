@@ -228,6 +228,31 @@ acumular, e uma fila acumulada é o mesmo que não ter fila.
 Uma conversa **ignorada que volta a falar retorna para a fila**: quem marcou spam pode ter
 errado, e a segunda mensagem é a evidência.
 
+### O alerta insiste de duas em duas horas
+
+O contador vive colado em "Não vinculadas", no menu da Comunicação. O **alerta** do rodapé
+é outro problema: ele existe para alcançar quem não está na Comunicação — quem passa o dia
+no Comercial, em qualquer aba dele, e nunca abre a fila.
+
+Ele aparecia uma vez por sessão e voltava só depois de um tempo fora. Quem deixa a aba
+aberta a manhã inteira, que é como esta equipe trabalha, via o alerta uma vez, fechava, e
+nunca mais. Agora ele volta **de duas em duas horas**, enquanto houver fila.
+
+Duas horas é **teto de insistência, não intervalo de exibição**: o alerta abre quando faz
+duas horas que ele não aparece, some quando a pessoa o fecha ou zera a fila, e a marca é
+carimbada quando ele ABRE — não quando alguém o fecha. Carimbar no fechamento faria a
+cadência depender de quanto tempo cada um demora a reparar nele. A marca vai em
+`localStorage`, com o id do vendedor na chave: `sessionStorage` reiniciaria a contagem a
+cada recarga, e quem recarrega de dez em dez minutos veria o alerta de dez em dez minutos.
+
+O mesmo número aparece como **indicador no Meu Dia**, com clique para a fila — ver
+[`meu-dia.md`](meu-dia.md).
+
+> **O que ninguém vê.** Sete conversas pendentes estão sem `vendedor_sugerido_id`, e todos
+> os contadores filtram por essa coluna: elas não aparecem para ninguém, em lugar nenhum.
+> A página abre no escopo de uma pessoa, e sem dono não há escopo que as contenha. Fica
+> anotado — resolver exige decidir de quem é a fila órfã.
+
 ## Triagem
 
 Toda mensagem de entrada passa por triagem, e a régua é **qualidade acima de custo**: o

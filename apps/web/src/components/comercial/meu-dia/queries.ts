@@ -25,6 +25,7 @@ export interface MeuDiaCarregado extends MeuDia {
 const VAZIO: MeuDia = {
   tem_acesso: false,
   vendedor_id: null,
+  dados_vendedor_id: null,
   vendedor_nome: null,
   tipo: null,
   espelhado: false,
