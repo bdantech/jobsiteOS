@@ -55,6 +55,18 @@ cadeia de dependências, não uma preferência:
 Sair da faixa **não** é sair do funil: uma nota que só deixou de casar a regra continua
 `a_prospectar` (a regra pode voltar a casar amanhã). Quem sai do funil é quem expirou.
 
+**E mensagem não move nota de conta contratante (0203).** O estágio anda sozinho quando
+alguém fala com o fornecedor — é o que impede o funil de dizer "ninguém procurou" logo
+depois de alguém ter procurado. Mas quando a empresa é uma CONTA nossa, a conversa quase
+nunca é sobre antecipar recebível dela: é suporte, cobrança, limite. Vincular um contato
+de cliente a uma conversa de WhatsApp já pôs R$ 14,04 milhões em quatro notas dentro de
+"Em prospecção" num microssegundo, e ninguém tinha prospectado nada.
+
+A pergunta é `app__e_conta_contratante()` — tem limite aprovado na plataforma? —, e não o
+papel na nota (a cliente era a emitente daquelas quatro) nem `empresas.tipo` (CNAE, que
+chama de `fornecedor` quem é conta na prática). Para essas empresas o card só anda **à
+mão**, pelo funil, com autor e histórico. Detalhe em [`comunicacao.md`](comunicacao.md).
+
 ## A régua gera; quem aprova é gente
 
 Ligar um canal em `/comunicacao/disparos` **não liga envio**. Liga a *geração* da fila:

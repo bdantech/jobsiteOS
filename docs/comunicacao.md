@@ -249,6 +249,28 @@ irreversível na prática; um token gasto não é.
   em todos os funis que tenham esse estágio. É o efeito que faz o funil parar de mentir:
   mover o card à mão depois de responder é a etapa que ninguém faz.
 
+> **Uma exceção, e ela tem nome: conta contratante (0203).** O funil de NOTAS não anda
+> por mensagem quando a empresa é uma conta nossa — quem tem limite aprovado na
+> plataforma, respondido por `app__e_conta_contratante()`.
+>
+> O caso que ensinou: vincular a contato de uma cliente a uma conversa de WhatsApp jogou
+> **R$ 14,04 milhões** em quatro notas de `a_prospectar` para `em_prospeccao`, no mesmo
+> microssegundo. A conversa era suporte — *"estamos com alguma operação vencida com
+> vocês?"*, *"a tela fica toda branca"*. Com uma conta a gente fala o tempo todo, e quase
+> nunca sobre antecipar recebível dela; supor prospecção é supor a coisa errada.
+>
+> A trava **não** é o papel na nota (a cliente era a emitente daquelas quatro) nem
+> `empresas.tipo` (que vem do CNAE: a Calure é `fornecedor` por CNAE e conta contratante
+> na prática). É ter conta.
+>
+> Ela vale para os **dois** caminhos — a varredura da carteira e a mensagem enviada de
+> dentro do card de uma nota. O segundo entrou porque a aba Mensagens do card mostra a
+> thread da EMPRESA: responder a um chamado dali carimba `funil = 'nfs'` sem que ninguém
+> tenha decidido prospectar. Quem quiser mesmo trabalhar o recebível de um cliente move o
+> card à mão — e aí o movimento tem autor e fica no histórico.
+>
+> Os outros funis (SDR, fornecedores, certificados) continuam andando por mensagem.
+
 ## O agente de próximo passo
 
 Um **decisor**, não um chatbot. Acorda por evento (resposta recebida, silêncio de N dias,
