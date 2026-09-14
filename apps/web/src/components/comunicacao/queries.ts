@@ -348,3 +348,16 @@ export async function buscarMeuGmail(): Promise<GmailConectado | null> {
   if (error) throw new Error(error.message)
   return (data as GmailConectado | null) ?? null
 }
+
+/**
+ * O id do USUÁRIO logado — não o do vendedor.
+ *
+ * `whatsapp_contas.usuario_responsavel` e `gmail_contas.usuario_id` apontam para
+ * `usuarios`, que é a mesma identidade de `auth.uid()`. Quem só tem
+ * `meuVendedorId()` não consegue responder "este número é meu?", porque um
+ * gestor sem cadastro de vendedor também tem caixa e número.
+ */
+export async function meuUsuarioId(): Promise<string | null> {
+  const { data } = await createClient().auth.getUser()
+  return data.user?.id ?? null
+}
