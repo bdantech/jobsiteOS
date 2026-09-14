@@ -118,6 +118,11 @@ O botão mostra o **custo estimado** antes de perguntar, e o número é o **teto
 alta, e a fatura sai menor. Prometer o teto e cobrar menos é a única direção aceitável do
 erro.
 
+A parada olha o que **esta corrida** achou. Um contato alto que o fornecedor já tinha não
+zera mais o clique: confiança é procedência, e o telefone impresso na nota costuma ser o do
+escritório — procurar o decisor é exatamente para o que o originador clica. O teto mensal e
+o TTL por provedor continuam sendo o freio.
+
 | Fonte | Custo | Quando roda |
 | --- | --- | --- |
 | `novavida` | R$ 0,35 | sempre — telefones e e-mail **da empresa**, mais celular dos sócios |

@@ -120,8 +120,6 @@ export interface EstadoFornecedor {
   municipio: string | null
   uf: string | null
   razao_social: string | null
-  /** A melhor confiança entre os contatos JÁ descobertos. */
-  melhor_confianca: Confianca | null
 }
 
 export interface OpcoesCascata {
@@ -161,9 +159,21 @@ export interface PlanoDescoberta {
 /**
  * O plano do clique pago (camadas 2+4).
  *
- * Já-tem-alta é avaliado ANTES de tudo: se a camada automática já achou um telefone
- * do `emit` da NF-e, o clique inteiro é desnecessário e o botão precisa dizer isso em
- * vez de aceitar R$ 1,65 para confirmar o que está na tela.
+ * ─── TER CONTATO ALTO NÃO FECHA A BUSCA ──────────────────────────────────────
+ *
+ * Já-tem-alta era avaliado ANTES de tudo e zerava o plano inteiro: o clique voltava
+ * "Já existe contato de confiança alta." e não rodava nada. A premissa era que o
+ * telefone do `emit` da NF-e responde "com quem falar" — e ela é falsa. Confiança
+ * alta descreve a PROCEDÊNCIA do número, não a utilidade da pessoa: o telefone que
+ * o fornecedor imprime na nota é o do escritório, e quem se cadastrou não é
+ * necessariamente quem decide antecipar. Procurar o decisor era exatamente o que a
+ * regra impedia — e ela pegava 505 dos 530 fornecedores do funil, ou seja, a busca
+ * paga estava fechada para quase todo mundo.
+ *
+ * O dinheiro continua guardado por três coisas que não mentem sobre o que a pessoa
+ * quer: o TETO mensal do originador, o TTL por provedor (não se paga duas vezes pela
+ * mesma pergunta dentro da janela) e a parada em `deveParar` DENTRO da corrida —
+ * achou alta agora, as etapas seguintes não rodam.
  */
 export function planejarDescobertaSobDemanda(
   estado: EstadoFornecedor,
@@ -173,12 +183,6 @@ export function planejarDescobertaSobDemanda(
   const parar = opcoes.pararAoEncontrarAlta ?? true
   const minFunc = opcoes.apolloMinimoFuncionarios ?? 10
   const minFat = opcoes.apolloMinimoFaturamento ?? null
-
-  const jaTemAlta =
-    estado.melhor_confianca !== null &&
-    PESO_CONFIANCA[estado.melhor_confianca] >= PESO_CONFIANCA.alta
-
-  const bloqueioGlobal = parar && jaTemAlta ? 'Já existe contato de confiança alta.' : null
 
   const etapa = (provedor: ProvedorCascata, custo: number, motivo: string | null): EtapaPlano => ({
     provedor,
@@ -215,11 +219,10 @@ export function planejarDescobertaSobDemanda(
         ? `Porte ${estado.porte_rfb} na Receita: empresa pequena raramente tem página no LinkedIn.`
         : 'Porte desconhecido e sem cadastro na Receita.'
 
-  const motivoApollo =
-    bloqueioGlobal ?? (!porteOk ? motivoPorte : null)
+  const motivoApollo = !porteOk ? motivoPorte : null
 
-  const novavida = etapa('novavida', custos.novavida, bloqueioGlobal)
-  const claude = etapa('claude_busca', custos.claude_busca, bloqueioGlobal)
+  const novavida = etapa('novavida', custos.novavida, null)
+  const claude = etapa('claude_busca', custos.claude_busca, null)
 
   /*
    * ─── A ORDEM MUDA QUANDO NÃO HÁ DOMÍNIO ────────────────────────────────────
@@ -242,13 +245,9 @@ export function planejarDescobertaSobDemanda(
     : [
         novavida,
         claude,
-        etapa(
-          'apollo',
-          custos.apollo,
-          motivoApollo ??
-            // Não é recusa: é condição. O worker reavalia depois da busca.
-            null,
-        ),
+        // Sem motivo de porte, o Apollo entra como CONDIÇÃO e não como recusa: o
+        // worker reavalia depois de a busca achar (ou não) o domínio.
+        etapa('apollo', custos.apollo, motivoApollo),
       ]
 
   const vaiRodar = etapas.filter((e) => e.rodara)
@@ -260,7 +259,7 @@ export function planejarDescobertaSobDemanda(
      * Sem domínio hoje, o Apollo só roda se a busca achar um. A tela usa isto para
      * dizer "até R$ X" em vez de prometer um número que pode não ser cobrado.
      */
-    apollo_depende_da_busca: !estado.dominio && porteOk && bloqueioGlobal === null,
+    apollo_depende_da_busca: !estado.dominio && porteOk,
   }
 }
 

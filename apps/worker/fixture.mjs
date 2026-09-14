@@ -7,14 +7,16 @@ export const r = {
   periodo: {
     inicio: '2026-08-31', fim: '2026-09-06', semana_iso: 36, ano: 2026,
     mes_inicio: '2026-09-01', mes_dias_decorridos: 6, mes_dias_total: 30,
-    base_12m_de: '2025-10-01', base_12m_ate: '2026-09-01', gerado_em: '2026-09-06T22:00:00Z',
+    base_12m_de: '2025-10-01', base_12m_ate: '2026-09-01',
+    retrato_em: '2026-09-06', retrato_carteira_em: '2026-09-06', ao_vivo: false,
+    gerado_em: '2026-09-06T22:00:00Z',
   },
   operacao: {
     kpis: {
       volume_convertido: ind('volume_convertido', 9771906, 7617274, 3000516, 225.7),
       vop_operado: ind('vop_operado', 16849085, 14339111, 5968015, 182.3),
       receita: ind('receita', 533909, 451752, 187418, 184.9),
-      limite_ocioso: { metrica: 'limite_ocioso', unidade: 'brl', subir_e_pior: true, foto: 59684416, sem_serie: true },
+      limite_ocioso: { metrica: 'limite_ocioso', unidade: 'brl', subir_e_pior: true, foto: 62624178, em: '2026-09-06', sem_serie: true },
     },
     antecipacao: {
       volume: ind('volume_convertido', 9771906, 7617274, 3000516, 225.7),

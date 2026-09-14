@@ -38,3 +38,10 @@ npm-debug.log*
 yarn-error.log*
 .vercel
 coverage/
+
+# ── planilhas de trabalho com dado pessoal ──────────────────────────────────
+# A importação do Pipedrive: nome, e-mail e telefone de ~1.700 pessoas, mais os
+# resíduos que ainda vão ser trabalhados à mão. Git não esquece — um arquivo
+# destes commitado uma vez fica no histórico de todo clone, para sempre, e sai
+# de lá só reescrevendo a história do repositório.
+Importacao/

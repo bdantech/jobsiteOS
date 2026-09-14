@@ -478,6 +478,13 @@ Google" pedem primeiras frases diferentes, e é a primeira frase que decide se a
 e é ela que justifica desligar um provedor no painel de eficácia (§6). Apagar faria um provedor com 5%
 de validade sumir do relatório parecendo limpo.
 
+**Ter contato alto não fecha a busca paga.** Ela recusava o clique inteiro quando o card já tinha
+confiança alta — e isso pegava 505 dos 530 fornecedores do funil, porque o `<fone>` do `emit` é
+justamente o que a varredura grátis acha. Procedência alta não diz que a pessoa serve: o telefone
+impresso na nota é o do escritório, e quem se cadastrou não é necessariamente quem decide antecipar.
+Quem guarda o dinheiro é o **teto** do originador, o **TTL** por provedor e a parada **dentro** da
+corrida — achou alta agora, as etapas seguintes não rodam.
+
 ### Credenciais
 
 `NOVAVIDA_USUARIO`, `NOVAVIDA_SENHA`, `NOVAVIDA_CLIENTE` e `GOOGLE_PLACES_API_KEY` vivem **só em env do
@@ -666,6 +673,13 @@ kill switch → supressão → base legal → teto da thread → teto da conta �
 **Fora da janela é adiamento, não descarte.** Uma mensagem gerada às 22h não é errada, é
 cedo demais: `agendada_para` é a terceira saída. Um humano pode furar a janela com
 confirmação explícita — nunca a supressão.
+
+**Quem cria contato preenche a base legal — sempre.** Contato sem base nasce mudo: cadastrado,
+visível na ficha e recusado pelo portão, que é o pior dos três estados porque parece que
+funcionou. A promoção de um contato descoberto (`0196`) deriva a base da **fonte** pela mesma
+regra da `0144` — `xml_nfe` e `sacado` são `dado_publico_nfe`, o resto é `manual` — e grava
+fonte e evidência em `base_legal_detalhe`, que é o "como chegamos neste número" que se defende
+depois.
 
 ### O agente é um decisor, e o espaço de ações é fechado
 

@@ -617,10 +617,17 @@ export function FichaFornecedor({
             id: 'mensagens',
             label: 'Mensagens',
             conteudo: (
+              /*
+               * O CNPJ vai junto do `empresa_id` porque a maioria dos cards deste
+               * funil não tem ficha — 525 dos 530. Sem ele a aba só sabia dizer que
+               * não há empresa, e não alcançava os contatos que a descoberta achou
+               * para este mesmo CNPJ, que é o material de que ela precisa.
+               */
               <AbaMensagens
                 empresaId={card.empresa_id}
                 funil="fornecedores"
                 funilCardId={card.fornecedor_cnpj}
+                fornecedorCnpj={card.fornecedor_cnpj}
               />
             ),
           },
@@ -722,7 +729,6 @@ function DialogConfirmarBusca({
           municipio: card.municipio,
           uf: card.uf,
           razao_social: card.fornecedor_nome,
-          melhor_confianca: (card.melhor_confianca as Confianca | null) ?? null,
         },
         {
           custos: { ...CUSTOS_PADRAO, ...((d.custos as Record<string, number>) ?? {}) },

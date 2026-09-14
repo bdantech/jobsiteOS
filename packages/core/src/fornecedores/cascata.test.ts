@@ -17,7 +17,6 @@ const BASE: EstadoFornecedor = {
   municipio: 'Sorocaba',
   uf: 'SP',
   razao_social: 'SERRALHERIA X LTDA',
-  melhor_confianca: null,
 }
 
 test('ME sem domínio: Nova Vida e Claude rodam, Apollo não', () => {
@@ -109,21 +108,24 @@ test('faturamento estimado substitui o headcount quando o headcount falta', () =
   assert.equal(p.etapas.find((e) => e.provedor === 'apollo')?.rodara, true)
 })
 
-test('já tendo contato de confiança alta, o clique inteiro não roda e custa zero', () => {
-  const p = planejarDescobertaSobDemanda({ ...BASE, dominio: 'x.com.br', funcionarios: 50, melhor_confianca: 'alta' })
-  assert.equal(p.custo_estimado, 0)
-  assert.equal(p.etapas.every((e) => !e.rodara), true)
-  assert.match(p.etapas[0]?.motivo ?? '', /confiança alta/)
-})
-
-test('confiança média não bloqueia — média é justamente o que se está tentando melhorar', () => {
-  const p = planejarDescobertaSobDemanda({ ...BASE, melhor_confianca: 'media' })
+test('o contato que já existe não fecha o plano — procurar o decisor é o uso do clique', () => {
+  /*
+   * A regra antiga zerava o clique quando o fornecedor já tinha contato de confiança
+   * alta, e isso pegava 505 dos 530 do funil: o telefone impresso na NF-e é do
+   * escritório, e quem se cadastrou não é necessariamente quem decide antecipar.
+   * Confiança é procedência do número, não utilidade da pessoa.
+   */
+  const p = planejarDescobertaSobDemanda({ ...BASE, dominio: 'x.com.br', funcionarios: 50 })
+  assert.equal(p.etapas.filter((e) => e.rodara).length, 3)
   assert.ok(p.custo_estimado > 0)
+  // Quem economiza agora é a parada DENTRO da corrida, com o que a corrida achou.
+  assert.equal(p.pode_custar_menos, true)
+  assert.equal(deveParar('alta'), true)
 })
 
-test('desligar parar_ao_encontrar_alta faz tudo rodar mesmo com alta', () => {
+test('desligar parar_ao_encontrar_alta tira a promessa de custar menos', () => {
   const p = planejarDescobertaSobDemanda(
-    { ...BASE, dominio: 'x.com.br', funcionarios: 50, melhor_confianca: 'alta' },
+    { ...BASE, dominio: 'x.com.br', funcionarios: 50 },
     { pararAoEncontrarAlta: false },
   )
   assert.equal(p.etapas.filter((e) => e.rodara).length, 3)

@@ -48,6 +48,12 @@ import { buscarNaNovaVida } from './provedores/novavida.js'
  * O custo mostrado no botão é o TETO do clique. Se a Nova Vida trouxer o celular do
  * sócio com confiança alta, o Apollo e o Claude não rodam e a fatura é menor.
  * Prometer o teto e cobrar menos é a única direção aceitável do erro.
+ *
+ * A parada olha o que ESTA corrida achou, e não o que o fornecedor já tinha. Com a
+ * confiança do card como ponto de partida, o clique de um fornecedor que já tinha
+ * telefone alto (505 dos 530 do funil) pulava a primeira etapa e todas as seguintes —
+ * o originador não tinha como procurar o decisor, que é justamente para o que ele
+ * clica quando o contato conhecido é a portaria.
  */
 
 export interface ResultadoClique {
@@ -75,7 +81,7 @@ export async function planejarClique(cnpj: string): Promise<{
 
   const { data: funil } = await supabaseAdmin
     .from('fornecedores_funil')
-    .select('originador_id, melhor_confianca')
+    .select('originador_id')
     .eq('fornecedor_cnpj', cnpj)
     .maybeSingle()
 
@@ -89,7 +95,6 @@ export async function planejarClique(cnpj: string): Promise<{
     municipio: cadastral.municipio,
     uf: cadastral.uf,
     razao_social: cadastral.razao_social,
-    melhor_confianca: (funil?.melhor_confianca as Confianca | null) ?? null,
   }
 
   const plano = planejarDescobertaSobDemanda(estado, {
@@ -146,7 +151,7 @@ export async function descobertaSobDemanda(
   const cadastral = await cadastralDoFornecedor(cnpj)
   const { data: funil } = await supabaseAdmin
     .from('fornecedores_funil')
-    .select('melhor_confianca, sacados_principais')
+    .select('sacados_principais')
     .eq('fornecedor_cnpj', cnpj)
     .maybeSingle()
 
@@ -160,7 +165,15 @@ export async function descobertaSobDemanda(
    */
   let dominioAtual = cadastral.dominio
 
-  let melhor = (funil?.melhor_confianca as Confianca | null) ?? null
+  /*
+   * A melhor confiança DESTA corrida, começando em nada.
+   *
+   * Ela alimenta só o `deveParar` entre etapas, e é por isso que não parte do que o
+   * card já tinha: a confiança guardada é a de um número que talvez seja a portaria,
+   * e usá-la como ponto de partida fazia a primeira etapa ser pulada — o clique
+   * inteiro virava um "pulado" caro de explicar e sem contato novo.
+   */
+  let melhor: Confianca | null = null
   let novos = 0
   let custo = 0
   let parouEm: string | undefined
