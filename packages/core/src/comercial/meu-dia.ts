@@ -143,13 +143,25 @@ export interface BlocoCatalogado {
   limiaresPadrao: Readonly<Record<string, number>>
   /** Rótulo humano de cada limiar, para a tela de settings. */
   limiarRotulos?: Readonly<Record<string, string>>
+  /**
+   * O `valor` deste bloco é CONTEXTO, não dinheiro nosso — e por isso ele não entra em
+   * "Em jogo hoje" nem na composição do dia.
+   *
+   * Existe por causa das reuniões. O valor delas deixou de ser `valor_esperado_mensal`
+   * (o que a gente fatura com a empresa) e passou a ser o faturamento DA EMPRESA, que é
+   * o que diz o tamanho de quem vai sentar do outro lado. São duas grandezas com três
+   * ordens de magnitude de diferença — a Aliança MB vale R$ 29 mil/mês para nós e fatura
+   * R$ 716 milhões. Somar a segunda num indicador chamado "em jogo hoje" transformaria
+   * um número que o vendedor usa para se orientar numa ficção de três casas.
+   */
+  foraDoEmJogo?: boolean
 }
 
 /**
- * O auxiliar do closer NÃO aparece em `cargos`, e não é esquecimento: ele espelha
- * integralmente o Meu Dia do closer a que está vinculado (§3.5). Quem resolve isso é a
- * `cargoDeVisao()` lá embaixo, num lugar só — repetir 'auxiliar' em treze blocos
- * garantiria que o décimo quarto ficasse de fora.
+ * O auxiliar do closer NÃO aparece em `cargos`, e não é esquecimento: ele espelha o Meu
+ * Dia do closer a que está vinculado (§3.5), menos os blocos de reunião. Quem resolve
+ * isso é a dupla `cargoDeVisao()` + `BLOCOS_FORA_DO_AUXILIAR` lá embaixo, num lugar só —
+ * repetir 'auxiliar' em treze blocos garantiria que o décimo quarto ficasse de fora.
  */
 export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
   // ─── Originador ───────────────────────────────────────────────────────────
@@ -290,7 +302,20 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
   {
     tipo: 'reunioes_proximas',
     rotulo: 'Reuniões de hoje e amanhã',
-    descricao: 'A ação é confirmar antes que vire no-show.',
+    /*
+     * O VALOR AO LADO É O FATURAMENTO DA EMPRESA, e não o que ela vale para nós.
+     *
+     * Era `valor_esperado_mensal` — a receita que esperamos tirar dela. Duas coisas
+     * estavam erradas nisso. A primeira é que metade das empresas não tem esse campo
+     * preenchido (a Metalúrgica RPL, reunião de amanhã, está nula), e a linha aparecia
+     * sem número nenhum. A segunda é que não é a pergunta que se faz antes de uma
+     * reunião: o que muda a preparação é o TAMANHO de quem vai sentar do outro lado.
+     * Uma construtora de R$ 716 milhões e uma de R$ 3 milhões pedem conversas
+     * diferentes, e a receita esperada não distingue as duas — ela é derivada nossa.
+     */
+    descricao:
+      'A ação é confirmar antes que vire no-show. O valor ao lado é o faturamento da '
+      + 'empresa — o tamanho de quem vai sentar do outro lado, não o que ela vale para nós.',
     cargos: ['sdr', 'vendedor'],
     grupo: 'funil',
     acao: 'abrir_card_lead',
@@ -298,6 +323,7 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     maxPadrao: 10,
     limiaresPadrao: { horizonte_dias: 2 },
     limiarRotulos: { horizonte_dias: 'Horizonte, em dias' },
+    foraDoEmJogo: true,
   },
 
   // ─── Closer ───────────────────────────────────────────────────────────────
@@ -484,10 +510,33 @@ export function cargoDeVisao(tipo: string | null | undefined): TipoVendedorId | 
   return null
 }
 
+/**
+ * O que o auxiliar NÃO vê, apesar de espelhar o closer em todo o resto.
+ *
+ * Os dois são reunião, e reunião é a exceção que o próprio desenho do cargo pede: o
+ * auxiliar trabalha o dia a dia do closer — documento parado, proposta sem resposta,
+ * crédito decidido, carteira ociosa — e não senta nas reuniões dele.
+ *
+ * `reunioes_pendentes_aceite` sai pelo motivo mais forte dos dois, e ele não é de tela:
+ * aceitar uma reunião CRIA a comissão do SDR (`sdr_valor_reuniao`) e prende o closer a
+ * um compromisso. É uma decisão que gasta o dinheiro de duas outras pessoas, e o silêncio
+ * já tem um desfecho definido — em 48h ela aceita sozinha. Um auxiliar que não decide não
+ * quebra nada; um que decide, decide por dois.
+ *
+ * A carteira, as vendas e as conversas continuam iguais às do closer: é exatamente nisso
+ * que "ajudar no dia a dia" consiste.
+ */
+export const BLOCOS_FORA_DO_AUXILIAR: readonly BlocoMeuDiaId[] = [
+  'reunioes_proximas',
+  'reunioes_pendentes_aceite',
+]
+
 export function blocosDoCargo(tipo: string | null | undefined): BlocoCatalogado[] {
   const cargo = cargoDeVisao(tipo)
   if (!cargo) return []
-  return CATALOGO_MEU_DIA.filter((b) => b.cargos.includes(cargo))
+  const doCargo = CATALOGO_MEU_DIA.filter((b) => b.cargos.includes(cargo))
+  if (tipo !== 'auxiliar') return doCargo
+  return doCargo.filter((b) => !BLOCOS_FORA_DO_AUXILIAR.includes(b.tipo))
 }
 
 // ─── O que o agregador devolve ──────────────────────────────────────────────
@@ -578,8 +627,15 @@ export function ordenarItens(itens: readonly ItemMeuDia[]): ItemMeuDia[] {
 }
 
 /** R$ em jogo hoje: a soma do que os itens acionáveis valem. Sem valor não soma. */
+/**
+ * Só o que é dinheiro NOSSO entra. Ver `foraDoEmJogo` no catálogo: o faturamento das
+ * empresas com quem vamos nos reunir é contexto, e somá-lo aqui inflaria o indicador em
+ * três ordens de magnitude.
+ */
 export function valorEmJogo(dia: MeuDia): number {
-  return arredondar(dia.blocos.reduce((s, b) => s + b.valor_total, 0))
+  return arredondar(
+    dia.blocos.reduce((s, b) => (blocoCatalogado(b.tipo)?.foraDoEmJogo ? s : s + b.valor_total), 0),
+  )
 }
 
 export function totalDeItens(dia: MeuDia): number {
@@ -598,7 +654,8 @@ export function composicaoDoDia(dia: MeuDia): { grupo: GrupoMeuDia; itens: numbe
     if (!cat) continue
     const atual = acc.get(cat.grupo) ?? { itens: 0, valor: 0 }
     atual.itens += bloco.itens.length
-    atual.valor += bloco.valor_total
+    // Mesma régua do "Em jogo hoje": contexto não vira fatia de dinheiro.
+    if (!cat.foraDoEmJogo) atual.valor += bloco.valor_total
     acc.set(cat.grupo, atual)
   }
   return [...acc.entries()]

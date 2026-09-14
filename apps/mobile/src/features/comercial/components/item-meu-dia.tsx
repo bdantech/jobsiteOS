@@ -3,15 +3,16 @@ import { Animated, Pressable, View } from 'react-native'
 import { Swipeable } from 'react-native-gesture-handler'
 import { useRouter } from 'expo-router'
 import { Ban, CalendarClock, Check, ChevronRight } from 'lucide-react-native'
-import { blocoCatalogado, type ItemMeuDia } from '@jobsiteos/core'
+import { blocoCatalogado, dinheiroCurto, type ItemMeuDia } from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Sheet } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
-const brl = (n: number) =>
-  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+/* A mesma régua da web (core): o faturamento da empresa chega aqui em centenas de
+   milhões, e "R$ 716.042.600" não cabe na linha de um celular. */
+const brl = dinheiroCurto
 
 const FAIXA: Record<string, string> = {
   alta: 'bg-red-500',

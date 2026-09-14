@@ -195,3 +195,27 @@ export function composicaoPorChave(
   const resto = ord.slice(topo).reduce((s, [, v]) => s + v, 0)
   return resto > 0 ? [...cabeca, { nome: 'Outros', valor: resto }] : cabeca
 }
+
+// ─── Dinheiro curto ─────────────────────────────────────────────────────────
+
+/**
+ * R$ legível num espaço apertado, nas duas plataformas.
+ *
+ * Existia em cinco cópias, três delas parando em "mil" — e isso foi de graça enquanto os
+ * números eram limite de crédito. Deixou de ser quando o Meu Dia passou a mostrar o
+ * FATURAMENTO DA EMPRESA nas reuniões: a Aliança MB fatura R$ 716.042.600, que na régua
+ * antiga saía como "R$ 716.043 mil" — tecnicamente certo e ilegível, que é como um número
+ * grande deixa de ser lido.
+ */
+export function dinheiroCurto(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000_000) {
+    return `R$ ${(n / 1_000_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} bi`
+  }
+  if (abs >= 1_000_000) {
+    return `R$ ${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+  }
+  if (abs >= 1000) return `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')} mil`
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+}

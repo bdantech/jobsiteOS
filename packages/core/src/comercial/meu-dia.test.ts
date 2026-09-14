@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  BLOCOS_FORA_DO_AUXILIAR,
   CATALOGO_MEU_DIA,
   blocoCatalogado,
   blocosDoCargo,
@@ -15,6 +16,7 @@ import {
   type ItemMeuDia,
   type MeuDia,
 } from './meu-dia.ts'
+import { dinheiroCurto } from './meu-dia-visual.ts'
 import type { CommissionParam } from './comissao-v2.ts'
 
 /**
@@ -70,12 +72,63 @@ test('todo limiar do catálogo tem rótulo para a tela de settings', () => {
   }
 })
 
-test('o auxiliar do closer vê o dia do closer, e não um dia próprio', () => {
+test('o auxiliar do closer vê o dia do closer, menos as reuniões', () => {
   assert.equal(cargoDeVisao('auxiliar'), 'vendedor')
+
+  const doAuxiliar = blocosDoCargo('auxiliar').map((b) => b.tipo)
+  const doCloser = blocosDoCargo('vendedor').map((b) => b.tipo)
+
+  // Tudo o que o closer tem, menos os dois de reunião — e NADA a mais.
   assert.deepEqual(
-    blocosDoCargo('auxiliar').map((b) => b.tipo),
-    blocosDoCargo('vendedor').map((b) => b.tipo),
+    doAuxiliar,
+    doCloser.filter((t) => !BLOCOS_FORA_DO_AUXILIAR.includes(t)),
   )
+  assert.ok(doCloser.includes('reunioes_proximas'))
+  assert.ok(doCloser.includes('reunioes_pendentes_aceite'))
+  assert.ok(!doAuxiliar.includes('reunioes_proximas'))
+  assert.ok(!doAuxiliar.includes('reunioes_pendentes_aceite'))
+  // O resto do dia é idêntico: é nisso que "ajudar o closer" consiste.
+  assert.ok(doAuxiliar.includes('carteira_ociosa'))
+  assert.ok(doAuxiliar.includes('aguardando_documentacao'))
+  assert.ok(doAuxiliar.includes('credito_decidido'))
+  assert.ok(doAuxiliar.includes('propostas_sem_resposta'))
+})
+
+test('o faturamento da empresa não entra no "em jogo hoje"', () => {
+  /*
+   * A Aliança MB fatura R$ 716 mi e vale R$ 29 mil/mês para nós. Somar a primeira num
+   * indicador de dinheiro nosso é o bug que `foraDoEmJogo` existe para impedir.
+   */
+  const dia = {
+    tem_acesso: true,
+    vendedor_id: null,
+    vendedor_nome: null,
+    tipo: 'vendedor',
+    espelhado: false,
+    gerado_em: '2026-09-14T00:00:00Z',
+    blocos: [
+      { tipo: 'reunioes_proximas', itens: [item()], total: 2, valor_total: 749_090_720 },
+      { tipo: 'propostas_sem_resposta', itens: [item()], total: 1, valor_total: 29_332 },
+    ],
+    mapa_carteira: [],
+    evolucao: [],
+    funil_semana: [],
+  } as unknown as Parameters<typeof valorEmJogo>[0]
+
+  assert.equal(valorEmJogo(dia), 29_332)
+  assert.equal(
+    composicaoDoDia(dia).find((f) => f.grupo === 'funil')?.valor,
+    29_332,
+  )
+})
+
+test('dinheiro curto encurta milhão e bilhão, não só milhar', () => {
+  assert.equal(dinheiroCurto(716_042_600), 'R$ 716 mi')
+  assert.equal(dinheiroCurto(33_048_120), 'R$ 33 mi')
+  assert.equal(dinheiroCurto(1_500_000_000), 'R$ 1,5 bi')
+  assert.equal(dinheiroCurto(29_332), 'R$ 29 mil')
+  // O separador do Intl é espaço NÃO-quebrável; comparar com o normal falha calado.
+  assert.equal(dinheiroCurto(840).replace(/\u00a0/g, ' '), 'R$ 840')
 })
 
 test('quem não é vendedor de nenhum tipo não tem blocos', () => {

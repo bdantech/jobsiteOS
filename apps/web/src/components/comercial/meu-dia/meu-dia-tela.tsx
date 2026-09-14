@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Clock, Wallet } from 'lucide-react'
 import {
   blocoCatalogado,
   corPorEspera,
+  dinheiroCurto,
   itensUrgentes,
   ordenarItens,
   totalDeItens,
@@ -51,12 +52,8 @@ import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from '
  * vez, e a rolagem é resposta melhor do que um filtro que apaga contexto.
  */
 
-const brl = (n: number) =>
-  n >= 1_000_000
-    ? `R$ ${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
-    : n >= 1000
-      ? `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')} mil`
-      : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+/* A régua do core — a mesma que o widget e o celular usam. */
+const brl = dinheiroCurto
 
 /**
  * A natureza da conta na carteira do closer.
@@ -252,7 +249,17 @@ function WidgetDoBloco({
   const [fatia, setFatia] = React.useState<string | null>(null)
   const [natureza, setNatureza] = React.useState<Natureza>('todas')
   const rotulo = cat?.rotulo ?? bloco.tipo
-  const contexto = bloco.valor_total > 0 ? brl(bloco.valor_total) : `${bloco.total}`
+  /*
+   * O CABEÇALHO DE UM BLOCO DE CONTEXTO CONTA, NÃO SOMA.
+   *
+   * "Reuniões de hoje e amanhã" passou a mostrar o faturamento das empresas, e somar
+   * isso no topo do widget daria "R$ 749 mi" sobre duas reuniões — um número que só
+   * pode ser lido errado. O valor continua por item, que é onde ele responde alguma
+   * coisa ("com quem eu vou falar é grande ou pequeno?"); o cabeçalho volta a ser a
+   * contagem. Mesma régua do indicador "Em jogo hoje", em `valorEmJogo()`.
+   */
+  const contexto =
+    bloco.valor_total > 0 && !cat?.foraDoEmJogo ? brl(bloco.valor_total) : `${bloco.total}`
   const restantes = bloco.total - bloco.itens.length
   const rodape =
     restantes > 0 ? (
@@ -613,7 +620,14 @@ function Timeline({ itens }: { itens: ItemMeuDia[] }) {
 }
 
 /**
- * O mapa da carteira passiva: tamanho pelo limite, COR PELO TEMPERATURE REPORT.
+ * O mapa da carteira PASSIVA: tamanho pelo limite, COR PELO TEMPERATURE REPORT.
+ *
+ * Passiva de verdade desde a 0202. Ele lia `v_passiva`, que junta os papéis
+ * `gestao_passiva` e `vendedor` — e no papel `vendedor` cabem as duas naturezas. O
+ * resultado era a Ribeiro Caram, uma conta em prospecção ativa com R$ 7 milhões de
+ * limite, sendo o maior retângulo de um mapa chamado "Minha carteira passiva". As
+ * ativas não sumiram do dia: elas estão no bloco Carteira ociosa, que nunca prometeu
+ * passividade e tem filtro de natureza.
  *
  * A cor era a ociosidade em dias, que é um proxy. O report é a leitura da plataforma
  * sobre a saúde da conta — usar o proxy existindo a leitura direta é escolher o pior dos
@@ -650,7 +664,7 @@ function MapaCarteira({ clientes }: { clientes: MeuDia['mapa_carteira'] }) {
   return (
     <Widget
       titulo="Minha carteira passiva"
-      descricao="Área pelo limite aprovado, cor pelo temperature report"
+      descricao="Área pelo limite aprovado, cor pelo temperature report. As contas em prospecção ativa estão em Carteira ociosa"
       contexto={`${ordenados.length}`}
       rodape={
         <span className="flex flex-wrap gap-x-3 gap-y-1">

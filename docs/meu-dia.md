@@ -117,7 +117,21 @@ bloco que aparece na tela e não aparece nas configurações.
 | Conversas sem reunião | `conversas` do vendedor sem lead com reunião | dias parada (3) |
 | No-shows | `sdr_leads` estágio `no_show` | — |
 | Com fit, sem agendamento | `sdr_leads` com `fit` e sem `reuniao_em` | dias desde o fit (2) |
-| Reuniões de hoje e amanhã | `sdr_leads.reuniao_em` | horizonte em dias (2) |
+| Reuniões de hoje e amanhã | `sdr_leads.reuniao_em`; o valor é `empresas.faturamento_anual` | horizonte em dias (2) |
+
+> **O valor da reunião é o faturamento DA EMPRESA, não a nossa receita.** Era
+> `valor_esperado_mensal`, e falhava de duas formas: metade das empresas tem o campo nulo
+> (a Metalúrgica RPL, reunião de amanhã, aparecia sem número nenhum), e não é a pergunta
+> que se faz antes de uma reunião — o que muda a preparação é o tamanho de quem vai sentar
+> do outro lado. A Aliança MB fatura R$ 716 mi e vale R$ 29 mil/mês para nós; são
+> conversas diferentes.
+>
+> São grandezas com três ordens de magnitude de diferença, e por isso o bloco carrega
+> `foraDoEmJogo` no catálogo: ele não entra em **"Em jogo hoje"**, não entra na composição
+> do dia e não vira soma no cabeçalho do próprio widget (lá o contexto volta a ser a
+> contagem). Somar faturamento de cliente num indicador chamado "em jogo" transformaria o
+> número que o vendedor usa para se orientar numa ficção de três casas. A origem
+> (declarado × estimado) vai no subtítulo, e o `valor_esperado_mensal` continua no `meta`.
 
 > **"Não contatado" não é `ultimo_toque_em is null`.** A rota de inbound carimba
 > `ultimo_toque_em = distribuido_em` no nascimento do lead. A pergunta certa é se houve
@@ -175,6 +189,15 @@ manuais.
 > ociosa" sobre uma lista majoritariamente ativa; passou a "Carteira ociosa", `meta`
 > carrega o `gestao_operacao`, e o widget filtra entre ambas / passiva / ativa. O teto do
 > bloco subiu de 12 para 20 porque um teto aplicado ANTES do filtro faz o filtro mentir.
+>
+> **O MAPA, esse, é mesmo só das passivas (0202).** Ele lia a mesma `v_passiva` e não
+> tinha filtro nenhum — o resultado era a Ribeiro Caram, conta em prospecção ativa com
+> R$ 7 milhões de limite, sendo o maior retângulo de um widget intitulado "Minha carteira
+> passiva". O mapa passou a excluir `gestao_operacao = 'prospeccao_ativa'`; o BLOCO
+> continua com as duas naturezas e o filtro, porque o nome dele não promete passividade e
+> o dinheiro parado na prospecção ativa é trabalho de alguém. Conta sem classificação
+> continua no mapa (`is distinct from`, não `= 'passivo'`): sumir do mapa do dono por
+> causa de um campo em branco é pior que aparecer com a natureza desconhecida.
 
 ## Comissão projetada — fora da tela
 
@@ -208,8 +231,30 @@ externo — site do cliente, tribunal — segue `target="_blank"`: aquilo não �
 
 ## Quem vê o dia de quem
 
-- **Auxiliar do closer**: espelha integralmente o dia do superior. O cabeçalho diz
-  "Carteira de {closer}". A tradução mora em `cargoDeVisao()` e em `app_meu_dia_cargo()`.
+- **Auxiliar do closer**: espelha o dia do superior **menos as reuniões**. O cabeçalho diz
+  "Carteira de {closer}".
+
+  Saem dois blocos, e a lista deles é `BLOCOS_FORA_DO_AUXILIAR` no core:
+  *Reuniões de hoje e amanhã* e *Reuniões pendentes de aceite*. O segundo sai pelo motivo
+  mais forte, e ele não é de tela: **aceitar uma reunião cria a comissão do SDR**
+  (`sdr_valor_reuniao`) e prende o closer ao compromisso. É decisão que gasta o dinheiro
+  de outras duas pessoas, e o silêncio já tem desfecho — em 48h ela aceita sozinha. Um
+  auxiliar que não decide não quebra nada; um que decide, decide por dois. Todo o resto é
+  igual: documento parado, proposta sem resposta, crédito decidido, carteira ociosa,
+  certificado vencendo, mapa da carteira.
+
+  **Conversas, sugestões do Agente e tarefas manuais são as do closer MAIS as dele.** Eram
+  só as do closer, e o efeito era uma tela de lista de trabalho que não mostrava as
+  tarefas de quem a abria. Quando a tarefa não é da carteira, o motivo diz de quem é
+  ("Vence hoje · tarefa de Pamela Oliveira").
+
+  A tradução mora em **um lugar só**, `app__md_montar`: `v_pessoa` é de quem é o dia,
+  `v_dados` é de quem são os dados. Antes ela morava em `meu_dia()`, *antes* do agregador,
+  e isso tinha dois efeitos ruins — o gestor que escolhia o auxiliar no seletor recebia um
+  **dia vazio** (o id explícito ganhava do coalesce, e o auxiliar não tem carteira própria),
+  e o agregador nunca via `tipo = 'auxiliar'`, então não havia onde pendurar a regra das
+  reuniões. O resumo matinal do worker fazia a mesma resolução por conta própria — era a
+  terceira cópia da regra, e ela também foi embora.
 - **Gestor**: seletor no topo, **leitura**. Ele vê, mas não adia nem descarta — decidir o
   dia dos outros é diferente de olhar para ele. Quem pode **mexer** vem de
   `app_meu_dia_alvos()`: eu, e o meu closer quando sou auxiliar.

@@ -1,4 +1,7 @@
-import { resolverConfig } from '../../../../../packages/core/src/comercial/meu-dia.js'
+import {
+  blocoCatalogado,
+  resolverConfig,
+} from '../../../../../packages/core/src/comercial/meu-dia.js'
 import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
@@ -79,13 +82,21 @@ export async function resumoMeuDiaJob(): Promise<ResultadoResumoMeuDia> {
 
     try {
       /*
-       * O ALVO do auxiliar é o closer dele — a mesma resolução que a tela faz. Sem isto
-       * o auxiliar receberia um resumo do próprio cadastro, que é sempre vazio: quem
-       * titulariza conta é o superior.
+       * O ALVO É A PRÓPRIA PESSOA, e a troca pelo closer acontece dentro do agregador.
+       *
+       * Isto já resolveu o superior aqui, com um `coalesce(s.superior_id, s.id)` — a
+       * terceira cópia da mesma regra, e a que sobreviveu à 0202. O efeito era sutil e
+       * ruim: passando o id do CLOSER, `app__md_montar` via `tipo = 'vendedor'` e não
+       * tinha como saber que o resumo era do auxiliar. A manhã dela vinha com as
+       * reuniões do Fabio contadas dentro, enquanto a tela dela não as mostra — e um
+       * push que promete doze itens numa tela que tem dez é como a pessoa para de abrir
+       * o push.
+       *
+       * O `cargo` continua sendo calculado aqui porque ele serve a outra coisa: achar a
+       * linha de `meu_dia_config`, que é por CARGO e não por pessoa.
        */
-      const { rows: alvoRows } = await pool.query<{ alvo: string; cargo: string }>(
-        `select coalesce(s.superior_id, s.id) as alvo,
-                case when s.tipo = 'auxiliar' then 'vendedor' else s.tipo end as cargo
+      const { rows: alvoRows } = await pool.query<{ cargo: string }>(
+        `select case when s.tipo = 'auxiliar' then 'vendedor' else s.tipo end as cargo
          from vendedores s where s.id = $1`,
         [v.id],
       )
@@ -95,7 +106,7 @@ export async function resumoMeuDiaJob(): Promise<ResultadoResumoMeuDia> {
       const config = resolverConfig(alvo.cargo, overridesPorCargo.get(alvo.cargo) ?? {})
 
       const { data, error } = await supabaseAdmin.rpc('app__md_montar' as never, {
-        p_alvo: alvo.alvo,
+        p_alvo: v.id,
         p_config: config,
       } as never)
       if (error) throw new Error(error.message)
@@ -106,7 +117,15 @@ export async function resumoMeuDiaJob(): Promise<ResultadoResumoMeuDia> {
         (s, b) => s + b.itens.filter((i) => i.urgencia === 'alta').length,
         0,
       )
-      const emJogo = blocos.reduce((s, b) => s + Number(b.valor_total ?? 0), 0)
+      /*
+       * Só dinheiro NOSSO, igual ao indicador da tela (`valorEmJogo` no core). O bloco
+       * de reuniões carrega o faturamento das empresas desde a 0202 — somá-lo aqui faria
+       * o push anunciar "R$ 749 mi em jogo" por causa de duas reuniões.
+       */
+      const emJogo = blocos.reduce(
+        (s, b) => (blocoCatalogado(b.tipo)?.foraDoEmJogo ? s : s + Number(b.valor_total ?? 0)),
+        0,
+      )
 
       if (itens === 0) {
         out.sem_itens += 1

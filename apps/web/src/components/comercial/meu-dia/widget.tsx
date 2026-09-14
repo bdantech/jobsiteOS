@@ -6,7 +6,13 @@ import { LinkEmAba } from '@/components/shell/link-em-aba'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { blocoCatalogado, ordenarItens, type BlocoMeuDia, type ItemMeuDia } from '@jobsiteos/core'
+import {
+  blocoCatalogado,
+  dinheiroCurto,
+  ordenarItens,
+  type BlocoMeuDia,
+  type ItemMeuDia,
+} from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -52,10 +58,12 @@ export function Widget({
   )
 }
 
-const brl = (n: number) =>
-  n >= 1000
-    ? `R$ ${Math.round(n / 1000).toLocaleString('pt-BR')} mil`
-    : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+/*
+ * A régua do core, e não uma quarta cópia. Esta parava em "mil", o que era inofensivo
+ * enquanto o número era limite de crédito — e deixou de ser quando a linha de reunião
+ * passou a mostrar o faturamento da empresa: R$ 716.042.600 saía como "R$ 716.043 mil".
+ */
+const brl = dinheiroCurto
 
 const FAIXA: Record<string, string> = {
   alta: 'bg-red-500',
