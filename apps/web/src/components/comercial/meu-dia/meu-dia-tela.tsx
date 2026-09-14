@@ -184,7 +184,7 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
             onClick={() => setModal({ titulo: 'O que tem relógio correndo', itens: urgentes })}
           />
           <IndicadorDoCargo dia={dia} onAbrir={setModal} />
-          <IndicadorSemIdentificacao vendedorId={dia.dados_vendedor_id ?? dia.vendedor_id} />
+          <IndicadorSemIdentificacao vendedorId={dia.vendedor_id} />
         </div>
       </div>
 
@@ -610,8 +610,15 @@ function IndicadorDoCargo({
  * ninguém vê. Os três primeiros são fixos porque são o retrato do dia; este é um alerta,
  * e alerta em zero é ruído.
  *
- * O escopo é de quem são os DADOS, não de quem é o dia: a fila de identificação pertence a
- * quem tem número e carteira, então a auxiliar vê a do closer dela — como vê a carteira.
+ * ─── O ESCOPO É DE QUEM ABRE, E NÃO DE QUEM É A CARTEIRA ───────────────────
+ * Aqui o Meu Dia deixa de espelhar, e é de propósito. Tudo o mais na tela é da carteira do
+ * superior quando quem abre é auxiliar — documento parado, proposta, limite ocioso —
+ * porque carteira é do closer. A fila de identificação não: ela é de quem RECEBEU a
+ * mensagem, no número dele, e identificar é dizer com quem VOCÊ falou.
+ *
+ * A auxiliar ganha aparelho próprio, e a partir daí a fila dela é dela. Mostrar a do
+ * closer faria duas pessoas olharem para a mesma lista de 46 achando cada uma que é sua —
+ * e o resultado disso não é a fila trabalhada em dobro, é ninguém pegando nenhuma.
  */
 function IndicadorSemIdentificacao({ vendedorId }: { vendedorId: string | null }) {
   const contagem = useQuery({

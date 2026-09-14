@@ -578,9 +578,14 @@ export interface MeuDia {
   /**
    * De quem são os DADOS — o superior, quando quem abre é auxiliar (0202/0204).
    *
-   * Existe porque nem toda pergunta do dia se responde pelo dono do dia: a carteira, as
-   * vendas e a fila de identificação são de quem tem número e cliente. Sem este campo, a
-   * tela refaria a regra do superior em TypeScript, que é a cópia que a 0202 apagou.
+   * É a outra metade de um par que o payload já expunha pela metade: `espelhado` diz QUE
+   * o dia é de outra carteira e `vendedor_nome` diz DE QUEM, mas nenhum dos dois dá o id,
+   * e sem id a tela não consegue perguntar nada sobre essa pessoa sem refazer a regra do
+   * superior em TypeScript — a cópia que a 0202 apagou.
+   *
+   * NÃO é o escopo padrão da tela. Cada coisa escolhe: carteira e funis seguem os dados
+   * (do superior), e o que é de quem RECEBEU — a fila de identificação, por exemplo —
+   * segue `vendedor_id`.
    */
   dados_vendedor_id: string | null
   /** O nome de quem são os DADOS: é o que o cabeçalho anuncia. */

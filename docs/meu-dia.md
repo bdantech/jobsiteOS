@@ -217,9 +217,16 @@ o que ensina o olho a pular aquele canto — e aí, no dia em que ele marca 12, 
 Os três primeiros são fixos porque são o retrato do dia; este é alerta, e alerta em zero é
 ruído.
 
-O escopo é `dados_vendedor_id` e não `vendedor_id`: a fila pertence a quem tem número e
-carteira, então a **auxiliar vê a do closer dela** — como vê a carteira dele. É o mesmo par
-da 0202, e foi para isso que a 0204 passou a devolver o campo.
+**Aqui o Meu Dia deixa de espelhar, e é de propósito.** Tudo o mais na tela é da carteira
+do superior quando quem abre é auxiliar — documento parado, proposta, limite ocioso —
+porque carteira é do closer. A fila de identificação não: ela é de quem **recebeu** a
+mensagem, no número dele, e identificar é dizer com quem *você* falou. A auxiliar ganha
+aparelho próprio, e a partir daí a fila dela é dela.
+
+Mostrar a do closer faria duas pessoas olharem para a mesma lista de 46 achando cada uma
+que é sua — e o resultado disso não é a fila trabalhada em dobro, é ninguém pegando
+nenhuma. O escopo é `vendedor_id`; `dados_vendedor_id` (0204) existe para outra coisa, e
+cada consumidor escolhe qual dos dois responde à pergunta dele.
 
 ## Comissão projetada — fora da tela
 

@@ -1,22 +1,30 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- 0204 — O Meu Dia diz de quem é a fila de identificação
+-- 0204 — `dados_vendedor_id`: a outra metade do par que o Meu Dia já expunha
 --
--- O Meu Dia ganhou um indicador com o número de conversas esperando
--- identificação — gente que falou com a gente e o sistema não soube quem era. A
--- contagem sai de `conversas_nao_vinculadas.vendedor_sugerido_id`, ou seja, ela
--- precisa de um VENDEDOR para contar.
+-- ─── O QUE ESTE CAMPO É ─────────────────────────────────────────────────────
+-- A 0202 separou duas perguntas que o Meu Dia misturava: de quem é o DIA
+-- (`v_pessoa`) e de quem são os DADOS (`v_dados`, o superior quando quem abre é
+-- auxiliar). O payload passou a contar essa separação pela metade — `espelhado`
+-- diz QUE o dia é de outra carteira, `vendedor_nome` diz DE QUEM — e nunca deu o
+-- id. Sem id, qualquer tela que precise perguntar algo sobre essa pessoa tem de
+-- refazer a regra do superior em TypeScript, que é exatamente a terceira cópia
+-- que a 0202 apagou.
 --
--- E aí aparece o mesmo par da 0202: `vendedor_id` é de quem é o DIA, e nem sempre
--- é de quem são os dados. Para a auxiliar do closer o dia é dela e a carteira é do
--- Fabio — e a fila de identificação é do Fabio também, porque quem tem número e
--- carteira é ele. Contando por `vendedor_id` o indicador dela daria zero para
--- sempre, num dia em que todo o resto é do superior.
+-- Uma chave a mais no mesmo objeto, sem nenhuma outra mudança nesta função.
 --
--- `dados_vendedor_id` é o `v_dados` que a 0202 já calculava e não devolvia. Uma
--- chave a mais no mesmo objeto: a alternativa seria a tela refazer a regra do
--- superior em TypeScript, que é exatamente a terceira cópia que a 0202 apagou.
+-- ─── O QUE ELE NÃO É ────────────────────────────────────────────────────────
+-- Ele NÃO é o escopo padrão da tela, e a correção desta nota é parte da história.
 --
--- Nada mais muda nesta função.
+-- Este campo nasceu para o indicador de conversas sem identificação: o raciocínio
+-- era "a fila é de quem tem número e carteira, então a auxiliar vê a do closer".
+-- Estava errado. A fila de identificação é de quem RECEBEU a mensagem — e a
+-- auxiliar ganha aparelho próprio. Mostrar a do closer faria duas pessoas olharem
+-- para a mesma lista achando cada uma que é sua, e o resultado disso não é a fila
+-- trabalhada em dobro: é ninguém pegando nenhuma.
+--
+-- O indicador ficou em `vendedor_id`. O campo ficou porque completa o par acima,
+-- que é razão própria e independente do primeiro uso. Cada consumidor escolhe:
+-- carteira e funis seguem os DADOS, o que é de quem recebeu segue a PESSOA.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 create or replace function public.app__md_montar(p_alvo uuid, p_config jsonb)
