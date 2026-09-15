@@ -91,6 +91,11 @@ export interface FiltrosFunil {
   /** Traz de volta o que a regra de natureza ocultou. Para auditoria, não para o dia a dia. */
   incluirNaoOperaveis?: boolean
   /**
+   * Traz de volta as notas de quem já foi marcado como SEM INTERESSE. Para conferir uma
+   * decisão — "por que esta nota sumiu?" —, não para trabalhar.
+   */
+  incluirSuprimidos?: boolean
+  /**
    * Só as notas roteadas para este vendedor. É o que separa "o funil de NFs do
    * originador" da fila inteira, que é a tela do gestor.
    */
@@ -172,12 +177,27 @@ export async function buscarFunil(
   // regra escondeu, já que ela lê natureza em texto livre e erra às vezes.
   if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
 
-  // Fornecedor que já disse que não vai se cadastrar sai dos DOIS funis — o do gestor
-  // e o do vendedor, que são esta mesma função. Sem isto, a decisão tomada uma vez na
-  // lista de prospecção teria de ser lembrada nota a nota, todo dia, por quem trabalha
-  // o Kanban. Vale também para as encerradas: a nota some da tela, não do banco, e
-  // volta inteira quando alguém reverte o descarte.
-  query = query.eq('fornecedor_sem_interesse', false)
+  /*
+   * QUEM JÁ FOI DESCARTADO SAI DO FUNIL — pelos DOIS caminhos que existem.
+   *
+   * Há duas portas para "sem interesse", e elas gravam em lugares diferentes:
+   *
+   *   `fornecedor_sem_interesse`  ← `antecipacao_fornecedor_sem_interesse`
+   *                                 (o card do funil de FORNECEDORES)
+   *   `fornecedor_suprimido`      ← `supressao` escopo empresa, não vencida
+   *                                 (o botão "sem interesse" do card da NOTA)
+   *
+   * Só a primeira era filtrada. A segunda — que é a mais usada, 274 decisões contra 3 —
+   * deixava as notas na coluna, apenas com o card 60% apagado. Eram 574 notas e
+   * R$ 8,5 milhões de trabalho já recusado disputando espaço com o que falta fazer, e
+   * a decisão tinha de ser lembrada nota a nota, todo dia, por quem varre o Kanban.
+   *
+   * A nota some da TELA, não do banco: volta inteira quando a supressão é revertida — e
+   * volta agora, com a flag, para quem quiser conferir o que escondeu.
+   */
+  if (!filtros.incluirSuprimidos) {
+    query = query.eq('fornecedor_sem_interesse', false).eq('fornecedor_suprimido', false)
+  }
 
   if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
   else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)

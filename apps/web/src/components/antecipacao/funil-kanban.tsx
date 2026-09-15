@@ -134,6 +134,13 @@ export function FunilKanban({
   const [emissaoAte, setEmissaoAte] = React.useState('')
   const [vencDe, setVencDe] = React.useState('')
   const [vencAte, setVencAte] = React.useState('')
+  /*
+   * Ver as notas de quem já foi marcado SEM INTERESSE. Desligado por padrão: é trabalho
+   * recusado, e trabalho recusado no meio da fila é o que faz alguém reabrir a mesma
+   * conversa duas vezes. A flag existe para conferir a decisão ("por que esta nota
+   * sumiu?"), não para trabalhar.
+   */
+  const [incluirSuprimidos, setIncluirSuprimidos] = React.useState(false)
 
   const termoDebounced = useDebounce(termo, 350)
   const valorMinD = useDebounce(valorMin, 400)
@@ -219,10 +226,12 @@ export function FunilKanban({
       emissaoAte: emissaoAte || undefined,
       vencimentoDe: vencDe || undefined,
       vencimentoAte: vencAte || undefined,
+      incluirSuprimidos: incluirSuprimidos || undefined,
       ordem,
       ordemAsc,
     }),
     [
+      incluirSuprimidos,
       termoDebounced,
       faixa,
       tipagem,
@@ -259,7 +268,7 @@ export function FunilKanban({
   const totalConhecido = COLUNAS.every((c) => totais[c] !== undefined)
 
   const intervalosAtivos = Boolean(
-    valorMin || valorMax || emissaoDe || emissaoAte || vencDe || vencAte,
+    valorMin || valorMax || emissaoDe || emissaoAte || vencDe || vencAte || incluirSuprimidos,
   )
   const filtrando = Boolean(
     termoDebounced || faixa || tipagem || intervalosAtivos || (!travadoNoVendedor && originador !== TODOS),
@@ -275,6 +284,7 @@ export function FunilKanban({
     setEmissaoAte('')
     setVencDe('')
     setVencAte('')
+    setIncluirSuprimidos(false)
     if (!travadoNoVendedor) setOriginador(TODOS)
   }
 
@@ -425,6 +435,28 @@ export function FunilKanban({
             tipo="date"
             id="vencimento"
           />
+          {/*
+            A flag mora AQUI e não na barra: ela não é um recorte do dia a dia, é uma
+            conferência. Na barra, ao lado de faixa e tipagem, ela viraria um botão que
+            alguém liga sem querer — e o funil voltaria a ter dentro dele 574 notas de
+            fornecedores que já disseram não.
+          */}
+          <div className="space-y-1.5 border-t pt-3">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={incluirSuprimidos}
+                onChange={(e) => setIncluirSuprimidos(e.target.checked)}
+              />
+              <span>Mostrar fornecedores sem interesse</span>
+            </label>
+            <p className="pl-6 text-xs text-muted-foreground">
+              Quem foi marcado como sem interesse sai do funil. Ligue para conferir o que a
+              decisão escondeu — os cards vêm apagados.
+            </p>
+          </div>
+
           {intervalosAtivos && (
             <Button
               type="button"
@@ -438,6 +470,7 @@ export function FunilKanban({
                 setEmissaoAte('')
                 setVencDe('')
                 setVencAte('')
+                setIncluirSuprimidos(false)
               }}
             >
               Limpar valor e datas

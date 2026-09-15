@@ -55,6 +55,27 @@ cadeia de dependências, não uma preferência:
 Sair da faixa **não** é sair do funil: uma nota que só deixou de casar a regra continua
 `a_prospectar` (a regra pode voltar a casar amanhã). Quem sai do funil é quem expirou.
 
+### Quem foi descartado sai do funil, pelas DUAS portas
+
+Existem dois caminhos para "sem interesse", e eles gravam em lugares diferentes:
+
+| coluna da view | vem de | quem aciona |
+|---|---|---|
+| `fornecedor_sem_interesse` | `antecipacao_fornecedor_sem_interesse` | o card do funil de **fornecedores** |
+| `fornecedor_suprimido` | `supressao` escopo empresa, não vencida | o botão do card da **nota** |
+
+Só a primeira era filtrada. A segunda — que é a mais usada, **274 decisões contra 3** —
+deixava as notas na coluna, apenas com o card 60% apagado: eram **574 notas e R$ 8,5
+milhões** de trabalho já recusado disputando espaço com o que falta fazer, e a decisão
+tinha de ser lembrada nota a nota, todo dia, por quem varre o Kanban.
+
+Hoje as duas somem por padrão. A flag **"Mostrar fornecedores sem interesse"** vive dentro
+do popover *Valor e datas*, e não na barra: ela não é um recorte do dia a dia, é uma
+conferência ("por que esta nota sumiu?"). Na barra viraria um botão que alguém liga sem
+querer.
+
+A nota some da TELA, não do banco — volta inteira quando a supressão é revertida.
+
 ### A conta em cima, a SPE embaixo — e o CNPJ decidindo
 
 O card mostra a CONTA (a empresa a que tudo está amarrado, e é por ela que a pessoa
