@@ -55,6 +55,35 @@ cadeia de dependências, não uma preferência:
 Sair da faixa **não** é sair do funil: uma nota que só deixou de casar a regra continua
 `a_prospectar` (a regra pode voltar a casar amanhã). Quem sai do funil é quem expirou.
 
+### A conta em cima, a SPE embaixo — e o CNPJ decidindo
+
+O card mostra a CONTA (a empresa a que tudo está amarrado, e é por ela que a pessoa
+pensa) e, embaixo, "via {sacado}" — a SPE contra a qual a nota foi emitida, que é o que
+identifica de qual OBRA ela é.
+
+A segunda linha só deveria existir quando são duas empresas, e até a 0206 quem decidia
+isso era comparar os dois NOMES. Eles vêm de lugares diferentes: o da conta é a razão
+social do nosso cadastro, o do sacado é o que o **fornecedor digitou no XML da NF-e**.
+
+```
+RIBEIRO CARAM               ←→  CONSTRUTURA RIBERIO CARAM LTDA   (sic)
+HALSTEN INCORPORADORA LTDA  ←→  HALSTEN INCORPARADORA LTDA       (sic)
+CALURE EMPREENDIMENTOS LTDA ←→  Calure empreendimentos ltda
+```
+
+Todas com o **mesmo CNPJ**, todas sem SPE nenhuma — e todas mostrando "via {a mesma
+construtora, escrita errado}" numa linha própria. Eram **85 de 101 pares**.
+
+A régua passou a ser o CNPJ (`speDoSacado`, no core, com testes): mesma pessoa jurídica,
+uma linha; pessoas diferentes, duas. Normalizar texto não resolveria — "CONSTRUTURA
+RIBERIO" não casa com "RIBEIRO CARAM" por régua segura nenhuma, e não deve: similaridade
+de nome é para quando não existe identificador, e aqui existe um exato ao lado.
+
+Dois casos ficaram mostrando as duas linhas de propósito. **Filial** (mesma raiz, CNPJ
+diferente) é outro estabelecimento, e o nome do XML costuma dizer qual ("— SEDE"). E
+**CNPJ faltando** de um dos lados prefere mostrar: uma linha a mais é ruído, uma SPE
+escondida é "de qual obra é esta nota?" sem resposta na tela.
+
 **E mensagem não move nota de conta contratante (0203).** O estágio anda sozinho quando
 alguém fala com o fornecedor — é o que impede o funil de dizer "ninguém procurou" logo
 depois de alguém ter procurado. Mas quando a empresa é uma CONTA nossa, a conversa quase

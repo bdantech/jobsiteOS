@@ -1,4 +1,11 @@
-import type { EstagioFunil, Faixa, Tables, Tipagem, Views } from '@jobsiteos/core'
+import type {
+  ContaDoSacadoResolvida,
+  EstagioFunil,
+  Faixa,
+  Tables,
+  Tipagem,
+  Views,
+} from '@jobsiteos/core'
 import { ESTAGIOS_ABERTOS, ESTAGIOS_ENCERRADOS } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 
@@ -306,6 +313,8 @@ export interface ContaDoSacado {
   conta_id: string | null
   conta_nome: string | null
   conta_fantasia: string | null
+  /** O CNPJ da conta. É ele que decide se o sacado É a conta ou uma SPE dela (0206). */
+  conta_cnpj: string | null
 }
 
 export async function buscarContasDosSacados(
@@ -319,11 +328,20 @@ export async function buscarContasDosSacados(
   return (data ?? []) as ContaDoSacado[]
 }
 
-/** O mapa cnpj → conta, pronto para o card. Sem conta resolvida, a chave nem entra. */
-export function mapaDeContas(linhas: readonly ContaDoSacado[] | undefined): Map<string, string> {
-  const m = new Map<string, string>()
+/**
+ * O mapa cnpj do sacado → conta, pronto para o card. Sem conta resolvida, a chave nem
+ * entra.
+ *
+ * Carrega o par {nome, cnpj} e não só o nome: quem decide se a segunda linha do card é
+ * uma SPE de verdade é `speDoSacado()`, e ela compara CNPJ — comparar nome erra em 85
+ * dos 101 pares, porque o nome do sacado vem do XML digitado pelo fornecedor.
+ */
+export function mapaDeContas(
+  linhas: readonly ContaDoSacado[] | undefined,
+): Map<string, ContaDoSacadoResolvida> {
+  const m = new Map<string, ContaDoSacadoResolvida>()
   for (const l of linhas ?? []) {
-    if (l.cnpj && l.conta_nome) m.set(l.cnpj, l.conta_nome)
+    if (l.cnpj && l.conta_nome) m.set(l.cnpj, { nome: l.conta_nome, cnpj: l.conta_cnpj })
   }
   return m
 }

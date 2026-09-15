@@ -11629,6 +11629,7 @@ export type Database = {
           conta_id: string | null
           conta_nome: string | null
           conta_fantasia: string | null
+          conta_cnpj: string | null
         }[]
       }
       app_criar_api_key: {

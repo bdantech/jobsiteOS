@@ -122,7 +122,7 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Sync da seguradora',
     moduloId: 'credito',
     descricao:
-      'Sincroniza o que já está na apólice, consulta as decisões abertas e expira as aprovações vencidas. Nunca descobre sacado novo — isso só entra pelo envio da esteira, que é ação humana e custa dinheiro.',
+      'Sincroniza o que já está na apólice, consulta as decisões abertas e expira as aprovações vencidas. Nunca descobre sacado novo — isso só entra pelo envio da esteira, que é ação humana e custa dinheiro. DUAS VEZES AO DIA (6h e 14h de São Paulo) porque não há webhook da Atradius: quem pergunta somos nós, e com uma rodada só uma análise enviada de manhã só tinha resposta no dia seguinte.',
     destino: 'POST /jobs/credito/sync',
   },
   {

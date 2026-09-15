@@ -47,7 +47,7 @@
     },
     {
       "path": "/api/cron/credito-sync",
-      "schedule": "0 9 * * *"
+      "schedule": "0 9,17 * * *"
     },
     {
       "path": "/api/cron/credito-reanalises",

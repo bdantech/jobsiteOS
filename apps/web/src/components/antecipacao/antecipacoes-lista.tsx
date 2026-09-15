@@ -12,7 +12,13 @@ import {
   Scale,
   Search,
 } from 'lucide-react'
-import { MATCH_STATUS_LABELS, MOTIVO_MATCH_LABELS, formatCnpj } from '@jobsiteos/core'
+import {
+  MATCH_STATUS_LABELS,
+  MOTIVO_MATCH_LABELS,
+  formatCnpj,
+  speDoSacado,
+  type ContaDoSacadoResolvida,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -310,10 +316,11 @@ function LinhaAntecipacao({
   destacada: boolean
   onResolvida: () => void
   /** O cliente a que a antecipação está amarrada, quando difere do sacado. */
-  conta?: string | null
+  conta?: ContaDoSacadoResolvida | null
 }) {
   const [filaAberta, setFilaAberta] = React.useState(destacada)
   const nomeSacado = a.sacado_nome ?? formatCnpj(a.sacado_cnpj)
+  const spe = speDoSacado(conta, a.sacado_cnpj, nomeSacado)
   const precisaDecisao = a.match_status === 'revisao' || a.match_status === 'sem_nf'
 
   return (
@@ -325,13 +332,18 @@ function LinhaAntecipacao({
             <span className="truncate">{a.fornecedor_nome ?? formatCnpj(a.fornecedor_cnpj)}</span>
             <span className="text-muted-foreground">→</span>
             <span className="truncate text-sm font-normal text-muted-foreground">
-              {conta ?? nomeSacado}
+              {conta?.nome ?? nomeSacado}
             </span>
             {/* A SPE fica, menor: ela é quem paga o boleto e é o nome que aparece
-                no relatório da plataforma. O que muda é a hierarquia. */}
-            {conta && conta !== nomeSacado ? (
+                no relatório da plataforma. O que muda é a hierarquia.
+
+                Quem decide se ela existe é o CNPJ, e não o nome — ver `speDoSacado`
+                (core): o nome do sacado vem do XML digitado pelo fornecedor, e a
+                mesma empresa aparece com prefixo, em minúsculas e com erro de
+                digitação. Antes disso, 85 de 101 pares repetiam a construtora aqui. */}
+            {spe ? (
               <span className="truncate text-xs font-normal text-muted-foreground/70">
-                via {nomeSacado}
+                via {spe}
               </span>
             ) : null}
           </CardTitle>

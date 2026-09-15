@@ -238,9 +238,9 @@ maioria, e isso não é dado faltando: das 90 análises da base, 5 foram pedidas
 distinguir os três — "ninguém pediu" e "não sabemos quem pediu" não são a mesma frase, e
 um "—" serviria para as duas.
 
-**A resposta da seguradora volta uma vez por dia, às 6h de São Paulo.** O cron
-`/api/cron/credito-sync` (`0 9 * * *` em UTC) dispara `POST /jobs/credito/sync`, que roda
-três coisas em sequência:
+**A resposta da seguradora volta duas vezes por dia: 6h e 14h de São Paulo.** O cron
+`/api/cron/credito-sync` (`0 9,17 * * *` em UTC) dispara `POST /jobs/credito/sync`, que
+roda três coisas em sequência:
 
 | passo | o que faz |
 |---|---|
@@ -248,9 +248,13 @@ três coisas em sequência:
 | `pollDecisoes` | consulta **caso a caso** o que está em `enviada_seguradora` ou `em_analise` e tem `atradius_case_id` |
 | `expirarAnalises` | derruba aprovação vencida — a data de validade é nossa, e roda mesmo sem seguradora configurada |
 
-É o `pollDecisoes` que traz o resultado do que foi enviado. Não há webhook da Atradius:
-quem pergunta somos nós, uma vez por dia. Meia hora depois (`credito-reanalises`, 6h30 SP)
-roda a retomada, e no dia 7 de cada mês às 5h SP o `credito-mensal`.
+É o `pollDecisoes` que traz o resultado do que foi enviado. **Não há webhook da Atradius**
+— quem pergunta somos nós, e é por isso que a rodada da tarde existe: com uma só, uma
+análise enviada de manhã ficava sem resposta até o dia seguinte, mesmo que a seguradora
+tivesse decidido às 10h.
+
+Meia hora depois da rodada da manhã (`credito-reanalises`, 6h30 SP) roda a retomada, e no
+dia 7 de cada mês às 5h SP o `credito-mensal`.
 
 Enquanto a análise está `enviada_seguradora` ou `em_analise`, a ficha se refaz sozinha a
 cada 30s — então o resultado aparece na tela sem recarregar, assim que o poll da manhã o

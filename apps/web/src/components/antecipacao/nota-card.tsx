@@ -6,8 +6,10 @@ import { AlertTriangle, BadgeCheck, Files, Gavel } from 'lucide-react'
 import {
   FAIXA_LABELS,
   TIPAGEM_LABELS,
+  speDoSacado,
   urgenciaDe,
   valorLiquidoEstimado,
+  type ContaDoSacadoResolvida,
   type Faixa,
   type Tipagem,
 } from '@jobsiteos/core'
@@ -63,7 +65,7 @@ export function NotaCard({
    * diferente do sacado. Vem pronto de cima, resolvido em lote — cada card
    * buscando a própria conta seria uma leitura por card.
    */
-  conta?: string | null
+  conta?: ContaDoSacadoResolvida | null
   /**
    * O dono da nota, só quando a lista NÃO está recortada por vendedor. Vem pronto de
    * cima em vez de ser buscado aqui: são dezenas de cards por coluna, e cada um
@@ -95,10 +97,13 @@ export function NotaCard({
    *
    * A SPE não some: ela vira a linha de baixo, porque é ela que identifica DE QUAL
    * obra é a nota — e é o nome que aparece no boleto e no relatório da plataforma.
-   * Some só quando é igual à conta, que é quando repeti-la não diz nada.
+   * Some quando o sacado É a conta, e quem decide isso é o CNPJ, não o nome: o nome
+   * do sacado vem do XML que o fornecedor digitou, e "CONSTRUTURA RIBERIO CARAM LTDA"
+   * é a mesma empresa que "RIBEIRO CARAM" sem que texto nenhum consiga dizer isso.
+   * A régua inteira, com o porquê e os testes, está em `speDoSacado` (core).
    */
-  const nomePrincipal = conta ?? nomeSacado
-  const spe = conta && conta !== nomeSacado ? nomeSacado : null
+  const nomePrincipal = conta?.nome ?? nomeSacado
+  const spe = speDoSacado(conta, nota.sacado_cnpj, nomeSacado)
 
   return (
     <>
