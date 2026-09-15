@@ -101,8 +101,27 @@ export function NotaModal({
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0 print:max-h-none print:overflow-visible">
-        <DialogHeader className="border-b px-5 py-3">
+      {/*
+        ─── `flex flex-col gap-0`, E NÃO O GRID DO PRIMITIVO ───────────────────
+        `DialogContent` nasce `grid gap-4 p-6`. Este modal zerava o `p-6` e esquecia o
+        `gap-4` — e as três faixas (cabeçalho, corpo, ações) ficavam com 16px de ar entre
+        si, DEPOIS da linha de borda de cada uma. Na aba Documento isso passava: o
+        conteúdo começa com um bloco próprio e o vão lia como parte do desenho. Nas abas
+        Fornecedor e Mensagens, que começam com texto solto, o corpo aparecia deslocado do
+        cabeçalho sem nada explicando por quê.
+
+        O outro defeito era a altura: o corpo travava em `calc(92vh - 5rem)`, uma conta que
+        conhece o cabeçalho e ignora a barra de ações. Com as duas somadas passando de
+        92vh, o `overflow-hidden` do contêiner cortava justamente a barra de ações — e ela
+        é onde mora o menu da nota. Aparecia nas abas altas (a thread de mensagens é a mais
+        alta de todas), que é onde o relato começou.
+
+        `flex-1 min-h-0` no corpo resolve os dois: quem sobra é o corpo, e o cabeçalho e o
+        rodapé ficam inteiros. É a mesma forma do `ModalDoCard` dos funis, que já tinha
+        chegado nela.
+      */}
+      <DialogContent className="flex max-h-[92vh] max-w-5xl flex-col gap-0 overflow-hidden p-0 print:max-h-none print:overflow-visible">
+        <DialogHeader className="shrink-0 border-b px-5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -139,7 +158,7 @@ export function NotaModal({
           </div>
         </DialogHeader>
 
-        <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 print:overflow-visible">
           {isPending ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
@@ -206,7 +225,7 @@ export function NotaModal({
         </div>
 
         {acoes ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 py-3 print:hidden">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3 print:hidden">
             {acoes}
           </div>
         ) : null}
