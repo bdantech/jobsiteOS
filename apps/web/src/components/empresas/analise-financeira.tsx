@@ -152,7 +152,16 @@ function ConsultaProtestosDialog({
   const protestos = React.useMemo(() => (consulta ? extrairProtestos(consulta.cartorios) : []), [consulta])
   return (
     <Dialog open={consulta !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      {/*
+        `min-w-0` NO CONTEÚDO, `overflow-hidden` NA CAIXA.
+        O DialogContent é um grid, e item de grid nasce com `min-width: auto`: a
+        trilha cresce até caber o conteúdo em vez de respeitar o `max-w-2xl`. Com 19
+        meses o gráfico pede ~900px, a trilha ia atrás, e a TABELA — que é `w-full` —
+        era esticada junto. Por isso barras e a coluna Valor saíam pela borda direita
+        do diálogo, por cima da página. O `overflow-x-auto` que o gráfico já tinha
+        nunca chegava a valer: não havia largura menor que o conteúdo para rolar.
+      */}
+      <DialogContent className="max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>Protestos da consulta</DialogTitle>
           <DialogDescription>
@@ -161,12 +170,12 @@ function ConsultaProtestosDialog({
               : ''}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
+        <div className="min-w-0 space-y-4">
+          <div className="min-w-0">
             <p className="mb-2 text-sm font-medium">Protestos no tempo</p>
             <GraficoTempoProtestos protestos={protestos} />
           </div>
-          <div className="max-h-[50vh] overflow-y-auto">
+          <div className="max-h-[50vh] min-w-0 overflow-y-auto">
             <TabelaProtestos protestos={protestos} />
           </div>
         </div>
@@ -199,7 +208,7 @@ function GrupoProtestosDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>Protestos do grupo econômico</DialogTitle>
           <DialogDescription>Protestos das empresas do grupo com registro.</DialogDescription>
@@ -211,18 +220,20 @@ function GrupoProtestosDialog({
             Nenhuma empresa do grupo com protesto.
           </p>
         ) : (
-          <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+          <div className="min-w-0 space-y-4">
+            {/* Duas colunas, dois `min-w-0`: aqui o gráfico esticaria a COLUNA dele, e
+                a coluna esticaria o grid. O mesmo vazamento, uma camada acima. */}
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0">
                 <p className="mb-2 text-sm font-medium">Protestos no tempo</p>
                 <GraficoTempoProtestos protestos={protestos} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="mb-2 text-sm font-medium">Valor por empresa</p>
                 <GraficoValorPorEmpresa dados={porEmpresa} />
               </div>
             </div>
-            <div className="max-h-[45vh] overflow-y-auto">
+            <div className="max-h-[45vh] min-w-0 overflow-y-auto">
               <TabelaProtestos protestos={protestos} comEmpresa />
             </div>
           </div>

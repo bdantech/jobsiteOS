@@ -648,7 +648,9 @@ function ProtestoEvolucaoDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      {/* Mesmo gráfico, mesmo diálogo-grid, mesmo vazamento: sem `min-w-0` a trilha
+          cresce até os N meses e as barras saem pela borda direita. */}
+      <DialogContent className="max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>{alvo?.nome ?? ''}</DialogTitle>
           <DialogDescription>
@@ -662,7 +664,7 @@ function ProtestoEvolucaoDialog({
             Sem detalhe de protesto para desenhar a série.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <GraficoTempoProtestos protestos={protestos} />
             <p className="text-xs text-muted-foreground">
               {protestos.length} protesto(s) · {brl(total)} no total
