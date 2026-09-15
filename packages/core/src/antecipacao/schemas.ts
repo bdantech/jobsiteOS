@@ -180,26 +180,6 @@ export const promoverFornecedorSchema = z.object({
 })
 export type PromoverFornecedorInput = z.infer<typeof promoverFornecedorSchema>
 
-export const marcarSemInteresseSchema = z.object({
-  fornecedor_cnpj: cnpjSchema.describe('CNPJ do fornecedor (14 dígitos, com ou sem pontuação).'),
-  motivo: z.string().trim().min(1, 'Informe o motivo.').max(500).describe('Por que não abordar — obrigatório.'),
-  eterna: z
-    .boolean()
-    .default(false)
-    .describe(
-      'true = supressão ETERNA (LGPD, multinacional que nunca antecipa). false = soft, ' +
-        'expira em `dias` e o fornecedor volta a ser elegível.',
-    ),
-  dias: z
-    .number()
-    .int()
-    .min(1)
-    .max(3650)
-    .default(90)
-    .describe('Duração da supressão soft, em dias. Ignorado quando eterna = true.'),
-})
-export type MarcarSemInteresseInput = z.infer<typeof marcarSemInteresseSchema>
-
 // ─── Fornecedor sem interesse em se CADASTRAR (prospecção) ──────────────────
 
 /**
@@ -253,6 +233,49 @@ export const MOTIVO_SEM_INTERESSE_DESCRICOES: Record<MotivoSemInteresse, string>
     'Não há recebível a antecipar — não conta como falha da régua de porte.',
   outro: 'Qualquer outro caso — a observação passa a ser obrigatória.',
 }
+
+/**
+ * Marcar sem interesse pelo card da NOTA. Desde a 0207 ele faz as duas coisas de uma vez:
+ *
+ *   entra na LISTA (`antecipacao_fornecedor_sem_interesse`) — a decisão de funil, sem
+ *   prazo, com motivo de lista fechada. É ela que tira as notas dos funis.
+ *
+ *   e ganha SUPRESSÃO de canal (`supressao`) com o prazo escolhido — o "posso voltar a
+ *   abordar?", que é outra pergunta.
+ *
+ * O `motivo` virou o MESMO ENUM da lista, e o texto livre desceu para `observacao`. Ele
+ * era texto livre, e o resultado foi 250 descartes explicados em frases digitadas à mão —
+ * "Funcionário PJ" com duas grafias, "Fornecedor não faz antecipações" com três. Uma
+ * pergunta contável ("por que descartamos 250 fornecedores?") precisa de resposta
+ * enumerada; a frase continua existindo, ao lado, para o que o enum não cobre.
+ */
+export const marcarSemInteresseSchema = z.object({
+  fornecedor_cnpj: cnpjSchema.describe('CNPJ do fornecedor (14 dígitos, com ou sem pontuação).'),
+  motivo: motivoSemInteresseSchema.describe('Por que ele sai do funil — o mesmo enum da lista.'),
+  observacao: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .nullable()
+    .describe('O texto livre. Obrigatório quando o motivo é `outro` (validado no banco).'),
+  fornecedor_nome: z.string().trim().max(200).optional().nullable(),
+  eterna: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Sobre a ABORDAGEM, não sobre o funil: true = nunca mais falar com este CNPJ. ' +
+        'false = a supressão de canal expira em `dias`. A saída do funil é permanente nos dois casos.',
+    ),
+  dias: z
+    .number()
+    .int()
+    .min(1)
+    .max(3650)
+    .default(90)
+    .describe('Duração da supressão de canal, em dias. Ignorado quando eterna = true.'),
+})
+export type MarcarSemInteresseInput = z.infer<typeof marcarSemInteresseSchema>
 
 export const marcarFornecedorSemInteresseSchema = z
   .object({

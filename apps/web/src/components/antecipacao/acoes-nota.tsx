@@ -9,7 +9,11 @@ import {
   ESTAGIOS_ABERTOS,
   ESTAGIOS_ENCERRADOS,
   ESTAGIO_FUNIL_LABELS,
+  MOTIVOS_SEM_INTERESSE,
+  MOTIVO_SEM_INTERESSE_DESCRICOES,
+  MOTIVO_SEM_INTERESSE_LABELS,
   type EstagioFunil,
+  type MotivoSemInteresse,
 } from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +33,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { marcarSemInteresseAction, moverEstagioAction } from '@/actions/antecipacao'
 import { antecipacaoKeys, type NotaFunil } from './queries'
@@ -129,6 +140,28 @@ export function MoverEstagioDialog({
 
 // ─── Sem interesse ──────────────────────────────────────────────────────────
 
+/**
+ * Marcar um fornecedor como sem interesse, a partir do card da nota.
+ *
+ * ─── UMA LISTA SÓ (0207) ────────────────────────────────────────────────────
+ * Este botão gravava só em `supressao`, e a lista que a equipe abre — "Fornecedores sem
+ * interesse" — lê `antecipacao_fornecedor_sem_interesse`. As 249 decisões tomadas aqui
+ * não apareciam lá: quem abria a lista via três nomes e concluía que ninguém tinha curado
+ * nada. Agora as duas portas alimentam a mesma lista.
+ *
+ * ─── SÃO DUAS PERGUNTAS, E O DIÁLOGO PASSOU A FAZER AS DUAS ────────────────
+ * "Por que ele sai do funil" e "posso voltar a abordá-lo" não são a mesma coisa, e
+ * tratá-las como uma foi o que produziu 250 descartes com prazo de 90 dias — inclusive
+ * 146 funcionários PJ, que não deixam de ser funcionários PJ em noventa dias.
+ *
+ *   MOTIVO     → a lista. Permanente, de lista fechada, revertível num clique.
+ *   ABORDAGEM  → a supressão de canal. 90 dias ou nunca mais.
+ *
+ * O motivo é enumerado pelo mesmo motivo do diálogo da ficha do fornecedor: "por que
+ * descartamos 250 fornecedores?" só tem resposta se ninguém puder digitar a mesma razão
+ * de sete formas. A observação continua existindo para o que o enum não cobre, e é
+ * obrigatória em "outro".
+ */
 export function SemInteresseDialog({
   cnpj,
   nome,
@@ -141,16 +174,32 @@ export function SemInteresseDialog({
   onOpenChange: (v: boolean) => void
 }) {
   const qc = useQueryClient()
-  const [motivo, setMotivo] = React.useState('')
+  const [motivo, setMotivo] = React.useState<MotivoSemInteresse | ''>('')
+  const [observacao, setObservacao] = React.useState('')
   const [eterna, setEterna] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
 
+  // Reabrir para OUTRO fornecedor não pode herdar o motivo do anterior: é o caminho
+  // mais curto para descartar meia lista com a razão errada.
+  React.useEffect(() => {
+    if (aberto) {
+      setMotivo('')
+      setObservacao('')
+      setEterna(false)
+    }
+  }, [aberto, cnpj])
+
+  const precisaObservacao = motivo === 'outro'
+  const podeSalvar = motivo !== '' && (!precisaObservacao || observacao.trim() !== '')
+
   async function confirmar() {
-    if (motivo.trim() === '') return
+    if (!podeSalvar) return
     setSalvando(true)
     const r = await marcarSemInteresseAction({
       fornecedor_cnpj: cnpj,
-      motivo: motivo.trim(),
+      motivo,
+      observacao: observacao.trim() || null,
+      fornecedor_nome: nome,
       eterna,
       dias: 90,
     })
@@ -161,11 +210,9 @@ export function SemInteresseDialog({
     }
     toast.success(
       eterna
-        ? 'Fornecedor suprimido permanentemente.'
-        : 'Fornecedor suprimido por 90 dias — depois volta a ser elegível.',
+        ? 'Fora do funil e sem abordagem — permanente.'
+        : 'Fora do funil. A abordagem volta a ser liberada em 90 dias.',
     )
-    setMotivo('')
-    setEterna(false)
     onOpenChange(false)
     invalidar(qc)
   }
@@ -176,48 +223,90 @@ export function SemInteresseDialog({
         <DialogHeader>
           <DialogTitle>Marcar sem interesse</DialogTitle>
           <DialogDescription>
-            {nome ?? cnpj}. Todas as notas vivas dele saem das faixas na hora, e nenhum canal
-            poderá tocá-lo enquanto a supressão valer.
+            {nome ?? cnpj}. Ele entra na lista de fornecedores sem interesse, as notas dele
+            saem dos funis na hora, e dá para reverter num clique.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              type="button"
-              variant={eterna ? 'outline' : 'default'}
-              onClick={() => setEterna(false)}
-              aria-pressed={!eterna}
-              className="h-auto flex-col items-start gap-1 py-3 text-left"
+          <div className="space-y-2">
+            <Label htmlFor="sem-interesse-motivo">Por que ele sai do funil</Label>
+            {/* `undefined` e não '': string vazia é um valor selecionado para o Radix,
+                e o placeholder nunca apareceria. */}
+            <Select
+              value={motivo || undefined}
+              onValueChange={(v) => setMotivo(v as MotivoSemInteresse)}
             >
-              <span className="font-medium">90 dias</span>
-              <span className="text-xs font-normal opacity-80">
-                &quot;Sem interesse agora&quot;. Expira e ele volta ao funil.
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant={eterna ? 'default' : 'outline'}
-              onClick={() => setEterna(true)}
-              aria-pressed={eterna}
-              className="h-auto flex-col items-start gap-1 py-3 text-left"
-            >
-              <span className="font-medium">Eterna</span>
-              <span className="text-xs font-normal opacity-80">
-                LGPD, ou quem nunca vai antecipar. Não expira.
-              </span>
-            </Button>
+              <SelectTrigger id="sem-interesse-motivo">
+                <SelectValue placeholder="Escolha o motivo" />
+              </SelectTrigger>
+              <SelectContent>
+                {MOTIVOS_SEM_INTERESSE.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {MOTIVO_SEM_INTERESSE_LABELS[m]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {motivo ? (
+              <p className="text-xs text-muted-foreground">
+                {MOTIVO_SEM_INTERESSE_DESCRICOES[motivo]}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="sem-interesse-motivo">Motivo</Label>
+            <Label htmlFor="sem-interesse-obs">
+              Observação{precisaObservacao ? '' : ' (opcional)'}
+            </Label>
             <Textarea
-              id="sem-interesse-motivo"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ex.: pediu para não ser contatado; política da matriz proíbe antecipação."
-              rows={3}
+              id="sem-interesse-obs"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              placeholder="O que o motivo da lista não conta."
+              rows={2}
             />
+            {precisaObservacao && observacao.trim() === '' ? (
+              <p className="text-xs text-destructive">
+                &quot;Outro&quot; sem explicação é indistinguível de um clique errado.
+              </p>
+            ) : null}
+          </div>
+
+          {/*
+            A SEGUNDA pergunta, e ela é só sobre ABORDAGEM. A saída do funil é permanente
+            nos dois casos — quem a mantém é a lista, não a supressão. Antes estes botões
+            diziam "expira e ele volta ao funil", e era isso que trazia de volta 146
+            funcionários PJ noventa dias depois.
+          */}
+          <div className="space-y-2 border-t pt-4">
+            <Label>Podemos voltar a abordá-lo?</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant={eterna ? 'outline' : 'default'}
+                onClick={() => setEterna(false)}
+                aria-pressed={!eterna}
+                className="h-auto flex-col items-start gap-1 py-3 text-left"
+              >
+                <span className="font-medium">Em 90 dias</span>
+                <span className="text-xs font-normal opacity-80">
+                  Nenhum canal o toca até lá. Ele NÃO volta ao funil.
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant={eterna ? 'default' : 'outline'}
+                onClick={() => setEterna(true)}
+                aria-pressed={eterna}
+                className="h-auto flex-col items-start gap-1 py-3 text-left"
+              >
+                <span className="font-medium">Nunca mais</span>
+                <span className="text-xs font-normal opacity-80">
+                  LGPD, ou quem pediu para não ser procurado.
+                </span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -228,9 +317,9 @@ export function SemInteresseDialog({
           <Button
             variant="destructive"
             onClick={() => void confirmar()}
-            disabled={salvando || motivo.trim() === ''}
+            disabled={salvando || !podeSalvar}
           >
-            {salvando ? 'Suprimindo…' : eterna ? 'Suprimir para sempre' : 'Suprimir por 90 dias'}
+            {salvando ? 'Marcando…' : 'Marcar sem interesse'}
           </Button>
         </DialogFooter>
       </DialogContent>

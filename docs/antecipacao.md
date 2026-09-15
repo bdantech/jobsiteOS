@@ -55,26 +55,56 @@ cadeia de dependências, não uma preferência:
 Sair da faixa **não** é sair do funil: uma nota que só deixou de casar a regra continua
 `a_prospectar` (a regra pode voltar a casar amanhã). Quem sai do funil é quem expirou.
 
-### Quem foi descartado sai do funil, pelas DUAS portas
+### Sem interesse: uma lista só (0207)
 
-Existem dois caminhos para "sem interesse", e eles gravam em lugares diferentes:
+Havia dois botões de "sem interesse" gravando em tabelas diferentes, e a lista que a
+equipe abre lia só uma delas:
 
-| coluna da view | vem de | quem aciona |
+| | grava em | tinha |
 |---|---|---|
-| `fornecedor_sem_interesse` | `antecipacao_fornecedor_sem_interesse` | o card do funil de **fornecedores** |
-| `fornecedor_suprimido` | `supressao` escopo empresa, não vencida | o botão do card da **nota** |
+| ficha do fornecedor | `antecipacao_fornecedor_sem_interesse` | 3 CNPJs |
+| menu do card da nota | `supressao` escopo empresa | 250 CNPJs |
 
-Só a primeira era filtrada. A segunda — que é a mais usada, **274 decisões contra 3** —
-deixava as notas na coluna, apenas com o card 60% apagado: eram **574 notas e R$ 8,5
-milhões** de trabalho já recusado disputando espaço com o que falta fazer, e a decisão
-tinha de ser lembrada nota a nota, todo dia, por quem varre o Kanban.
+As 249 decisões tomadas pelo card da nota — uma a uma, em 145 minutos distintos de
+trabalho — não apareciam em lugar nenhum que alguém abrisse. Quem consultava "sem
+interesse" via três nomes e concluía que ninguém tinha curado nada.
 
-Hoje as duas somem por padrão. A flag **"Mostrar fornecedores sem interesse"** vive dentro
-do popover *Valor e datas*, e não na barra: ela não é um recorte do dia a dia, é uma
-conferência ("por que esta nota sumiu?"). Na barra viraria um botão que alguém liga sem
-querer.
+**A lista passou a ser uma só**, e os dois botões alimentam ela. O que o texto livre
+revelou, ao ser traduzido para o enum:
 
-A nota some da TELA, não do banco — volta inteira quando a supressão é revertida.
+```
+funcionario_pj ............ 146      ← "Funcionário PJ", em duas grafias
+nao_utiliza_antecipacao ...  81      ← "não faz antecipações", em três
+outro .....................  24      ← "Imobiliária", "pagamento à vista"…
+caixa_confortavel .........   1
+```
+
+241 das 250 eram **recorte** ("esta nota não é do nosso negócio"), não recusa. Era por
+isso que o retorno automático em 90 dias estava errado: um funcionário PJ não deixa de
+ser funcionário PJ em noventa dias.
+
+**São duas perguntas, e o diálogo passou a fazer as duas separadas:**
+
+| | onde mora | expira? |
+|---|---|---|
+| **Por que ele sai do funil** | a lista, com motivo de lista fechada | **nunca** — revertível num clique |
+| **Podemos voltar a abordá-lo** | `supressao` (canal) | 90 dias ou nunca mais |
+
+Em novembro a supressão de canal das 250 expira, mas o fornecedor **não volta ao funil**:
+quem o mantém fora agora é a lista.
+
+### As notas de quem foi descartado somem do funil
+
+A view expõe as duas colunas — `fornecedor_sem_interesse` (a lista) e
+`fornecedor_suprimido` (a supressão viva) — e o funil filtra as duas. Antes filtrava só a
+primeira, e eram **574 notas e R$ 8,5 milhões** de trabalho já recusado disputando espaço
+com o que falta fazer, com o card apenas 60% apagado.
+
+A flag **"Mostrar fornecedores sem interesse"** vive dentro do popover *Valor e datas*, e
+não na barra: ela não é um recorte do dia a dia, é uma conferência ("por que esta nota
+sumiu?"). Na barra viraria um botão que alguém liga sem querer.
+
+A nota some da TELA, não do banco — volta inteira quando a decisão é revertida.
 
 ### A conta em cima, a SPE embaixo — e o CNPJ decidindo
 
