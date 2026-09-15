@@ -161,9 +161,27 @@ export function Esteira() {
     })
   }, [data, busca])
 
+  /*
+   * O KANBAN SÓ MOSTRA DECISÃO VIVA (0208).
+   *
+   * Uma análise substituída continua com `estagio = 'aprovada'` — e tem que continuar,
+   * porque foi isso que a seguradora respondeu. Mas ela não é mais a resposta da
+   * empresa, e deixá-la na coluna faria o número no alto dela dizer "temos 55
+   * aprovadas" contando três versões velhas da mesma cobertura.
+   *
+   * Some do quadro, não do sistema: a vista em lista continua mostrando as duas, com
+   * a substituída marcada. É onde se vai quando a pergunta é "o que a apólice já
+   * respondeu sobre esta empresa".
+   */
+  const substituidas = React.useMemo(
+    () => filtradas.filter((a) => a.substituida_em !== null),
+    [filtradas],
+  )
+
   const porEstagio = React.useMemo(() => {
     const m = new Map<string, AnaliseNaEsteira[]>()
     for (const a of filtradas) {
+      if (a.substituida_em !== null) continue
       const lista = m.get(a.estagio) ?? []
       lista.push(a)
       m.set(a.estagio, lista)
@@ -235,7 +253,7 @@ export function Esteira() {
             <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
               <p className="font-medium text-foreground">Nenhuma análise ainda.</p>
               <p className="mt-1">
-                As solicitações nascem na Company 360 de um sacado, ou vêm do backfill da apólice.
+                As solicitações nascem na Company 360 de um sacado, ou vêm da importação da apólice.
               </p>
             </div>
           ) : filtradas.length === 0 ? (
@@ -246,28 +264,38 @@ export function Esteira() {
               <p className="mt-1">{(data ?? []).length} análises na esteira.</p>
             </div>
           ) : vista === 'kanban' ? (
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {COLUNAS_ESTEIRA.map((estagio) => {
-                const itens = porEstagio.get(estagio) ?? []
-                return (
-                  <div key={estagio} className="w-56 shrink-0 space-y-2">
-                    <div className="flex items-baseline justify-between gap-2 border-b pb-1">
-                      <p className="text-xs font-medium">{ESTAGIO_ANALISE_LABELS[estagio]}</p>
-                      <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
+            <div className="space-y-2">
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {COLUNAS_ESTEIRA.map((estagio) => {
+                  const itens = porEstagio.get(estagio) ?? []
+                  return (
+                    <div key={estagio} className="w-56 shrink-0 space-y-2">
+                      <div className="flex items-baseline justify-between gap-2 border-b pb-1">
+                        <p className="text-xs font-medium">{ESTAGIO_ANALISE_LABELS[estagio]}</p>
+                        <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {itens.map((a) => (
+                          <CartaoAnalise key={a.id} a={a} />
+                        ))}
+                        {itens.length === 0 && (
+                          <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
+                            vazio
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      {itens.map((a) => (
-                        <CartaoAnalise key={a.id} a={a} />
-                      ))}
-                      {itens.length === 0 && (
-                        <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
-                          vazio
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+              {substituidas.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {substituidas.length === 1
+                    ? '1 decisão anterior foi substituída por uma reanálise e saiu do quadro. Ela continua'
+                    : `${substituidas.length} decisões anteriores foram substituídas por reanálises e saíram do quadro. Elas continuam`}{' '}
+                  na vista em lista.
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -283,7 +311,7 @@ export function Esteira() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(data ?? []).map((a) => (
+                  {filtradas.map((a) => (
                     /* Mesma lista, mesma regra: a linha inteira abre, pelo mesmo link
                        esticado do card. Duas vistas do mesmo dado que se clicam de jeitos
                        diferentes fazem a pessoa reaprender a tela ao trocar de botão. */
@@ -303,6 +331,13 @@ export function Esteira() {
                         <Badge variant="outline" className="whitespace-nowrap text-[11px]">
                           {ESTAGIO_ANALISE_LABELS[a.estagio as EstagioAnalise] ?? a.estagio}
                         </Badge>
+                        {/* O desfecho continua sendo o que a seguradora disse; esta
+                            segunda linha é que diz que ele não é mais o que vale. */}
+                        {a.substituida_em !== null && (
+                          <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            substituída
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{moeda(a.limite_solicitado)}</TableCell>
                       <TableCell className="text-right tabular-nums">{moeda(a.limite_aprovado)}</TableCell>

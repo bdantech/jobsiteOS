@@ -703,6 +703,8 @@ export type Database = {
           rating_seguradora: string | null
           seguradora: string
           solicitada_por: string | null
+          substituida_em: string | null
+          substituida_por: string | null
         }
         Insert: {
           contato_externo?: Json | null
@@ -736,6 +738,8 @@ export type Database = {
           rating_seguradora?: string | null
           seguradora?: string
           solicitada_por?: string | null
+          substituida_em?: string | null
+          substituida_por?: string | null
         }
         Update: {
           contato_externo?: Json | null
@@ -769,8 +773,17 @@ export type Database = {
           rating_seguradora?: string | null
           seguradora?: string
           solicitada_por?: string | null
+          substituida_em?: string | null
+          substituida_por?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "analises_credito_substituida_por_fkey"
+            columns: ["substituida_por"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "analises_credito_analise_propria_id_fkey"
             columns: ["analise_propria_id"]

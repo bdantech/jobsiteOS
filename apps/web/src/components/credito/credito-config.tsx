@@ -316,7 +316,7 @@ function AmbienteDaSeguradora({
             <CardTitle className="text-base">Ambiente da seguradora</CardTitle>
             <CardDescription>
               Contra qual Atradius o worker bate: homologação ou produção. Vale para envio,
-              poll, sync e backfill — não há como um rodar num ambiente e outro no outro.
+              consulta, releitura e importação — não há como um rodar num ambiente e outro no outro.
             </CardDescription>
           </div>
           <div className="flex shrink-0 gap-2">

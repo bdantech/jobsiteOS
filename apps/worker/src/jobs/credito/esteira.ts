@@ -859,6 +859,10 @@ export async function expirarAnalises(): Promise<{ expiradas: number }> {
     .not('expira_em', 'is', null)
     .lt('expira_em', hoje)
     .is('expirada_em', null)
+    // Uma cobertura que já foi substituída não tem o que expirar: quem vale é a
+    // decisão que tomou o lugar dela (0208), e o evento diria à empresa que perdeu
+    // algo que ela não tem mais desde a reanálise.
+    .is('substituida_em', null)
 
   for (const a of vencidas ?? []) {
     await supabaseAdmin

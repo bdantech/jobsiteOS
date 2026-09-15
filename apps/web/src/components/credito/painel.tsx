@@ -225,35 +225,62 @@ export function CreditoPainel() {
             <div className="space-y-1.5">
               <CardTitle className="text-base">Funil da esteira</CardTitle>
               <CardDescription>
-                Só o que <strong>nasceu aqui</strong>. As análises trazidas do backfill da
+                Só o que <strong>nasceu aqui</strong>. As análises trazidas da importação da
                 apólice ficam de fora: elas inflariam a taxa de aprovação com decisões que este
                 fluxo não tomou.
               </CardDescription>
             </div>
+            {/*
+             * OS QUATRO BOTÕES, EM PORTUGUÊS E EM ORDEM DE ALCANCE.
+             *
+             * "Sync" e "Backfill" diziam ao leitor o nome do JOB, não o que ele faz — e
+             * os dois nomes em inglês, um ao lado do outro, não davam nenhuma pista de
+             * que fazem coisas diferentes. A diferença que importa é uma só:
+             *
+             *   Consultar decisões  pergunta pelas que ENVIAMOS e ainda não voltaram
+             *   Reler a apólice     atualiza as que JÁ EXISTEM aqui — não cria nenhuma
+             *   Importar da apólice CRIA aqui as coberturas que só existem lá
+             *
+             * "Simular importação" fica colado em "Importar" de propósito: é o mesmo
+             * trabalho sem gravar, e a proximidade é o que faz alguém rodar o ensaio
+             * antes em vez de depois.
+             */}
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled={rodando !== null} onClick={() => void rodar('Consulta de decisões', pollDecisoesAction)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={rodando !== null}
+                onClick={() => void rodar('Consulta de decisões', pollDecisoesAction)}
+                title="Pergunta à seguradora o desfecho dos casos que enviamos daqui e ainda estão em análise."
+              >
                 Consultar decisões
               </Button>
-              <Button variant="outline" size="sm" disabled={rodando !== null} onClick={() => void rodar('Sync da apólice', syncAtradiusAction)}>
-                Sync da apólice
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={rodando !== null}
+                onClick={() => void rodar('Releitura da apólice', syncAtradiusAction)}
+                title="Relê a apólice inteira e atualiza limite, rating e desfecho das análises que JÁ existem aqui. Não cria linha nova — o que só existe na apólice continua invisível até a importação."
+              >
+                Reler a apólice
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={rodando !== null}
-                onClick={() => void rodar('Ensaio do backfill', simularBackfillAtradiusAction)}
+                onClick={() => void rodar('Simulação da importação', simularBackfillAtradiusAction)}
                 title="Lê e mapeia tudo, relata no log o que faria e NÃO grava nada. Roda em qualquer ambiente."
               >
-                Ensaiar backfill
+                Simular importação
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={rodando !== null}
-                onClick={() => void rodar('Backfill da apólice', backfillAtradiusAction)}
-                title="GRAVA no banco os limites e as decisões que a apólice já tem. Só roda com a seguradora em produção. Não descobre buyer novo."
+                onClick={() => void rodar('Importação da apólice', backfillAtradiusAction)}
+                title="CRIA aqui as coberturas que só existem na apólice, e atualiza as que já vieram antes (a busca é pelo case_id, então não duplica). Só roda com a seguradora em produção. Não descobre buyer novo."
               >
-                Backfill
+                Importar da apólice
               </Button>
             </div>
           </div>

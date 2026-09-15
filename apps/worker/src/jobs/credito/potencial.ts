@@ -194,8 +194,11 @@ async function carregarContexto(cnpjs: string[]): Promise<ContextoSinais> {
     supabaseAdmin.from('certificados').select('cnpj, expires_at, status').in('cnpj', cnpjs),
     supabaseAdmin
       .from('analises_credito')
-      .select('cnpj, estagio, expira_em, decidida_em, criada_em')
+      .select('cnpj, estagio, expira_em, decidida_em, criada_em, substituida_em')
       .in('cnpj', cnpjs)
+      // Decisão substituída é histórico (0208). Deixá-la entrar aqui reintroduziria
+      // o limite velho no scorecard, e uma negativa já revertida no knockout.
+      .is('substituida_em', null)
       .order('criada_em', { ascending: false }),
   ])
 

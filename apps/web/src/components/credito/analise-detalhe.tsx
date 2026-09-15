@@ -12,6 +12,7 @@ import {
   FileText,
   Gauge,
   Hash,
+  History,
   MapPin,
   PlayCircle,
   RefreshCw,
@@ -101,7 +102,7 @@ function quemPediu(painel: PainelSacado): string {
 
   switch (painel.esteira?.origem) {
     case 'atradius_backfill':
-      return ' — não foi pedida aqui; veio do backfill da apólice'
+      return ' — não foi pedida aqui; veio da importação da apólice'
     case 'api_producao':
       return ' — aberta pela API da plataforma'
     default:
@@ -344,11 +345,42 @@ export function AnaliseDetalhe({ id }: { id: string }) {
   const local = [empresa?.municipio, empresa?.uf].filter(Boolean).join(' / ')
   const concluida = status === 'concluida'
   // Aprovada parcial também precifica: o limite é menor, o preço continua existindo.
-  const podePrecificar = estagio === 'aprovada' || estagio === 'aprovada_parcial'
+  // Substituída, não: o preço sairia de um limite que a apólice já reviu, e
+  // `app_publicar_condicoes` recusa (0208). Melhor não oferecer o botão do que
+  // oferecer um que levanta erro no fim do caminho.
+  const substituida = esteira.substituida_em !== null
+  const podePrecificar = !substituida && (estagio === 'aprovada' || estagio === 'aprovada_parcial')
 
   return (
     <div className="space-y-4">
       <VoltarContextual padrao={{ href: '/credito', label: 'Esteira' }} />
+
+      {/*
+       * O AVISO VEM ANTES DE TUDO, e não como mais um badge no cabeçalho.
+       *
+       * Esta página inteira mostra números — limite aprovado, validade, rating — e
+       * todos eles continuam corretos como registro do que a seguradora respondeu na
+       * época. O que mudou é que eles não valem mais. Quem chega aqui por um link
+       * antigo precisa saber disso ANTES de ler o primeiro número, senão sai daqui com
+       * um limite na cabeça que a apólice já reviu.
+       */}
+      {substituida && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <History className="size-4 shrink-0 text-amber-600 dark:text-amber-500" aria-hidden />
+          <span>
+            <strong>Esta análise é histórico.</strong> Outra decisão para o mesmo CNPJ tomou o
+            lugar dela em {formatData(esteira.substituida_em)}.
+          </span>
+          {esteira.substituida_por && (
+            <Link
+              href={`/credito/analises/${esteira.substituida_por}`}
+              className="font-medium underline underline-offset-2"
+            >
+              Abrir a que vale
+            </Link>
+          )}
+        </div>
+      )}
 
       {/*
        * O título é a CONSTRUTORA, não "Análise de crédito".
@@ -435,10 +467,18 @@ export function AnaliseDetalhe({ id }: { id: string }) {
               tags={
                 <>
                   <Badge variant="outline">{ESTAGIO_ANALISE_LABELS[estagio]}</Badge>
+                  {substituida ? (
+                    <Badge
+                      variant="secondary"
+                      title="Outra decisão para o mesmo CNPJ tomou o lugar desta."
+                    >
+                      substituída
+                    </Badge>
+                  ) : null}
                   {esteira.origem === 'atradius_backfill' ? (
                     <Badge
                       variant="secondary"
-                      title="Veio do backfill da apólice: já existia na seguradora e não foi pedida por aqui."
+                      title="Veio da importação da apólice: já existia na seguradora e não foi pedida por aqui."
                     >
                       da apólice
                     </Badge>
@@ -613,7 +653,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
 
                     {esteira.origem === 'atradius_backfill' && (
                       <p className="mt-4 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                        Esta análise veio do <strong>backfill da apólice</strong>: ela já existia na
+                        Esta análise veio da <strong>importação da apólice</strong>: ela já existia na
                         seguradora e não foi pedida por aqui. Fica marcada para o funil da esteira
                         não levar crédito por uma decisão que ele não tomou.
                       </p>

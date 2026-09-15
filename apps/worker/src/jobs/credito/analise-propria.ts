@@ -895,6 +895,9 @@ export async function sugerirReanalises(): Promise<{ sugeridas: number }> {
     .not('expira_em', 'is', null)
     .lte('expira_em', limite.toISOString().slice(0, 10))
     .gte('expira_em', new Date().toISOString().slice(0, 10))
+    // Sugerir a renovação de uma decisão já substituída é pedir de novo o que a
+    // reanálise acabou de responder (0208).
+    .is('substituida_em', null)
 
   let sugeridas = 0
   for (const a of vencendo ?? []) {

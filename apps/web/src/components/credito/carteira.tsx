@@ -350,7 +350,7 @@ export function CarteiraCredito() {
 
           <p className="text-[0.8rem] text-muted-foreground">
             A cobertura sai das análises com limite aprovado e vigente, independentemente de
-            terem nascido na esteira ou vindo do backfill da apólice. O recorte é por{' '}
+            terem nascido na esteira ou vindo da importação da apólice. O recorte é por{' '}
             <strong>valor</strong> e não por estágio: uma recusa de aumento mantém a cobertura
             anterior de pé, e filtrar por estágio esconderia seguro que existe.
           </p>
