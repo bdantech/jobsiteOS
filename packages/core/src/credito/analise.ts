@@ -301,6 +301,15 @@ export const OPCOES_PROTESTO_PADRAO: OpcoesProtesto = {
 /** Um exercício contábil já revisado, em números puros. Sem origens, sem IA. */
 export interface ExercicioContabil {
   exercicio: number
+  /**
+   * O PERÍODO que o documento cobre, `YYYY-MM-DD`. Toda DRE diz isso no cabeçalho
+   * ("Exercício findo em 31 de dezembro de 2025", "Período de 01/01/2026 a 30/06/2026"),
+   * e é a única coisa que distingue um ano fechado de oito meses de um ano fechado.
+   *
+   * Nulo nas extrações anteriores a esta regra — `exercicioFechado` sabe o que fazer.
+   */
+  periodo_inicio: string | null
+  periodo_fim: string | null
   receita_bruta: number | null
   receita_liquida: number | null
   cmv: number | null
@@ -625,14 +634,25 @@ export function calcularIndicadores(ctx: ContextoAnalise, p: ParametrosAnalise):
 }
 
 /**
- * CAGR entre o primeiro e o último exercício COM receita líquida.
+ * CAGR entre o primeiro e o último exercício FECHADO com receita líquida.
  *
  * Usa os anos declarados e não a contagem de linhas: exercícios de 2021 e 2024 são três
  * períodos, e tratá-los como dois inflaria o crescimento de uma base que só tem furo.
+ *
+ * ─── E SÓ EXERCÍCIO FECHADO ENTRA ──────────────────────────────────────────
+ * Comparar oito meses com um ano é medir uma queda que não aconteceu. Na CAVAZANI isso
+ * dava −20% ao ano entre 2024 (R$ 135 mi em doze meses) e 2026 (R$ 86 mi em oito), e o
+ * número ia para o parecer e para o scorecard como se fosse deterioração.
+ *
+ * Anualizar o parcial para comparar seria pior: receita de construtora vem por medição
+ * de obra, o mês não é uniforme, e o ×12/8 inventaria a precisão exata que o indicador
+ * promete ter. Sem dois anos fechados, a resposta honesta é `null` — e `null` não é
+ * zero: "não sabemos se cresceu" e "não cresceu" são conversas diferentes.
  */
-export function cagrReceita(exercicios: ExercicioContabil[]): number | null {
+export function cagrReceita(exercicios: ExercicioContabil[], hoje: Date = new Date()): number | null {
   const comReceita = exercicios
     .filter((e) => num(e.receita_liquida) !== null && (num(e.receita_liquida) as number) > 0)
+    .filter((e) => exercicioFechado(e, hoje))
     .sort((a, b) => a.exercicio - b.exercicio)
   if (comReceita.length < 2) return null
   const primeiro = comReceita[0] as ExercicioContabil
@@ -1106,8 +1126,16 @@ export interface CampoExtraido {
 
 export interface BlocoExercicio {
   exercicio: number
+  /** O período coberto, como o documento o declara. Ver `ExercicioContabil`. */
+  periodo_inicio?: string | null
+  periodo_fim?: string | null
   moeda: string
-  campos: Partial<Record<keyof Omit<ExercicioContabil, 'exercicio'>, CampoExtraido>>
+  campos: Partial<
+    Record<
+      keyof Omit<ExercicioContabil, 'exercicio' | 'periodo_inicio' | 'periodo_fim'>,
+      CampoExtraido
+    >
+  >
 }
 
 export interface Conflito {
@@ -1132,6 +1160,8 @@ export function achatarExtracao(dados: DadosExtraidos | null | undefined): Exerc
       const v = (k: keyof typeof c) => num(c[k]?.valor ?? null)
       return {
         exercicio: b.exercicio,
+        periodo_inicio: b.periodo_inicio ?? null,
+        periodo_fim: b.periodo_fim ?? null,
         receita_bruta: v('receita_bruta'),
         receita_liquida: v('receita_liquida'),
         cmv: v('cmv'),
@@ -1155,6 +1185,58 @@ export function achatarExtracao(dados: DadosExtraidos | null | undefined): Exerc
         patrimonio_liquido: v('patrimonio_liquido'),
       }
     })
+}
+
+// ─── Exercício fechado × período parcial ────────────────────────────────────
+
+/**
+ * Quantos MESES o documento cobre. `null` quando o período não foi extraído.
+ *
+ * Conta meses de calendário inclusive: 01/01 a 31/12 dá 12, 01/01 a 30/06 dá 6. É o que
+ * a DRE quer dizer, e evita discutir se fevereiro tem 28 ou 29 dias.
+ */
+export function mesesCobertos(
+  inicio: string | null | undefined,
+  fim: string | null | undefined,
+): number | null {
+  if (!inicio || !fim) return null
+  const a = new Date(inicio)
+  const b = new Date(fim)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null
+  const meses =
+    (b.getUTCFullYear() * 12 + b.getUTCMonth()) - (a.getUTCFullYear() * 12 + a.getUTCMonth()) + 1
+  return meses > 0 && meses <= 24 ? meses : null
+}
+
+/**
+ * Este exercício representa um ANO INTEIRO?
+ *
+ * ─── POR QUE ESTA PERGUNTA EXISTE ───────────────────────────────────────────
+ * A CAVAZANI EMPREENDIMENTOS entregou um DRE de 2026 em setembro de 2026. A receita
+ * de oito meses — R$ 87.961.659 — foi promovida a "faturamento anual, origem balanço
+ * auditado, confiança alta", e a ficha passou a dizer que a empresa encolheu 31% em
+ * relação aos R$ 127.374.399 de 2025. Esse número entra na CALIBRAÇÃO do estimador,
+ * que é a régua de 5.109 empresas: um documento parcial desregula todas elas.
+ *
+ * ─── A REGRA, EM DOIS DEGRAUS ───────────────────────────────────────────────
+ * Com período extraído, a resposta é aritmética: 12 meses, e ponto. Exatamente 12 —
+ * 11 ou 13 não é um ano contábil, é um documento que não entendemos, e na dúvida ele
+ * não sobe para a régua.
+ *
+ * Sem período (toda extração anterior a esta regra), sobra o degrau barato e
+ * infalível: NENHUM ANO FECHA ANTES DE TERMINAR. Exercício do ano corrente ou do
+ * futuro é parcial por definição. Sozinho, isso já teria pego a CAVAZANI.
+ *
+ * O que ele NÃO pega sem o período: um DRE de jan–jun/2025 lido em 2026. Por isso o
+ * período é a correção de raiz, e este degrau é o cinto.
+ */
+export function exercicioFechado(
+  ex: { exercicio: number; periodo_inicio?: string | null; periodo_fim?: string | null },
+  hoje: Date = new Date(),
+): boolean {
+  const meses = mesesCobertos(ex.periodo_inicio, ex.periodo_fim)
+  if (meses !== null) return meses === 12
+  return Number.isInteger(ex.exercicio) && ex.exercicio < hoje.getFullYear()
 }
 
 /**

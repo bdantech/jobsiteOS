@@ -47,6 +47,10 @@ const EXEMPLO: ContextoAnalise = {
   exercicios: [
     {
       exercicio: 2023,
+      // Períodos explícitos: o exemplo tem que continuar sendo dois anos FECHADOS
+      // quando o calendário virar, senão o CAGR da prévia some sozinho um dia.
+      periodo_inicio: '2023-01-01',
+      periodo_fim: '2023-12-31',
       receita_bruta: 80_000_000,
       receita_liquida: 72_000_000,
       cmv: null,
@@ -71,6 +75,10 @@ const EXEMPLO: ContextoAnalise = {
     },
     {
       exercicio: 2024,
+      // Períodos explícitos: o exemplo tem que continuar sendo dois anos FECHADOS
+      // quando o calendário virar, senão o CAGR da prévia some sozinho um dia.
+      periodo_inicio: '2024-01-01',
+      periodo_fim: '2024-12-31',
       receita_bruta: 100_000_000,
       receita_liquida: 90_000_000,
       cmv: null,

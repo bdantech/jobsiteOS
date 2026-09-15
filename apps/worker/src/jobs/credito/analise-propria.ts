@@ -136,6 +136,31 @@ const ESQUEMA_EXTRACAO = {
         type: 'object',
         properties: {
           exercicio: { type: 'integer', description: 'O ano do exercício, ex.: 2024.' },
+          /*
+           * O PERÍODO, e não só o ano.
+           *
+           * Toda demonstração diz isto no cabeçalho — "Exercício findo em 31 de
+           * dezembro de 2025", "Período de 01/01/2026 a 30/06/2026" — e é a única
+           * coisa que separa um ano fechado de um balancete de oito meses. Sem
+           * perguntar, os dois chegavam aqui idênticos, e a receita parcial virava
+           * "faturamento anual, origem balanço auditado, confiança alta".
+           *
+           * `null` é resposta válida e melhor que um chute: `exercicioFechado` cai no
+           * degrau do ano corrente quando não sabe o período.
+           */
+          periodo_inicio: {
+            type: ['string', 'null'],
+            description:
+              'Primeiro dia do período coberto, AAAA-MM-DD. Um exercício anual fechado ' +
+              'começa em 01/01. Se o documento não disser, devolva null — não presuma.',
+          },
+          periodo_fim: {
+            type: ['string', 'null'],
+            description:
+              'Último dia do período coberto, AAAA-MM-DD. "Exercício findo em 31 de ' +
+              'dezembro de 2025" é 2025-12-31; um balancete "acumulado até agosto/2026" ' +
+              'é 2026-08-31. Se o documento não disser, devolva null.',
+          },
           moeda: { type: 'string' },
           campos: {
             type: 'object',
@@ -160,7 +185,7 @@ const ESQUEMA_EXTRACAO = {
             },
           },
         },
-        required: ['exercicio', 'moeda', 'campos'],
+        required: ['exercicio', 'periodo_inicio', 'periodo_fim', 'moeda', 'campos'],
       },
     },
     lacunas: {
@@ -253,7 +278,14 @@ const INSTRUCOES_EXTRACAO =
   `resultado_equivalencia_patrimonial. Muitos formulários brasileiros — o padrão da CAIXA, ` +
   `por exemplo — não publicam EBITDA nem depreciação, e é normal que esses campos faltem.\n` +
   `7. Lucro líquido NÃO é EBITDA, e resultado antes dos tributos NÃO é EBITDA. Cada um vai ` +
-  `para o seu próprio campo; nenhum deles serve de substituto para outro.`
+  `para o seu próprio campo; nenhum deles serve de substituto para outro.\n` +
+  `8. PERÍODO: todo exercício carrega periodo_inicio e periodo_fim (AAAA-MM-DD), lidos do ` +
+  `CABEÇALHO da demonstração, não deduzidos do ano. "Exercício findo em 31 de dezembro de ` +
+  `2025" é 2025-01-01 a 2025-12-31. Um balancete "acumulado de janeiro a agosto de 2026" é ` +
+  `2026-01-01 a 2026-08-31 — e isso não é detalhe: um período parcial lido como ano inteiro ` +
+  `faz a receita de oito meses virar o faturamento anual da empresa. Se o documento não ` +
+  `disser o período, devolva null nos dois: null é uma resposta correta, um 01/01 a 31/12 ` +
+  `presumido não é.`
 
 /**
  * Sobe os PDFs ao modelo e devolve a extração.

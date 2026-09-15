@@ -4,7 +4,14 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertTriangle, FileText, ShieldCheck } from 'lucide-react'
-import { CAMPOS_CRITICOS, criticosPendentes, type DadosExtraidos, type Tables } from '@jobsiteos/core'
+import {
+  CAMPOS_CRITICOS,
+  criticosPendentes,
+  exercicioFechado,
+  mesesCobertos,
+  type DadosExtraidos,
+  type Tables,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +35,19 @@ import { analisePropriaKeys } from './queries'
  * Confirmar SEM alterar também é um ato, e fica gravado: "eu olhei e está certo" é
  * informação, e é diferente de "ninguém olhou".
  */
+
+/**
+ * O período do exercício em uma frase — e "não informado" quando o documento não disse.
+ *
+ * "Não informado" é uma resposta honesta que vale mais que um 01/01–31/12 presumido: é o
+ * que diz a quem revisa que o modelo NÃO achou a data, em vez de sugerir que achou.
+ */
+function periodoDoBloco(bloco: { exercicio: number; periodo_inicio?: string | null; periodo_fim?: string | null }): string {
+  const meses = mesesCobertos(bloco.periodo_inicio, bloco.periodo_fim)
+  if (meses === null) return 'Período não informado no documento'
+  const br = (d: string) => new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+  return `${br(bloco.periodo_inicio as string)} a ${br(bloco.periodo_fim as string)} · ${meses} ${meses === 1 ? 'mês' : 'meses'}`
+}
 
 const LABELS: Record<string, string> = {
   receita_bruta: 'Receita bruta',
@@ -153,10 +173,33 @@ export function RevisaoExtracao({
                 <Badge variant="outline" className="text-[10px]">
                   {bloco.moeda}
                 </Badge>
+                {/*
+                  * O PERÍODO É UM CAMPO A CONFERIR, como qualquer outro.
+                  *
+                  * A CAVAZANI entregou um DRE de oito meses de 2026 e a receita virou o
+                  * faturamento ANUAL da empresa, com confiança alta, desregulando a régua
+                  * que calibra 5.109 estimativas. Quem revisa é a única pessoa que pode
+                  * pegar o modelo lendo o cabeçalho errado — mas só se a tela mostrar o
+                  * que ele leu.
+                  */}
+                {!exercicioFechado(bloco) && (
+                  <Badge variant="destructive" className="text-[10px]">
+                    período parcial
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
-                Só os campos críticos exigem confirmação. Os demais entram no cálculo como foram
-                lidos e aparecem no detalhe de cada indicador.
+                {periodoDoBloco(bloco)} · Só os campos críticos exigem confirmação. Os demais
+                entram no cálculo como foram lidos e aparecem no detalhe de cada indicador.
+                {!exercicioFechado(bloco) && (
+                  <>
+                    {' '}
+                    <strong>
+                      Este exercício não cobre um ano inteiro: ele não vira o faturamento anual
+                      da empresa nem entra no cálculo de crescimento.
+                    </strong>
+                  </>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>

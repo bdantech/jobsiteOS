@@ -15,6 +15,8 @@ import {
   menorTeto,
   motivoObrigatorio,
   protestoVencido,
+  exercicioFechado,
+  mesesCobertos,
   type ContextoAnalise,
   type DadosExtraidos,
   type ExercicioContabil,
@@ -23,6 +25,8 @@ import {
 
 const vazio: ExercicioContabil = {
   exercicio: 2024,
+  periodo_inicio: null,
+  periodo_fim: null,
   receita_bruta: null,
   receita_liquida: null,
   cmv: null,
@@ -570,5 +574,74 @@ describe('extração', () => {
       exercicios: [{ exercicio: 2024, moeda: 'BRL', campos: { ebitda: { valor: null, origem: null } } }],
     })
     assert.deepEqual(p, [])
+  })
+})
+
+// ─── Exercício fechado × período parcial (a CAVAZANI) ───────────────────────
+
+describe('exercício fechado', () => {
+  const SETEMBRO_2026 = new Date('2026-09-15T12:00:00Z')
+
+  it('o período manda: 12 meses fecha, 8 não', () => {
+    assert.equal(mesesCobertos('2025-01-01', '2025-12-31'), 12)
+    assert.equal(mesesCobertos('2026-01-01', '2026-08-31'), 8)
+    assert.equal(mesesCobertos(null, '2025-12-31'), null)
+    assert.equal(mesesCobertos('2025-12-31', '2025-01-01'), null)
+
+    assert.equal(
+      exercicioFechado({ exercicio: 2025, periodo_inicio: '2025-01-01', periodo_fim: '2025-12-31' }, SETEMBRO_2026),
+      true,
+    )
+    assert.equal(
+      exercicioFechado({ exercicio: 2026, periodo_inicio: '2026-01-01', periodo_fim: '2026-08-31' }, SETEMBRO_2026),
+      false,
+    )
+  })
+
+  it('o período VENCE o ano: um semestre de 2025 lido em 2026 não é ano fechado', () => {
+    // Este é o caso que o degrau do ano corrente NÃO pega sozinho — é por ele que o
+    // período foi extraído.
+    assert.equal(
+      exercicioFechado({ exercicio: 2025, periodo_inicio: '2025-01-01', periodo_fim: '2025-06-30' }, SETEMBRO_2026),
+      false,
+    )
+  })
+
+  it('sem período, nenhum ano fecha antes de terminar', () => {
+    assert.equal(exercicioFechado({ exercicio: 2025 }, SETEMBRO_2026), true)
+    assert.equal(exercicioFechado({ exercicio: 2026 }, SETEMBRO_2026), false)
+    assert.equal(exercicioFechado({ exercicio: 2027 }, SETEMBRO_2026), false)
+  })
+
+  it('11 ou 13 meses não é ano contábil, e na dúvida não sobe para a régua', () => {
+    assert.equal(
+      exercicioFechado({ exercicio: 2024, periodo_inicio: '2024-02-01', periodo_fim: '2024-12-31' }, SETEMBRO_2026),
+      false,
+    )
+  })
+
+  it('o CAGR da CAVAZANI deixa de existir em vez de inventar uma queda', () => {
+    // Os números reais: 2024 e 2025 fechados, 2026 com oito meses.
+    const serie = [
+      { ...vazio, exercicio: 2024, receita_liquida: 135_155_173 },
+      { ...vazio, exercicio: 2025, receita_liquida: 122_279_424 },
+      { ...vazio, exercicio: 2026, receita_liquida: 86_111_514 },
+    ]
+    const comParcial = cagrReceita(serie, SETEMBRO_2026) as number
+    // Sem a régua, o parcial entrava e a série "caía" ~20% ao ano.
+    assert.ok(comParcial < 0)
+    assert.ok(Math.abs(comParcial - (122_279_424 / 135_155_173 - 1)) < 1e-9)
+
+    // Com um único ano fechado sobrando, não há o que medir — e null não é zero.
+    assert.equal(
+      cagrReceita(
+        [
+          { ...vazio, exercicio: 2025, receita_liquida: 122_279_424 },
+          { ...vazio, exercicio: 2026, receita_liquida: 86_111_514 },
+        ],
+        SETEMBRO_2026,
+      ),
+      null,
+    )
   })
 })
