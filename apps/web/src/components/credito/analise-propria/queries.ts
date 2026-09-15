@@ -25,6 +25,13 @@ export const analisePropriaKeys = {
 export interface PainelSacado {
   encontrado: boolean
   esteira: Tables<'analises_credito'> | null
+  /**
+   * Quem PEDIU a análise aqui dentro. Nulo quando ninguém daqui pediu — e a maioria é
+   * assim: 84 das 90 vieram do backfill da apólice da Atradius. Quem distingue os dois
+   * casos é `esteira.origem`, e a tela precisa dos dois para não escrever "—" sobre
+   * "ninguém pediu" e sobre "não sabemos quem" com a mesma cara.
+   */
+  solicitante: { id: string; nome: string | null; email: string | null } | null
   empresa: {
     id: string
     cnpj: string | null
@@ -92,6 +99,7 @@ export async function buscarPainelSacado(analiseId: string): Promise<PainelSacad
   return {
     encontrado: r.encontrado ?? false,
     esteira: r.esteira ?? null,
+    solicitante: r.solicitante ?? null,
     empresa: r.empresa ?? null,
     metricas: r.metricas ?? null,
     score: r.score ?? null,

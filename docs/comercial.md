@@ -862,6 +862,34 @@ comissão de outra pessoa, e nenhuma dessas coisas se faz com uma mão, em pé.
 Vendedor, território, parâmetros de comissão e motivos são editáveis na tela, por RPC com
 `audit_log` — mesma disciplina do resto do sistema.
 
+### Cinco abas, divididas por pergunta
+
+A tela era uma coluna só com oito seções, e a última — a régua do Meu Dia, com seletor de
+cargo e treze blocos — ficava a quatro rolagens do topo. Numa tela de configuração isso
+não é só incômodo: o que está longe é o que ninguém sabe que existe, e um parâmetro que
+ninguém sabe que existe fica no default para sempre.
+
+| aba | o que responde |
+|---|---|
+| **Time** | Vendedores e territórios · Painel do time (leaderboard, alerta de inatividade) |
+| **Funil** | Distribuição semanal · Motivos de perda |
+| **Comissão** | Parâmetros do motor v2 · Relógio das contas · Classificação da conta |
+| **Fornecedores** | Funil de cadastro e custo do clique |
+| **Meu Dia** | O que cada cargo vê quando abre o dia |
+
+**Três coisas mudaram de lugar, e não por arrumação.** O card "Painel e passivos" juntava
+o leaderboard (que é sobre o time), o mínimo de antecipações (que classifica a conta e por
+isso decide a TAXA) e o estorno de no-show (uma regra de comissão dentro de um card que
+não falava de comissão). Um título com "e" no meio costuma ser duas coisas, e era.
+
+Os dois números de `passivos` foram para **Comissão** com o nome que merecem —
+*Classificação da conta* — porque é a natureza da conta que escolhe entre `vend_passivo_*`
+e `vend_prospeccao_ativa_*` na tabela de parâmetros logo acima. Eles não mudam o que se
+vê; mudam o que se paga.
+
+O `<VendedorForm>` fica **fora** do `<Tabs>`: dentro, trocar de aba com ele aberto o
+desmontaria no meio do preenchimento.
+
 A aba **Regras de comissão** passou a editar `commission_params` (motor v2). Ela lista o
 CATÁLOGO inteiro, inclusive o que ninguém publicou: uma tela que só mostra o publicado
 esconde justamente o parâmetro esquecido, e o esquecido é o que faz alguém não receber,

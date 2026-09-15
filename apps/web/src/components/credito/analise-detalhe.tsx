@@ -55,7 +55,7 @@ import { RevisaoExtracao } from './analise-propria/revisao-extracao'
 import { Cenarios, Indicadores, Lacunas, Tetos, brl } from './analise-propria/resultado'
 import { StatusAnalise } from './analise-propria/status-analise'
 import { CondicoesComerciais } from './condicoes/condicoes'
-import { analisePropriaKeys, buscarPainelSacado } from './analise-propria/queries'
+import { analisePropriaKeys, buscarPainelSacado, type PainelSacado } from './analise-propria/queries'
 
 /**
  * A ficha de uma análise de crédito.
@@ -83,6 +83,31 @@ const moeda = (v: number | null | undefined): string => brl(v)
 
 const formatData = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleDateString('pt-BR') : '—'
+
+/**
+ * Quem pediu esta análise — e, quando ninguém daqui pediu, DE ONDE ela veio.
+ *
+ * As duas frases não são a mesma, e o silêncio entre elas é o que faz alguém abrir um
+ * caso de R$ 3 milhões sem saber a quem perguntar "por que pediram isso?". Das 90
+ * análises da base, 5 foram pedidas aqui dentro; 84 chegaram pelo backfill da apólice da
+ * Atradius (já existiam lá quando a integração subiu) e 1 entrou pela API de produção.
+ *
+ * Um "—" serviria para os três casos e não responderia nenhum. `solicitada_por` nulo numa
+ * análise de backfill não é dado faltando: é a resposta.
+ */
+function quemPediu(painel: PainelSacado): string {
+  const nome = painel.solicitante?.nome?.trim()
+  if (nome) return ` por ${nome}`
+
+  switch (painel.esteira?.origem) {
+    case 'atradius_backfill':
+      return ' — não foi pedida aqui; veio do backfill da apólice'
+    case 'api_producao':
+      return ' — aberta pela API da plataforma'
+    default:
+      return ''
+  }
+}
 
 /**
  * As ações da análise, todas no mesmo lugar: enviar à seguradora, rodar a nossa análise
@@ -470,7 +495,8 @@ export function AnaliseDetalhe({ id }: { id: string }) {
               ]}
               rodape={
                 empresa
-                  ? `Solicitada em ${formatData(esteira.criada_em)} · Atualizada em ${formatData(esteira.atualizada_em)}`
+                  ? `Solicitada em ${formatData(esteira.criada_em)}${quemPediu(data)}` +
+                    ` · Atualizada em ${formatData(esteira.atualizada_em)}`
                   : 'Esta análise não está ligada a uma empresa cadastrada.'
               }
             />

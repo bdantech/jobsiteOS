@@ -229,6 +229,33 @@ este sistema recebe de fora, e vai para Admin além de Crédito.
 do painel exclui essas linhas: incluí-las inflaria a taxa de aprovação com decisões que
 este fluxo não tomou.
 
+### Quem pediu, e quando a resposta volta
+
+A ficha da análise diz **quem a solicitou** (`analises_credito.solicitada_por`, servido
+pela chave `solicitante` do `analise_propria_painel` desde a 0205). O campo é nulo na
+maioria, e isso não é dado faltando: das 90 análises da base, 5 foram pedidas aqui dentro,
+84 vieram do backfill da apólice e 1 entrou pela API de produção. A tela usa `origem` para
+distinguir os três — "ninguém pediu" e "não sabemos quem pediu" não são a mesma frase, e
+um "—" serviria para as duas.
+
+**A resposta da seguradora volta uma vez por dia, às 6h de São Paulo.** O cron
+`/api/cron/credito-sync` (`0 9 * * *` em UTC) dispara `POST /jobs/credito/sync`, que roda
+três coisas em sequência:
+
+| passo | o que faz |
+|---|---|
+| `syncAtradius` | lê as decisões da apólice dos últimos 30 dias |
+| `pollDecisoes` | consulta **caso a caso** o que está em `enviada_seguradora` ou `em_analise` e tem `atradius_case_id` |
+| `expirarAnalises` | derruba aprovação vencida — a data de validade é nossa, e roda mesmo sem seguradora configurada |
+
+É o `pollDecisoes` que traz o resultado do que foi enviado. Não há webhook da Atradius:
+quem pergunta somos nós, uma vez por dia. Meia hora depois (`credito-reanalises`, 6h30 SP)
+roda a retomada, e no dia 7 de cada mês às 5h SP o `credito-mensal`.
+
+Enquanto a análise está `enviada_seguradora` ou `em_analise`, a ficha se refaz sozinha a
+cada 30s — então o resultado aparece na tela sem recarregar, assim que o poll da manhã o
+trouxer.
+
 ## Sobre a integração com a Atradius
 
 O portal de desenvolvedores (`api.atradius.com/developers`) **exige cadastro** para
