@@ -287,10 +287,16 @@ export function SemInteresseDialog({
                 variant={eterna ? 'outline' : 'default'}
                 onClick={() => setEterna(false)}
                 aria-pressed={!eterna}
-                className="h-auto flex-col items-start gap-1 py-3 text-left"
+                /*
+                 * `whitespace-normal` anula o `whitespace-nowrap` da base do Button.
+                 * Sem ele a segunda linha não quebra: ela sai do botão, atravessa a
+                 * borda do diálogo e some. O `w-full` é o par disso — é ele que dá ao
+                 * texto uma largura para quebrar DENTRO.
+                 */
+                className="h-auto flex-col items-start gap-1 whitespace-normal py-3 text-left"
               >
                 <span className="font-medium">Em 90 dias</span>
-                <span className="text-xs font-normal opacity-80">
+                <span className="w-full text-xs font-normal leading-snug opacity-80">
                   Nenhum canal o toca até lá. Ele NÃO volta ao funil.
                 </span>
               </Button>
@@ -299,10 +305,10 @@ export function SemInteresseDialog({
                 variant={eterna ? 'default' : 'outline'}
                 onClick={() => setEterna(true)}
                 aria-pressed={eterna}
-                className="h-auto flex-col items-start gap-1 py-3 text-left"
+                className="h-auto flex-col items-start gap-1 whitespace-normal py-3 text-left"
               >
                 <span className="font-medium">Nunca mais</span>
-                <span className="text-xs font-normal opacity-80">
+                <span className="w-full text-xs font-normal leading-snug opacity-80">
                   LGPD, ou quem pediu para não ser procurado.
                 </span>
               </Button>
