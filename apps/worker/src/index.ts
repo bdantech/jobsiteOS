@@ -52,6 +52,8 @@ import {
   dispararAntecipacaoDiario,
   dispararReclassificacaoFunil,
   dispararOutbox,
+  dispararVozEnviar,
+  dispararVozGerar,
   dispararContatosNf,
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
@@ -113,6 +115,7 @@ import {
   processarWebhookWasender,
 } from './jobs/comunicacao/webhooks.js'
 import { autorizarWebhookWasender, segredoResendValido } from './comunicacao/webhook-auth.js'
+import { assinaturaDaVozConfere, registrarResultadoDaLigacao } from './voz/webhook.js'
 
 /**
  * The worker's HTTP surface. Small on purpose: it starts jobs and reports health.
@@ -126,7 +129,26 @@ import { autorizarWebhookWasender, segredoResendValido } from './comunicacao/web
  */
 
 const app = express()
-app.use(express.json({ limit: '256kb' }))
+/*
+ * `verify` guarda o corpo CRU antes do parse.
+ *
+ * A assinatura do webhook da voz cobre os BYTES que vieram no fio. Conferir
+ * sobre o objeto re-serializado assinaria outra coisa — a ordem das chaves e o
+ * espaçamento mudam o hash —, e o resultado seria um webhook que ou passa
+ * sempre ou nunca, dependendo de como o outro lado montou o JSON.
+ */
+app.use(
+  express.json({
+    limit: '256kb',
+    verify: (req, _res, buf) => {
+      ;(req as RequisicaoComCorpoCru).corpoCru = buf.toString('utf8')
+    },
+  }),
+)
+
+interface RequisicaoComCorpoCru extends Request {
+  corpoCru?: string
+}
 
 // ─── /health (público: é o probe do Railway) ────────────────────────────────
 
@@ -324,6 +346,37 @@ app.post('/webhooks/resend', async (req: Request, res: Response) => {
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Webhook do Resend falhou ao processar.')
     res.status(200).json({ ok: false })
+  }
+})
+
+/*
+ * O resultado da ligação, vindo da Ana.
+ *
+ * Fica aqui em cima, com os outros webhooks públicos: quem chama é um serviço
+ * externo que não tem o `WORKER_SECRET` — ele prova quem é assinando o corpo.
+ *
+ * Responde 200 para o que foi gravado E para o que recusamos de vez (corpo
+ * ilegível, ligação que não conhecemos): a Ana reenvia até receber 2xx, e
+ * insistir num corpo que nunca vai ser aceito só enche a fila dela. O que pode
+ * melhorar sozinho — banco fora do ar — devolve 503 e é reenviado.
+ */
+app.post('/webhooks/voz', async (req: Request, res: Response) => {
+  const assinatura = req.headers['x-onepay-assinatura']
+  const cru = (req as RequisicaoComCorpoCru).corpoCru ?? ''
+  if (!assinaturaDaVozConfere(cru, typeof assinatura === 'string' ? assinatura : null)) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+  try {
+    const r = await registrarResultadoDaLigacao(req.body)
+    if (r.ok) {
+      res.status(200).json({ ok: true, access_key: r.access_key })
+      return
+    }
+    res.status(r.recusar ? 200 : 503).json({ ok: false, erro: r.erro })
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Webhook da voz falhou ao processar.')
+    res.status(503).json({ ok: false })
   }
 })
 
@@ -866,6 +919,22 @@ app.post('/jobs/antecipacao/calibrar', (_req: Request, res: Response, next: Next
 app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararReclassificacaoFunil(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/voz/gerar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararVozGerar(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/voz/enviar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararVozEnviar(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

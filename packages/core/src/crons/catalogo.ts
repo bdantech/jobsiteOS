@@ -353,6 +353,22 @@ export const CRONS: readonly CronCatalogado[] = [
       'Varre as campanhas vivas atrás de opt-out e bounce acima do limiar. Existe para quando NINGUÉM está olhando — o painel de quem abre a tela é calculado na hora. Alerta uma vez por campanha por tipo, e só com amostra mínima: 1 opt-out em 3 enviadas é 33% e não significa nada, e um alerta que grita cedo é um alerta que o time aprende a ignorar.',
     destino: 'POST /jobs/campanhas/metricas',
   },
+  {
+    path: '/api/cron/voz-gerar',
+    nome: 'Fila da Ana (voz)',
+    moduloId: 'antecipacao',
+    descricao:
+      'Escolhe quais notas viram ligação hoje e grava, para cada nota recusada, POR QUE não vira — hoje quase todas param em "sem IOF calculado", porque a estimativa do funil não desconta IOF e a Ana fala o líquido em voz alta. Roda 8h30, depois da reclassificação: a régua de faixas já rodou e o que entra na fila é o que vale ligar hoje. Gerar não liga para ninguém.',
+    destino: 'POST /jobs/voz/gerar',
+  },
+  {
+    path: '/api/cron/voz-enviar',
+    nome: 'Envio para a Ana (voz)',
+    moduloId: 'antecipacao',
+    descricao:
+      'Leva a fila para o serviço de voz, de meia em meia hora entre 9h e 17h30. Não adianta mandar mais rápido: a Ana liga UMA POR VEZ, em horário comercial, e o que sobra só empilha do lado dela. O intervalo também dá espaço para a retentativa de envio acontecer no mesmo dia. Com a voz desligada em `antecipacao_config`, é um no-op barato.',
+    destino: 'POST /jobs/voz/enviar',
+  },
 ]
 
 export interface CronAgendado {
