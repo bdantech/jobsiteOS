@@ -301,9 +301,10 @@ function AcessosCruzados({
         <ul className="space-y-1">
           {outros.map((v) => (
             <li key={v.id}>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex min-w-0 items-center gap-2 text-sm">
                 <input
                   type="checkbox"
+                  className="shrink-0"
                   checked={concedidos.has(v.id)}
                   onChange={(e) => {
                     const s = new Set(concedidos)
@@ -312,8 +313,8 @@ function AcessosCruzados({
                     onChange(s)
                   }}
                 />
-                {v.nome}
-                <span className="text-xs text-muted-foreground">
+                <span className="truncate">{v.nome}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {TIPO_VENDEDOR_LABELS[v.tipo as TipoVendedorId] ?? v.tipo}
                 </span>
               </label>
@@ -557,11 +558,22 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      {/* `overflow-x-hidden`: sem ele, um nome de empresa longo dentro do seletor empurra
-          a largura e o modal inteiro ganha barra horizontal. */}
-      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
-        <form onSubmit={enviar}>
-          <DialogHeader>
+      {/*
+        O MIOLO ROLA, O RODAPÉ NÃO.
+        Antes o diálogo inteiro era a área de rolagem (`overflow-y-auto` na caixa), e o
+        "Salvar" ficava no fim de um formulário longo: com o tipo `vendedor` ou
+        `originador`, que abrem o seletor de empresas, era preciso rolar até o fim para
+        descobrir que o botão existia. Agora ele mora numa faixa fixa embaixo.
+
+        E `min-w-0` no formulário: o DialogContent é um grid, e item de grid nasce com
+        `min-width: auto` — um nome de empresa comprido no seletor empurrava a trilha
+        além do `max-w-lg` e o diálogo ganhava barra horizontal. O `overflow-x-hidden`
+        que estava aqui escondia o sintoma sem devolver a largura, então o conteúdo
+        continuava cortado em vez de caber.
+      */}
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <form onSubmit={enviar} className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{vendedor ? 'Editar vendedor' : 'Novo vendedor'}</DialogTitle>
             <DialogDescription>
               Não existe excluir: vendedor se desativa. Apagar levaria junto a explicação de
@@ -569,7 +581,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-3 py-4">
+          <div className="grid min-h-0 min-w-0 flex-1 gap-3 overflow-y-auto px-6 py-4">
             <div className="space-y-1.5">
               <Label htmlFor="nome">Nome</Label>
               <Input id="nome" name="nome" defaultValue={vendedor?.nome ?? ''} required minLength={2} />
@@ -582,7 +594,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
                 name="tipo"
                 value={tipo}
                 onChange={(e) => setTipo(e.target.value as TipoVendedorId)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
               >
                 {TIPOS_VENDEDOR.map((t) => (
                   <option key={t} value={t}>{TIPO_VENDEDOR_LABELS[t]}</option>
@@ -606,7 +618,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
                   value={superiorId}
                   onChange={(e) => setSuperiorId(e.target.value)}
                   required
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Escolha o closer…</option>
                   {vendedores
@@ -636,7 +648,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
                   value={usuarioId}
                   onChange={(e) => setUsuarioId(e.target.value)}
                   required
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Selecione…</option>
                   {(usuarios.data ?? []).map((u) => (
@@ -667,7 +679,7 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
                     id="direcao"
                     name="direcao"
                     defaultValue={settings.direcao ?? 'both'}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
                   >
                     <option value="out">Saída (recebe da distribuição)</option>
                     <option value="in">Entrada (recebe inbound, criado à mão)</option>
@@ -743,9 +755,13 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
             </label>
           </div>
 
-          {erro ? <p className="pb-2 text-sm text-destructive">{erro}</p> : null}
-
-          <DialogFooter>
+          {/* O erro entra na faixa fixa junto dos botões: no miolo rolante ele podia
+              ficar fora da tela, e um formulário que não salva sem dizer por quê é a
+              pior das duas falhas. */}
+          <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:items-center">
+            {erro ? (
+              <p className="min-w-0 flex-1 text-sm text-destructive sm:text-left">{erro}</p>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
           </DialogFooter>
