@@ -91,6 +91,8 @@ import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-an
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
+import { gerarFilaDeVoz } from './voz/gerar.js'
+import { enviarFilaDeVoz } from './voz/enviar.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
@@ -161,6 +163,8 @@ export type TipoJob =
   | 'antecipacao-calibrar'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
+  | 'voz-gerar'
+  | 'voz-enviar'
   | 'antecipacao-lookup'
   | 'antecipacao-contatos'
   | 'antecipacao-protesto-fornecedor'
@@ -903,6 +907,20 @@ export function dispararReclassificacaoFunil(): string {
 /** Regeneração da outbox sob demanda (depois de mexer na régua de disparo). */
 export function dispararOutbox(): string {
   return dispararAvulso('antecipacao-outbox', async () => gerarOutbox())
+}
+
+/**
+ * A fila da Ana: decidir quem ligar, e depois levar para ela.
+ *
+ * Dois jobs porque são duas decisões — gerar é escolher, enviar é gastar. Com a
+ * voz desligada na config (o padrão), os dois viram no-op barato.
+ */
+export function dispararVozGerar(): string {
+  return dispararAvulso('voz-gerar', async () => gerarFilaDeVoz())
+}
+
+export function dispararVozEnviar(): string {
+  return dispararAvulso('voz-enviar', async () => enviarFilaDeVoz())
 }
 
 /** Lookup cadastral sob demanda — para esvaziar a fila sem esperar o diário. */
