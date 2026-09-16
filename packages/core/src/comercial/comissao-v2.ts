@@ -64,6 +64,7 @@ export const ORIGENS_LANCAMENTO_V2 = [
   'nf_convertida',
   'sdr_reuniao',
   'sdr_conta_fechada',
+  'sdr_penalidade_sem_fit',
   'estorno',
   'ajuste_manual',
 ] as const
@@ -73,6 +74,7 @@ export const ORIGEM_LANCAMENTO_V2_LABELS: Record<OrigemLancamentoV2, string> = {
   nf_convertida: 'NF convertida',
   sdr_reuniao: 'Reunião aceita',
   sdr_conta_fechada: 'Conta fechada',
+  sdr_penalidade_sem_fit: 'Penalidade — reunião sem fit',
   estorno: 'Estorno',
   ajuste_manual: 'Ajuste manual',
 }
@@ -260,11 +262,45 @@ export const PARAMETROS_COMISSAO: readonly ParametroCatalogado[] = [
   },
   {
     chave: 'sdr_valor_reuniao',
-    rotulo: 'SDR — reunião aceita',
+    rotulo: 'SDR — reunião aceita (padrão)',
     unidade: 'BRL',
     grupo: 'sdr',
     aceitaOverride: true,
-    descricao: 'Valor fixo, na reunião ACEITA pelo vendedor (ou aceita por decurso de prazo).',
+    descricao:
+      'Valor fixo, na reunião ACEITA pelo vendedor (ou aceita por decurso de prazo). É o '
+      + 'PISO: vale quando a chave da origem do lead (inbound/outbound) não está publicada, '
+      + 'e quando o lead não diz de onde veio.',
+  },
+  {
+    chave: 'sdr_valor_reuniao_inbound',
+    rotulo: 'SDR — reunião aceita, lead inbound',
+    unidade: 'BRL',
+    grupo: 'sdr',
+    aceitaOverride: true,
+    descricao:
+      'Lead que chegou sozinho. Costuma valer menos que o outbound: marcar reunião com '
+      + 'quem já procurou a casa é trabalho diferente de encontrar alguém do zero. '
+      + 'Sem publicar, cai no valor padrão.',
+  },
+  {
+    chave: 'sdr_valor_reuniao_outbound',
+    rotulo: 'SDR — reunião aceita, lead outbound',
+    unidade: 'BRL',
+    grupo: 'sdr',
+    aceitaOverride: true,
+    descricao:
+      'Lead da distribuição ou criado à mão pelo SDR — prospecção. Sem publicar, cai no '
+      + 'valor padrão.',
+  },
+  {
+    chave: 'sdr_penalidade_sem_fit',
+    rotulo: 'SDR — penalidade por reunião sem fit',
+    unidade: 'BRL',
+    grupo: 'sdr',
+    aceitaOverride: true,
+    descricao:
+      'Deduzido do SDR quando o lead de uma reunião JÁ PAGA é julgado sem fit. Publique '
+      + 'como valor positivo: o sinal é do motor. Ausente ou zero = sem penalidade.',
   },
   {
     chave: 'sdr_valor_conta_fechada',
@@ -906,6 +942,34 @@ export function lancamentosDaCessao(
 
 // ─── SDR ────────────────────────────────────────────────────────────────────
 
+/**
+ * Inbound é o lead que CHEGOU. Todo o resto é prospecção.
+ *
+ * `sdr_leads.origem` tem três valores: `inbound` (entrou pela porta), `distribuicao` (o
+ * motor entregou ao SDR) e `manual` (o SDR criou a linha). Os dois últimos são a mesma
+ * coisa do ponto de vista do esforço — alguém foi atrás —, e é o esforço que a régua
+ * está precificando.
+ */
+export const ORIGENS_LEAD_INBOUND: readonly string[] = ['inbound']
+
+export function ehLeadInbound(origem: string | null | undefined): boolean {
+  return typeof origem === 'string' && ORIGENS_LEAD_INBOUND.includes(origem)
+}
+
+/**
+ * A chave de valor que a origem do lead pede — ou `null` quando o lead não diz de onde
+ * veio.
+ *
+ * `null` não é "outbound por padrão": chutar a origem de um lead sem procedência pagaria
+ * a régua da prospecção por trabalho que talvez não tenha existido, ou o contrário. Sem
+ * origem, o motor cai no valor padrão, que é exatamente o que ele já fazia antes desta
+ * distinção existir.
+ */
+export function chaveValorReuniao(origem: string | null | undefined): string | null {
+  if (typeof origem !== 'string' || origem === '') return null
+  return ehLeadInbound(origem) ? 'sdr_valor_reuniao_inbound' : 'sdr_valor_reuniao_outbound'
+}
+
 export interface ReuniaoAceita {
   aceiteId: string
   sdrId: string
@@ -915,6 +979,8 @@ export interface ReuniaoAceita {
   /** Quando o aceite se consumou — decisão explícita ou decurso de prazo. */
   aceitaEm: string
   automatico: boolean
+  /** `sdr_leads.origem`. Decide entre a régua de inbound e a de outbound. */
+  leadOrigem?: string | null
 }
 
 export function lancamentoSdrReuniao(
@@ -922,7 +988,21 @@ export function lancamentoSdrReuniao(
   params: readonly CommissionParam[],
 ): LancamentoV2 | null {
   if (aceite.sdrIsIa) return null
-  const valor = valorParametro(params, 'sdr_valor_reuniao', aceite.sdrId, aceite.aceitaEm)
+
+  /*
+   * A CHAVE DA ORIGEM VENCE, E A AUSÊNCIA DELA NÃO É ZERO.
+   *
+   * Quem não publicar `sdr_valor_reuniao_inbound` continua pagando o valor padrão às
+   * reuniões de inbound — que é o comportamento de antes desta distinção. Tratar a
+   * ausência como "R$ 0 para inbound" faria a migração desta régua zerar a comissão de
+   * todo mundo no dia em que subisse, sem ninguém ter decidido isso.
+   */
+  const chaveOrigem = chaveValorReuniao(aceite.leadOrigem)
+  const porOrigem = chaveOrigem
+    ? valorParametro(params, chaveOrigem, aceite.sdrId, aceite.aceitaEm)
+    : null
+  const chave = porOrigem !== null ? (chaveOrigem as string) : 'sdr_valor_reuniao'
+  const valor = porOrigem ?? valorParametro(params, 'sdr_valor_reuniao', aceite.sdrId, aceite.aceitaEm)
   if (valor === null || valor <= 0) return null
 
   return {
@@ -938,7 +1018,8 @@ export function lancamentoSdrReuniao(
     nf_numero: null,
     descricao:
       `Reunião ${aceite.automatico ? 'aceita por decurso de prazo' : 'aceita'} — ` +
-      `${aceite.empresaNome ?? 'empresa'}`,
+      `${aceite.empresaNome ?? 'empresa'}` +
+      (aceite.leadOrigem ? ` (${ehLeadInbound(aceite.leadOrigem) ? 'inbound' : 'outbound'})` : ''),
     gestao_operacao: null,
     fase: null,
     valor_cedido: null,
@@ -949,7 +1030,86 @@ export function lancamentoSdrReuniao(
     valor: arredondar(valor),
     params_snapshot: {
       sdr_valor_reuniao: valor,
+      // A CHAVE, e não só o número: numa contestação a pergunta é "por que R$ 20 e não
+      // R$ 60?", e a resposta é qual régua se aplicou, não quanto ela valia.
+      chave: chave,
+      lead_origem: aceite.leadOrigem ?? null,
       aceite_automatico: aceite.automatico,
+      papel: 'SDR',
+    },
+  }
+}
+
+// ─── Penalidade: reunião marcada com quem não tinha fit ─────────────────────
+
+export interface ReuniaoSemFit {
+  aceiteId: string
+  sdrId: string
+  sdrIsIa: boolean
+  empresaId: string
+  empresaNome: string | null
+  /** Quando alguém julgou o lead sem fit. É a data que define a competência. */
+  semFitEm: string
+  /** O que a reunião pagou. Entra no snapshot para a linha ser contestável. */
+  valorPagoNaReuniao: number
+}
+
+/**
+ * O desconto por ter levado ao closer uma reunião que não deveria ter existido.
+ *
+ * ─── TRÊS DECISÕES QUE MEXEM COM DINHEIRO ───────────────────────────────────
+ *
+ * A COMPETÊNCIA É A DO JULGAMENTO, não a da reunião. É a mesma regra do estorno: reabrir
+ * uma competência fechada para descontar reescreveria uma folha aprovada. O desconto
+ * aparece no mês em que se descobriu.
+ *
+ * O VALOR NÃO É LIMITADO AO QUE A REUNIÃO PAGOU. Uma penalidade que nunca passa do que
+ * foi pago é uma devolução, e devolução não desestimula nada: no pior caso o SDR fica
+ * no zero, exatamente como ficaria não marcando reunião nenhuma. Quem publica o número
+ * decide o tamanho do desincentivo — e é por isso que o parâmetro é separado do valor
+ * da reunião em vez de ser um percentual dele.
+ *
+ * SÓ ONDE HOUVE PAGAMENTO. Quem chama esta função filtra por reunião que gerou
+ * lançamento. Descontar de um SDR que não recebeu por aquela reunião — porque o
+ * parâmetro do dia não existia, por exemplo — o deixaria líquido negativo por um
+ * trabalho que a casa nunca precificou.
+ */
+export function lancamentoPenalidadeSemFit(
+  e: ReuniaoSemFit,
+  params: readonly CommissionParam[],
+): LancamentoV2 | null {
+  if (e.sdrIsIa) return null
+  const penalidade = valorParametro(params, 'sdr_penalidade_sem_fit', e.sdrId, e.semFitEm)
+  if (penalidade === null || penalidade <= 0) return null
+
+  return {
+    vendedor_id: e.sdrId,
+    papel: 'SDR',
+    competencia: competenciaSp(e.semFitEm),
+    origem_tipo: 'sdr_penalidade_sem_fit',
+    // O MESMO `origem_id` da reunião. Com a unicidade (papel, origem_tipo, origem_id,
+    // vendedor_id), reavaliar o fit dez vezes não cobra dez penalidades.
+    origem_id: e.aceiteId,
+    evento_em: e.semFitEm,
+    empresa_id: e.empresaId,
+    cedente_cnpj: null,
+    cedente_nome: null,
+    nf_numero: null,
+    descricao: `Reunião sem fit — ${e.empresaNome ?? 'empresa'}`,
+    gestao_operacao: null,
+    fase: null,
+    valor_cedido: null,
+    anticipation_days: null,
+    vop: null,
+    taxa_brl_por_mm: null,
+    share_pct: 100,
+    // O sinal é do motor, nunca do parâmetro: um número negativo publicado por engano
+    // viraria um bônus silencioso.
+    valor: arredondar(-Math.abs(penalidade)),
+    params_snapshot: {
+      sdr_penalidade_sem_fit: penalidade,
+      valor_pago_na_reuniao: e.valorPagoNaReuniao,
+      aceite_id: e.aceiteId,
       papel: 'SDR',
     },
   }
@@ -1120,8 +1280,22 @@ export function explicarCalculo(l: {
       ? `Estorno integral de ${brl(Math.abs(l.valor))} (${String(snap.motivo ?? 'cessão revertida')}).`
       : `Estorno de ${num(prop * 100, 1)}% do lançamento original = ${brl(l.valor)}.`
   }
+  if (l.origem_tipo === 'sdr_penalidade_sem_fit') {
+    const pago = Number(snap.valor_pago_na_reuniao ?? 0)
+    return (
+      `Penalidade de ${brl(Math.abs(l.valor))} por reunião com lead julgado sem fit. ` +
+      `A reunião havia pago ${brl(pago)}.`
+    )
+  }
   if (l.origem_tipo === 'sdr_reuniao' || l.origem_tipo === 'sdr_conta_fechada') {
-    return `Valor fixo de ${brl(l.valor)} — não depende de VOP.`
+    const chave = typeof snap.chave === 'string' ? snap.chave : null
+    const regua =
+      chave === 'sdr_valor_reuniao_inbound'
+        ? ' (régua de inbound)'
+        : chave === 'sdr_valor_reuniao_outbound'
+          ? ' (régua de outbound)'
+          : ''
+    return `Valor fixo de ${brl(l.valor)}${regua} — não depende de VOP.`
   }
   if (l.origem_tipo === 'ajuste_manual') {
     return `Ajuste manual de ${brl(l.valor)}, lançado por um gestor.`

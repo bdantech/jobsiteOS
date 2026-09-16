@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { buscarVendedoresVisiveis, comercialKeys } from './queries'
+import { buscarVendedoresDaComissao, comercialKeys } from './queries'
 import { Extrato } from './comissao/extrato'
 import { FilaAceite } from './comissao/fila-aceite'
 import { Historico } from './comissao/historico'
@@ -54,11 +54,26 @@ export function Comissoes({
   const [verVendedor, setVerVendedor] = React.useState<string>(ehGestor ? '' : (vendedorId ?? ''))
   const [competencia, setCompetencia] = React.useState<string>(competenciaCorrente())
 
+  /*
+   * QUEM EU POSSO VER É PERGUNTA DO BANCO, NÃO DEDUÇÃO DO CARGO (0210).
+   *
+   * O seletor só existia para gestor. Mas um closer com acesso cruzado publicado — o
+   * Fábio enxerga a folha do SDR e a do originador — já recebia as linhas dos três pelo
+   * RLS e ficava sem como separá-las: o extrato vinha somado, sem filtro e sem dizer
+   * que estava somando.
+   *
+   * `comercial_vendedores_da_comissao` responde pela régua do DINHEIRO, que é mais
+   * curta que a do trabalho. Todo mundo consulta, porque todo mundo precisa saber se
+   * enxerga mais de uma folha — e é isso, e não o cargo, que decide se o controle
+   * aparece.
+   */
   const visiveis = useQuery({
     queryKey: comercialKeys.visiveis(),
-    queryFn: buscarVendedoresVisiveis,
-    enabled: ehGestor,
+    queryFn: buscarVendedoresDaComissao,
   })
+
+  // Um item é a própria pessoa: um seletor de uma opção é um controle que não controla.
+  const podeEscolher = (visiveis.data ?? []).length > 1
 
   const alvo = verVendedor || null
   const ehCorrente = competencia === competenciaCorrente()
@@ -87,16 +102,21 @@ export function Comissoes({
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          {ehGestor ? (
+          {podeEscolher ? (
             <div className="space-y-1">
               <label htmlFor="ver-vendedor" className="text-xs text-muted-foreground">Ver</label>
               <select
                 id="ver-vendedor"
                 value={verVendedor}
                 onChange={(e) => setVerVendedor(e.target.value)}
-                className="h-9 w-56 rounded-md border border-input bg-background px-2 text-sm"
+                className="h-9 w-56 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
               >
-                <option value="">Consolidado (todos)</option>
+                {/*
+                  "Consolidado" some para quem não é gestor. Para o Fábio ele somaria a
+                  folha dele com a do SDR e a do originador num número que não é de
+                  ninguém — e o total da empresa é uma pergunta de gestor.
+                */}
+                {ehGestor ? <option value="">Consolidado (todos)</option> : null}
                 {(visiveis.data ?? []).map((v) => (
                   <option key={v.id} value={v.id}>{v.nome}</option>
                 ))}

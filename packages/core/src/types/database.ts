@@ -13495,6 +13495,7 @@ export type Database = {
         Returns: Json
       }
       comercial_vendedores_visiveis: { Args: never; Returns: Json }
+      comercial_vendedores_da_comissao: { Args: never; Returns: Json }
       comissao_painel_v2: {
         Args: { p_meses?: number; p_vendedor_id?: string }
         Returns: Json

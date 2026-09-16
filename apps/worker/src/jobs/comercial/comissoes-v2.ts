@@ -7,6 +7,7 @@ import {
   estornosDaCessao,
   gestaoNaData,
   lancamentoSdrContaFechada,
+  lancamentoPenalidadeSemFit,
   lancamentoSdrReuniao,
   lancamentosDaCessao,
   sugereRevisao,
@@ -649,6 +650,8 @@ export interface ResultadoAceitesSdr {
   abertos: number
   expirados: number
   lancados: number
+  /** Reuniões já pagas cujo lead foi depois julgado sem fit. */
+  penalidades: number
 }
 
 /**
@@ -662,7 +665,7 @@ export interface ResultadoAceitesSdr {
  */
 export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
   const params = await carregarParams()
-  const acc: ResultadoAceitesSdr = { abertos: 0, expirados: 0, lancados: 0 }
+  const acc: ResultadoAceitesSdr = { abertos: 0, expirados: 0, lancados: 0, penalidades: 0 }
 
   const slaHoras = valorParametro(params, 'sdr_sla_recusa_horas', null, new Date()) ?? 48
 
@@ -731,12 +734,18 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
     decidido_em: string | null
     prazo_em: string
     automatico: boolean
+    lead_origem: string | null
   }>(
+    // `l.origem` decide entre a régua de inbound e a de outbound. Vem por join e não
+    // por coluna copiada no aceite: a origem do lead não muda depois de criado, então
+    // não há retrato a congelar — e uma cópia seria mais um lugar para divergir.
     `select a.id, a.sdr_id, v.is_ia, a.empresa_id, e.razao_social as empresa,
-            a.decidido_em, a.prazo_em, a.aceite_automatico as automatico
+            a.decidido_em, a.prazo_em, a.aceite_automatico as automatico,
+            l.origem as lead_origem
      from sdr_aceites a
      join vendedores v on v.id = a.sdr_id
      join empresas e on e.id = a.empresa_id
+     join sdr_leads l on l.id = a.sdr_lead_id
      where a.status = 'aceita' and a.lancado_em is null`,
   )
   for (const a of aLancar) {
@@ -750,6 +759,7 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
         empresaNome: a.empresa,
         aceitaEm,
         automatico: a.automatico,
+        leadOrigem: a.lead_origem,
       },
       params,
     )
@@ -777,6 +787,81 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
         motivo: 'Reunião aceita: o SDR passa a titularizar este sacado enquanto a janela durar.',
       })
     }
+  }
+
+  /*
+   * ── 4. Penalizar a reunião cujo lead se revelou SEM FIT ──
+   *
+   * O fato gerador é o JULGAMENTO, não a reunião: alguém olhou a empresa depois da
+   * conversa e disse que ela não é cliente. Por isso a data que conta é
+   * `fit_definido_em`, e a competência sai dela.
+   *
+   * SÓ ONDE A REUNIÃO PAGOU (`l.valor > 0`). Descontar de um SDR que não recebeu por
+   * aquela reunião — porque o parâmetro do dia não existia, ou porque ela é de antes de
+   * a régua existir — o deixaria líquido negativo por trabalho que a casa nunca
+   * precificou. Quem não ganhou não devolve.
+   *
+   * NÃO PRECISA DE MARCA DE "já cobrei": a unicidade
+   * (papel, origem_tipo, origem_id, vendedor_id) usa o id do ACEITE, então reavaliar o
+   * fit dez vezes continua sendo uma penalidade só. É a mesma trava que impede o
+   * lançamento da reunião de duplicar.
+   */
+  const { rows: semFit } = await pool.query<{
+    id: string
+    sdr_id: string
+    is_ia: boolean
+    empresa_id: string
+    empresa: string | null
+    sem_fit_em: string
+    valor_pago: string
+  }>(
+    `select a.id, a.sdr_id, v.is_ia, a.empresa_id, e.razao_social as empresa,
+            coalesce(l.fit_definido_em, l.encerrado_em, l.atualizado_em) as sem_fit_em,
+            pago.valor as valor_pago
+     from sdr_aceites a
+     join sdr_leads l on l.id = a.sdr_lead_id
+     join vendedores v on v.id = a.sdr_id
+     join empresas e on e.id = a.empresa_id
+     join lateral (
+       select sum(c.valor) as valor
+         from comissao_lancamentos_v2 c
+        where c.origem_tipo = 'sdr_reuniao' and c.origem_id = a.id and c.vendedor_id = a.sdr_id
+     ) pago on true
+     where a.status = 'aceita'
+       and l.fit is false
+       and coalesce(pago.valor, 0) > 0
+       and not exists (
+         select 1 from comissao_lancamentos_v2 p
+          where p.origem_tipo = 'sdr_penalidade_sem_fit'
+            and p.origem_id = a.id and p.vendedor_id = a.sdr_id
+       )`,
+  )
+
+  for (const s of semFit) {
+    const l = lancamentoPenalidadeSemFit(
+      {
+        aceiteId: s.id,
+        sdrId: s.sdr_id,
+        sdrIsIa: s.is_ia,
+        empresaId: s.empresa_id,
+        empresaNome: s.empresa,
+        semFitEm: s.sem_fit_em,
+        valorPagoNaReuniao: Number(s.valor_pago) || 0,
+      },
+      params,
+    )
+    if (!l) continue
+    await gravar([l])
+    acc.penalidades++
+    await emitirEvento(s.empresa_id, EVENTO_TIPOS.SDR_ACEITE_PENDENTE, {
+      resumo:
+        `Lead julgado sem fit depois da reunião: ${Math.abs(l.valor).toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })} descontados do SDR.`,
+      url: '/comercial/comissoes',
+      aceite_id: s.id,
+    })
   }
 
   logger.info(acc, 'Fila de aceite do SDR processada.')

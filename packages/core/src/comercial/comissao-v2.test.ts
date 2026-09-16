@@ -14,6 +14,7 @@ import {
   gestaoNaData,
   idadeEmMeses,
   lancamentoSdrContaFechada,
+  lancamentoPenalidadeSemFit,
   lancamentoSdrReuniao,
   lancamentosDaCessao,
   resolverParametro,
@@ -831,4 +832,116 @@ test('a cessão revertida estorna o auxiliar junto com o closer', () => {
   const doAux = estornos.find((e) => e.papel === 'AUXILIAR')!
   assert.equal(doAux.valor, -225)
   assert.equal(doAux.vendedor_id, 'aux-1')
+})
+
+// ─── A régua por origem do lead, e a penalidade por reunião sem fit ──────────
+
+const BASE_ACEITE = {
+  aceiteId: 'ac-1',
+  sdrId: 'sdr-1',
+  sdrIsIa: false,
+  empresaId: 'sacado-1',
+  empresaNome: 'Construtora Alfa',
+  aceitaEm: '2026-03-05T12:00:00Z',
+  automatico: false,
+}
+
+const PARAMS_POR_ORIGEM = [
+  ...PARAMS,
+  param({ chave: 'sdr_valor_reuniao_inbound', valor: 60, unidade: 'BRL' }),
+  param({ chave: 'sdr_valor_reuniao_outbound', valor: 300, unidade: 'BRL' }),
+  param({ chave: 'sdr_penalidade_sem_fit', valor: 150, unidade: 'BRL' }),
+]
+
+test('inbound e outbound pagam réguas diferentes, e a linha diz qual', () => {
+  const dentro = lancamentoSdrReuniao({ ...BASE_ACEITE, leadOrigem: 'inbound' }, PARAMS_POR_ORIGEM)!
+  const fora = lancamentoSdrReuniao({ ...BASE_ACEITE, leadOrigem: 'distribuicao' }, PARAMS_POR_ORIGEM)!
+  assert.equal(dentro.valor, 60)
+  assert.equal(fora.valor, 300)
+  assert.equal(dentro.params_snapshot.chave, 'sdr_valor_reuniao_inbound')
+  assert.equal(fora.params_snapshot.chave, 'sdr_valor_reuniao_outbound')
+  assert.match(dentro.descricao, /\(inbound\)/)
+  assert.match(fora.descricao, /\(outbound\)/)
+})
+
+test('lead criado à mão pelo SDR é outbound: ele foi atrás', () => {
+  const manual = lancamentoSdrReuniao({ ...BASE_ACEITE, leadOrigem: 'manual' }, PARAMS_POR_ORIGEM)!
+  assert.equal(manual.valor, 300)
+})
+
+test('sem a chave da origem publicada, a reunião continua pagando o padrão', () => {
+  // A troca mais perigosa desta régua: subir a distinção e zerar a comissão de todo
+  // mundo porque ninguém publicou as duas chaves novas.
+  const so_padrao = lancamentoSdrReuniao({ ...BASE_ACEITE, leadOrigem: 'inbound' }, PARAMS)!
+  assert.equal(so_padrao.valor, 200)
+  assert.equal(so_padrao.params_snapshot.chave, 'sdr_valor_reuniao')
+})
+
+test('lead sem origem não vira outbound por chute — cai no padrão', () => {
+  const semOrigem = lancamentoSdrReuniao({ ...BASE_ACEITE, leadOrigem: null }, PARAMS_POR_ORIGEM)!
+  assert.equal(semOrigem.valor, 200)
+  assert.equal(semOrigem.params_snapshot.chave, 'sdr_valor_reuniao')
+  assert.equal(semOrigem.descricao.includes('('), false)
+})
+
+test('a penalidade é negativa, e o sinal é do motor — não do parâmetro', () => {
+  const base = {
+    aceiteId: 'ac-1',
+    sdrId: 'sdr-1',
+    sdrIsIa: false,
+    empresaId: 'sacado-1',
+    empresaNome: 'Construtora Alfa',
+    semFitEm: '2026-04-02T12:00:00Z',
+    valorPagoNaReuniao: 300,
+  }
+  const l = lancamentoPenalidadeSemFit(base, PARAMS_POR_ORIGEM)!
+  assert.equal(l.valor, -150)
+  assert.equal(l.origem_tipo, 'sdr_penalidade_sem_fit')
+
+  /*
+   * Publicado NEGATIVO por engano, a penalidade simplesmente não existe.
+   *
+   * A alternativa era ler o módulo e cobrar 150 assim mesmo. Seria pior: um sinal
+   * trocado na tela de parâmetros passaria a descontar de alguém sem que ninguém
+   * tivesse decidido isso. Valor estranho não deve produzir dinheiro — nem a favor,
+   * nem contra. O `-Math.abs()` no motor é a segunda trava, para o caso de um valor
+   * negativo chegar por outro caminho e virar bônus.
+   */
+  const invertido = lancamentoPenalidadeSemFit(base, [
+    ...PARAMS,
+    param({ chave: 'sdr_penalidade_sem_fit', valor: -150, unidade: 'BRL' }),
+  ])
+  assert.equal(invertido, null)
+})
+
+test('a penalidade cai na competência do JULGAMENTO, não na da reunião', () => {
+  // Reunião em março, fit avaliado em abril: descontar em março reabriria uma folha
+  // que pode já ter sido aprovada.
+  const l = lancamentoPenalidadeSemFit(
+    {
+      aceiteId: 'ac-1',
+      sdrId: 'sdr-1',
+      sdrIsIa: false,
+      empresaId: 'sacado-1',
+      empresaNome: 'Construtora Alfa',
+      semFitEm: '2026-04-02T12:00:00Z',
+      valorPagoNaReuniao: 300,
+    },
+    PARAMS_POR_ORIGEM,
+  )!
+  assert.equal(l.competencia, '2026-04-01')
+})
+
+test('sem penalidade publicada não há desconto, e SDR de IA nunca é penalizado', () => {
+  const base = {
+    aceiteId: 'ac-1',
+    sdrId: 'sdr-1',
+    sdrIsIa: false,
+    empresaId: 'sacado-1',
+    empresaNome: null,
+    semFitEm: '2026-04-02T12:00:00Z',
+    valorPagoNaReuniao: 300,
+  }
+  assert.equal(lancamentoPenalidadeSemFit(base, PARAMS), null)
+  assert.equal(lancamentoPenalidadeSemFit({ ...base, sdrIsIa: true }, PARAMS_POR_ORIGEM), null)
 })

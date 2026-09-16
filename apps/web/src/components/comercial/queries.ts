@@ -88,6 +88,21 @@ export async function buscarVendedoresVisiveis(): Promise<VendedorVisivel[]> {
   return (data ?? []) as unknown as VendedorVisivel[]
 }
 
+/**
+ * Os vendedores cuja FOLHA quem está logado pode abrir — régua mais curta que a do
+ * trabalho (0210).
+ *
+ * O auxiliar enxerga o funil do closer e os acessos cruzados dele, porque é com isso
+ * que ele trabalha. Remuneração de terceiro não entra nessa conta, e por isso a tela de
+ * comissões pergunta por aqui e não por `buscarVendedoresVisiveis`.
+ */
+export async function buscarVendedoresDaComissao(): Promise<VendedorVisivel[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('comercial_vendedores_da_comissao')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as VendedorVisivel[]
+}
+
 export async function buscarVendedores(): Promise<Tables<'vendedores'>[]> {
   const supabase = createClient()
   const { data, error } = await supabase
