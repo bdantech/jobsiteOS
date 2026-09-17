@@ -218,3 +218,24 @@ export async function buscarPainelCredito(): Promise<PainelCredito> {
 
   return p
 }
+
+
+/**
+ * Baixa um documento da análise.
+ *
+ * O bucket `analise-docs` é PRIVADO, então não existe URL pública a colar num link: o
+ * caminho precisa ser assinado a cada clique. Cinco minutos é curto de propósito — a URL
+ * assinada vale para quem a tiver, e uma que dura horas é um documento contábil de
+ * terceiro circulando em histórico de navegador.
+ *
+ * `download` no lugar de abrir na aba: o navegador recebe o Content-Disposition com o
+ * nome ORIGINAL do arquivo, e não o caminho interno com timestamp que ninguém reconhece.
+ */
+export async function baixarDocAnalise(caminho: string, nomeArquivo?: string | null): Promise<string> {
+  const supabase = createClient()
+  const { data, error } = await supabase.storage
+    .from('analise-docs')
+    .createSignedUrl(caminho, 300, { download: nomeArquivo ?? caminho.split('/').pop() ?? true })
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Não foi possível gerar o link.')
+  return data.signedUrl
+}

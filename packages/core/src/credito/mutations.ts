@@ -4,6 +4,7 @@ import {
   concluirAnaliseSchema,
   definirExClienteMotivoSchema,
   editarParecerSchema,
+  definirLimiteAnaliseSchema,
   moverAnaliseSchema,
   publicarCondicoesSchema,
   registrarDecisaoCreditoSchema,
@@ -68,6 +69,16 @@ export async function moverAnalise(
 ): Promise<Tables<'analises_credito'>> {
   const dados = parseOuFalhar(moverAnaliseSchema, input)
   const { data, error } = await supabase.rpc('app_mover_analise', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_credito'>
+}
+
+export async function definirLimiteAnalise(
+  supabase: Supabase,
+  input: unknown,
+): Promise<Tables<'analises_credito'>> {
+  const dados = parseOuFalhar(definirLimiteAnaliseSchema, input)
+  const { data, error } = await supabase.rpc('app_definir_limite_analise', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'analises_credito'>
 }

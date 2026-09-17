@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, FileText } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileText } from 'lucide-react'
 import type { Tables } from '@jobsiteos/core'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { buscarCreditoConfig, creditoKeys } from '../queries'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'
+import { baixarDocAnalise, buscarCreditoConfig, creditoKeys } from '../queries'
 
 /**
  * O diálogo de envio à seguradora, com a escolha dos documentos.
@@ -35,6 +38,12 @@ import { buscarCreditoConfig, creditoKeys } from '../queries'
  * este diálogo. Quem quiser reenviar, marca.
  */
 
+const BRL = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 0,
+})
+
 interface TipoDoc {
   id: string
   label: string
@@ -45,6 +54,7 @@ export function DialogoEnviarSeguradora({
   onOpenChange,
   nome,
   docs,
+  limiteSolicitado,
   enviando,
   onConfirmar,
 }: {
@@ -52,8 +62,10 @@ export function DialogoEnviarSeguradora({
   onOpenChange: (v: boolean) => void
   nome: string
   docs: Tables<'analise_docs'>[]
+  /** O que o COMERCIAL pediu ao abrir a análise. É só o ponto de partida. */
+  limiteSolicitado: number | null
   enviando: boolean
-  onConfirmar: (docIds: string[]) => void
+  onConfirmar: (docIds: string[], limite: number) => void
 }) {
   const config = useQuery({
     queryKey: creditoKeys.config(),
@@ -75,6 +87,40 @@ export function DialogoEnviarSeguradora({
     if (!aberto) return
     setMarcados(new Set(docs.filter((d) => !d.enviado_seguradora_em).map((d) => d.id)))
   }, [aberto, docs])
+
+  /*
+   * O LIMITE NASCE DO QUE O COMERCIAL PEDIU, E TERMINA NO QUE O ANALISTA DECIDE.
+   *
+   * Quem digitou o número original abriu a análise no funil, antes de existir balanço,
+   * exposição ou protesto na mesa. Quem aperta este botão leu tudo isso. Herdar o valor
+   * é o certo — ninguém deveria redigitar o que já está lá —, mas travá-lo faria a
+   * Atradius receber um pedido que a pessoa que o enviou não defende.
+   *
+   * Renasce a cada abertura, pelo mesmo motivo da seleção de documentos: um campo que
+   * guarda o que foi digitado e abandonado na vez anterior manda um número que ninguém
+   * conferiu nesta.
+   */
+  const [limite, setLimite] = React.useState('')
+  React.useEffect(() => {
+    if (!aberto) return
+    setLimite(limiteSolicitado != null && limiteSolicitado > 0 ? String(limiteSolicitado) : '')
+  }, [aberto, limiteSolicitado])
+
+  const limiteNum = Number(limite.replace(',', '.'))
+  const limiteValido = Number.isFinite(limiteNum) && limiteNum > 0
+  const mudou = limiteValido && limiteNum !== Number(limiteSolicitado ?? 0)
+
+  const [baixando, setBaixando] = React.useState<string | null>(null)
+  async function baixar(id: string, caminho: string, nomeArquivo: string | null) {
+    setBaixando(id)
+    try {
+      window.open(await baixarDocAnalise(caminho, nomeArquivo), '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível abrir o documento.')
+    } finally {
+      setBaixando(null)
+    }
+  }
 
   const alternar = (id: string) =>
     setMarcados((atual) => {
@@ -100,6 +146,41 @@ export function DialogoEnviarSeguradora({
         </DialogHeader>
 
         <p className="rounded-md border p-3 text-sm">{nome}</p>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="limite-envio">Limite a pedir</Label>
+          <Input
+            id="limite-envio"
+            type="number"
+            min={1}
+            step={1000}
+            inputMode="numeric"
+            value={limite}
+            onChange={(e) => setLimite(e.target.value)}
+            className="tabular-nums"
+          />
+          <p className="text-xs text-muted-foreground">
+            {limiteValido ? (
+              <>
+                {BRL.format(limiteNum)}
+                {mudou ? (
+                  <>
+                    {' '}
+                    · substitui os{' '}
+                    <strong>{BRL.format(Number(limiteSolicitado ?? 0))}</strong> que o comercial
+                    pediu, e o novo valor fica registrado na análise
+                  </>
+                ) : (
+                  ' · foi o que o comercial pediu'
+                )}
+              </>
+            ) : (
+              <span className="text-destructive">
+                Informe um limite maior que zero — é ele que vai no pedido.
+              </span>
+            )}
+          </p>
+        </div>
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -145,8 +226,29 @@ export function DialogoEnviarSeguradora({
                         <FileText className="size-3 shrink-0 text-muted-foreground" aria-hidden />
                         <span className="truncate">{rotulos.get(d.tipo) ?? d.tipo}</span>
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {d.nome_arquivo ?? d.arquivo_url}
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                          {d.nome_arquivo ?? d.arquivo_url}
+                        </span>
+                        {/*
+                          Conferir ANTES de mandar é a razão de este diálogo existir — e
+                          "é este arquivo mesmo?" não se responde pelo nome quando a pasta
+                          tem três PDFs parecidos. O botão para o clique no label para não
+                          desmarcar o documento que a pessoa quis abrir.
+                        */}
+                        <button
+                          type="button"
+                          className="shrink-0 text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                          disabled={baixando === d.id}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void baixar(d.id, d.arquivo_url, d.nome_arquivo)
+                          }}
+                        >
+                          <Download className="mr-0.5 inline size-3" aria-hidden />
+                          {baixando === d.id ? 'abrindo…' : 'abrir'}
+                        </button>
                       </span>
                       {d.enviado_seguradora_em ? (
                         <span className="mt-0.5 flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-500">
@@ -178,7 +280,10 @@ export function DialogoEnviarSeguradora({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => onConfirmar(escolhidos)} disabled={enviando}>
+            <Button
+              onClick={() => onConfirmar(escolhidos, limiteNum)}
+              disabled={enviando || !limiteValido}
+            >
               {enviando ? 'Enviando…' : 'Enviar'}
             </Button>
           </div>

@@ -13496,6 +13496,10 @@ export type Database = {
       }
       comercial_vendedores_visiveis: { Args: never; Returns: Json }
       comercial_vendedores_da_comissao: { Args: never; Returns: Json }
+      app_definir_limite_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+      }
       comissao_painel_v2: {
         Args: { p_meses?: number; p_vendedor_id?: string }
         Returns: Json

@@ -6,6 +6,7 @@ import {
   ativarScorecardVersao,
   canAccessRoute,
   concluirAnalise,
+  definirLimiteAnalise,
   criarApiKey,
   criarApiKeySchema,
   enviarWebhookTeste,
@@ -139,11 +140,33 @@ export async function enviarAnalisesAction(
    * pedido, os documentos eu levo por outro canal" — e por isso ela não é recusada.
    */
   docIds: string[] = [],
+  /**
+   * O limite que o ANALISTA decidiu pedir, no diálogo de envio.
+   *
+   * Gravado ANTES de acordar o worker, e falhando aqui o envio não sai: o worker lê
+   * `limite_solicitado` do banco, então mandar primeiro e corrigir depois submeteria à
+   * Atradius o número velho — e o pedido lá fora não se reescreve.
+   *
+   * Só faz sentido com UMA análise: o diálogo é de uma, e um limite único aplicado a um
+   * lote seria o mesmo número para empresas diferentes.
+   */
+  limiteSolicitado?: number | null,
 ): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
-  const { erro } = await autorizar()
-  if (erro) return erro
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
   if (!analiseIds.length) {
     return { ok: false, message: 'Selecione ao menos uma análise para enviar.', code: 'invalid' }
+  }
+  if (limiteSolicitado != null && analiseIds.length === 1) {
+    try {
+      await definirLimiteAnalise(supabase, {
+        id: analiseIds[0],
+        limite_solicitado: limiteSolicitado,
+        origem: 'envio',
+      })
+    } catch (error) {
+      return falhaDe(error)
+    }
   }
   const r = await dispararEnviarAnalises(analiseIds, docIds)
   revalidatePath('/credito')

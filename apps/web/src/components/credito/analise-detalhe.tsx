@@ -132,6 +132,7 @@ function Acoes({
   empresaId,
   temGrupo,
   docs,
+  limiteSolicitado,
   protestoConsultadoEm,
   recenciaDias,
   anosAtrasPadrao,
@@ -145,6 +146,7 @@ function Acoes({
   empresaId: string | null
   temGrupo: boolean
   docs: Tables<'analise_docs'>[]
+  limiteSolicitado: number | null
   protestoConsultadoEm: string | null
   recenciaDias: number
   anosAtrasPadrao: number
@@ -161,9 +163,9 @@ function Acoes({
   // outros estágios seria desenhar um clique que não faz nada.
   const podeEnviar = podeEnviarASeguradora(estagio)
 
-  async function enviar(docIds: string[]) {
+  async function enviar(docIds: string[], limite: number) {
     setEnviando(true)
-    const r = await enviarAnalisesAction([analiseId], docIds)
+    const r = await enviarAnalisesAction([analiseId], docIds, limite)
     setEnviando(false)
     setConfirmandoEnvio(false)
     if (!r.ok) {
@@ -277,8 +279,9 @@ function Acoes({
         onOpenChange={setConfirmandoEnvio}
         nome={nome}
         docs={docs}
+        limiteSolicitado={limiteSolicitado}
         enviando={enviando}
-        onConfirmar={(docIds) => void enviar(docIds)}
+        onConfirmar={(docIds, limite) => void enviar(docIds, limite)}
       />
     </>
   )
@@ -418,6 +421,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             empresaId={empresa?.id ?? null}
             temGrupo={(data.metricas?.grupo_spes_total ?? 0) > 0}
             docs={data.docs}
+            limiteSolicitado={esteira.limite_solicitado === null ? null : Number(esteira.limite_solicitado)}
             protestoConsultadoEm={data.protestos?.consultado_em ?? null}
             recenciaDias={data.parametros_ativos?.protestos?.recencia_dias ?? 90}
             anosAtrasPadrao={data.parametros_ativos?.protestos?.spes_anos_atras_padrao ?? 5}

@@ -3,13 +3,13 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, FileUp, ScanLine, Send } from 'lucide-react'
+import { AlertTriangle, Download, FileUp, ScanLine, Send } from 'lucide-react'
 import type { Tables } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { registrarDocAction } from '@/actions/credito'
 import { createClient } from '@/lib/supabase/client'
-import { buscarCreditoConfig, creditoKeys } from '../queries'
+import { baixarDocAnalise, buscarCreditoConfig, creditoKeys } from '../queries'
 import { analisePropriaKeys } from './queries'
 
 /**
@@ -94,6 +94,28 @@ export function Documentos({
   const faltamObrigatorios = tipos.filter((t) => t.obrigatorio && !enviados.has(t.id))
   const faltamEssenciais = tipos.filter((t) => t.essencial && !enviados.has(t.id))
 
+  /*
+   * A URL é assinada NO CLIQUE, e não no render.
+   *
+   * Assinar a lista inteira ao abrir a aba geraria uma URL válida por documento que
+   * ninguém pediu — e elas continuariam valendo depois de a pessoa sair da tela. Aqui a
+   * assinatura acontece quando alguém realmente quer o arquivo, e dura cinco minutos.
+   */
+  const [baixando, setBaixando] = React.useState<string | null>(null)
+  async function baixar(id: string, caminho: string, nome: string | null) {
+    setBaixando(id)
+    try {
+      const url = await baixarDocAnalise(caminho, nome)
+      // `noopener` porque a aba de destino é um storage assinado; não há nada lá que
+      // precise falar com esta janela.
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível baixar o documento.')
+    } finally {
+      setBaixando(null)
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -153,11 +175,22 @@ export function Documentos({
                 </div>
                 {doTipo.map((d) => (
                   <div key={d.id} className="space-y-0.5">
-                    <p className="truncate text-xs text-muted-foreground">
-                      {d.nome_arquivo ?? d.arquivo_url} ·{' '}
-                      {new Date(d.enviado_em).toLocaleDateString('pt-BR')}
-                      {d.extraido_em ? ' · já lido pela extração' : ''}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {d.nome_arquivo ?? d.arquivo_url} ·{' '}
+                        {new Date(d.enviado_em).toLocaleDateString('pt-BR')}
+                        {d.extraido_em ? ' · já lido pela extração' : ''}
+                      </p>
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                        disabled={baixando === d.id}
+                        onClick={() => void baixar(d.id, d.arquivo_url, d.nome_arquivo)}
+                      >
+                        <Download className="mr-1 inline size-3" aria-hidden />
+                        {baixando === d.id ? 'Abrindo…' : 'Baixar'}
+                      </button>
+                    </div>
                     {/*
                      * O que foi À SEGURADORA, por documento.
                      *

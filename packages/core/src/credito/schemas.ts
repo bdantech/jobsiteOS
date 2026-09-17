@@ -134,6 +134,24 @@ export const moverAnaliseSchema = z.object({
 export type MoverAnaliseInput = z.infer<typeof moverAnaliseSchema>
 
 /**
+ * O limite pedido, ajustado na HORA DO ENVIO.
+ *
+ * Quem digitou o número original foi o comercial, ao abrir o pedido. Quem manda à
+ * seguradora é o analista, dias depois, com o balanço lido — e é ele quem sabe qual
+ * número faz sentido defender. O RPC recusa fora de `solicitada` e `docs_recebidos`:
+ * depois de enviado, o limite pedido é um fato do outro lado, não uma intenção nossa.
+ */
+export const definirLimiteAnaliseSchema = z.object({
+  id: z.string().uuid(),
+  limite_solicitado: z.coerce
+    .number()
+    .positive()
+    .describe('Limite a pedir à seguradora, em reais. Substitui o que o comercial pediu.'),
+  origem: z.string().trim().max(40).optional().describe('De onde veio o ajuste. Vai ao audit_log.'),
+})
+export type DefinirLimiteAnaliseInput = z.infer<typeof definirLimiteAnaliseSchema>
+
+/**
  * O desfecho que cada decisão do confronto produz na esteira.
  *
  * `operar_limite_reduzido` vira `aprovada_parcial` porque é literalmente isso: um sim
