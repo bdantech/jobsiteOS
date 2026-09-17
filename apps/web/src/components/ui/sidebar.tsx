@@ -439,7 +439,16 @@ const SidebarGroupLabel = React.forwardRef<HTMLDivElement, SidebarGroupLabelProp
           'flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
           // On the rail the label has nowhere to go: it collapses to zero height and fades
           // out, rather than wrapping into an unreadable stack of two-letter lines.
-          'group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0',
+          //
+          // `pointer-events-none` JUNTO, e não é detalhe: o que some é a TINTA, não a
+          // caixa. O `-mt-8` sobe o rótulo 32px, ele passa a ocupar o espaço do último
+          // item do grupo ANTERIOR, e `SidebarGroup` é `relative` — o grupo de baixo
+          // pinta por cima do de cima. Com `opacity-0` isso vira um retângulo invisível
+          // que come o clique (e o tooltip) do item que está embaixo: na barra fechada,
+          // o último módulo de cada seção aparecia e não clicava. Transparente não é o
+          // mesmo que ausente para o hit-testing; esta linha é o que torna as duas
+          // coisas iguais.
+          'group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0',
           className,
         )}
         {...props}
