@@ -78,14 +78,26 @@ export async function montarValoresVariaveis(
           .eq('id', ctx.empresaId)
           .maybeSingle()
       : nada<{ razao_social: string | null; nome_fantasia: string | null; cnpj: string | null }>(),
-    // As notas VIVAS da empresa como fornecedora: `faixa` nula é nota que saiu do
-    // funil, e contá-la faria a mensagem prometer um valor que não existe mais.
+    /*
+     * As notas ANTECIPÁVEIS da empresa como fornecedora.
+     *
+     * O filtro era `faixa is not null`, e ele recusava nota demais: `faixa` é a régua de
+     * PRIORIDADE do funil, e sair dela tem três motivos diferentes gravados ao lado, em
+     * `faixa_motivo`. `expirada` (vence antes do mínimo operável) e `suprimido` são nota
+     * que não se pode oferecer — essas continuam de fora. `fora_das_faixas` é nota viva
+     * que simplesmente não casou com nenhuma regra de faixa, e contá-la é o certo: a
+     * frase do template ("tem N notas de X somando Y") é verdadeira sobre ela.
+     *
+     * Na base de hoje isso é a diferença entre 167 e 297 fornecedores com contato para
+     * quem o template preenche — dois terços dos casos em que a pessoa escolhia o
+     * template e recebia `{qtd_notas}` literal, com o botão de enviar travado.
+     */
     ctx.empresaId
       ? supabase
           .from('notas_funil')
           .select('valor, sacado_nome, sacado_cnpj, fornecedor_nome')
           .eq('fornecedor_empresa_id', ctx.empresaId)
-          .not('faixa', 'is', null)
+          .or('faixa.not.is.null,faixa_motivo.eq.fora_das_faixas')
           .limit(500)
       : nadaLista<NotaResumo>(),
     // A PRÓXIMA reunião, não a última: um lembrete que fala de ontem é ruído.
