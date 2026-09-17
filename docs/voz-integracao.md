@@ -47,31 +47,32 @@ motivo em `voz_ligacoes.motivo_recusa`:
 ```
 kill_switch → suprimido → sem_contato → sem_base_legal → no_procon → telefone_invalido
 → nota_cancelada → nao_operavel → sem_numero_da_nota → sem_vencimento
-→ vencimento_estimado → vencida → sem_taxa → taxa_padrao → sem_desconto → sem_iof
-→ sem_liquido
+→ vencimento_estimado → vencida → sem_taxa → taxa_padrao → sem_desconto → sem_liquido
 ```
 
 Da mais permanente para a mais temporária, como no outro portão. Quem está no Procon nunca
-vai ser ligado; a nota sem IOF passa a poder no dia em que a conta existir.
+vai ser ligado; a nota com vencimento estimado passa a poder no dia em que o XML trouxer a
+data de verdade.
 
 ---
 
-## Três decisões em aberto
+## O IOF: resolvido
 
-Hoje **quase toda nota para em `sem_iof`** — de propósito. São decisões de negócio, não de
-código, e estão aqui para serem decididas em vez de descobertas numa ligação gravada.
+A operação é **cessão de recebível, não empréstimo — e não tem IOF** (confirmado com a OnePay
+em 17/09/2026).
 
-### 1. O líquido não desconta IOF
+Isso resolve o que era o maior bloqueio: o deságio é o custo inteiro, e
+`valor_liquido = valor − receita_esperada` é exatamente o que `valorLiquidoEstimado` já
+calcula. O campo `valor_iof` continua no contrato, opcional e zero, para o caso de um dia
+existir operação que tenha — e, com zero, a Ana **não menciona IOF em nenhum momento**: ela
+não fala de imposto que não existe.
 
-`valorLiquidoEstimado` é `valor − receita_esperada`, e a `receita_esperada` é só o deságio.
-O payload real da plataforma (`/api/v1/anticipations`) tem `netValue`, `discountedAmount` e
-`witholdTaxAmount` certos — mas só existe **depois** que a antecipação foi solicitada, e na
-hora da ligação ela ainda não foi.
+## Duas decisões em aberto
 
-Caminhos: incluir o IOF na estimativa do funil; pedir uma cotação à plataforma antes de
-ligar; ou a Ana não falar o líquido (perde força — é o número que faz decidir na hora).
+São decisões de negócio, não de código, e estão aqui para serem decididas em vez de
+descobertas numa ligação gravada.
 
-### 2. A taxa pode ser a padrão
+### 1. A taxa pode ser a padrão
 
 `calcularReceitaEsperada` cai no default do `antecipacao_config` quando o sacado não tem
 snapshot de crédito, e marca `taxa_padrao: true`. Na tela isso é "estimativa menos
@@ -80,7 +81,7 @@ confiável"; na ligação seria a Ana dizendo uma condição que não é a real.
 O campo `taxa_padrao` do portão existe e hoje chega sempre `false`, porque a `notas_funil`
 não expõe o flag. Enquanto não expuser, a ausência de taxa é o único sinal.
 
-### 3. O vencimento pode ser estimado
+### 2. O vencimento pode ser estimado
 
 `notas_fiscais.vencimento_origem` admite `estimado`. A Ana diz a data em voz alta; com data
 estimada ela erra na frente de quem sabe a data de cor. O portão recusa.

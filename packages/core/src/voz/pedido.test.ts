@@ -33,8 +33,8 @@ const FATOS: FatosDaLigacao = {
     taxa_am: 3.49,
     taxa_padrao: false,
     valor_desconto: 4327.6,
-    valor_iof: 388.12,
-    valor_liquido: 57284.28,
+    valor_iof: 0,
+    valor_liquido: 57672.4,
     cancelada: false,
   },
   fornecedor: {
@@ -72,7 +72,7 @@ test('o pedido sai no formato que a fila da Ana aceita', () => {
   assert.equal(r.pedido.telefone, '+5531988776655')
   assert.equal(r.pedido.oferta.recebiveis[0]?.prazo_dias, 56)
   assert.equal(r.pedido.oferta.recebiveis[0]?.data_emissao, '2026-09-12')
-  assert.equal(r.pedido.oferta.resumo_oferta.valor_liquido_total, 57284.28)
+  assert.equal(r.pedido.oferta.resumo_oferta.valor_liquido_total, 57672.4)
 })
 
 test('a supressão vem antes de tudo que não seja o kill switch', () => {
@@ -130,12 +130,20 @@ test('taxa do default não pode ser dita como condição', () => {
   assert.deepEqual(podeLigar(comNota({ taxa_am: null })), { pode: false, motivo: 'sem_taxa' })
 })
 
-test('sem IOF calculado a ligação não sai', () => {
-  // O líquido do funil hoje é `valor − receita_esperada`, sem IOF: a Ana
-  // prometeria mais do que a proposta paga.
-  assert.deepEqual(podeLigar(comNota({ valor_iof: null })), { pode: false, motivo: 'sem_iof' })
+test('sem o deságio ou sem o líquido a ligação não sai', () => {
   assert.deepEqual(podeLigar(comNota({ valor_liquido: null })), { pode: false, motivo: 'sem_liquido' })
   assert.deepEqual(podeLigar(comNota({ valor_desconto: null })), { pode: false, motivo: 'sem_desconto' })
+})
+
+test('IOF não é exigido: a cessão de recebível não tem', () => {
+  // Confirmado com a OnePay em 17/09/2026. O líquido é face − deságio, que é o
+  // que `valorLiquidoEstimado` já calcula.
+  assert.deepEqual(podeLigar(comNota({ valor_iof: null })), { pode: true })
+  const r = montarPedidoDeLigacao(comNota({ valor_iof: null, valor_liquido: 57672.4 }))
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  assert.equal(r.pedido.oferta.recebiveis[0]?.valor_iof, 0)
+  assert.equal(r.pedido.oferta.recebiveis[0]?.valor_liquido, 57672.4)
 })
 
 test('nota cancelada, não operável ou sem número não vira ligação', () => {
