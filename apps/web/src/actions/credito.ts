@@ -15,6 +15,7 @@ import {
   salvarWebhook,
   moverAnalise,
   registrarDocAnalise,
+  enviarAnaliseManualmente,
   salvarCreditoConfig,
   salvarScorecardVersao,
   solicitarAnalise,
@@ -172,6 +173,33 @@ export async function enviarAnalisesAction(
   const r = await dispararEnviarAnalises(analiseIds, docIds)
   revalidatePath('/credito')
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Marca a análise como enviada à seguradora POR FORA da API (0216).
+ *
+ * O caso é o buyer sem cadastro na Atradius: `resolverBuyer` devolve "não encontrado", e
+ * cadastro de buyer não tem API — o handbook manda falar com o representante. Resolvido
+ * por fora, isto é o que faz a esteira andar.
+ *
+ * Não acorda o worker, e é o ponto: nada sai daqui. A afirmação é de quem clicou, fica
+ * gravada com nome e hora, e a decisão virá pela tela de confronto — o poll não consulta
+ * uma cobertura sem número de caso.
+ */
+export async function enviarAnaliseManualmenteAction(
+  input: unknown,
+): Promise<ActionResult<{ analise: Tables<'analises_credito'> }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const a = await enviarAnaliseManualmente(supabase, input)
+    revalidatePath('/credito')
+    revalidatePath(`/credito/analises/${a.id}`)
+    if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)
+    return { ok: true, data: { analise: a } }
+  } catch (error) {
+    return falhaDe(error)
+  }
 }
 
 /**

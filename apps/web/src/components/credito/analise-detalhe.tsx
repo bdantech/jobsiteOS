@@ -12,6 +12,7 @@ import {
   FileText,
   Gauge,
   Hash,
+  Hand,
   History,
   Mail,
   SendHorizonal,
@@ -47,11 +48,13 @@ import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import {
   enviarAnalisesAction,
+  enviarAnaliseManualmenteAction,
   moverAnaliseAction,
   reenviarDocumentosEmailAction,
 } from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
 import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
+import { DialogoEnvioManual } from './analise-propria/dialogo-envio-manual'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
@@ -206,6 +209,7 @@ function FalhaDeEnvio({
 function Acoes({
   analiseId,
   nome,
+  cnpj,
   estagio,
   statusPropria,
   jaTemPropria,
@@ -220,6 +224,7 @@ function Acoes({
 }: {
   analiseId: string
   nome: string
+  cnpj: string
   estagio: EstagioAnalise
   statusPropria: StatusAnalisePropria | null
   jaTemPropria: boolean
@@ -238,6 +243,8 @@ function Acoes({
   const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false)
   const [enviando, setEnviando] = React.useState(false)
   const [reenviandoDocs, setReenviandoDocs] = React.useState(false)
+  const [confirmandoManual, setConfirmandoManual] = React.useState(false)
+  const [marcandoManual, setMarcandoManual] = React.useState(false)
   const [confirmandoDocs, setConfirmandoDocs] = React.useState(false)
 
   const decidida = ehEstagioDecidido(estagio)
@@ -273,6 +280,31 @@ function Acoes({
       return
     }
     toast.success('Reenvio disparado. O resultado aparece em cada documento.')
+    onMudou()
+  }
+
+  /*
+   * O caminho de quem já mandou POR FORA (0216).
+   *
+   * Vive ao lado de "Enviar à seguradora" e nasce da mesma porta (`podeEnviar`), porque é
+   * a alternativa dela — não um estágio a mais no "Mover para…". Aquele seletor é
+   * escrituração nossa e se desfaz movendo de volta; isto afirma que existe pedido aberto
+   * na Atradius, e nenhum clique aqui desfaz o que está lá fora.
+   */
+  async function marcarManual(v: { observacao?: string; atradius_case_id?: string }) {
+    setMarcandoManual(true)
+    const r = await enviarAnaliseManualmenteAction({ id: analiseId, ...v })
+    setMarcandoManual(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    setConfirmandoManual(false)
+    toast.success(
+      r.data.analise.atradius_case_id
+        ? 'Marcada como enviada. Com o número do cover, o acompanhamento automático assume daqui.'
+        : 'Marcada como enviada. A decisão terá de ser registrada aqui quando a Atradius responder.',
+    )
     onMudou()
   }
 
@@ -338,6 +370,18 @@ function Acoes({
           Enviar à seguradora
         </Button>
       )}
+      {/*
+        A saída para quando a API não tem saída: buyer sem cadastro na Atradius não se
+        resolve por API, e depois de resolver por fora a esteira precisa andar. Mesma
+        porta do envio automático — de "Solicitada" ou "Documentos recebidos" —, que é
+        onde uma análise fica presa quando `resolverBuyer` falha.
+      */}
+      {podeEnviar && (
+        <Button size="sm" variant="outline" onClick={() => setConfirmandoManual(true)}>
+          <Hand className="mr-1.5 size-3.5" aria-hidden />
+          Enviada à mão
+        </Button>
+      )}
       {podeReenviarDocs && (
         <Button
           size="sm"
@@ -398,6 +442,15 @@ function Acoes({
        * aqui que se escolhe QUAIS documentos acompanham o pedido, porque documento de
        * terceiro que sai não volta.
        */}
+      <DialogoEnvioManual
+        aberto={confirmandoManual}
+        onOpenChange={setConfirmandoManual}
+        nome={nome}
+        cnpj={formatCnpj(cnpj)}
+        enviando={marcandoManual}
+        onConfirmar={(v) => void marcarManual(v)}
+      />
+
       <DialogoEnviarSeguradora
         aberto={confirmandoDocs}
         onOpenChange={setConfirmandoDocs}
@@ -540,6 +593,31 @@ export function AnaliseDetalhe({ id }: { id: string }) {
       )}
 
       {/*
+       * ESTA ANÁLISE FOI MARCADA À MÃO (0216), e quem abrir o card precisa saber.
+       *
+       * O estágio diz "Enviada à seguradora" exatamente como diria se a API tivesse
+       * aberto o pedido — e é a mesma verdade, o pedido existe. O que muda é o DEPOIS:
+       * sem número de cover não há o que o acompanhamento automático consulte, e a
+       * decisão vai ficar esperando alguém registrá-la. Sem esta tarja, a espera parece
+       * "a Atradius ainda não respondeu", que é indistinguível de "ninguém foi olhar".
+       *
+       * Com o cover preenchido a tarja some: aí o poll assumiu, e não há o que avisar.
+       */}
+      {esteira.envio_manual_em && !esteira.atradius_case_id && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-sm">
+          <Hand className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+          <p>
+            <strong>Enviada à seguradora à mão</strong>, por fora da API, em{' '}
+            {new Date(esteira.envio_manual_em).toLocaleDateString('pt-BR')}.{' '}
+            <span className="text-muted-foreground">
+              Sem o número do cover, o acompanhamento automático não consulta esta análise —
+              quando a Atradius responder, a decisão precisa ser registrada aqui.
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/*
        * O título é a CONSTRUTORA, não "Análise de crédito".
        *
        * Quem chega aqui já sabe que está numa análise — veio da esteira, ou de um link
@@ -569,6 +647,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
           <Acoes
             analiseId={id}
             nome={nome}
+            cnpj={esteira.cnpj}
             estagio={estagio}
             statusPropria={status}
             jaTemPropria={propria !== null}

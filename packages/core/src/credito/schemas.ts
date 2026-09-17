@@ -134,6 +134,31 @@ export const moverAnaliseSchema = z.object({
 export type MoverAnaliseInput = z.infer<typeof moverAnaliseSchema>
 
 /**
+ * Marcar como enviada à seguradora POR FORA da API (0216).
+ *
+ * Porta própria, e não mais um valor em `moverAnaliseSchema`: aqueles cinco estágios são
+ * escrituração do nosso lado da mesa e se desfazem movendo de volta. Este é uma afirmação
+ * sobre o mundo lá fora — existe um pedido aberto na Atradius —, destrava a conclusão da
+ * esteira e não se desfaz, porque o pedido continua lá.
+ *
+ * O caso que ela resolve: o CNPJ não está cadastrado como buyer, e cadastro de buyer não
+ * tem API (o handbook manda falar com o representante). Resolvido por fora, a análise
+ * precisa de um jeito de dizer que foi.
+ */
+export const enviarAnaliseManualmenteSchema = z.object({
+  id: z.string().uuid(),
+  /** O que foi feito, para quem, por qual canal. Vira linha na timeline da empresa. */
+  observacao: z.string().trim().max(2000).optional(),
+  /**
+   * O número do cover, se o representante já o devolveu. Opcional de propósito: exigi-lo
+   * travaria justamente o caso comum, que é mandar hoje e receber o número depois.
+   * Preenchido, o poll passa a cuidar desta linha sozinho.
+   */
+  atradius_case_id: z.string().trim().max(60).optional(),
+})
+export type EnviarAnaliseManualmenteInput = z.infer<typeof enviarAnaliseManualmenteSchema>
+
+/**
  * O limite pedido, ajustado na HORA DO ENVIO.
  *
  * Quem digitou o número original foi o comercial, ao abrir o pedido. Quem manda à

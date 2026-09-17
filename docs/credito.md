@@ -234,6 +234,38 @@ Depende de `RESEND_API_KEY` e de um remetente (`RESEND_REMETENTE_INTERNO`, com q
 `RESEND_REMETENTE`) **no worker**. Faltando, nenhum e-mail sai e cada documento fica com
 esse motivo escrito.
 
+### Quando o buyer não existe: enviar à mão (0216)
+
+`resolverBuyer` devolve "CNPJ não encontrado como buyer" e **não há cadastro por API** — o
+handbook manda falar com o representante comercial. Reenviar não resolve: gasta a consulta
+de novo e devolve o mesmo erro. A tela já dizia isso e já entregava o CNPJ pronto para
+copiar (0212); o que faltava era o **depois**.
+
+Resolvido o cadastro por fora, **Enviada à mão** move o card para `enviada_seguradora`
+sem nenhuma chamada sair daqui. Porta própria (`app_enviar_analise_manualmente`), e não
+mais um valor no "Mover para…": os cinco estágios daquele seletor são escrituração do
+nosso lado da mesa e se desfazem movendo de volta; este afirma que **existe um pedido
+aberto na Atradius**, destrava `ESTAGIOS_CONCLUIVEIS` e não se desfaz, porque o pedido
+continua lá depois de qualquer clique.
+
+- **Mesma porta do envio automático** (`solicitada` ou `docs_recebidos`). Marcar um
+  rascunho afirmaria que há pedido sobre uma pasta que ninguém conferiu.
+- **`envio_manual_em` + `envio_manual_por`.** Daria para inferir pelo `atradius_case_id`
+  nulo, e é assim que o poll já distingue as duas — mas inferência por ausência vira
+  mentira em silêncio no dia em que outro caminho criar uma análise enviada sem case id.
+  E esta é a única forma de uma análise chegar a "enviada" sem nenhuma chamada ter saído:
+  "mandaram mesmo?" precisa de resposta com nome e hora.
+- **A decisão também virá à mão.** `pollDecisoes` filtra `atradius_case_id is not null` —
+  sem número de cover não há o que consultar. O diálogo avisa antes de confirmar, e uma
+  tarja no card repete enquanto durar. Descobrir isso três semanas depois, esperando um
+  aviso automático que nunca vem, é o modo caro de aprender.
+- **O número do cover é opcional e muda o regime.** Preenchido (na hora ou depois), o poll
+  assume a linha sozinho e a tarja some. Exigi-lo travaria o caso comum, que é mandar hoje
+  e receber o número depois.
+
+A papelada continua indo pelo botão **Enviar documentos** (04d §4.2, por e-mail): ele
+aparece justamente quando a análise já saiu do estágio de envio.
+
 ### A regra de custo
 
 `resolverBuyer` **pode ser cobrado** pela Atradius. Ele é chamado em **um** lugar: dentro

@@ -5,6 +5,7 @@ import {
   definirExClienteMotivoSchema,
   editarParecerSchema,
   definirLimiteAnaliseSchema,
+  enviarAnaliseManualmenteSchema,
   moverAnaliseSchema,
   publicarCondicoesSchema,
   registrarDecisaoCreditoSchema,
@@ -22,6 +23,7 @@ import {
   type ConcluirAnaliseInput,
   type DefinirExClienteMotivoInput,
   type EditarParecerInput,
+  type EnviarAnaliseManualmenteInput,
   type MoverAnaliseInput,
   type PublicarCondicoesInput,
   type RegistrarDecisaoCreditoInput,
@@ -59,6 +61,22 @@ export async function solicitarAnalise(
 ): Promise<Tables<'analises_credito'>> {
   const dados = parseOuFalhar(solicitarAnaliseSchema, input)
   const { data, error } = await supabase.rpc('app_solicitar_analise', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_credito'>
+}
+
+/**
+ * Afirma que o pedido foi aberto na seguradora por fora da API (0216).
+ *
+ * O RPC recusa fora de `solicitada`/`docs_recebidos` — a MESMA porta do envio automático.
+ * Marcar um rascunho afirmaria que existe pedido sobre uma pasta que ninguém olhou.
+ */
+export async function enviarAnaliseManualmente(
+  supabase: Supabase,
+  input: EnviarAnaliseManualmenteInput | unknown,
+): Promise<Tables<'analises_credito'>> {
+  const dados = parseOuFalhar(enviarAnaliseManualmenteSchema, input)
+  const { data, error } = await supabase.rpc('app_enviar_analise_manualmente', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'analises_credito'>
 }
