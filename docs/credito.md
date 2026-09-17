@@ -192,11 +192,47 @@ lote e por retomada, onde não houve tela nenhuma. O resultado fica gravado por 
 (`analise_docs.enviado_seguradora_em` / `envio_seguradora_erro`) e aparece na aba
 Documentos — "mandei os documentos" sem isso não responde *quais*.
 
-Uma recusa de anexo **não** derruba o envio: o pedido de cobertura já foi submetido, já
-pode ter sido cobrado, e a seguradora aceita documento depois. A rota de anexo da Atradius
-é a única deste provedor que **não** está confirmada contra resposta real — está marcada
-como tal em `ROTAS.documentosDaCobertura`, e é por isso que a falha é por documento e vai
-inteira para o log.
+Um e-mail que não sai **não** derruba o envio: o pedido de cobertura já foi submetido, já
+pode ter sido cobrado, e a seguradora aceita a papelada depois. Quando falha, o motivo fica
+em cada linha e a tela da análise oferece **Reenviar documentos** — que manda só o e-mail,
+sem reabrir o pedido e sem resolver buyer de novo.
+
+#### A papelada vai por e-mail (0214)
+
+Até 17/09/2026 os anexos iam pela API, por `covers/{id}/documents` — a única rota deste
+provedor que nunca foi confirmada contra resposta real. A Atradius respondeu que **a API
+não recebe documento** e pediu tudo por e-mail, junto do pedido. A rota saiu do código: um
+método que sempre falha convida a próxima pessoa a "consertar a chamada" contra um endpoint
+que não existe.
+
+O caminho hoje:
+
+- **Texto e regras** em `packages/core/src/credito/documentos-email.ts` (puro, testado):
+  assunto, corpo, normalização da lista de destinatários e o agrupamento por tamanho.
+- **Bytes e transporte** em `apps/worker/src/jobs/credito/documentos-email.ts`: baixa do
+  bucket, chama o Resend com anexo e grava linha a linha.
+- **Para quem vai** em `credito_config.documentos_email`, editável em Crédito ›
+  Configurações › *Envio de documentos por e-mail*. Lista **vazia significa que nada sai** —
+  um destinatário padrão no código mandaria documento de cliente para um endereço que
+  ninguém escolheu, e e-mail não se desenvia.
+
+Não passa pela fila da Comunicação de propósito: `mensagens_outbox` é o ledger de conversa
+com cliente — supressão, cooldown, teto por thread, janela — e qualquer uma dessas regras
+poderia **recusar** o envio. Um balanço que não chega porque o cooldown do contato estava
+quente é uma falha impossível de explicar. Mesma decisão, e pelo mesmo motivo, do report
+semanal.
+
+O **parecer da análise proprietária não vai junto**: é a nossa leitura de risco, escrita
+para decidir aqui dentro. Quem quiser mandá-lo, anexa o PDF à análise como documento e
+marca no diálogo — aí é escolha explícita.
+
+Acima de 20 MB de anexo o envio se divide em mais de um e-mail, numerados no assunto; o
+excedente nunca é descartado. `enviado_seguradora_em` significa "o Resend aceitou a
+mensagem", não "o analista leu" — entrega e bounce chegam pelo webhook.
+
+Depende de `RESEND_API_KEY` e de um remetente (`RESEND_REMETENTE_INTERNO`, com queda para
+`RESEND_REMETENTE`) **no worker**. Faltando, nenhum e-mail sai e cada documento fica com
+esse motivo escrito.
 
 ### A regra de custo
 

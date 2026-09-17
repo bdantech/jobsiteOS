@@ -164,9 +164,12 @@ export interface PedidoCobertura {
 /**
  * Um documento a caminho da seguradora.
  *
- * Já vem com os BYTES, e não com um caminho de bucket, por dois motivos: quem sabe ler
- * o bucket é o worker, e quem sabe falar com a seguradora é o provedor — misturar as
- * duas coisas obrigaria cada provedor novo a conhecer o nosso storage.
+ * Já vem com os BYTES, e não com um caminho de bucket: quem sabe ler o bucket é o
+ * worker, e quem sabe entregar é o transporte — misturar as duas coisas obrigaria cada
+ * caminho de entrega novo a conhecer o nosso storage.
+ *
+ * O transporte, hoje, é E-MAIL: ver `documentos-email.ts`. A API da Atradius não recebe
+ * documento, e o método que tentava anexá-la saiu desta interface em 17/09/2026.
  */
 export interface DocumentoParaSeguradora {
   /** O id da linha em `analise_docs`. Volta no resultado para marcar o que foi aceito. */
@@ -241,20 +244,18 @@ export interface Seguradora {
   /** Submete o pedido de cobertura. */
   pedirCobertura(pedido: PedidoCobertura): Promise<ResultadoSeguradora<{ case_id: string }>>
 
-  /**
-   * Anexa documentos ao pedido já aberto.
+  /*
+   * NÃO EXISTE `enviarDocumentos` AQUI, e isso é uma decisão, não um esquecimento.
    *
-   * Um resultado POR DOCUMENTO, e não um `ok` do lote: metade aceita e metade recusada
-   * é o caso comum (tamanho, formato), e um booleano só do conjunto obrigaria o Crédito
-   * a reenviar tudo para descobrir o que faltou. A esteira grava linha a linha.
+   * Havia — apontando para `covers/{id}/documents`, uma rota que entrou no código com a
+   * ressalva de nunca ter sido confirmada. Em 17/09/2026 a Atradius respondeu que a API
+   * NÃO recebe documento e pediu a papelada por e-mail, junto do pedido. O caminho vive
+   * em `documentos-email.ts` (texto e regras) e no job `credito/documentos-email.ts`
+   * (bytes e transporte).
    *
-   * Falhar aqui NUNCA desfaz o pedido de cobertura: ele já foi submetido, já pode ter
-   * sido cobrado, e a seguradora aceita documento depois. O envio segue valendo.
+   * Um método que sempre falha é pior que método nenhum: ele convida a próxima pessoa a
+   * "consertar a chamada", que é tempo gasto contra uma rota que não existe.
    */
-  enviarDocumentos(
-    caseId: string,
-    documentos: DocumentoParaSeguradora[],
-  ): Promise<ResultadoSeguradora<ResultadoEnvioDocumento[]>>
 
   /** Estado atual de um pedido. Usado pelo poll. */
   consultarDecisao(caseId: string): Promise<ResultadoSeguradora<DecisaoSeguradora | null>>

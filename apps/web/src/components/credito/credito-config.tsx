@@ -6,6 +6,10 @@ import { toast } from 'sonner'
 import { AlertTriangle, Plus, Save, Trash2 } from 'lucide-react'
 import {
   AMBIENTES_SEGURADORA,
+  ASSUNTO_PADRAO,
+  ehEmailValido,
+  lerEmailDocumentos,
+  type EmailDocumentos,
   AMBIENTE_SEGURADORA_PADRAO,
   UID_TYPES_SEGURADORA,
   UID_TYPE_SEGURADORA_PADRAO,
@@ -271,6 +275,194 @@ function TiposDeDocumento({
           O identificador entre parênteses é o que os arquivos já enviados guardam. Ele é
           gerado na criação e não muda quando você renomeia o documento — mudá-lo desligaria
           da análise todo arquivo já anexado.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Para quem a papelada da análise vai.
+ *
+ * ── POR QUE ESTA TELA EXISTE ────────────────────────────────────────────────
+ * Os documentos iam pela API, por uma rota de anexo que nunca chegou a ser confirmada.
+ * Em 17/09/2026 a Atradius respondeu que a API NÃO recebe documento e pediu a papelada
+ * por e-mail, junto do pedido de cobertura. A lista de para-quem é decisão de negócio —
+ * muda quando o analista da conta muda —, então mora aqui e não numa variável do worker.
+ *
+ * ── LISTA VAZIA SIGNIFICA QUE NADA SAI ──────────────────────────────────────
+ * E é assim de propósito: um destinatário padrão embutido no código mandaria documento de
+ * cliente para um endereço que ninguém escolheu. Enquanto a lista estiver vazia, o envio
+ * marca cada documento com o motivo — a tela da análise mostra, e o caminho de volta é
+ * esta página.
+ */
+function EmailDosDocumentos({
+  config,
+  onSalvar,
+  salvando,
+}: {
+  config: EmailDocumentos
+  onSalvar: (v: EmailDocumentos) => Promise<void>
+  salvando: boolean
+}) {
+  const [rascunho, setRascunho] = React.useState<EmailDocumentos | null>(null)
+  const atual = rascunho ?? config
+  const sujo = rascunho !== null && JSON.stringify(rascunho) !== JSON.stringify(config)
+
+  function mexer(fn: (v: EmailDocumentos) => EmailDocumentos) {
+    setRascunho((r) => fn(structuredClone(r ?? config)))
+  }
+
+  // Aviso, não bloqueio: um endereço pela metade enquanto se digita é normal, e recusar o
+  // Salvar por causa dele esconderia o problema do responder-para, que é outro campo.
+  const invalidos = atual.destinatarios.filter((d) => d.email.trim() !== '' && !ehEmailValido(d.email))
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Envio de documentos por e-mail</CardTitle>
+            <CardDescription>
+              Para quem a Atradius recebe a papelada da análise. A API da seguradora não aceita
+              anexo — foi ela quem pediu por e-mail, junto do pedido de cobertura.
+            </CardDescription>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" disabled={!sujo} onClick={() => setRascunho(null)}>
+              Descartar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!sujo || salvando}
+              onClick={async () => {
+                await onSalvar({
+                  ...atual,
+                  destinatarios: atual.destinatarios.filter((d) => ehEmailValido(d.email)),
+                })
+                setRascunho(null)
+              }}
+            >
+              <Save className="mr-1 h-3.5 w-3.5" aria-hidden />
+              {salvando ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {atual.destinatarios.length === 0 && (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[0.8rem]">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+            <span>
+              Sem destinatário, <strong>nenhum documento sai</strong>. O pedido de cobertura
+              continua indo normalmente — só a papelada fica retida, com o motivo escrito em cada
+              documento na tela da análise.
+            </span>
+          </p>
+        )}
+
+        {atual.destinatarios.map((d, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+            <Input
+              value={d.email}
+              onChange={(e) =>
+                mexer((v) => {
+                  const item = v.destinatarios[i]
+                  if (item) item.email = e.target.value
+                  return v
+                })
+              }
+              className="h-8 min-w-56 flex-[2]"
+              placeholder="analista@atradius.com"
+              aria-label={`E-mail do destinatário ${i + 1}`}
+              type="email"
+            />
+            <Input
+              value={d.nome ?? ''}
+              onChange={(e) =>
+                mexer((v) => {
+                  const item = v.destinatarios[i]
+                  if (item) item.nome = e.target.value
+                  return v
+                })
+              }
+              className="h-8 min-w-40 flex-1"
+              placeholder="Nome (opcional)"
+              aria-label={`Nome do destinatário ${i + 1}`}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 px-2"
+              aria-label={`Remover ${d.email || 'destinatário'}`}
+              onClick={() =>
+                mexer((v) => ({ ...v, destinatarios: v.destinatarios.filter((_, j) => j !== i) }))
+              }
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </div>
+        ))}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            mexer((v) => ({ ...v, destinatarios: [...v.destinatarios, { email: '', nome: '' }] }))
+          }
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
+          Adicionar destinatário
+        </Button>
+
+        {invalidos.length > 0 && (
+          <p className="text-[0.8rem] text-amber-600">
+            {invalidos.length === 1 ? 'Um endereço não parece' : `${invalidos.length} endereços não parecem`}{' '}
+            válido{invalidos.length === 1 ? '' : 's'} e não será
+            {invalidos.length === 1 ? '' : 'ão'} salvo{invalidos.length === 1 ? '' : 's'}.
+          </p>
+        )}
+
+        <div className="grid gap-4 border-t pt-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="docs-responder-para">Responder para</Label>
+            <Input
+              id="docs-responder-para"
+              type="email"
+              value={atual.responder_para ?? ''}
+              onChange={(e) => mexer((v) => ({ ...v, responder_para: e.target.value || null }))}
+              placeholder="credito@oneos.com.br"
+            />
+            <p className="text-[0.8rem] text-muted-foreground">
+              O e-mail sai de um subdomínio de automação, e resposta que cai nele{' '}
+              <strong>ninguém lê</strong>. Ponha aqui a caixa de quem cuida da esteira — é para
+              ela que o analista da seguradora vai responder pedindo o documento que faltou.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="docs-assunto">Assunto</Label>
+            <Input
+              id="docs-assunto"
+              value={atual.assunto_template ?? ''}
+              onChange={(e) => mexer((v) => ({ ...v, assunto_template: e.target.value || null }))}
+              placeholder={ASSUNTO_PADRAO}
+            />
+            <p className="text-[0.8rem] text-muted-foreground">
+              Em branco usa o padrão. Marcadores: <code className="text-[11px]">{'{cnpj}'}</code>,{' '}
+              <code className="text-[11px]">{'{empresa}'}</code>,{' '}
+              <code className="text-[11px]">{'{case_id}'}</code>,{' '}
+              <code className="text-[11px]">{'{referencia}'}</code>. O CNPJ vem primeiro no padrão
+              porque é por ele que a seguradora acha o buyer.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[0.8rem] text-muted-foreground">
+          Quem escolhe QUAIS documentos vão continua sendo o analista, no diálogo de envio — a
+          pasta inteira nunca sai por omissão. Anexos acima de 20 MB no total viajam em mais de
+          um e-mail, numerados.
         </p>
       </CardContent>
     </Card>
@@ -667,6 +859,25 @@ export function CreditoConfig({ crons = [] }: { crons?: CronDoCredito[] }) {
     void qc.invalidateQueries({ queryKey: creditoKeys.config() })
   }
 
+  async function salvarEmailDocumentos(v: EmailDocumentos) {
+    setSalvando('documentos_email')
+    // Linha própria em `credito_config`, e não um campo dentro de `atradius`: aquele bloco
+    // é a identificação na seguradora, lida a cada chamada HTTP e com cache de um minuto.
+    // Uma lista de e-mails que muda por decisão de negócio não divide linha com isso.
+    const r = await salvarCreditoConfigAction({ chave: 'documentos_email', valor: v })
+    setSalvando(null)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(
+      v.destinatarios.length === 0
+        ? 'Lista salva vazia — nenhum documento será enviado até haver um destinatário.'
+        : `Documentos passam a ir para ${v.destinatarios.length} destinatário(s).`,
+    )
+    void qc.invalidateQueries({ queryKey: creditoKeys.config() })
+  }
+
   async function salvarTipos(tipos: TipoDoc[]) {
     setSalvando('docs')
     // Id gerado só para os NOVOS (os que ainda estão com o placeholder). Regerar o id de
@@ -754,6 +965,12 @@ export function CreditoConfig({ crons = [] }: { crons?: CronDoCredito[] }) {
         uidType={uidType}
         onSalvar={salvarIdentificacao}
         salvando={salvando === 'identificacao'}
+      />
+
+      <EmailDosDocumentos
+        config={lerEmailDocumentos(config.data?.documentos_email)}
+        onSalvar={salvarEmailDocumentos}
+        salvando={salvando === 'documentos_email'}
       />
 
       <TiposDeDocumento

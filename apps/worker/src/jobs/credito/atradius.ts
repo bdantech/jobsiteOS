@@ -9,10 +9,8 @@ import type {
   AmbienteSeguradora,
   BuyerSeguradora,
   DecisaoSeguradora,
-  DocumentoParaSeguradora,
   EstagioSeguradora,
   PedidoCobertura,
-  ResultadoEnvioDocumento,
   ResultadoSeguradora,
   Seguradora,
 } from '../../../../../packages/core/src/credito/seguradora.js'
@@ -98,20 +96,15 @@ const ROTAS = {
   decisoes: (q: string) => `/credit-insurance/cover-management/v1/covers/decisions?${q}`,
   /** Aplicações ainda SEM decisão — é o que distingue "em análise" de "não existe". */
   aplicacoes: (q: string) => `/credit-insurance/cover-management/v1/covers/applications?${q}`,
-  /**
-   * NÃO CONFIRMADO. Anexos de uma cobertura.
+  /*
+   * NÃO HÁ ROTA DE ANEXO. Havia `covers/{id}/documents` aqui, com a ressalva de nunca
+   * ter sido confirmada contra resposta real — o handbook cobre cover, buyer e policy,
+   * e não documenta anexo.
    *
-   * As outras rotas deste objeto foram verificadas contra resposta real; esta não —
-   * o handbook que temos cobre cover, buyer e policy, e não documenta anexo. Ela está
-   * aqui, e não escondida atrás de um `if`, porque a alternativa era não enviar nada.
-   *
-   * O que a incerteza obriga: falhar aqui NUNCA derruba o envio (o pedido de cobertura
-   * já foi submetido e pode já ter sido cobrado), o corpo da recusa vai INTEIRO para o
-   * log, e o erro fica gravado por documento em `analise_docs.envio_seguradora_erro` —
-   * é lá que se lê "esta rota não existe" na primeira tentativa contra a sandbox.
+   * Em 17/09/2026 a Atradius confirmou: a API não recebe documento, e a papelada deve ir
+   * POR E-MAIL junto do pedido. É o que `jobs/credito/documentos-email.ts` faz. Esta
+   * ausência fica escrita para ninguém "restaurar" a rota achando que foi engano.
    */
-  documentosDaCobertura: (coverId: string) =>
-    `/credit-insurance/cover-management/v1/covers/${encodeURIComponent(coverId)}/documents`,
 }
 
 /** CONFIRMADO: `Atradius-App-Key`, e não o `x-application-key` que eu tinha suposto. */
@@ -1240,49 +1233,6 @@ export const atradius: Seguradora = {
       return { ok: false, erro: 'A Atradius aceitou o pedido mas não devolveu um coverId.', recuperavel: false }
     }
     return { ok: true, dados: { case_id: String(coverId) } }
-  },
-
-  /**
-   * Anexa à cobertura os documentos que o analista escolheu.
-   *
-   * ── UM POR CHAMADA, E NUNCA EM PARALELO ────────────────────────────────────
-   * Um lote inteiro num POST só devolve um veredito, e "o envio falhou" sobre cinco
-   * arquivos não diz qual deles a seguradora recusou. Sequencial, cada linha volta com
-   * a sua resposta — e é isso que a esteira grava em `analise_docs`.
-   *
-   * ── BASE64, E NÃO MULTIPART ────────────────────────────────────────────────
-   * O gateway já aceita JSON em todas as rotas confirmadas, e um multipart exigiria um
-   * caminho HTTP próprio (fora do `chamar`, sem token, sem correlação, sem retry) para
-   * uma rota que ainda nem está confirmada. Base64 custa um terço a mais de tráfego e
-   * mantém o documento no mesmo cano do resto.
-   *
-   * Nada aqui lança: uma exceção subiria até o laço do envio e mataria as análises
-   * seguintes por causa de um PDF.
-   */
-  async enviarDocumentos(caseId: string, documentos: DocumentoParaSeguradora[]) {
-    const resultados: ResultadoEnvioDocumento[] = []
-
-    for (const doc of documentos) {
-      const r = await chamar<unknown>(ROTAS.documentosDaCobertura(caseId), {
-        method: 'POST',
-        body: {
-          coverId: caseId,
-          documentType: doc.tipo,
-          fileName: doc.nome_arquivo,
-          mimeType: doc.mime,
-          content: Buffer.from(doc.conteudo).toString('base64'),
-        },
-      })
-      resultados.push(r.ok ? { id: doc.id, ok: true } : { id: doc.id, ok: false, erro: r.erro })
-      if (!r.ok) {
-        logger.warn(
-          { caseId, doc: doc.id, tipo: doc.tipo, erro: r.erro },
-          'A Atradius não aceitou o documento.',
-        )
-      }
-    }
-
-    return { ok: true as const, dados: resultados }
   },
 
   async consultarDecisao(caseId) {

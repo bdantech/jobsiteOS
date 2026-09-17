@@ -57,6 +57,7 @@ export function DialogoEnviarSeguradora({
   limiteSolicitado,
   enviando,
   onConfirmar,
+  modo = 'envio',
 }: {
   aberto: boolean
   onOpenChange: (v: boolean) => void
@@ -65,8 +66,19 @@ export function DialogoEnviarSeguradora({
   /** O que o COMERCIAL pediu ao abrir a análise. É só o ponto de partida. */
   limiteSolicitado: number | null
   enviando: boolean
+  /** No modo `documentos` o limite vem `0` e o chamador o ignora: não há pedido a abrir. */
   onConfirmar: (docIds: string[], limite: number) => void
+  /**
+   * `envio` abre o pedido de cobertura (paga o buyer) e leva a papelada junto.
+   * `documentos` só manda a papelada, por e-mail, de uma análise que JÁ foi.
+   *
+   * Um diálogo com dois modos, e não dois diálogos: a lista de documentos — com o estado
+   * de cada um, o botão de abrir e a regra de pré-marcação — é a mesma coisa nos dois
+   * casos, e duas cópias dela divergiriam no primeiro ajuste.
+   */
+  modo?: 'envio' | 'documentos'
 }) {
+  const soDocumentos = modo === 'documentos'
   const config = useQuery({
     queryKey: creditoKeys.config(),
     queryFn: buscarCreditoConfig,
@@ -136,18 +148,32 @@ export function DialogoEnviarSeguradora({
     <Dialog open={aberto} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Enviar à seguradora</DialogTitle>
+          <DialogTitle>
+            {soDocumentos ? 'Reenviar documentos por e-mail' : 'Enviar à seguradora'}
+          </DialogTitle>
           <DialogDescription>
-            O envio resolve o cadastro do buyer na Atradius, e{' '}
-            <strong>essa consulta pode ser cobrada</strong> — uma vez por CNPJ que ainda não tem
-            cadastro. Depois disso o pedido de cobertura é submetido e a decisão chega pelo
-            acompanhamento automático.
+            {soDocumentos ? (
+              <>
+                O pedido de cobertura <strong>não é reaberto</strong> e nada aqui é cobrado — sai
+                só a papelada, por e-mail, para os endereços configurados em Crédito ›
+                Configurações.
+              </>
+            ) : (
+              <>
+                O envio resolve o cadastro do buyer na Atradius, e{' '}
+                <strong>essa consulta pode ser cobrada</strong> — uma vez por CNPJ que ainda não
+                tem cadastro. Depois disso o pedido de cobertura é submetido e a decisão chega
+                pelo acompanhamento automático.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <p className="rounded-md border p-3 text-sm">{nome}</p>
 
-        <div className="space-y-1.5">
+        {/* Sem limite no reenvio: não há pedido a abrir, e um campo aqui convidaria a
+            "corrigir" um número que a Atradius já recebeu e não reescreve. */}
+        <div className={soDocumentos ? 'hidden' : 'space-y-1.5'}>
           <Label htmlFor="limite-envio">Limite a pedir</Label>
           <Input
             id="limite-envio"
@@ -184,7 +210,9 @@ export function DialogoEnviarSeguradora({
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm font-medium">Documentos que vão junto</p>
+            <p className="text-sm font-medium">
+              {soDocumentos ? 'Documentos a reenviar' : 'Documentos que vão junto'}
+            </p>
             {docs.length > 0 && (
               <div className="flex items-center gap-2 text-xs">
                 <button
@@ -207,8 +235,9 @@ export function DialogoEnviarSeguradora({
 
           {docs.length === 0 ? (
             <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              Nenhum documento anexado. O pedido sai assim mesmo — a seguradora aceita anexo
-              depois, pela mesma cobertura.
+              {soDocumentos
+                ? 'Nenhum documento anexado à análise — não há o que reenviar.'
+                : 'Nenhum documento anexado. O pedido sai assim mesmo — a papelada vai por e-mail depois, pela mesma cobertura.'}
             </p>
           ) : (
             <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border">
@@ -281,10 +310,10 @@ export function DialogoEnviarSeguradora({
               Cancelar
             </Button>
             <Button
-              onClick={() => onConfirmar(escolhidos, limiteNum)}
-              disabled={enviando || !limiteValido}
+              onClick={() => onConfirmar(escolhidos, soDocumentos ? 0 : limiteNum)}
+              disabled={enviando || (soDocumentos ? escolhidos.length === 0 : !limiteValido)}
             >
-              {enviando ? 'Enviando…' : 'Enviar'}
+              {enviando ? 'Enviando…' : soDocumentos ? 'Reenviar' : 'Enviar'}
             </Button>
           </div>
         </DialogFooter>

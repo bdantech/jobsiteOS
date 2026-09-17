@@ -13,6 +13,7 @@ import {
   Gauge,
   Hash,
   History,
+  Mail,
   SendHorizonal,
   MapPin,
   PlayCircle,
@@ -44,7 +45,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
-import { enviarAnalisesAction, moverAnaliseAction } from '@/actions/credito'
+import {
+  enviarAnalisesAction,
+  moverAnaliseAction,
+  reenviarDocumentosEmailAction,
+} from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
 import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
@@ -232,11 +237,44 @@ function Acoes({
   const [confirmandoRodar, setConfirmandoRodar] = React.useState(false)
   const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false)
   const [enviando, setEnviando] = React.useState(false)
+  const [reenviandoDocs, setReenviandoDocs] = React.useState(false)
+  const [confirmandoDocs, setConfirmandoDocs] = React.useState(false)
 
   const decidida = ehEstagioDecidido(estagio)
   // `solicitada` e `docs_recebidos` — é o que o worker aceita, e oferecer o botão nos
   // outros estágios seria desenhar um clique que não faz nada.
   const podeEnviar = podeEnviarASeguradora(estagio)
+
+  /*
+   * A papelada vai por E-MAIL desde 17/09/2026: a API da Atradius não recebe anexo, e foi
+   * a própria seguradora que pediu assim. E-mail falha por motivo que se resolve fora
+   * daqui — lista de destinatários vazia, endereço errado, anexo grande demais —, e sem
+   * esta porta o caminho de volta seria reenviar a análise inteira, que resolve buyer de
+   * novo e pode ser cobrado.
+   *
+   * Por isso o botão aparece quando ALGUM documento falhou, mesmo em análise que ainda
+   * poderia ser enviada: é exatamente ali que usar o envio completo custaria dinheiro à
+   * toa.
+   */
+  const temFalhaDeDoc = docs.some((d) => d.envio_seguradora_erro)
+  const podeReenviarDocs = docs.length > 0 && (temFalhaDeDoc || !podeEnviar)
+
+  async function reenviarDocs(docIds: string[]) {
+    setReenviandoDocs(true)
+    const r = await reenviarDocumentosEmailAction(analiseId, docIds)
+    setReenviandoDocs(false)
+    setConfirmandoDocs(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    if (!r.data.enfileirado) {
+      toast.error(r.data.aviso ?? 'O worker não aceitou o reenvio.')
+      return
+    }
+    toast.success('Reenvio disparado. O resultado aparece em cada documento.')
+    onMudou()
+  }
 
   async function enviar(docIds: string[], limite: number) {
     setEnviando(true)
@@ -300,6 +338,17 @@ function Acoes({
           Enviar à seguradora
         </Button>
       )}
+      {podeReenviarDocs && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setConfirmandoDocs(true)}
+          disabled={reenviandoDocs}
+        >
+          <Mail className="mr-1.5 size-3.5" aria-hidden />
+          {temFalhaDeDoc ? 'Reenviar documentos' : 'Enviar documentos'}
+        </Button>
+      )}
       {podeRodar && (
         <Button
           size="sm"
@@ -349,6 +398,17 @@ function Acoes({
        * aqui que se escolhe QUAIS documentos acompanham o pedido, porque documento de
        * terceiro que sai não volta.
        */}
+      <DialogoEnviarSeguradora
+        aberto={confirmandoDocs}
+        onOpenChange={setConfirmandoDocs}
+        nome={nome}
+        docs={docs}
+        limiteSolicitado={limiteSolicitado}
+        enviando={reenviandoDocs}
+        onConfirmar={(docIds) => void reenviarDocs(docIds)}
+        modo="documentos"
+      />
+
       <DialogoEnviarSeguradora
         aberto={confirmandoEnvio}
         onOpenChange={setConfirmandoEnvio}

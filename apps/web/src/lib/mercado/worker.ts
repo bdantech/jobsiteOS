@@ -780,6 +780,24 @@ export async function dispararEnviarAnalises(
 }
 
 /**
+ * Reenvia por e-mail os documentos de uma análise JÁ enviada.
+ *
+ * Separado de `dispararEnviarAnalises` porque aquele resolve buyer — a chamada que pode
+ * ser cobrada — e só enxerga análise ainda não enviada. Aqui nada é cobrado: o pedido de
+ * cobertura fica como está, e o que sai é só a papelada.
+ */
+export async function dispararReenviarDocumentosEmail(
+  analiseId: string,
+  docIds: string[],
+): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/credito/documentos-email',
+    { analise_id: analiseId, doc_ids: docIds },
+    'credito-documentos-email',
+  )
+}
+
+/**
  * O desfecho de uma análise concluída pela tela chegando ao funil comercial.
  *
  * Separado do RPC de propósito: o RPC escreve a esteira com o usuário; mover o card da

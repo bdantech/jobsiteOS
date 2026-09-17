@@ -60,6 +60,7 @@ import {
   dispararDominioEmpresa,
   dispararDecisaoEmVendas,
   dispararEnviarAnalises,
+  dispararReenviarDocumentosEmail,
   dispararEstimarPotencial,
   dispararAnalisePropria,
   dispararDrenarAnalisesProprias,
@@ -949,6 +950,12 @@ const enviarAnalisesSchema = z.object({
   doc_ids: z.array(z.string().uuid()).max(50).optional(),
 })
 
+const reenviarDocsEmailSchema = z.object({
+  analise_id: z.string().uuid(),
+  /** Vazio seria um e-mail sem anexo: recusado aqui, não no job. */
+  doc_ids: z.array(z.string().uuid()).min(1).max(50),
+})
+
 const decisaoEmVendasSchema = z.object({
   analise_id: z.string().uuid(),
   decisao: z.enum(['aprovada', 'aprovada_parcial', 'negada']),
@@ -1004,6 +1011,18 @@ app.post('/jobs/credito/enviar', (req: Request, res: Response, next: NextFunctio
   try {
     const { analise_ids, doc_ids } = enviarAnalisesSchema.parse(req.body ?? {})
     res.status(202).json({ job_id: dispararEnviarAnalises(analise_ids, doc_ids), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Reenvio da papelada por e-mail, sem reabrir o pedido de cobertura (04d §4.2).
+ */
+app.post('/jobs/credito/documentos-email', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { analise_id, doc_ids } = reenviarDocsEmailSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararReenviarDocumentosEmail(analise_id, doc_ids), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

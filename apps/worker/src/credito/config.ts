@@ -6,6 +6,10 @@ import {
   type AmbienteSeguradora,
   type UidTypeSeguradora,
 } from '../../../../packages/core/src/credito/seguradora.js'
+import {
+  lerEmailDocumentos,
+  type EmailDocumentos,
+} from '../../../../packages/core/src/credito/documentos-email.js'
 import { supabaseAdmin } from '../db.js'
 
 /**
@@ -143,6 +147,23 @@ export async function lerIntegracaoSeguradora(): Promise<IntegracaoSeguradora> {
   }
   integracaoCache = { valor, lidaEm: Date.now() }
   return valor
+}
+
+/**
+ * Para quem a papelada da análise vai, agora que ela vai por e-mail.
+ *
+ * Sem cache, ao contrário de `lerIntegracaoSeguradora`: esta é lida uma vez por análise
+ * enviada, não uma vez por chamada HTTP — não há laço apertado para proteger. E o custo
+ * de um cache aqui seria mandar documento para um endereço que alguém acabou de tirar da
+ * lista, que é o erro caro desta configuração.
+ */
+export async function lerConfigEmailDocumentos(): Promise<EmailDocumentos> {
+  const { data } = await supabaseAdmin
+    .from('credito_config')
+    .select('valor')
+    .eq('chave', 'documentos_email')
+    .maybeSingle()
+  return lerEmailDocumentos(data?.valor)
 }
 
 export async function lerTiposDoc(): Promise<TipoDoc[]> {

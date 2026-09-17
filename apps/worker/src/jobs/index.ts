@@ -80,6 +80,7 @@ import {
   pollDecisoes,
   syncAtradius,
 } from './credito/esteira.js'
+import { reenviarDocumentosPorEmail } from './credito/documentos-email.js'
 import { sincronizarAnalisesPlataforma } from './credito/sync-analises-plataforma.js'
 import {
   drenarAnalisesProprias,
@@ -175,6 +176,7 @@ export type TipoJob =
   | 'credito-scores'
   | 'credito-potencial'
   | 'credito-enviar'
+  | 'credito-documentos-email'
   | 'credito-decisao-vendas'
   | 'credito-poll'
   | 'credito-backfill'
@@ -1025,6 +1027,20 @@ export function dispararEnviarAnalises(analiseIds?: string[], docIds?: string[])
       'Enviando análises à seguradora.',
     )
     return enviarAnalises(analiseIds, docIds)
+  })
+}
+
+/**
+ * Reenvia por e-mail os documentos de UMA análise, sem tocar no pedido de cobertura.
+ *
+ * Job próprio, e não um pedaço de `dispararEnviarAnalises`: aquele resolve buyer, que é
+ * a chamada que pode ser cobrada, e só olha análise ainda não enviada. O caso de uso aqui
+ * é o oposto — a análise já foi, e o que faltou foi a papelada chegar.
+ */
+export function dispararReenviarDocumentosEmail(analiseId: string, docIds: string[]): string {
+  return dispararAvulso('credito-documentos-email', async () => {
+    logger.info({ analise: analiseId, documentos: docIds.length }, 'Reenviando documentos por e-mail.')
+    return reenviarDocumentosPorEmail(analiseId, docIds)
   })
 }
 

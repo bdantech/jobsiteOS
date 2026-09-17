@@ -29,6 +29,7 @@ import {
   dispararCreditoMensal,
   dispararDecisaoEmVendas,
   dispararEnviarAnalises,
+  dispararReenviarDocumentosEmail,
   dispararEstimarPotencial,
   dispararPollDecisoes,
   dispararRecalcularScores,
@@ -170,6 +171,28 @@ export async function enviarAnalisesAction(
   }
   const r = await dispararEnviarAnalises(analiseIds, docIds)
   revalidatePath('/credito')
+  return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
+}
+
+/**
+ * Reenvia por e-mail os documentos de uma análise que já foi à seguradora (04d §4.2).
+ *
+ * A papelada vai por e-mail desde 17/09/2026 — a API da Atradius não recebe anexo. Um
+ * e-mail falha por motivos que se resolvem FORA do sistema (lista de destinatários vazia,
+ * endereço errado, anexo grande demais), e sem esta porta o único caminho de volta seria
+ * reenviar a análise inteira: que resolve buyer de novo, e resolver buyer pode ser cobrado.
+ */
+export async function reenviarDocumentosEmailAction(
+  analiseId: string,
+  docIds: string[],
+): Promise<ActionResult<{ enfileirado: boolean; aviso?: string }>> {
+  const { erro } = await autorizar()
+  if (erro) return erro
+  if (!docIds.length) {
+    return { ok: false, message: 'Marque ao menos um documento para reenviar.', code: 'invalid' }
+  }
+  const r = await dispararReenviarDocumentosEmail(analiseId, docIds)
+  revalidatePath(`/credito/analises/${analiseId}`)
   return { ok: true, data: { enfileirado: r.ok, aviso: r.ok ? undefined : r.message } }
 }
 

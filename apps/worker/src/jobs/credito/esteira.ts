@@ -2,7 +2,6 @@ import { EVENTO_TIPOS, type EventoTipo } from '../../../../../packages/core/src/
 import { houveReducaoDeLimite } from '../../../../../packages/core/src/credito/seguradora.js'
 import type {
   DecisaoSeguradora,
-  DocumentoParaSeguradora,
   Seguradora,
 } from '../../../../../packages/core/src/credito/seguradora.js'
 import type { Json } from '../../../../../packages/core/src/types/database.js'
@@ -12,6 +11,7 @@ import { lerConfigCredito, lerIntegracaoSeguradora } from '../../credito/config.
 import { emitirEvento } from '../../radar/eventos.js'
 import { aplicarDecisaoCreditoEmVendas } from '../comercial/comissoes.js'
 import { atradius } from './atradius.js'
+import { enviarDocumentosPorEmail } from './documentos-email.js'
 import { recalcularScoresDeCnpjs } from './potencial.js'
 import { processarAnalisePropria } from './analise-propria.js'
 
@@ -52,7 +52,12 @@ export async function enviarAnalises(
   falharam?: number
   /** Quantas análises proprietárias o envio abriu de carona (04j §6). */
   analises_disparadas?: number
-  /** Documentos aceitos pela seguradora, somando as análises do lote. */
+  /**
+   * Documentos que saíram por e-mail, somando as análises do lote.
+   *
+   * "Saiu" é "o Resend aceitou a mensagem", não "o analista leu" — é a única régua que o
+   * momento do envio conhece. Entrega e bounce chegam depois, pelo webhook.
+   */
   documentos_enviados?: number
   detalhes?: Array<{ id: string; erro: string }>
 }> {
@@ -77,9 +82,12 @@ export async function enviarAnalises(
 
   // `docs_recebidos` entra junto de `solicitada`: é de lá que sai o envio depois de a
   // pasta ser conferida, e era para lá que o gatilho do checklist passou a levar (0187).
+  // `empresas(razao_social)` entra pelo e-mail dos documentos: o assunto e o corpo
+  // nomeiam a empresa, e um e-mail à seguradora que só tem CNPJ obriga quem o recebe a
+  // procurar de quem é antes de saber se é com ele.
   let q = supabaseAdmin
     .from('analises_credito')
-    .select('id, cnpj, limite_solicitado, moeda, atradius_buyer_id')
+    .select('id, cnpj, limite_solicitado, moeda, atradius_buyer_id, empresas(razao_social)')
     .in('estagio', ['solicitada', 'docs_recebidos'])
   if (analiseIds?.length) q = q.in('id', analiseIds)
 
@@ -157,11 +165,29 @@ export async function enviarAnalises(
     await emitirEventoAnalise(a.id, EVENTO_TIPOS.ANALISE_ENVIADA, 'Análise enviada à seguradora', `Pedido ${pedido.dados.case_id} aberto na ${seguradora.nome}.`)
     acc.enviadas++
 
-    // Os documentos vão DEPOIS do pedido, e o resultado deles não muda o do envio: a
-    // cobertura já foi submetida e a seguradora aceita anexo mais tarde. Tratar uma
-    // recusa de PDF como falha de envio faria alguém reenviar — e reenviar resolve
-    // buyer, que é a chamada paga.
-    acc.documentos_enviados += await enviarDocumentosDaAnalise(a.id, pedido.dados.case_id, docIds)
+    /*
+     * Os documentos vão DEPOIS do pedido, e por E-MAIL (ver `documentos-email.ts`): a API
+     * da Atradius não recebe anexo, e foi a própria seguradora que pediu assim.
+     *
+     * O resultado deles não muda o do envio — a cobertura já foi submetida, e a papelada
+     * é aceita depois. Tratar um e-mail que não saiu como falha de envio faria alguém
+     * reenviar a análise, e reenviar resolve buyer, que é a chamada paga. Quando o e-mail
+     * falha, o motivo fica em cada linha de `analise_docs` e a tela oferece o reenvio só
+     * dos documentos.
+     */
+    const empresaDaAnalise = a.empresas as { razao_social: string | null } | null
+    const docs = await enviarDocumentosPorEmail(
+      {
+        id: a.id,
+        cnpj: a.cnpj,
+        razao_social: empresaDaAnalise?.razao_social ?? null,
+        case_id: pedido.dados.case_id,
+        limite_solicitado: a.limite_solicitado === null ? null : Number(a.limite_solicitado),
+        moeda: a.moeda,
+      },
+      docIds ?? [],
+    )
+    acc.documentos_enviados += docs.enviados
 
     // 04j §6: a análise proprietária dispara JUNTO do envio, não antes dele.
     //
@@ -173,91 +199,6 @@ export async function enviarAnalises(
 
   logger.info(acc, 'Envio de análises concluído.')
   return { status: 'ok', ...acc, detalhes }
-}
-
-/**
- * Manda à seguradora os documentos ESCOLHIDOS desta análise.
- *
- * ── POR QUE A ESCOLHA É EXPLÍCITA ──────────────────────────────────────────
- * A pasta de uma análise tem coisas que a seguradora precisa (balanço, DRE, contrato
- * social) e coisas que são nossas (a relação de faturamento que o cliente mandou por
- * WhatsApp, um balancete rascunhado, um documento anexado no tipo errado). Mandar tudo
- * por padrão entrega dado de terceiro que ninguém decidiu entregar — e é irreversível.
- *
- * Por isso `docIds` vazio significa NENHUM, e não TODOS: quem quer mandar marca.
- *
- * ── O QUE FICA GRAVADO ─────────────────────────────────────────────────────
- * Linha a linha: `enviado_seguradora_em` quando a seguradora aceitou, ou o motivo em
- * `envio_seguradora_erro`. "Mandei os documentos" sem isso não responde QUAIS, que é
- * exatamente a pergunta de quem abre um chamado três semanas depois.
- */
-async function enviarDocumentosDaAnalise(
-  analiseId: string,
-  caseId: string,
-  docIds?: string[],
-): Promise<number> {
-  if (!docIds?.length) return 0
-
-  const { data: linhas } = await supabaseAdmin
-    .from('analise_docs')
-    .select('id, tipo, nome_arquivo, arquivo_url')
-    .eq('analise_id', analiseId)
-    .in('id', docIds)
-  if (!linhas?.length) return 0
-
-  const documentos: DocumentoParaSeguradora[] = []
-  for (const d of linhas) {
-    // URL externa é documento que o job de download ainda não trouxe para o bucket.
-    // Mandá-lo daqui exigiria buscá-lo na origem — e a origem é justamente a que pode
-    // ter sumido; é para isso que a 04n §2.2 manda guardar o arquivo conosco.
-    if (/^https?:\/\//i.test(d.arquivo_url)) {
-      await marcarErroDoDocumento(d.id, 'O arquivo ainda não foi baixado para o nosso bucket.')
-      continue
-    }
-    const baixado = await supabaseAdmin.storage.from('analise-docs').download(d.arquivo_url)
-    if (baixado.error || !baixado.data) {
-      await marcarErroDoDocumento(d.id, `Não foi possível ler o arquivo: ${baixado.error?.message ?? 'sem corpo'}.`)
-      continue
-    }
-    documentos.push({
-      id: d.id,
-      tipo: d.tipo,
-      nome_arquivo: d.nome_arquivo ?? `${d.tipo}.pdf`,
-      mime: baixado.data.type || 'application/octet-stream',
-      conteudo: new Uint8Array(await baixado.data.arrayBuffer()),
-    })
-  }
-  if (documentos.length === 0) return 0
-
-  const r = await seguradora.enviarDocumentos(caseId, documentos)
-  if (!r.ok) {
-    // Falha do LOTE (autenticação, rota) — o motivo é o mesmo para todos, e cada linha
-    // precisa carregá-lo: a tela mostra o documento, não o lote.
-    for (const d of documentos) await marcarErroDoDocumento(d.id, r.erro)
-    return 0
-  }
-
-  let aceitos = 0
-  for (const item of r.dados) {
-    if (item.ok) {
-      aceitos++
-      await supabaseAdmin
-        .from('analise_docs')
-        .update({ enviado_seguradora_em: new Date().toISOString(), envio_seguradora_erro: null })
-        .eq('id', item.id)
-    } else {
-      await marcarErroDoDocumento(item.id, item.erro ?? 'A seguradora recusou sem dizer o motivo.')
-    }
-  }
-  logger.info({ analiseId, caseId, aceitos, tentados: documentos.length }, 'Documentos enviados à seguradora.')
-  return aceitos
-}
-
-async function marcarErroDoDocumento(docId: string, erro: string): Promise<void> {
-  await supabaseAdmin
-    .from('analise_docs')
-    .update({ envio_seguradora_erro: erro.slice(0, 500), enviado_seguradora_em: null })
-    .eq('id', docId)
 }
 
 /**
