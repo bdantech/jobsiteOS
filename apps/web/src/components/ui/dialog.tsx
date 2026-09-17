@@ -25,6 +25,22 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+/**
+ * `grid-cols-[minmax(0,1fr)]` NÃO é enfeite — é o que mantém o conteúdo dentro da caixa.
+ *
+ * O primitivo é um `grid` de uma coluna `auto`. Coluna `auto` é dimensionada pelo
+ * min-content do que está dentro: basta UM filho que não sabe encolher — um `<select>`
+ * cujas opções são "Nome · email@dominio", uma tabela, um CNPJ sem espaço — para a trilha
+ * ficar mais larga que o `max-w-lg`. A caixa não cresce junto (o `max-width` a segura), e
+ * o resultado é o conteúdo vazando/ cortado na direita: todo campo `w-full` passa a medir
+ * a trilha, não o modal.
+ *
+ * `min-w-0` no filho não resolve isso. A contribuição de min-content de um `<select>` é o
+ * tamanho da opção mais larga, e `min-width: 0` não a diminui — só permite que o elemento
+ * encolha DEPOIS que a trilha já tiver um tamanho. Fixar o mínimo da coluna em 0 é o que
+ * faz a trilha parar no tamanho do modal; aí o conteúdo largo passa a rolar ou truncar
+ * dentro dele, que é o que se espera de um diálogo.
+ */
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
@@ -34,7 +50,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg grid-cols-[minmax(0,1fr)] translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
         className,
       )}
       {...props}

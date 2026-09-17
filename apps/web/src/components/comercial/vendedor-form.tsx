@@ -581,7 +581,11 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid min-h-0 min-w-0 flex-1 gap-3 overflow-y-auto px-6 py-4">
+          {/* O miolo é um segundo grid, com o mesmo mínimo de coluna do primitivo (ver
+              `DialogContent`): é ele que segura os campos, e sem `minmax(0,1fr)` o select
+              de usuário — cujas opções são "Nome · email" — esticava a trilha e levava
+              junto todo mundo que é `w-full`. */}
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-3 overflow-y-auto px-6 py-4">
             <div className="space-y-1.5">
               <Label htmlFor="nome">Nome</Label>
               <Input id="nome" name="nome" defaultValue={vendedor?.nome ?? ''} required minLength={2} />
