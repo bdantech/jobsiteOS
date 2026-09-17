@@ -14,10 +14,9 @@ import { logger } from '../../logger.js'
  *
  * ── DUAS SAÍDAS, NENHUMA SILENCIOSA ────────────────────────────────────────
  * O job grava `a_enviar` para o que passou e `recusada` + `motivo_recusa` para o
- * que não passou. A segunda metade é a que importa no começo: sem ela, "a Ana
- * não ligou para ninguém hoje" é um mistério, e o time vai procurar bug onde
- * existe regra — hoje quase tudo cai em `sem_iof`, porque a estimativa do funil
- * não calcula IOF (ver o PR).
+ * que não passou. A segunda metade é a que importa: sem ela, "a Ana não ligou
+ * para ninguém hoje" é um mistério, e o time vai procurar bug onde existe regra
+ * — vencimento estimado, contato sem base legal, número no Procon.
  *
  * ── A NOTA É A UNIDADE, E É DIFERENTE DA OUTBOX ────────────────────────────
  * O toque por mensagem é por FORNECEDOR (ninguém recebe um WhatsApp por nota).
@@ -199,9 +198,9 @@ export async function gerarFilaDeVoz(): Promise<ResultadoGeracaoVoz> {
         // ausência de taxa é o único sinal (ver §2.2 do PR).
         taxa_padrao: false,
         valor_desconto: bruta.receita_esperada === null ? null : Number(bruta.receita_esperada),
-        // DECISÃO EM ABERTO: o funil não calcula IOF. Enquanto for assim, o
-        // portão recusa com `sem_iof` em vez de a Ana prometer a mais.
-        valor_iof: null,
+        // Cessão de recebível não tem IOF (OnePay, 17/09/2026): o deságio é o
+        // custo inteiro, e o líquido estimado do funil é o número certo.
+        valor_iof: 0,
         valor_liquido:
           bruta.receita_esperada === null ? null : Number(bruta.valor) - Number(bruta.receita_esperada),
         cancelada: (bruta.status_sync ?? '').toLowerCase().includes('cancel'),

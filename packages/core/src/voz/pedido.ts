@@ -37,7 +37,6 @@ export type MotivoNaoLigar =
   | 'sem_taxa'
   | 'taxa_padrao'
   | 'sem_desconto'
-  | 'sem_iof'
   | 'sem_liquido'
   | 'sem_numero_da_nota'
 
@@ -56,7 +55,6 @@ export const MOTIVO_NAO_LIGAR_LABELS: Record<MotivoNaoLigar, string> = {
   sem_taxa: 'Sem taxa para a operação',
   taxa_padrao: 'Taxa padrão, sem análise do sacado',
   sem_desconto: 'Sem o deságio calculado',
-  sem_iof: 'Sem o IOF calculado',
   sem_liquido: 'Sem o líquido a receber',
   sem_numero_da_nota: 'Nota sem número',
 }
@@ -87,12 +85,16 @@ export interface NotaDaLigacao {
   /** `receita_esperada`: o deságio, visto do lado do fornecedor. */
   valor_desconto: number | null
   /**
-   * DECISÃO EM ABERTO (ver o PR): hoje a estimativa do funil não calcula IOF, e
-   * `valor_liquido = valor − receita_esperada` sai maior que o líquido real. Este
-   * campo existe para receber a conta quando ela existir; enquanto vier nulo, o
-   * portão recusa a ligação em vez de deixar a Ana prometer a mais.
+   * A operação é CESSÃO de recebível, não empréstimo: não há IOF (confirmado
+   * com a OnePay em 17/09/2026). O campo fica opcional e zero porque um dia
+   * pode existir operação que tenha — e, com zero, a Ana não menciona IOF em
+   * nenhum momento: ela não fala de imposto que não existe.
+   *
+   * Consequência boa: `valor_liquido = valor − receita_esperada`, que é
+   * exatamente o que `valorLiquidoEstimado` já calcula. O deságio é o custo
+   * inteiro.
    */
-  valor_iof: number | null
+  valor_iof?: number | null
   valor_liquido: number | null
   status_sync?: string | null
   cancelada?: boolean
@@ -157,7 +159,6 @@ export function podeLigar(fatos: FatosDaLigacao): VeredictoLigacao {
   // Taxa do default é chute bom para ordenar o funil e ruim para dizer ao cliente.
   if (nota.taxa_padrao) return { pode: false, motivo: 'taxa_padrao' }
   if (nota.valor_desconto === null) return { pode: false, motivo: 'sem_desconto' }
-  if (nota.valor_iof === null) return { pode: false, motivo: 'sem_iof' }
   if (nota.valor_liquido === null) return { pode: false, motivo: 'sem_liquido' }
 
   return { pode: true }
@@ -214,7 +215,7 @@ export function montarPedidoDeLigacao(fatos: FatosDaLigacao): ResultadoMontagem 
             valor_face: nota.valor,
             taxa_am: nota.taxa_am as number,
             valor_desconto: nota.valor_desconto as number,
-            valor_iof: nota.valor_iof as number,
+            valor_iof: nota.valor_iof ?? 0,
             valor_liquido: nota.valor_liquido as number,
           },
         ],
