@@ -71,13 +71,18 @@ export interface ResumoMobile {
   nfs_vivas: number
   passivas_geridas: number
   proximas_reunioes: { id: string; titulo: string; inicio_em: string }[]
+  /**
+   * `null` quando quem pede não pode ver a FOLHA desta pessoa (0215) — o auxiliar
+   * abrindo o painel do closer. Nulo, e não zero: zero afirmaria que a comissão dele é
+   * zero. O trabalho dele continua todo aqui.
+   */
   comissao_mes: {
     competencia: string
     total: number
     cessoes?: number
     por_status: Record<string, number>
     por_papel?: Record<string, number>
-  }
+  } | null
   /** Reuniões esperando o aceite DESTA pessoa. A única pendência do módulo com prazo. */
   aceites_pendentes: number
 }
@@ -89,6 +94,10 @@ export interface ResumoMobile {
  * seletor. Passá-lo NÃO é uma decisão de permissão do app: a RPC chama
  * `app_pode_ver_vendedor(id)` e devolve `tem_acesso: false` para quem não pode —
  * um id forjado aqui não vira leitura no banco.
+ *
+ * O bloco `comissao_mes` tem régua própria e mais curta (`app_pode_ver_folha`, 0215):
+ * vê-se o TRABALHO de quem se ajuda, não a remuneração dele. Por isso ele pode vir
+ * `null` num painel que, no resto, veio inteiro.
  */
 export function useResumoComercial(vendedorId?: string | null) {
   return useQuery({
@@ -108,7 +117,7 @@ export function useResumoComercial(vendedorId?: string | null) {
         nfs_vivas: r.nfs_vivas ?? 0,
         passivas_geridas: r.passivas_geridas ?? 0,
         proximas_reunioes: r.proximas_reunioes ?? [],
-        comissao_mes: r.comissao_mes ?? { competencia: '', total: 0, por_status: {} },
+        comissao_mes: r.comissao_mes ?? null,
         aceites_pendentes: r.aceites_pendentes ?? 0,
       }
     },

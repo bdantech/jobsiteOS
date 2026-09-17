@@ -422,8 +422,42 @@ A aba Comissões usa **duas** réguas, e a distinção não é burocracia:
 |---|---|---|
 | própria comissão | todo vendedor | mês corrente, histórico e extrato dele |
 | `vendedor_acessos` | quem recebeu acesso cruzado | o extrato de quem concedeu |
-| `ehGestor` = Admin **ou** Comercial | quem decide sobre a FOLHA | seletor de vendedor, consolidado, simulador, aprovar/pagar competência |
+| `ehGestor` = Admin **ou** Comercial, **e não auxiliar** | quem decide sobre a FOLHA | seletor de vendedor, consolidado, simulador, aprovar/pagar competência |
 | `ehAdmin` = módulo `admin` | quem decide sobre a POLÍTICA | painel de reclassificação |
+
+#### O auxiliar vê só a própria folha (0215)
+
+**Ser auxiliar vence ser gestor, para efeito de dinheiro.** O perfil responde "a que
+MÓDULOS esta pessoa tem acesso", e a auxiliar tem perfil `Comercial` porque é ele que lhe
+dá o módulo — de carona, ele a tornava gestora da folha: a tela abria em "Consolidado
+(todos)" e o painel somava a casa inteira, quebrado por papel, o que deixa ler a linha de
+cada um por subtração.
+
+Ela não perde nada que seja dela. A linha do auxiliar **já é** a do closer com o
+percentual aplicado (`repasse_auxiliar_pct` ÷ nº de auxiliares), com a mesma descrição e
+o mesmo sacado. O extrato dele continua inteiro, na escala dele; o que some é o valor
+cheio do closer.
+
+E não mexe no TRABALHO: o funil, a carteira e o Meu Dia do superior continuam à vista, por
+`app_vendedores_visiveis()`. Ajudar alguém a tocar as contas dele é motivo para ver as
+contas, e nunca foi motivo para ver o contracheque.
+
+**Dinheiro tem DOIS caminhos no banco, e quem mexe num tem de mexer no outro:**
+
+| caminho | régua | onde |
+|---|---|---|
+| RLS | `app_vendedores_visiveis_comissao()` | políticas de `comissao_lancamentos`/`_v2`, `comissao_competencias`, `commission_params`, `comissao_regras` |
+| `security definer` | `app_pode_ver_folha(id)` | `comissao_painel_v2`, o bloco `comissao_mes` de `comercial_resumo_vendedor` |
+
+RLS **não vale dentro de uma função `security definer`**. A 0210 consertou as políticas e
+não encostou nas funções, que continuaram perguntando `app_pode_ver_vendedor()` — a régua
+do TRABALHO. Era por aí que passava o vazamento maior, porque `comissao_painel_v2` alimenta
+a aba que abre por padrão. `grep app_pode_ver_vendedor` sobre funções que leem `comissao_%`
+é como se acha o segundo caminho.
+
+`comercial_resumo_vendedor` é o caso desdobrado: o painel de trabalho continua liberado
+pela régua do trabalho, e só o bloco `comissao_mes` responde à do dinheiro. Ele vem `null`
+— não zero — e as duas telas escondem o card. Zero afirmaria que o closer não ganhou nada.
 
 Reclassificar é a única ação da tela que **reprecifica o trabalho de outra pessoa**: muda
 a taxa de todas as cessões futuras daquela conta. Por isso ela é mais restrita que aprovar

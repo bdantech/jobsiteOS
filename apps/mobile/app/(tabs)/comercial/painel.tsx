@@ -112,31 +112,37 @@ export default function PainelComercialScreen() {
       {/*
         O card de comissão agora ABRE a tela — o motor v2 tornou o número live, e o
         primeiro reflexo de quem vê o valor mudar é querer saber qual cessão o mudou.
+
+        E ele SOME quando a folha não é de quem está olhando (0215): o auxiliar abre o
+        painel do closer pelo trabalho, e o trabalho continua todo abaixo. Some em vez
+        de mostrar R$ 0,00 — um zero afirmaria que o closer não ganhou nada no mês.
       */}
-      <Pressable onPress={() => router.push('/comercial/comissoes')}>
-        <Card className="gap-1 p-4">
-          <View className="flex-row items-center gap-2">
-            <Coins size={14} color={colors.mutedForeground} />
-            <Text variant="muted" className="text-xs uppercase tracking-wide">
-              Comissão do mês
+      {data.comissao_mes ? (
+        <Pressable onPress={() => router.push('/comercial/comissoes')}>
+          <Card className="gap-1 p-4">
+            <View className="flex-row items-center gap-2">
+              <Coins size={14} color={colors.mutedForeground} />
+              <Text variant="muted" className="text-xs uppercase tracking-wide">
+                Comissão do mês
+              </Text>
+            </View>
+            <Text className="text-2xl font-semibold">{brl(data.comissao_mes.total)}</Text>
+            <View className="flex-row flex-wrap gap-1.5 pt-1">
+              {Object.entries(data.comissao_mes.por_status).map(([s, v]) => (
+                <Badge key={s} variant="outline">
+                  <Text className="text-[10px]">
+                    {STATUS_LANCAMENTO_V2_LABELS[s as StatusLancamentoV2] ?? s}: {brl(Number(v))}
+                  </Text>
+                </Badge>
+              ))}
+            </View>
+            <Text variant="muted" className="pt-1 text-[11px]">
+              Provisionado ainda não é fechado, fechado ainda não é aprovado, e aprovado ainda
+              não é pago. Toque para ver o extrato.
             </Text>
-          </View>
-          <Text className="text-2xl font-semibold">{brl(data.comissao_mes.total)}</Text>
-          <View className="flex-row flex-wrap gap-1.5 pt-1">
-            {Object.entries(data.comissao_mes.por_status).map(([s, v]) => (
-              <Badge key={s} variant="outline">
-                <Text className="text-[10px]">
-                  {STATUS_LANCAMENTO_V2_LABELS[s as StatusLancamentoV2] ?? s}: {brl(Number(v))}
-                </Text>
-              </Badge>
-            ))}
-          </View>
-          <Text variant="muted" className="pt-1 text-[11px]">
-            Provisionado ainda não é fechado, fechado ainda não é aprovado, e aprovado ainda
-            não é pago. Toque para ver o extrato.
-          </Text>
-        </Card>
-      </Pressable>
+          </Card>
+        </Pressable>
+      ) : null}
 
       {/*
         A fila de aceite fica ACIMA dos funis quando tem gente esperando: passado o SLA a

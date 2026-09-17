@@ -22,6 +22,19 @@ export interface ContextoComercial {
   /** O cadastro de vendedor do usuário logado, quando existe. */
   vendedor: { id: string; tipo: string; superior_id: string | null } | null
   ehGestor: boolean
+  /**
+   * Auxiliar de um closer. Só o DINHEIRO pergunta isto (0215).
+   *
+   * O perfil responde "a que módulos esta pessoa tem acesso", e a auxiliar tem perfil
+   * `Comercial` porque é ele que lhe dá o módulo — de carona, ele a fazia gestora da
+   * folha e a tela de Comissões abria em "Consolidado (todos)". Ser auxiliar é uma
+   * posição na estrutura comercial, declarada em `vendedores`, e para efeito de
+   * remuneração ela vence o perfil: o auxiliar vê a própria folha, e só.
+   *
+   * No TRABALHO nada muda — funil, carteira e Meu Dia do superior continuam à vista.
+   * A régua do banco é a mesma: `app_auxiliar_de_closer()`.
+   */
+  ehAuxiliar: boolean
 }
 
 export async function contextoComercial(): Promise<ContextoComercial> {
@@ -38,9 +51,12 @@ export async function contextoComercial(): Promise<ContextoComercial> {
     supabase.rpc('app_gestor_comercial'),
   ])
 
+  const vendedor = vendedorRes.data ?? null
+
   return {
     context,
-    vendedor: vendedorRes.data ?? null,
+    vendedor,
     ehGestor: gestorRes.data === true,
+    ehAuxiliar: vendedor?.tipo === 'auxiliar',
   }
 }

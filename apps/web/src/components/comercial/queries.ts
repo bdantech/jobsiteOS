@@ -51,7 +51,12 @@ export interface ResumoComercial {
   nfs_vivas: number
   passivas_geridas: number
   proximas_reunioes: { id: string; titulo: string; inicio_em: string; empresa_id: string | null }[]
-  comissao_mes: { competencia: string; total: number; por_status: Record<string, number> }
+  /**
+   * `null` quando quem pede não pode ver a FOLHA desta pessoa (0215) — o auxiliar
+   * abrindo o painel do closer, por exemplo. Nulo, e não zero: zero afirmaria que a
+   * comissão dele é zero, que é falso. O trabalho dele continua todo aqui.
+   */
+  comissao_mes: { competencia: string; total: number; por_status: Record<string, number> } | null
 }
 
 export async function buscarResumo(vendedorId?: string | null): Promise<ResumoComercial> {
@@ -70,7 +75,7 @@ export async function buscarResumo(vendedorId?: string | null): Promise<ResumoCo
     nfs_vivas: r.nfs_vivas ?? 0,
     passivas_geridas: r.passivas_geridas ?? 0,
     proximas_reunioes: r.proximas_reunioes ?? [],
-    comissao_mes: r.comissao_mes ?? { competencia: '', total: 0, por_status: {} },
+    comissao_mes: r.comissao_mes ?? null,
   }
 }
 

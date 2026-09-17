@@ -181,17 +181,25 @@ export function MeuPainel({ ehGestor }: { ehGestor: boolean }) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Numero
-          icone={Coins}
-          rotulo="Comissão do mês"
-          valor={brl(data.comissao_mes.total)}
-          href="/comercial/comissoes"
-          nota={
-            Object.entries(data.comissao_mes.por_status)
-              .map(([s, v]) => `${STATUS_LANCAMENTO_LABELS[s as StatusLancamento] ?? s}: ${brl(v)}`)
-              .join(' · ') || 'Nada apurado ainda'
-          }
-        />
+        {/*
+          O card SOME quando não é a própria folha (0215). O auxiliar abre o painel do
+          closer para ajudá-lo a tocar as contas — e o trabalho continua todo aqui —, mas
+          a remuneração dele não é assunto de quem ajuda. Some em vez de mostrar R$ 0,00:
+          um zero afirmaria que o closer não ganhou nada neste mês.
+        */}
+        {data.comissao_mes ? (
+          <Numero
+            icone={Coins}
+            rotulo="Comissão do mês"
+            valor={brl(data.comissao_mes.total)}
+            href="/comercial/comissoes"
+            nota={
+              Object.entries(data.comissao_mes.por_status)
+                .map(([s, v]) => `${STATUS_LANCAMENTO_LABELS[s as StatusLancamento] ?? s}: ${brl(v)}`)
+                .join(' · ') || 'Nada apurado ainda'
+            }
+          />
+        ) : null}
         {tipo === 'originador' && (
           <Numero icone={Inbox} rotulo="NFs vivas na carteira" valor={String(data.nfs_vivas)} href="/antecipacao" />
         )}
