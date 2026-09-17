@@ -69,6 +69,11 @@ export interface PainelSacado {
   opera_na_plataforma: boolean
   nfe_observada: { janela_meses: number; total: number; qtd: number; media_mensal: number }
   docs: Tables<'analise_docs'>[]
+  /**
+   * A última tentativa de envio à seguradora que falhou (0212). `null` quando nunca
+   * falhou — não quando nunca se tentou, que dá no mesmo para a tela.
+   */
+  ultima_falha_envio: { motivo: string | null; em: string } | null
   parametros_ativos: ParametrosAnalise | null
 }
 
@@ -107,6 +112,7 @@ export async function buscarPainelSacado(analiseId: string): Promise<PainelSacad
     protestos: r.protestos ?? null,
     certificado: r.certificado ?? null,
     opera_na_plataforma: r.opera_na_plataforma ?? false,
+    ultima_falha_envio: r.ultima_falha_envio ?? null,
     nfe_observada: r.nfe_observada ?? { janela_meses: 6, total: 0, qtd: 0, media_mensal: 0 },
     docs: r.docs ?? [],
     parametros_ativos: r.parametros_ativos ?? null,

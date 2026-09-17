@@ -13,6 +13,7 @@ import {
   Gauge,
   Hash,
   History,
+  SendHorizonal,
   MapPin,
   PlayCircle,
   RefreshCw,
@@ -123,6 +124,80 @@ function quemPediu(painel: PainelSacado): string {
  * protestos, a nossa recomendação. Enviar sem cobertura documental é jogar dinheiro fora
  * — e o único lugar em que dá para saber isso antes de clicar é este.
  */
+/**
+ * A tarja de envio que falhou.
+ *
+ * ─── UM CASO TEM CONDUTA PRÓPRIA, E É O MAIS COMUM ──────────────────────────
+ * "CNPJ não encontrado como buyer" não é erro nosso nem instabilidade: é a Atradius
+ * dizendo que aquela empresa não existe na base dela. Tentar de novo não muda nada — e
+ * cada tentativa gasta a consulta de buyer, que pode ser cobrada.
+ *
+ * O handbook oficial da Buyers API é explícito sobre a saída: não há endpoint de
+ * criação, os três são GET, e "in the rare case of a buyer search not bringing back
+ * results, the customer can contact the Atradius business representative for support".
+ * Então a tarja não oferece um botão que não existe do outro lado — ela entrega o que a
+ * pessoa precisa levar ao representante, pronto para copiar.
+ */
+function FalhaDeEnvio({
+  falha,
+  cnpj,
+  razaoSocial,
+}: {
+  falha: { motivo: string | null; em: string }
+  cnpj: string
+  razaoSocial: string | null
+}) {
+  const motivo = falha.motivo ?? 'A seguradora não aceitou o pedido.'
+  // Casa pelo texto que `enviarAnalises` escreve para este caso, no worker.
+  const buyerAusente = /não encontrado como buyer/i.test(motivo)
+  const paraCopiar = `${formatCnpj(cnpj)}${razaoSocial ? ` — ${razaoSocial}` : ''}`
+
+  return (
+    <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm">
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <AlertTriangle className="size-4 shrink-0 translate-y-0.5 text-destructive" aria-hidden />
+        <strong>O último envio à seguradora falhou.</strong>
+        <span className="text-muted-foreground">{motivo}</span>
+        <span className="text-xs text-muted-foreground">
+          {new Date(falha.em).toLocaleString('pt-BR')}
+        </span>
+      </p>
+
+      {buyerAusente ? (
+        <div className="space-y-1.5 pl-6 text-xs text-muted-foreground">
+          <p>
+            A Atradius não tem esta empresa cadastrada como buyer, e{' '}
+            <strong>não existe cadastro por API</strong> — a própria documentação manda
+            falar com o representante comercial. Reenviar sem resolver isso gasta a
+            consulta de novo e devolve o mesmo erro.
+          </p>
+          <p className="flex flex-wrap items-center gap-2">
+            <span>O que levar ao representante:</span>
+            <code className="rounded bg-background px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+              {paraCopiar}
+            </code>
+            <button
+              type="button"
+              className="underline underline-offset-2 hover:text-foreground"
+              onClick={() => {
+                void navigator.clipboard.writeText(paraCopiar)
+                toast.success('Copiado.')
+              }}
+            >
+              copiar
+            </button>
+          </p>
+        </div>
+      ) : (
+        <p className="flex items-center gap-1.5 pl-6 text-xs text-muted-foreground">
+          <SendHorizonal className="size-3 shrink-0" aria-hidden />
+          Corrigido o que o motivo aponta, &ldquo;Enviar à seguradora&rdquo; tenta de novo.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Acoes({
   analiseId,
   nome,
@@ -383,6 +458,25 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             </Link>
           )}
         </div>
+      )}
+
+      {/*
+       * A ÚLTIMA TENTATIVA DE ENVIO QUE FALHOU (0212).
+       *
+       * O worker já gravava o motivo, e ele já chegava ao sino. O que faltava era ele
+       * chegar AQUI: a análise ficava em "Solicitada", idêntica a uma que ninguém tinha
+       * tentado enviar. O efeito era a pessoa clicar em "Enviar" de novo, gastar de novo
+       * a consulta de buyer (que pode ser cobrada) e receber o mesmo nada.
+       *
+       * Só enquanto o envio ainda é possível: depois que a análise sai, a falha de
+       * ontem é história, e história tem lugar — a timeline da empresa.
+       */}
+      {podeEnviarASeguradora(estagio) && data.ultima_falha_envio && (
+        <FalhaDeEnvio
+          falha={data.ultima_falha_envio}
+          cnpj={esteira.cnpj}
+          razaoSocial={empresa?.razao_social ?? null}
+        />
       )}
 
       {/*
