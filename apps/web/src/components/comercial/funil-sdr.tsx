@@ -51,7 +51,7 @@ import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
-  comercialKeys,
+  comercialKeys, haOutroAoAlcance,
   type LeadComEmpresa,
 } from './queries'
 
@@ -186,10 +186,18 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
     queryFn: buscarTerritoriosCloser,
   })
 
-  // Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
-  // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
+  /*
+   * Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
+   * silencioso. Para os outros, a régua é HÁ ALGUÉM ALÉM DE MIM AO ALCANCE — não
+   * "há mais de um SDR na lista", que era o que estava aqui.
+   *
+   * A diferença aparece no closer com acesso cruzado a UM SDR: a lista de SDRs tem um
+   * item, a conta antiga dava 1 e escondia o filtro — mas as duas respostas existem e
+   * são diferentes (o funil inteiro que ele enxerga, ou só o daquele SDR). Um acesso
+   * cruzado publicado e sem filtro na tela é um acesso que ninguém consegue usar.
+   */
   const sdrsVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'sdr')
-  const mostrarSeletor = ehGestor || sdrsVisiveis.length > 1
+  const mostrarSeletor = ehGestor || (haOutroAoAlcance(alcance.data) && sdrsVisiveis.length > 0)
   const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
 
   function recarregar() {

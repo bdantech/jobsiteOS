@@ -21,7 +21,11 @@ import {
   type EstagioCertificado,
 } from '@jobsiteos/core'
 import { moverCertificadoCardAction } from '@/actions/certificado-funil'
-import { buscarVendedoresVisiveis, comercialKeys } from '@/components/comercial/queries'
+import {
+  buscarVendedoresVisiveis,
+  comercialKeys,
+  haOutroAoAlcance,
+} from '@/components/comercial/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -484,11 +488,14 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
                * de vendas e do de reuniões. Um filtro que muda de lugar entre telas
                * irmãs custa uma procura por tela, toda vez.
                *
-               * Quem não é gestor só o vê quando há mais de um funil ao alcance dele —
-               * o closer com originadores abaixo. Sem ninguém ao alcance não há
-               * escolha a fazer, e um seletor de uma opção só é ruído.
+               * Quem não é gestor só o vê quando há ALGUÉM ALÉM DE SI ao alcance — o
+               * closer com originadores abaixo. A conta era `originadores.length > 1`,
+               * e escondia o filtro de quem enxerga exatamente um originador: ali as
+               * duas respostas existem e são diferentes (tudo o que eu vejo, ou só o
+               * dele). Um originador sozinho continua sem seletor — para ele "todos" e
+               * "eu" são a mesma lista, e um controle que não controla é ruído.
                */}
-              {(ehGestor || originadores.length > 1) && originadores.length > 0 && (
+              {(ehGestor || haOutroAoAlcance(visiveis)) && originadores.length > 0 && (
                 <Select
                   value={vendedorId ?? 'todos'}
                   onValueChange={(v) => setVendedorId(v === 'todos' ? null : v)}

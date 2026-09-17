@@ -45,8 +45,11 @@ test('supressão vence tudo, inclusive a confirmação explícita de um humano',
   assert.equal(r.motivo, 'suprimido')
 })
 
-test('contato sem base legal não é abordado', () => {
-  assert.equal(podeEnviar({ ...BASE, baseLegal: null }, cfg).motivo, 'sem_base_legal')
+// A base legal virou registro, não porta: a coluna vazia dizia que ninguém preencheu,
+// não que faltava permissão. Quem recusa continua sendo supressão, teto, cooldown e
+// janela — e este teste é o que garante que a trava não volta por descuido.
+test('contato sem base legal registrada é abordado como qualquer outro', () => {
+  assert.equal(podeEnviar({ ...BASE, baseLegal: null }, cfg).pode, true)
 })
 
 test('o teto por thread barra a quarta mensagem do dia', () => {

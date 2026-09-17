@@ -23,6 +23,14 @@ export const comercialKeys = {
   config: () => ['comercial', 'config'] as const,
   carteira: (vendedorId?: string | null) => ['comercial', 'carteira', vendedorId ?? 'eu'] as const,
   visiveis: () => ['comercial', 'visiveis'] as const,
+  /*
+   * CHAVE PRÓPRIA, e não a `visiveis()`. As duas listas respondem perguntas diferentes
+   * ("quem eu abro" e "de quem eu vejo a folha", 0210) e a segunda é mais curta. Sob a
+   * mesma chave, o React Query serve a primeira que chegou: quem entrasse em Comissões
+   * vindo de um funil veria a lista do TRABALHO no seletor da folha — e escolheria um
+   * nome cujo extrato a RLS devolve vazio.
+   */
+  visiveisComissao: () => ['comercial', 'visiveis-comissao'] as const,
   pitch: (leadId: string) => ['comercial', 'pitch', leadId] as const,
   submissoes: (empresaId: string) => ['comercial', 'submissoes', empresaId] as const,
   reuniao: (alvo: string) => ['comercial', 'reuniao', alvo] as const,
@@ -72,6 +80,18 @@ export interface VendedorVisivel {
   nome: string
   tipo: string
   is_ia: boolean
+  /**
+   * Este sou eu. É o que separa "há outro funil ao alcance" de "a lista tem um item",
+   * e é a diferença entre um filtro útil e um seletor de uma opção só: um originador
+   * sozinho enxerga a si mesmo e não tem escolha a fazer; um closer que enxerga UM
+   * originador tem duas respostas possíveis (tudo, ou só o dele).
+   */
+  sou_eu: boolean
+}
+
+/** Há alguém ALÉM de mim nesta lista? É o que decide se o seletor de vendedor existe. */
+export function haOutroAoAlcance(lista: readonly VendedorVisivel[] | undefined): boolean {
+  return (lista ?? []).some((v) => !v.sou_eu)
 }
 
 /**

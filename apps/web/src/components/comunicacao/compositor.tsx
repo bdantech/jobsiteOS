@@ -48,9 +48,18 @@ import {
  * bloqueia o botão: sair literal é pior que não sair.
  *
  * ── O QUE ELE RECUSA ANTES DE CHAMAR O SERVIDOR ────────────────────────────
- * Contato sem o canal escolhido e contato sem base legal. As duas seriam recusas
- * do portão, e recusar aqui é o que transforma um erro em explicação — a RPC
- * continua sendo quem decide, e ela recusa de novo se algo mudar no meio.
+ * Contato sem o canal escolhido. Seria uma recusa do portão, e recusar aqui é o
+ * que transforma um erro em explicação — a RPC continua sendo quem decide, e ela
+ * recusa de novo se algo mudar no meio.
+ *
+ * A FALTA DE BASE LEGAL DEIXOU DE BLOQUEAR. Ela nasceu como porta: contato sem
+ * base registrada não era abordado. Na prática a base existe em todo telefone que
+ * chega aqui — a NF-e é dado público e o cadastro manual é relação comercial —, e
+ * o que o campo de fato media era se alguém tinha preenchido a coluna. Uma trava
+ * que mede preenchimento, e não permissão, só ensina a procurar outro caminho para
+ * mandar a mensagem. O valor continua gravado e continua decidindo o link de
+ * descadastro (`exigeDescadastro`); ele só não recusa mais o envio, aqui, no portão
+ * do worker nem no `app_comunicacao_enfileirar`.
  */
 
 export function Compositor({
@@ -173,7 +182,6 @@ export function Compositor({
      */
     if (remetente.bloqueio) return remetente.bloqueio
     if (!destino) return `Este contato não tem ${canal === 'email' ? 'e-mail' : 'WhatsApp'} cadastrado.`
-    if (!contato.base_legal) return 'Contato sem base legal — não é possível abordá-lo.'
     if (!corpo.trim()) return 'Escreva a mensagem.'
     if (pendentes.length > 0) {
       return `Sem valor para ${pendentes.map((v) => `{${v}}`).join(', ')} — sairia assim, literal. Escreva à mão ou escolha outro template.`
@@ -256,15 +264,15 @@ export function Compositor({
       {contato ? (
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{destinoLegivel ?? 'sem canal'}</span>
+          {/* A etiqueta só aparece quando há base registrada, e é informativa: de onde
+              veio este contato. A contraparte vermelha ("sem base legal") saiu junto com
+              o bloqueio — marcar de vermelho um telefone que se pode usar é dizer que a
+              tela sabe de um impedimento que ela não tem. */}
           {contato.base_legal ? (
             <Badge variant="outline" className="h-5 text-[10px]">
               {BASE_LEGAL_LABELS[contato.base_legal as BaseLegal] ?? contato.base_legal}
             </Badge>
-          ) : (
-            <Badge variant="destructive" className="h-5 text-[10px]">
-              sem base legal
-            </Badge>
-          )}
+          ) : null}
           {contato.nao_e_o_decisor ? (
             <Badge variant="outline" className="h-5 text-[10px]">
               não é quem decide

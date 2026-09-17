@@ -74,11 +74,14 @@ const NATUREZA_ROTULO: Record<Natureza, string> = {
 
 export interface MeuDiaTelaProps {
   dia: MeuDia
-  visiveis: { id: string; nome: string; tipo: string }[]
-  ehGestor: boolean
+  /**
+   * Os dias que esta pessoa pode abrir, dela inclusive (`sou_eu`). Vem do mesmo RPC que
+   * monta o filtro de vendedor no resto do módulo — a régua de quem-vê-quem é uma só.
+   */
+  visiveis: { id: string; nome: string; tipo: string; sou_eu: boolean }[]
 }
 
-export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
+export function MeuDiaTela({ dia, visiveis }: MeuDiaTelaProps) {
   const router = useRouter()
   const [modal, setModal] = React.useState<{ titulo: string; itens: ItemMeuDia[] } | null>(null)
   const [adiando, setAdiando] = React.useState<{ bloco: string; item: ItemMeuDia } | null>(null)
@@ -146,7 +149,14 @@ export function MeuDiaTela({ dia, visiveis, ehGestor }: MeuDiaTelaProps) {
           </p>
         </div>
 
-        {ehGestor && visiveis.length > 0 && (
+        {/*
+          O seletor aparece para quem tem OUTRO dia ao alcance — gestor ou não. Antes
+          ele era exclusivo do gestor, e o closer com acesso cruzado publicado ficava
+          sem porta justamente na tela que responde "o que essa pessoa faz hoje".
+          Quem não tem ninguém além de si mesmo não tem escolha a fazer; para esse a
+          lista tem um item só e o controle some.
+        */}
+        {visiveis.some((v) => !v.sou_eu) && (
           <select
             aria-label="Ver o dia de"
             value={dia.vendedor_id ?? ''}

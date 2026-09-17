@@ -25,7 +25,6 @@ import type {
  *   kill switch    a casa mandou parar. Nada mais importa.
  *   supressão      a PESSOA pediu para não receber. É o único motivo que nem uma
  *                  confirmação explícita de humano fura.
- *   base legal     não sabemos por que podemos falar com ela.
  *   teto da thread já mandamos demais para esta pessoa hoje.
  *   teto da conta  o número já mandou o que aguenta hoje (warmup).
  *   cooldown       falamos com ela ontem.
@@ -61,6 +60,13 @@ export interface FatosDoEnvio {
   /** Mensagem do agente em modo autônomo. O kill switch só alcança estas. */
   automatica: boolean
   suprimido: boolean
+  /**
+   * De onde veio o direito de falar com esta pessoa. NÃO recusa mais: a base existe em
+   * todo contato que chega à fila (NF-e é dado público, cadastro manual é relação
+   * comercial), e o que a coluna nula media era coluna não preenchida — uma trava sobre
+   * preenchimento, não sobre permissão. Continua aqui porque é o que decide o link de
+   * descadastro (`exigeDescadastro`) e porque é registro de COMO chegamos ao contato.
+   */
   baseLegal: BaseLegal | null
   /** Saídas para esta thread hoje. */
   enviadasNaThreadHoje: number
@@ -107,9 +113,11 @@ export function podeEnviar(fatos: FatosDoEnvio, cfg: ConfigComunicacao): Veredic
   if (fatos.suprimido) {
     return { pode: false, motivo: 'suprimido' }
   }
-  if (fatos.baseLegal === null) {
-    return { pode: false, motivo: 'sem_base_legal' }
-  }
+  /*
+   * BASE LEGAL NÃO RECUSA MAIS (ver `FatosDoEnvio.baseLegal`). A recusa ficava aqui,
+   * entre a supressão e o teto. O motivo continua no tipo porque linhas antigas da
+   * outbox foram recusadas por ele e a tela ainda precisa saber traduzi-lo.
+   */
   if (cfg.teto_diario_por_thread > 0 && fatos.enviadasNaThreadHoje >= cfg.teto_diario_por_thread) {
     return { pode: false, motivo: 'teto_thread' }
   }

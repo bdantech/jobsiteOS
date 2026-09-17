@@ -68,7 +68,7 @@ export function Comissoes({
    * aparece.
    */
   const visiveis = useQuery({
-    queryKey: comercialKeys.visiveis(),
+    queryKey: comercialKeys.visiveisComissao(),
     queryFn: buscarVendedoresDaComissao,
   })
 

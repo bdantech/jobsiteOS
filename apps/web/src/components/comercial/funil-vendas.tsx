@@ -39,6 +39,7 @@ import { EtapasDoFunil } from './etapas-funil'
 import { AbaCredito } from './aba-credito'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
+  haOutroAoAlcance,
   type VendaComEmpresa,
 } from './queries'
 
@@ -104,10 +105,14 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
     queryFn: () => buscarMotivos('funil_vendedor'),
   })
 
-  // Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
-  // silencioso. Vendedor comum só vê quando há realmente mais de um funil ao alcance.
+  /*
+   * Gestor sempre vê o seletor: para ele "todos" é uma informação, não um default
+   * silencioso. Para os outros, a régua é HÁ ALGUÉM ALÉM DE MIM AO ALCANCE — e não
+   * "há mais de um closer na lista", que escondia o filtro de quem tem acesso cruzado
+   * a exatamente um funil. Ver `haOutroAoAlcance`.
+   */
   const closersVisiveis = (alcance.data ?? []).filter((v) => v.tipo === 'vendedor')
-  const mostrarSeletor = ehGestor || closersVisiveis.length > 1
+  const mostrarSeletor = ehGestor || (haOutroAoAlcance(alcance.data) && closersVisiveis.length > 0)
   const nomePorId = new Map((vendedores.data ?? []).map((v) => [v.id, v.nome]))
 
   async function reatribuir(v: VendaComEmpresa, destino: string) {
