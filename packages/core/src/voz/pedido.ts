@@ -164,6 +164,85 @@ export function podeLigar(fatos: FatosDaLigacao): VeredictoLigacao {
   return { pode: true }
 }
 
+/**
+ * Uma linha de `notas_funil`, no pouco que a ligação precisa.
+ *
+ * Existe para o cron e a TELA não divergirem: as duas montam os mesmos fatos a
+ * partir da mesma view. Divergirem significaria a tela dizer "dá para ligar" e
+ * o job recusar de noite, sem ninguém entender por quê.
+ */
+export interface NotaDoFunil {
+  access_key: string
+  numero: string | null
+  serie?: string | null
+  emitida_em?: string | null
+  vencimento: string | null
+  vencimento_origem?: string | null
+  valor: number | string
+  taxa_usada: number | string | null
+  receita_esperada: number | string | null
+  status_sync?: string | null
+  operavel?: boolean | null
+  fornecedor_cnpj: string
+  fornecedor_nome?: string | null
+  fornecedor_cadastrado?: boolean | null
+  fornecedor_suprimido?: boolean | null
+  sacado_cnpj: string
+  sacado_nome?: string | null
+  sacado_razao_social?: string | null
+}
+
+const numero = (v: number | string | null | undefined): number | null => {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export function fatosDaNotaDoFunil(
+  nota: NotaDoFunil,
+  contato: ContatoDaLigacao | null,
+  opcoes: { killSwitch?: boolean; suprimido?: boolean; validadeDias?: number; agora?: Date } = {},
+): FatosDaLigacao {
+  const agora = opcoes.agora ?? new Date()
+  const valor = numero(nota.valor) ?? 0
+  const desagio = numero(nota.receita_esperada)
+  return {
+    killSwitch: Boolean(opcoes.killSwitch),
+    suprimido: Boolean(opcoes.suprimido) || Boolean(nota.fornecedor_suprimido),
+    contato,
+    nota: {
+      access_key: nota.access_key,
+      numero: nota.numero,
+      serie: nota.serie ?? null,
+      emitida_em: nota.emitida_em ?? null,
+      vencimento: nota.vencimento,
+      vencimento_origem: (nota.vencimento_origem ?? null) as NotaDaLigacao['vencimento_origem'],
+      valor,
+      taxa_am: numero(nota.taxa_usada),
+      // A view não expõe se a taxa caiu no default do `antecipacao_config`
+      // (§2.2 de docs/voz-integracao.md). Enquanto não expuser, a ausência de
+      // taxa é o único sinal que temos.
+      taxa_padrao: false,
+      valor_desconto: desagio,
+      // Cessão de recebível não tem IOF: o deságio é o custo inteiro.
+      valor_iof: 0,
+      valor_liquido: desagio === null ? null : Math.round((valor - desagio) * 100) / 100,
+      cancelada: (nota.status_sync ?? '').toLowerCase().includes('cancel'),
+      operavel: nota.operavel ?? null,
+    },
+    fornecedor: { razao_social: nota.fornecedor_nome ?? '', cnpj: nota.fornecedor_cnpj },
+    sacado: {
+      razao_social: nota.sacado_razao_social ?? nota.sacado_nome ?? '',
+      cnpj: nota.sacado_cnpj,
+    },
+    cadastro: { ativo: Boolean(nota.fornecedor_cadastrado), pendencias: [] },
+    validade_proposta: new Date(agora.getTime() + (opcoes.validadeDias ?? 3) * 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+    agora,
+  }
+}
+
 export type ResultadoMontagem =
   | { ok: true; pedido: PedidoLigacao }
   | { ok: false; motivo: MotivoNaoLigar }

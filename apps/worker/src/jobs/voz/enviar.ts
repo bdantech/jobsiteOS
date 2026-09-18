@@ -28,6 +28,7 @@ export interface ResultadoEnvioVoz {
 
 interface LinhaFila {
   access_key: string
+  id_externo: string
   pedido: PedidoLigacao
   tentativas: number
 }
@@ -48,7 +49,7 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
 
   const agora = new Date()
   const { rows } = await pool.query<LinhaFila>(
-    `select access_key, pedido, tentativas
+    `select access_key, id_externo, pedido, tentativas
        from voz_ligacoes
       where status = 'a_enviar'
         and pedido is not null
@@ -63,7 +64,9 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
   let falhadas = 0
 
   for (const linha of rows) {
-    const r = await enfileirarLigacao(conexao, linha.pedido)
+    // O `id_externo` é o da LINHA: a segunda tentativa da mesma nota é outra
+    // ligação, não reenvio da primeira — e é isso que a Ana usa para decidir.
+    const r = await enfileirarLigacao(conexao, { ...linha.pedido, id_externo: linha.id_externo })
 
     if (r.ok) {
       enviadas++
@@ -71,8 +74,8 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
         `update voz_ligacoes
             set status = 'enviada', ligacao_id = $2, enviada_em = now(),
                 tentativas = tentativas + 1, ultima_tentativa_em = now(), erro = null
-          where access_key = $1`,
-        [linha.access_key, r.resposta.id],
+          where id_externo = $1`,
+        [linha.id_externo, r.resposta.id],
       )
       continue
     }
@@ -87,9 +90,9 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
           set tentativas = $2, ultima_tentativa_em = now(), erro = $3,
               status = case when $4 then 'a_enviar' else 'falhou' end,
               agendada_para = case when $4 then $5::timestamptz else agendada_para end
-        where access_key = $1`,
+        where id_externo = $1`,
       [
-        linha.access_key,
+        linha.id_externo,
         tentativas,
         r.erro.slice(0, 500),
         podeTentar,
