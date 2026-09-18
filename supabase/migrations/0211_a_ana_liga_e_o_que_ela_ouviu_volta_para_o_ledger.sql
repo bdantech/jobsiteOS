@@ -39,11 +39,16 @@
 -- ─── §1 A fila ──────────────────────────────────────────────────────────────
 
 create table public.voz_ligacoes (
-  -- A nota é a unidade: uma ligação por nota, e a `access_key` é o `id_externo`
-  -- que a Ana usa para não ligar duas vezes para a mesma pessoa pelo mesmo
-  -- motivo. PK aqui é o que torna o reenvio inofensivo.
-  access_key text primary key
+  -- A nota é a unidade, mas não para sempre: "ninguém atendeu, liga de novo
+  -- amanhã" é pedido legítimo, e a Ana nunca redisca sozinha. Então a chave é
+  -- (nota, tentativa), e cada tentativa vira um `id_externo` diferente do lado
+  -- dela — que é o que impede reenvio acidental de virar segunda ligação.
+  access_key text not null
     references public.notas_fiscais (access_key) on delete cascade,
+  tentativa int not null default 1
+    constraint voz_ligacoes_tentativa_check check (tentativa >= 1),
+  /* O que a Ana recebe como `id_externo`: `<access_key>` na 1ª, `<access_key>:2` na 2ª. */
+  id_externo text not null unique,
   fornecedor_cnpj text not null
     constraint voz_ligacoes_fornecedor_check check (fornecedor_cnpj ~ '^[0-9]{14}$'),
   contato_id uuid references public.contatos (id) on delete set null,
@@ -77,14 +82,22 @@ create table public.voz_ligacoes (
   /* A linha do ledger que esta ligação virou. */
   comunicacao_id uuid references public.comunicacoes (id) on delete set null,
 
+  /* De onde veio o pedido: a régua diária, ou uma pessoa na tela. */
+  origem text not null default 'cron'
+    constraint voz_ligacoes_origem_check check (origem in ('cron', 'manual')),
+  enfileirada_por uuid references public.usuarios (id) on delete set null,
+
   criada_em timestamptz not null default now(),
   enviada_em timestamptz,
   encerrada_em timestamptz,
-  atualizada_em timestamptz not null default now()
+  atualizada_em timestamptz not null default now(),
+
+  primary key (access_key, tentativa)
 );
 
 create index voz_ligacoes_fila_idx on public.voz_ligacoes (status, agendada_para)
   where status = 'a_enviar';
+create index voz_ligacoes_id_externo_idx on public.voz_ligacoes (id_externo);
 create index voz_ligacoes_fornecedor_idx on public.voz_ligacoes (fornecedor_cnpj, criada_em desc);
 create index voz_ligacoes_ligacao_idx on public.voz_ligacoes (ligacao_id);
 
@@ -157,7 +170,9 @@ begin
     raise exception 'id_externo é obrigatório.' using errcode = '23514';
   end if;
 
-  select * into v_linha from public.voz_ligacoes where access_key = v_access_key;
+  -- Pelo `id_externo`, que é o que a Ana devolve: a segunda tentativa da mesma
+  -- nota é outra linha, e fechar a errada apagaria o resultado da primeira.
+  select * into v_linha from public.voz_ligacoes where id_externo = v_access_key;
   if not found then
     raise exception 'Ligação desconhecida: %.', v_access_key using errcode = 'no_data_found';
   end if;
@@ -168,7 +183,7 @@ begin
     return v_linha;
   end if;
 
-  select * into v_nota from public.notas_fiscais where access_key = v_access_key;
+  select * into v_nota from public.notas_fiscais where access_key = v_linha.access_key;
 
   update public.voz_ligacoes set
     status = case v_status
@@ -184,7 +199,7 @@ begin
     resultado = p,
     erro = nullif(p ->> 'erro', ''),
     encerrada_em = now()
-  where access_key = v_access_key
+  where id_externo = v_access_key
   returning * into v_linha;
 
   -- ── 2. O ledger ──────────────────────────────────────────────────────────
@@ -217,7 +232,7 @@ begin
     returning id into v_comunicacao;
 
     update public.voz_ligacoes set comunicacao_id = v_comunicacao
-      where access_key = v_access_key returning * into v_linha;
+      where id_externo = v_access_key returning * into v_linha;
   end if;
 
   -- ── 3. O estágio ─────────────────────────────────────────────────────────
@@ -228,7 +243,7 @@ begin
      and v_nota.estagio_funil in ('a_prospectar', 'em_prospeccao') then
     update public.notas_fiscais
       set estagio_funil = 'em_negociacao', estagio_alterado_em = now()
-      where access_key = v_access_key;
+      where access_key = v_linha.access_key;
   end if;
 
   -- ── 4. A supressão ───────────────────────────────────────────────────────
@@ -264,13 +279,105 @@ begin
 
   insert into public.audit_log (usuario_id, acao, entidade, entidade_id, payload)
   values (
-    null, 'voz.resultado', 'voz_ligacoes', v_access_key,
+    null, 'voz.resultado', 'voz_ligacoes', v_linha.id_externo,
     jsonb_build_object('outcome', v_outcome, 'status', v_linha.status,
                        'ligacao_id', v_linha.ligacao_id, 'chamada_id', v_linha.chamada_id)
   );
 
   return v_linha;
 end $$;
+
+-- ─── §4 A fila feita à mão ──────────────────────────────────────────────────
+--
+-- O cron decide por régua; esta função existe para quando uma PESSOA decide.
+-- Mesma fila, mesmo portão, mesma Ana — muda só quem apertou o botão, e isso
+-- fica gravado em `origem` e `enfileirada_por`.
+--
+-- O portão de conteúdo (líquido, taxa, vencimento, Procon) roda no core antes
+-- daqui, porque é ele que sabe montar o pedido. A SUPRESSÃO é reconferida aqui
+-- de propósito: é fato do banco, pode ter mudado entre a tela abrir e o clique
+-- acontecer, e recusar na transação é a única forma de a pessoa ver o motivo.
+
+create or replace function public.app_voz_enfileirar(p jsonb)
+returns public.voz_ligacoes language plpgsql security definer set search_path = '' as $$
+declare
+  v_ator uuid := auth.uid();
+  v_access_key text := nullif(btrim(coalesce(p ->> 'access_key', '')), '');
+  v_telefone text := nullif(btrim(coalesce(p ->> 'telefone', '')), '');
+  v_contato uuid := nullif(p ->> 'contato_id', '')::uuid;
+  v_pedido jsonb := p -> 'pedido';
+  v_digitos text;
+  v_nota public.notas_fiscais;
+  v_tentativa int;
+  v_id_externo text;
+  v_linha public.voz_ligacoes;
+begin
+  if not public.app_tem_modulo('comunicacao') then
+    raise exception 'Sem acesso ao módulo Comunicação.' using errcode = '42501';
+  end if;
+  if v_access_key is null or v_telefone is null then
+    raise exception 'Informe a nota e o telefone.' using errcode = '23514';
+  end if;
+  if v_telefone !~ '^\+55[0-9]{10,11}$' then
+    raise exception 'Telefone precisa estar em E.164 (+55DDNUMERO).' using errcode = '22023';
+  end if;
+  if v_pedido is null or jsonb_typeof(v_pedido) <> 'object' then
+    raise exception 'Pedido da ligação ausente.' using errcode = '23514';
+  end if;
+
+  select * into v_nota from public.notas_fiscais where access_key = v_access_key;
+  if not found then
+    raise exception 'Nota não encontrada.' using errcode = 'no_data_found';
+  end if;
+
+  v_digitos := regexp_replace(v_telefone, '[^0-9]', '', 'g');
+  if exists (
+    select 1 from public.supressao
+     where ((escopo in ('telefone', 'whatsapp') and valor = v_digitos)
+         or (escopo = 'empresa' and valor = v_nota.fornecedor_cnpj))
+       and (expira_em is null or expira_em >= current_date)
+  ) then
+    raise exception 'Esse contato pediu para não ser procurado.' using errcode = '42501';
+  end if;
+
+  -- Uma tentativa aberta por vez. Duas na fila viram duas ligações para a mesma
+  -- pessoa sobre a mesma nota, com minutos de diferença.
+  if exists (
+    select 1 from public.voz_ligacoes
+     where access_key = v_access_key and status in ('a_enviar', 'enviada')
+  ) then
+    raise exception 'Já existe uma ligação em andamento para esta nota.' using errcode = '23505';
+  end if;
+
+  select coalesce(max(tentativa), 0) + 1 into v_tentativa
+    from public.voz_ligacoes where access_key = v_access_key;
+  -- A primeira mantém a `access_key` limpa; da segunda em diante o sufixo é o
+  -- que faz a Ana entender que é OUTRA ligação, e não reenvio da mesma.
+  v_id_externo := case when v_tentativa = 1 then v_access_key
+                       else v_access_key || ':' || v_tentativa end;
+
+  insert into public.voz_ligacoes (
+    access_key, tentativa, id_externo, fornecedor_cnpj, contato_id, telefone,
+    status, pedido, origem, enfileirada_por
+  ) values (
+    v_access_key, v_tentativa, v_id_externo, v_nota.fornecedor_cnpj, v_contato, v_telefone,
+    'a_enviar', jsonb_set(v_pedido, '{id_externo}', to_jsonb(v_id_externo)), 'manual', v_ator
+  )
+  returning * into v_linha;
+
+  insert into public.audit_log (usuario_id, acao, entidade, entidade_id, payload)
+  values (v_ator, 'voz.enfileirar', 'voz_ligacoes', v_id_externo,
+          jsonb_build_object('access_key', v_access_key, 'tentativa', v_tentativa,
+                             'telefone', v_telefone));
+
+  return v_linha;
+end $$;
+
+comment on function public.app_voz_enfileirar(jsonb) is
+  'Põe uma ligação na fila a partir da tela. Mesma fila do cron; a supressão é reconferida aqui porque é fato do banco e pode ter mudado desde que a tela abriu.';
+
+revoke execute on function public.app_voz_enfileirar(jsonb) from public, anon;
+grant execute on function public.app_voz_enfileirar(jsonb) to authenticated, service_role;
 
 comment on function public.app__voz_registrar_resultado(jsonb) is
   'Fecha a ligação na fila e transforma o desfecho em ledger, estágio e supressão — tudo na mesma transação. Idempotente: a Ana reenvia o webhook até receber 2xx.';

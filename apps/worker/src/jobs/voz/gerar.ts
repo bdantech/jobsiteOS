@@ -1,9 +1,10 @@
 import { normalizarTelefoneBr } from '../../../../../packages/core/src/fornecedores/telefone.js'
 import {
+  fatosDaNotaDoFunil,
   montarPedidoDeLigacao,
   type ContatoDaLigacao,
-  type FatosDaLigacao,
   type MotivoNaoLigar,
+  type NotaDoFunil,
 } from '../../../../../packages/core/src/voz/pedido.js'
 import { lerConfigVoz } from '../../voz/config.js'
 import { pool, supabaseAdmin } from '../../db.js'
@@ -181,54 +182,22 @@ export async function gerarFilaDeVoz(): Promise<ResultadoGeracaoVoz> {
     const contato = await escolherContato(bruta, bloqueados, procon)
     const telefoneDigitos = (contato?.telefone_e164 ?? '').replace(/\D/g, '')
 
-    const fatos: FatosDaLigacao = {
+    const fatos = fatosDaNotaDoFunil(bruta as unknown as NotaDoFunil, contato, {
       killSwitch: cfg.kill_switch,
-      suprimido: Boolean(bruta.fornecedor_suprimido) || bloqueados.has(telefoneDigitos),
-      contato,
-      nota: {
-        access_key: bruta.access_key,
-        numero: bruta.numero,
-        serie: bruta.serie,
-        emitida_em: bruta.emitida_em,
-        vencimento: bruta.vencimento,
-        vencimento_origem: bruta.vencimento_origem as FatosDaLigacao['nota']['vencimento_origem'],
-        valor: Number(bruta.valor),
-        taxa_am: bruta.taxa_usada === null ? null : Number(bruta.taxa_usada),
-        // A view não diz se a taxa caiu no default; enquanto não disser, a
-        // ausência de taxa é o único sinal (ver §2.2 do PR).
-        taxa_padrao: false,
-        valor_desconto: bruta.receita_esperada === null ? null : Number(bruta.receita_esperada),
-        // Cessão de recebível não tem IOF (OnePay, 17/09/2026): o deságio é o
-        // custo inteiro, e o líquido estimado do funil é o número certo.
-        valor_iof: 0,
-        valor_liquido:
-          bruta.receita_esperada === null ? null : Number(bruta.valor) - Number(bruta.receita_esperada),
-        cancelada: (bruta.status_sync ?? '').toLowerCase().includes('cancel'),
-        operavel: bruta.operavel,
-      },
-      fornecedor: {
-        razao_social: bruta.fornecedor_nome ?? '',
-        cnpj: bruta.fornecedor_cnpj,
-      },
-      sacado: {
-        razao_social: bruta.sacado_razao_social ?? bruta.sacado_nome ?? '',
-        cnpj: bruta.sacado_cnpj,
-      },
-      cadastro: { ativo: Boolean(bruta.fornecedor_cadastrado), pendencias: [] },
-      validade_proposta: new Date(agora.getTime() + cfg.validade_dias * 86_400_000)
-        .toISOString()
-        .slice(0, 10),
+      suprimido: bloqueados.has(telefoneDigitos),
+      validadeDias: cfg.validade_dias,
       agora,
-    }
+    })
 
     const montado = montarPedidoDeLigacao(fatos)
     if (!montado.ok) {
       conta(montado.motivo)
       recusadas++
       await pool.query(
-        `insert into voz_ligacoes (access_key, fornecedor_cnpj, contato_id, telefone, status, motivo_recusa)
-         values ($1, $2, null, $3, 'recusada', $4)
-         on conflict (access_key) do nothing`,
+        `insert into voz_ligacoes (access_key, tentativa, id_externo, fornecedor_cnpj, telefone,
+                                   status, motivo_recusa)
+         values ($1, 1, $1, $2, $3, 'recusada', $4)
+         on conflict do nothing`,
         [bruta.access_key, bruta.fornecedor_cnpj, contato?.telefone_e164 ?? null, montado.motivo],
       )
       continue
@@ -236,9 +205,10 @@ export async function gerarFilaDeVoz(): Promise<ResultadoGeracaoVoz> {
 
     enfileiradas++
     await pool.query(
-      `insert into voz_ligacoes (access_key, fornecedor_cnpj, telefone, status, pedido)
-       values ($1, $2, $3, 'a_enviar', $4)
-       on conflict (access_key) do nothing`,
+      `insert into voz_ligacoes (access_key, tentativa, id_externo, fornecedor_cnpj, telefone,
+                                 status, pedido)
+       values ($1, 1, $1, $2, $3, 'a_enviar', $4)
+       on conflict do nothing`,
       [bruta.access_key, bruta.fornecedor_cnpj, montado.pedido.telefone, montado.pedido],
     )
   }

@@ -1,4 +1,14 @@
-import type { Tables, Views } from '@jobsiteos/core'
+import {
+  fatosDaNotaDoFunil,
+  normalizarTelefoneBr,
+  podeLigar,
+  type ContatoDaLigacao,
+  type NotaDoFunil,
+  type Tables,
+  type VeredictoLigacao,
+  type Views,
+} from '@jobsiteos/core'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
 /**
@@ -366,4 +376,142 @@ export async function buscarMeuGmail(): Promise<GmailConectado | null> {
 export async function meuUsuarioId(): Promise<string | null> {
   const { data } = await createClient().auth.getUser()
   return data.user?.id ?? null
+}
+
+// ─── Ligações (a Ana) ───────────────────────────────────────────────────────
+
+/**
+ * `voz_ligacoes` nasceu na 0211 e `database.ts` é GERADO do banco: enquanto o
+ * `pnpm db:types` não roda, o cliente tipado não conhece a tabela. O cast é
+ * explícito, está num lugar só, e some no dia em que os tipos forem gerados.
+ */
+function clienteDaVoz(): SupabaseClient {
+  return createClient() as unknown as SupabaseClient
+}
+
+export interface LigacaoDeVoz {
+  access_key: string
+  tentativa: number
+  id_externo: string
+  fornecedor_cnpj: string
+  telefone: string | null
+  status: string
+  motivo_recusa: string | null
+  ligacao_id: string | null
+  chamada_id: string | null
+  outcome: string | null
+  resumo: string | null
+  erro: string | null
+  origem: string
+  criada_em: string
+  encerrada_em: string | null
+  resultado: { links?: { painel?: string | null; gravacao?: string | null } | null } | null
+}
+
+const COLUNAS_VOZ =
+  'access_key, tentativa, id_externo, fornecedor_cnpj, telefone, status, motivo_recusa, ' +
+  'ligacao_id, chamada_id, outcome, resumo, erro, origem, criada_em, encerrada_em, resultado'
+
+/** A fila e o que ela já produziu, do mais recente para trás. */
+export async function buscarLigacoesDeVoz(): Promise<LigacaoDeVoz[]> {
+  const { data, error } = await clienteDaVoz()
+    .from('voz_ligacoes')
+    .select(COLUNAS_VOZ)
+    .order('criada_em', { ascending: false })
+    .limit(200)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as LigacaoDeVoz[]
+}
+
+export interface CandidataDeVoz {
+  nota: NotaDoFunil & { fornecedor_empresa_id: string | null; contato_fornecedor: unknown }
+  contato: ContatoDaLigacao | null
+  contatoId: string | null
+  veredicto: VeredictoLigacao
+}
+
+const COLUNAS_CANDIDATA =
+  'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, ' +
+  'receita_esperada, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, ' +
+  'fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, ' +
+  'sacado_nome, sacado_razao_social, contato_fornecedor'
+
+/**
+ * As notas que PODERIAM virar ligação — e, para cada uma que não pode, o motivo.
+ *
+ * O portão roda aqui no navegador porque ele é função pura do core: a tela
+ * mostra exatamente o mesmo veredicto que o job daria de madrugada. Quem monta
+ * o pedido de verdade é a action, no servidor; aqui é só o que a pessoa vê.
+ */
+export async function buscarCandidatasDeVoz(): Promise<CandidataDeVoz[]> {
+  const supabase = createClient()
+  const { data: notas, error } = await supabase
+    .from('notas_funil')
+    .select(COLUNAS_CANDIDATA)
+    .in('faixa', ['alta', 'boa'])
+    .in('estagio_funil', ['a_prospectar', 'em_prospeccao'])
+    .order('receita_esperada', { ascending: false, nullsFirst: false })
+    .limit(60)
+  if (error) throw new Error(error.message)
+  const linhas = (notas ?? []) as unknown as CandidataDeVoz['nota'][]
+  if (!linhas.length) return []
+
+  const empresaIds = [...new Set(linhas.map((n) => n.fornecedor_empresa_id).filter(Boolean))]
+  const [{ data: contatos }, { data: suprimidos }, jaNaFila] = await Promise.all([
+    empresaIds.length
+      ? supabase
+          .from('contatos')
+          .select('id, empresa_id, nome, cargo, email, telefone, whatsapp, ponto_focal, base_legal')
+          .in('empresa_id', empresaIds as string[])
+          .order('ponto_focal', { ascending: false })
+      : Promise.resolve({ data: [] as Tables<'contatos'>[] }),
+    supabase
+      .from('supressao')
+      .select('escopo, valor')
+      .or(`expira_em.is.null,expira_em.gte.${new Date().toISOString().slice(0, 10)}`),
+    buscarLigacoesDeVoz(),
+  ])
+
+  const bloqueados = new Set((suprimidos ?? []).map((s) => s.valor))
+  const abertas = new Set(
+    jaNaFila.filter((l) => l.status === 'a_enviar' || l.status === 'enviada').map((l) => l.access_key),
+  )
+
+  const saida: CandidataDeVoz[] = []
+  for (const nota of linhas) {
+    if (abertas.has(nota.access_key)) continue
+    const daEmpresa = (contatos ?? []).filter((c) => c.empresa_id === nota.fornecedor_empresa_id)
+    let contato: ContatoDaLigacao | null = null
+    let contatoId: string | null = null
+    for (const c of daEmpresa) {
+      const tel = normalizarTelefoneBr(c.whatsapp ?? c.telefone)
+      if (!tel.valido || !tel.e164) continue
+      contato = {
+        nome: c.nome,
+        cargo: c.cargo,
+        telefone_e164: tel.e164,
+        email: c.email,
+        base_legal: c.base_legal,
+      }
+      contatoId = c.id
+      break
+    }
+    if (!contato) {
+      const doPayload = nota.contato_fornecedor as { name?: string; phone?: string } | null
+      const tel = normalizarTelefoneBr(doPayload?.phone)
+      if (tel.valido && tel.e164) {
+        contato = {
+          nome: doPayload?.name ?? nota.fornecedor_nome ?? null,
+          telefone_e164: tel.e164,
+          base_legal: 'dado_publico_nfe',
+        }
+      }
+    }
+    const digitos = (contato?.telefone_e164 ?? '').replace(/\D/g, '')
+    const fatos = fatosDaNotaDoFunil(nota, contato, {
+      suprimido: bloqueados.has(digitos) || bloqueados.has(nota.fornecedor_cnpj),
+    })
+    saida.push({ nota, contato, contatoId, veredicto: podeLigar(fatos) })
+  }
+  return saida
 }

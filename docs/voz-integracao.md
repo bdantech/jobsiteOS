@@ -20,6 +20,10 @@ notas_funil ──▶ voz-gerar ──▶ voz_ligacoes ──▶ voz-enviar ─�
    notas_fiscais.estagio_funil
 ```
 
+**Ou pela tela:** `Comunicação → Ligações` põe uma nota na fila na hora, com o mesmo portão e a
+mesma fila do cron. Muda só quem decidiu — e isso fica em `origem = 'manual'` e
+`enfileirada_por`.
+
 **Dois jobs, e é de propósito.** Gerar é decidir quem ligar; enviar é gastar. Separados, a
 fila pode ser olhada antes de sair, e no dia em que a Ana estiver fora do ar o que falha é
 o envio — o `a_enviar` continua lá, com o pedido montado.
@@ -88,10 +92,33 @@ estimada ela erra na frente de quem sabe a data de cor. O portão recusa.
 
 ---
 
+## Ligar de novo para a mesma nota
+
+"Ninguém atendeu, liga amanhã" é pedido legítimo, e a Ana **nunca redisca sozinha** — de
+propósito: rediscar quem estava no meio de uma conversa é pior que não ligar.
+
+Por isso a chave da fila é **(nota, tentativa)**, e cada tentativa vira um `id_externo`
+diferente do lado dela: `<access_key>` na primeira, `<access_key>:2` na segunda. É o que
+permite a segunda ligação existir sem que um reenvio acidental do mesmo pedido vire duas
+ligações para a mesma pessoa.
+
+A tela recusa enquanto houver tentativa aberta (`a_enviar` ou `enviada`) para aquela nota:
+duas na fila seriam duas ligações com minutos de diferença.
+
+---
+
 ## O que volta, e o que isso muda aqui
 
 O desfecho chega em `POST /webhooks/voz` (worker), assinado com HMAC-SHA256 sobre o corpo
 cru. `app__voz_registrar_resultado` faz quatro coisas **na mesma transação**:
+
+O corpo do webhook é **a ligação inteira**: transcrição com tempos de cada fala, ferramentas
+usadas (inclusive as recusadas por guarda), eventos de turno, métricas de ritmo, objeções,
+quem decide, o pedido de não-contato quando houve, e a versão do prompt que conduziu. Mais
+`links.painel` e `links.gravacao` para abrir e **ouvir** — os dois exigem login no painel da
+Ana, porque é ligação gravada de uma pessoa real.
+
+Tudo isso fica cru em `voz_ligacoes.resultado`; o que entra no ledger é o resumo.
 
 1. fecha a linha em `voz_ligacoes`;
 2. grava a conversa em **`comunicacoes`** (`canal = 'ligacao'`, `provedor = 'voz'`,

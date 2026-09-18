@@ -3,17 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import {
-  BarChart3,
-  Bot,
-  FileText,
-  Inbox,
-  Link2Off,
-  MailCheck,
-  MessageCircle,
-  Send,
-  Settings,
-} from 'lucide-react'
+import { BarChart3, Bot, FileText, Inbox, Link2Off, MailCheck, MessageCircle, PhoneOutgoing, Send, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { contarNaoVinculadas } from './queries'
 import { useEscopoFila } from './use-escopo-fila'
@@ -46,6 +36,7 @@ const ITENS: readonly ItemNav[] = [
     contador: 'nao_vinculadas',
   },
   { href: '/comunicacao/outbox', label: 'Outbox', icon: MailCheck },
+  { href: '/comunicacao/ligacoes', label: 'Ligações', icon: PhoneOutgoing },
   { href: '/comunicacao/templates', label: 'Templates', icon: FileText },
   { href: '/comunicacao/playbooks', label: 'Playbooks', icon: Bot },
   { href: '/comunicacao/atividade', label: 'Atividade', icon: BarChart3 },
