@@ -603,13 +603,9 @@ export async function dispararOutbox(): Promise<DispararJobResultado> {
 }
 
 /**
- * A fila da Ana (voz). Gerar é decidir quem ligar; enviar é levar para ela.
- * Com a voz desligada em `antecipacao_config`, os dois respondem sem fazer nada.
+ * Leva para a Ana o que alguém pôs na fila pela tela. Não existe job que ESCOLHA
+ * as notas: com a voz desligada em `antecipacao_config`, responde sem fazer nada.
  */
-export async function dispararVozGerar(): Promise<DispararJobResultado> {
-  return postar('/jobs/voz/gerar', {}, 'voz-gerar')
-}
-
 export async function dispararVozEnviar(): Promise<DispararJobResultado> {
   return postar('/jobs/voz/enviar', {}, 'voz-enviar')
 }

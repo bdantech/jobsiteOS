@@ -52,7 +52,6 @@ import {
   dispararReclassificacaoFunil,
   dispararOutbox,
   dispararVozEnviar,
-  dispararVozGerar,
   dispararContatosNf,
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
@@ -915,14 +914,6 @@ app.post('/jobs/antecipacao/calibrar', (_req: Request, res: Response, next: Next
 app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararReclassificacaoFunil(), status: 'executando' })
-  } catch (erro) {
-    next(erro)
-  }
-})
-
-app.post('/jobs/voz/gerar', (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    res.status(202).json({ job_id: dispararVozGerar(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

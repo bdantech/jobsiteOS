@@ -11,27 +11,26 @@ Daqui sai o pedido; de lá volta um webhook assinado.
 ## O caminho inteiro
 
 ```
-notas_funil ──▶ voz-gerar ──▶ voz_ligacoes ──▶ voz-enviar ──▶ POST /api/ligacoes (Ana)
-   (faixa,        (portão)      a_enviar          (cron)              │
-   estágio)                     recusada                              │ liga, conversa
-                                                                      ▼
+Comunicação → Ligações ──▶ voz_ligacoes ──▶ voz-enviar ──▶ POST /api/ligacoes (Ana)
+   (uma PESSOA escolhe,       a_enviar         (cron)              │
+    o portão confere)         recusada                             │ liga, conversa
+                                                                   ▼
    comunicacoes ◀── app__voz_registrar_resultado ◀── POST /webhooks/voz (assinado)
    supressao                                              (worker)
    notas_fiscais.estagio_funil
 ```
 
-**Ou pela tela:** `Comunicação → Ligações` põe uma nota na fila na hora, com o mesmo portão e a
-mesma fila do cron. Muda só quem decidiu — e isso fica em `origem = 'manual'` e
-`enfileirada_por`.
+**Quem escolhe é uma pessoa.** Não existe cron que decida quem recebe ligação — a régua
+automática foi deixada de fora de propósito: a ligação é o canal mais caro de errar, e neste
+sistema nem mensagem sai sem alguém aprovar. A tela mostra as notas candidatas com o veredicto
+do portão em cada uma, e o clique põe na fila (`origem = 'manual'`, `enfileirada_por`).
 
-**Dois jobs, e é de propósito.** Gerar é decidir quem ligar; enviar é gastar. Separados, a
-fila pode ser olhada antes de sair, e no dia em que a Ana estiver fora do ar o que falha é
-o envio — o `a_enviar` continua lá, com o pedido montado.
+**O envio é separado da escolha.** No dia em que a Ana estiver fora do ar, o que falha é o
+envio — o `a_enviar` continua lá, com o pedido já montado.
 
 | Cron | Quando | O que faz |
 | --- | --- | --- |
-| `/api/cron/voz-gerar` | 8h30, dias úteis | Escolhe as notas e grava o motivo de cada recusa |
-| `/api/cron/voz-enviar` | 9h–17h30, de 30 em 30 min | Leva a fila para a Ana |
+| `/api/cron/voz-enviar` | 9h–17h30, de 30 em 30 min | Leva para a Ana o que já está na fila |
 
 ---
 
@@ -145,8 +144,9 @@ insert into antecipacao_config (chave, valor) values ('voz', '{"ligada": true}':
 on conflict (chave) do update set valor = excluded.valor;
 ```
 
-Nasce **desligada**. `kill_switch: true` para tudo sem apagar a fila. Também são config:
-`faixas`, `maximo_por_rodada`, `maximo_por_envio`, `validade_dias`.
+Nasce **desligada**: com `ligada: false`, a tela continua deixando enfileirar e nada sai.
+`kill_switch: true` para tudo sem apagar a fila, e vale também para a tela. Também são config:
+`maximo_por_envio` e `validade_dias` (o prazo que a Ana cita em voz alta).
 
 As variáveis (`VOZ_API_URL`, `VOZ_API_TOKEN`, `VOZ_WEBHOOK_SECRET`) dizem **onde** ela está e
 **como** as duas pontas se provam. Ligar e desligar é decisão de operação, feita no banco,

@@ -342,19 +342,11 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/campanhas/metricas',
   },
   {
-    path: '/api/cron/voz-gerar',
-    nome: 'Fila da Ana (voz)',
-    moduloId: 'antecipacao',
-    descricao:
-      'Escolhe quais notas viram ligação hoje e grava, para cada nota recusada, POR QUE não vira — hoje quase todas param em "sem IOF calculado", porque a estimativa do funil não desconta IOF e a Ana fala o líquido em voz alta. Roda 8h30, depois da reclassificação: a régua de faixas já rodou e o que entra na fila é o que vale ligar hoje. Gerar não liga para ninguém.',
-    destino: 'POST /jobs/voz/gerar',
-  },
-  {
     path: '/api/cron/voz-enviar',
     nome: 'Envio para a Ana (voz)',
-    moduloId: 'antecipacao',
+    moduloId: 'comunicacao',
     descricao:
-      'Leva a fila para o serviço de voz, de meia em meia hora entre 9h e 17h30. Não adianta mandar mais rápido: a Ana liga UMA POR VEZ, em horário comercial, e o que sobra só empilha do lado dela. O intervalo também dá espaço para a retentativa de envio acontecer no mesmo dia. Com a voz desligada em `antecipacao_config`, é um no-op barato.',
+      'Leva para o serviço de voz o que uma PESSOA pôs na fila em Comunicação → Ligações. Não existe cron que escolha as notas: a régua automática foi deixada de fora de propósito, porque a ligação é o canal mais caro de errar e aqui nem mensagem sai sem alguém aprovar. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez), e o intervalo dá espaço para a retentativa de envio no mesmo dia.',
     destino: 'POST /jobs/voz/enviar',
   },
 ]

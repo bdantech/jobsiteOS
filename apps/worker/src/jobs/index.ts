@@ -91,7 +91,6 @@ import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-an
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
-import { gerarFilaDeVoz } from './voz/gerar.js'
 import { enviarFilaDeVoz } from './voz/enviar.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
@@ -163,7 +162,6 @@ export type TipoJob =
   | 'antecipacao-calibrar'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
-  | 'voz-gerar'
   | 'voz-enviar'
   | 'antecipacao-lookup'
   | 'antecipacao-contatos'
@@ -910,15 +908,13 @@ export function dispararOutbox(): string {
 }
 
 /**
- * A fila da Ana: decidir quem ligar, e depois levar para ela.
+ * Leva para a Ana o que ALGUÉM pôs na fila.
  *
- * Dois jobs porque são duas decisões — gerar é escolher, enviar é gastar. Com a
- * voz desligada na config (o padrão), os dois viram no-op barato.
+ * Não existe job que escolha as notas: quem decide quem recebe uma ligação é uma
+ * pessoa, na tela de Comunicação → Ligações. A régua automática foi tirada de
+ * propósito — a ligação é o canal mais caro de errar, e no resto deste sistema
+ * nem mensagem sai sem alguém aprovar.
  */
-export function dispararVozGerar(): string {
-  return dispararAvulso('voz-gerar', async () => gerarFilaDeVoz())
-}
-
 export function dispararVozEnviar(): string {
   return dispararAvulso('voz-enviar', async () => enviarFilaDeVoz())
 }
