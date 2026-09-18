@@ -210,6 +210,19 @@ const envSchema = z.object({
   /** Tópico do Pub/Sub que o Gmail Watch usa. Sem ele, só o polling roda. */
   GOOGLE_PUBSUB_TOPIC: z.string().optional(),
 
+  /**
+   * A Ana — o serviço de voz da OnePay (fora deste repo). Ela LIGA para o
+   * fornecedor e devolve o desfecho por webhook.
+   *
+   * Três variáveis porque são três coisas diferentes: onde ela está, a
+   * credencial com que FALAMOS com ela, e o segredo com que ELA prova que o
+   * resultado veio dela. Misturar as duas últimas publicaria a credencial de
+   * saída num header que qualquer um pode nos fazer comparar.
+   */
+  VOZ_API_URL: z.string().url().optional(),
+  VOZ_API_TOKEN: z.string().optional(),
+  VOZ_WEBHOOK_SECRET: z.string().optional(),
+
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   /** "ONE OS <contato@oneos.com.br>" — o remetente do SISTEMA. */

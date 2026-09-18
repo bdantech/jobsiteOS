@@ -341,6 +341,14 @@ export const CRONS: readonly CronCatalogado[] = [
       'Varre as campanhas vivas atrás de opt-out e bounce acima do limiar. Existe para quando NINGUÉM está olhando — o painel de quem abre a tela é calculado na hora. Alerta uma vez por campanha por tipo, e só com amostra mínima: 1 opt-out em 3 enviadas é 33% e não significa nada, e um alerta que grita cedo é um alerta que o time aprende a ignorar.',
     destino: 'POST /jobs/campanhas/metricas',
   },
+  {
+    path: '/api/cron/voz-enviar',
+    nome: 'Envio para a Ana (voz)',
+    moduloId: 'comunicacao',
+    descricao:
+      'Leva para o serviço de voz o que uma PESSOA pôs na fila em Comunicação → Ligações. Não existe cron que escolha as notas: a régua automática foi deixada de fora de propósito, porque a ligação é o canal mais caro de errar e aqui nem mensagem sai sem alguém aprovar. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez), e o intervalo dá espaço para a retentativa de envio no mesmo dia.',
+    destino: 'POST /jobs/voz/enviar',
+  },
 ]
 
 export interface CronAgendado {

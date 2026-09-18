@@ -602,6 +602,14 @@ export async function dispararOutbox(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/outbox', {}, 'antecipacao-outbox')
 }
 
+/**
+ * Leva para a Ana o que alguém pôs na fila pela tela. Não existe job que ESCOLHA
+ * as notas: com a voz desligada em `antecipacao_config`, responde sem fazer nada.
+ */
+export async function dispararVozEnviar(): Promise<DispararJobResultado> {
+  return postar('/jobs/voz/enviar', {}, 'voz-enviar')
+}
+
 /** Lookup cadastral sob demanda, para esvaziar a fila sem esperar o diário. */
 export async function dispararLookupCadastral(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/lookup', {}, 'antecipacao-lookup')

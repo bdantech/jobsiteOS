@@ -4,6 +4,13 @@ import { revalidatePath } from 'next/cache'
 import {
   aceitarSugestao,
   aprovarMensagens,
+  CONFIG_VOZ_PADRAO,
+  fatosDaNotaDoFunil,
+  montarPedidoDeLigacao,
+  normalizarTelefoneBr,
+  MOTIVO_NAO_LIGAR_LABELS,
+  type ContatoDaLigacao,
+  type NotaDoFunil,
   definirModoAgente,
   descartarSugestao,
   desconectarGmail,
@@ -239,6 +246,123 @@ export async function descartarSugestaoAction(input: unknown): Promise<ActionRes
     await descartarSugestao(supabase, input)
     revalidatePath(ROTA)
     return { ok: true, data: { ok: true } }
+  } catch (e) {
+    return falha(e)
+  }
+}
+
+/**
+ * Põe uma nota na fila da Ana, a partir da tela.
+ *
+ * A tela manda a INTENÇÃO (qual nota, qual contato); quem monta o pedido é
+ * aqui, lendo a nota e o contato de novo. O navegador nunca dita o que a Ana vai
+ * falar — ele nem teria como saber se o número mudou desde que a tela abriu.
+ *
+ * O portão de conteúdo roda aqui; o de supressão roda de novo dentro da RPC,
+ * porque é fato do banco e pode ter mudado no meio do caminho.
+ */
+export async function enfileirarLigacaoAction(input: {
+  accessKey: string
+  contatoId?: string | null
+}): Promise<ActionResult<{ id_externo: string; tentativa: number }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const { data: nota, error: erroNota } = await supabase
+      .from('notas_funil')
+      .select(
+        'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, ' +
+          'receita_esperada, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, ' +
+          'fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, ' +
+          'sacado_nome, sacado_razao_social, contato_fornecedor',
+      )
+      .eq('access_key', input.accessKey)
+      .maybeSingle()
+    if (erroNota) return { ok: false, message: erroNota.message, code: 'db' }
+    if (!nota) return { ok: false, message: 'Nota não encontrada.', code: 'not_found' }
+
+    let contato: ContatoDaLigacao | null = null
+    if (input.contatoId) {
+      const { data: c } = await supabase
+        .from('contatos')
+        .select('id, nome, cargo, email, telefone, whatsapp, base_legal')
+        .eq('id', input.contatoId)
+        .maybeSingle()
+      const tel = normalizarTelefoneBr(c?.whatsapp ?? c?.telefone)
+      if (c && tel.valido && tel.e164) {
+        contato = {
+          nome: c.nome,
+          cargo: c.cargo,
+          telefone_e164: tel.e164,
+          email: c.email,
+          base_legal: c.base_legal,
+        }
+      }
+    }
+    if (!contato) {
+      const doPayload = (nota as { contato_fornecedor?: { name?: string; phone?: string } | null })
+        .contato_fornecedor
+      const tel = normalizarTelefoneBr(doPayload?.phone)
+      if (tel.valido && tel.e164) {
+        contato = {
+          nome: doPayload?.name ?? (nota as { fornecedor_nome?: string | null }).fornecedor_nome ?? null,
+          telefone_e164: tel.e164,
+          base_legal: 'dado_publico_nfe',
+        }
+      }
+    }
+
+    // A config do banco manda: `kill_switch` para tudo sem apagar a fila, e
+    // `validade_dias` é o prazo que a Ana diz em voz alta ("vale até sexta").
+    const { data: cfgLinha } = await supabase
+      .from('antecipacao_config')
+      .select('valor')
+      .eq('chave', 'voz')
+      .maybeSingle()
+    const cfg = {
+      ...CONFIG_VOZ_PADRAO,
+      ...((cfgLinha?.valor ?? {}) as Partial<typeof CONFIG_VOZ_PADRAO>),
+    }
+
+    const montado = montarPedidoDeLigacao(
+      fatosDaNotaDoFunil(nota as unknown as NotaDoFunil, contato, {
+        killSwitch: cfg.kill_switch,
+        validadeDias: cfg.validade_dias,
+      }),
+    )
+    if (!montado.ok) {
+      return {
+        ok: false,
+        message: `Não dá para ligar: ${MOTIVO_NAO_LIGAR_LABELS[montado.motivo].toLowerCase()}.`,
+        code: montado.motivo,
+      }
+    }
+
+    // `app_voz_enfileirar` nasceu na 0211 e `database.ts` é gerado do banco: o
+    // cast some quando o `pnpm db:types` rodar.
+    const rpc = supabase.rpc as unknown as (
+      nome: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: { id_externo: string; tentativa: number } | null; error: { message: string } | null }>
+    const { data, error } = await rpc('app_voz_enfileirar', {
+      p: {
+        access_key: input.accessKey,
+        telefone: montado.pedido.telefone,
+        contato_id: input.contatoId ?? null,
+        pedido: montado.pedido,
+      },
+    })
+    if (error) return { ok: false, message: error.message, code: 'rpc' }
+
+    revalidatePath('/comunicacao/ligacoes')
+    revalidatePath(ROTA)
+    return {
+      ok: true,
+      data: {
+        id_externo: data?.id_externo ?? input.accessKey,
+        tentativa: data?.tentativa ?? 1,
+      },
+    }
   } catch (e) {
     return falha(e)
   }

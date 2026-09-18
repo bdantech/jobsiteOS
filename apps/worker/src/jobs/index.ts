@@ -92,6 +92,7 @@ import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-an
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
+import { enviarFilaDeVoz } from './voz/enviar.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
@@ -162,6 +163,7 @@ export type TipoJob =
   | 'antecipacao-calibrar'
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
+  | 'voz-enviar'
   | 'antecipacao-lookup'
   | 'antecipacao-contatos'
   | 'antecipacao-protesto-fornecedor'
@@ -905,6 +907,18 @@ export function dispararReclassificacaoFunil(): string {
 /** Regeneração da outbox sob demanda (depois de mexer na régua de disparo). */
 export function dispararOutbox(): string {
   return dispararAvulso('antecipacao-outbox', async () => gerarOutbox())
+}
+
+/**
+ * Leva para a Ana o que ALGUÉM pôs na fila.
+ *
+ * Não existe job que escolha as notas: quem decide quem recebe uma ligação é uma
+ * pessoa, na tela de Comunicação → Ligações. A régua automática foi tirada de
+ * propósito — a ligação é o canal mais caro de errar, e no resto deste sistema
+ * nem mensagem sai sem alguém aprovar.
+ */
+export function dispararVozEnviar(): string {
+  return dispararAvulso('voz-enviar', async () => enviarFilaDeVoz())
 }
 
 /** Lookup cadastral sob demanda — para esvaziar a fila sem esperar o diário. */
