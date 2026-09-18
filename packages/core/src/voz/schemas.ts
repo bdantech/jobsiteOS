@@ -24,20 +24,15 @@ export interface ConfigVoz {
   ligada: boolean
   /** Para tudo, sem apagar a fila. É a primeira recusa do portão. */
   kill_switch: boolean
-  faixas: string[]
-  /** Teto por rodada do gerador — a Ana liga uma por vez, não adianta encher. */
-  maximo_por_rodada: number
-  /** Quantas mandar para a fila dela a cada corrida do enviador. */
+  /** Quantas levar para a fila dela a cada corrida do enviador. */
   maximo_por_envio: number
-  /** Dias de validade da proposta que a Ana pode citar. */
+  /** Dias de validade da proposta que a Ana pode citar ao telefone. */
   validade_dias: number
 }
 
 export const CONFIG_VOZ_PADRAO: ConfigVoz = {
   ligada: false,
   kill_switch: false,
-  faixas: ['alta', 'boa'],
-  maximo_por_rodada: 50,
   maximo_por_envio: 10,
   validade_dias: 3,
 }

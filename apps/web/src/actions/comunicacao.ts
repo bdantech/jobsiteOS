@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import {
   aceitarSugestao,
   aprovarMensagens,
+  CONFIG_VOZ_PADRAO,
   fatosDaNotaDoFunil,
   montarPedidoDeLigacao,
   normalizarTelefoneBr,
@@ -311,8 +312,23 @@ export async function enfileirarLigacaoAction(input: {
       }
     }
 
+    // A config do banco manda: `kill_switch` para tudo sem apagar a fila, e
+    // `validade_dias` é o prazo que a Ana diz em voz alta ("vale até sexta").
+    const { data: cfgLinha } = await supabase
+      .from('antecipacao_config')
+      .select('valor')
+      .eq('chave', 'voz')
+      .maybeSingle()
+    const cfg = {
+      ...CONFIG_VOZ_PADRAO,
+      ...((cfgLinha?.valor ?? {}) as Partial<typeof CONFIG_VOZ_PADRAO>),
+    }
+
     const montado = montarPedidoDeLigacao(
-      fatosDaNotaDoFunil(nota as unknown as NotaDoFunil, contato),
+      fatosDaNotaDoFunil(nota as unknown as NotaDoFunil, contato, {
+        killSwitch: cfg.kill_switch,
+        validadeDias: cfg.validade_dias,
+      }),
     )
     if (!montado.ok) {
       return {

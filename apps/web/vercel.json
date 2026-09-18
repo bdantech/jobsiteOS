@@ -170,10 +170,6 @@
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/cron/voz-gerar",
-      "schedule": "30 11 * * 1-5"
-    },
-    {
       "path": "/api/cron/voz-enviar",
       "schedule": "0,30 12-20 * * 1-5"
     }
