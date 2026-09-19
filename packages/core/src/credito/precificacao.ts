@@ -176,7 +176,16 @@ export const MATRIZ_PADRAO: MatrizPrecificacao = {
       fee_d1_desconto_pct_max: 0.3,
     },
     limiar_proporcionalidade_tac: 10_000,
-    comissao: { min: 1.0, max: 3.0 },
+    /*
+     * CASHBACK (o campo se chama `comissao`/`commission_percent` por dentro, que é o
+     * nome do contrato com a plataforma de produção — renomear a chave quebraria a
+     * integração; o que mudou foi o RÓTULO, em 19/09/2026).
+     *
+     * Teto de 3% -> 10%. O 3 era o teto da matriz semente e virou trava na mesa de
+     * negociação: quem precisava oferecer mais tinha de publicar fora da faixa, e
+     * "fora da faixa" é o aviso que deveria significar exceção, não rotina.
+     */
+    comissao: { min: 1.0, max: 10.0 },
     max_invoice_amount_default: 1_000_000,
     max_due_date_days_default: 90,
     validade_meses_default: 12,
@@ -934,7 +943,7 @@ export const CAMPO_CONDICAO_LABELS: Record<keyof CondicoesFormulario, string> = 
   fee_min_d0: 'TAC mínima D0',
   fee_d1: 'TAC D1',
   fee_min_d1: 'TAC mínima D1',
-  commission_percent: 'Comissão',
+  commission_percent: 'Cashback',
   extension_rate_percent: 'Prorrogação',
   bill_fine_percent: 'Multa',
   invest_back_limit: 'Limite invest back',

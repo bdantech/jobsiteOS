@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  arredondarLimiteSugerido,
   calcularPotencial,
   calibrarCredito,
   coeficientesVazios,
@@ -366,4 +367,38 @@ test('sem utilização e sem giro, a conta não fecha', () => {
     CHANCE,
   )
   assert.equal(r.motivo, 'sem_calibracao')
+})
+
+// ─── Limite sugerido ────────────────────────────────────────────────────────
+
+test('o limite sugerido não tem centavos — os dois casos reais que motivaram isto', () => {
+  // JCB CONSTRUTORA, 17/09/2026: entrou na esteira pedindo exatamente o potencial.
+  assert.equal(arredondarLimiteSugerido(18_156.87), 20_000)
+  // PLANGEFF ENGENHARIA, mesmo dia, mesmo caminho.
+  assert.equal(arredondarLimiteSugerido(435_764.96), 440_000)
+})
+
+test('o passo cresce com a grandeza — ninguém pede 18 mil de 50 em 50 mil', () => {
+  assert.equal(arredondarLimiteSugerido(4_300), 4_000)
+  assert.equal(arredondarLimiteSugerido(47_400), 45_000)
+  assert.equal(arredondarLimiteSugerido(312_000), 310_000)
+  assert.equal(arredondarLimiteSugerido(4_137_000), 4_150_000)
+})
+
+test('arredonda ao mais próximo, e não para baixo: o potencial não é teto da apólice', () => {
+  assert.equal(arredondarLimiteSugerido(18_900), 20_000)
+  assert.equal(arredondarLimiteSugerido(17_100), 15_000)
+})
+
+test('valor pequeno não vira zero — um pedido de R$ 0 seria recusado lá na frente', () => {
+  assert.equal(arredondarLimiteSugerido(120), 1_000)
+  assert.equal(arredondarLimiteSugerido(1), 1_000)
+})
+
+test('sem potencial não há sugestão: nulo, e não um número inventado', () => {
+  assert.equal(arredondarLimiteSugerido(null), null)
+  assert.equal(arredondarLimiteSugerido(undefined), null)
+  assert.equal(arredondarLimiteSugerido(0), null)
+  assert.equal(arredondarLimiteSugerido(-500), null)
+  assert.equal(arredondarLimiteSugerido(Number.NaN), null)
 })

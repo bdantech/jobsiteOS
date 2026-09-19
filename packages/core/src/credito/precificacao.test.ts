@@ -14,6 +14,7 @@ import {
   validarCondicoes,
   type CondicoesFormulario,
   type ContextoPrecificacao,
+  type MatrizPrecificacao,
 } from './precificacao.ts'
 
 // ─── §4 A TAC proporcional ──────────────────────────────────────────────────
@@ -196,7 +197,34 @@ test('os ajustes NÃO furam a faixa global: o teto é o teto', () => {
   )
   assert.equal(s.condicoes.monthly_rate_d0, MATRIZ_PADRAO.faixas.juros.d0_max)
   assert.equal(s.condicoes.fee_d0, MATRIZ_PADRAO.faixas.tac.fee_d0_max)
-  assert.equal(s.condicoes.commission_percent, MATRIZ_PADRAO.faixas.comissao.max)
+
+  /*
+   * O CASHBACK NÃO BATE MAIS NO TETO, e isso é o efeito esperado de ele ter subido
+   * para 10% (19/09/2026). A pior célula dá 3,0 e o protesto soma 0,2: 3,2, longe do
+   * limite. Antes o teto era 3,0 e esta linha era `=== max`.
+   *
+   * O número cru, e não um `<= max`: afrouxar a asserção aqui deixaria passar uma
+   * mudança de célula ou de ajuste sem ninguém notar, que é justamente o que este
+   * teste existe para pegar. Que o teto ainda RECORTA está no teste seguinte.
+   */
+  assert.equal(s.condicoes.commission_percent, 3.2)
+})
+
+test('o teto do cashback continua recortando — só não é 3% que o aperta', () => {
+  const apertada: MatrizPrecificacao = {
+    ...MATRIZ_PADRAO,
+    faixas: { ...MATRIZ_PADRAO.faixas, comissao: { min: 1.0, max: 2.5 } },
+  }
+  const s = sugerirCondicoes(
+    {
+      ...CTX_BASE,
+      faturamento_estimado: 1_000_000,
+      faixa_score: 'improvavel',
+      tem_protesto: true,
+    },
+    apertada,
+  )
+  assert.equal(s.condicoes.commission_percent, 2.5)
 })
 
 test('a sugestão sempre passa na própria validação — as 25 células, com e sem ajuste', () => {

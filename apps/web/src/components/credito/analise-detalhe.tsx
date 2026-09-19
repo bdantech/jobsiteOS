@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -55,6 +56,7 @@ import {
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
 import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
 import { DialogoEnvioManual } from './analise-propria/dialogo-envio-manual'
+import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
@@ -211,6 +213,7 @@ function Acoes({
   nome,
   cnpj,
   estagio,
+  limitePotencial,
   statusPropria,
   jaTemPropria,
   empresaId,
@@ -226,6 +229,7 @@ function Acoes({
   nome: string
   cnpj: string
   estagio: EstagioAnalise
+  limitePotencial: number | null
   statusPropria: StatusAnalisePropria | null
   jaTemPropria: boolean
   empresaId: string | null
@@ -244,6 +248,8 @@ function Acoes({
   const [enviando, setEnviando] = React.useState(false)
   const [reenviandoDocs, setReenviandoDocs] = React.useState(false)
   const [confirmandoManual, setConfirmandoManual] = React.useState(false)
+  const [pedindoNova, setPedindoNova] = React.useState(false)
+  const router = useRouter()
   const [marcandoManual, setMarcandoManual] = React.useState(false)
   const [confirmandoDocs, setConfirmandoDocs] = React.useState(false)
 
@@ -408,6 +414,21 @@ function Acoes({
           {rodando ? 'Iniciando…' : jaTemPropria ? 'Rodar de novo' : 'Rodar nossa análise'}
         </Button>
       )}
+      {/*
+        DECIDIDA NÃO É FIM DE LINHA. O desfecho fica como está — ele continua sendo o
+        que foi, e por isso a análise não é reaberta —, mas quem está lendo a negativa
+        é quem sabe o que mudou desde ela. Sem esta porta, o caminho era voltar à
+        Company 360 e procurar o card de crédito.
+
+        Fica onde ficaria o "Mover para…", que some justamente quando a análise decide:
+        é o mesmo lugar do olho, e é a única ação que sobra.
+      */}
+      {decidida && (
+        <Button size="sm" variant="default" onClick={() => setPedindoNova(true)}>
+          <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
+          Solicitar nova análise
+        </Button>
+      )}
       {!decidida && (
         <Select value="" onValueChange={(v) => void mover(v)} disabled={movendo}>
           <SelectTrigger className="h-9 w-44" aria-label="Mover análise">
@@ -442,6 +463,22 @@ function Acoes({
        * aqui que se escolhe QUAIS documentos acompanham o pedido, porque documento de
        * terceiro que sai não volta.
        */}
+      {pedindoNova && empresaId && (
+        <SolicitarAnaliseDialog
+          aberto
+          onOpenChange={(v) => !v && setPedindoNova(false)}
+          empresaId={empresaId}
+          limitePotencial={limitePotencial}
+          ehNova
+          /*
+           * Vai para a análise NOVA. Ficar na antiga depois de pedir outra faria a
+           * pessoa recarregar a página para entender o que aconteceu — e o que ela
+           * quer ver agora é a que acabou de abrir.
+           */
+          onSalvo={(novaId) => router.push(`/credito/analises/${novaId}`)}
+        />
+      )}
+
       <DialogoEnvioManual
         aberto={confirmandoManual}
         onOpenChange={setConfirmandoManual}
@@ -649,6 +686,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             nome={nome}
             cnpj={esteira.cnpj}
             estagio={estagio}
+            limitePotencial={empresa?.limite_potencial ?? null}
             statusPropria={status}
             jaTemPropria={propria !== null}
             empresaId={empresa?.id ?? null}

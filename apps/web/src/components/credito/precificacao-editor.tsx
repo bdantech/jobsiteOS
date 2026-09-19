@@ -255,13 +255,13 @@ export function PrecificacaoEditor() {
               onChange={(n) => set((d) => { d.faixas.tac.fee_d1_desconto_pct_max = n })}
             />
             <Numero
-              label="Comissão mínima"
+              label="Cashback mínimo"
               sufixo="%"
               valor={m.faixas.comissao.min}
               onChange={(n) => set((d) => { d.faixas.comissao.min = n })}
             />
             <Numero
-              label="Comissão máxima"
+              label="Cashback máximo"
               sufixo="%"
               valor={m.faixas.comissao.max}
               onChange={(n) => set((d) => { d.faixas.comissao.max = n })}
@@ -357,7 +357,7 @@ export function PrecificacaoEditor() {
                   onChange={(n) => set((d) => { d.ajustes[id].fee_pct = n })}
                 />
                 <Numero
-                  label="Comissão"
+                  label="Cashback"
                   sufixo="p.p."
                   valor={m.ajustes[id].comissao_pp}
                   onChange={(n) => set((d) => { d.ajustes[id].comissao_pp = n })}
@@ -397,7 +397,7 @@ export function PrecificacaoEditor() {
             <CardTitle className="text-base">Células</CardTitle>
             <CardDescription>
               Porte × faixa de score. Cada célula define o <strong>juros D0</strong>, a{' '}
-              <strong>TAC D0</strong> e a <strong>comissão</strong>; o D1 e as TACs mínimas são
+              <strong>TAC D0</strong> e a <strong>cashback</strong>; o D1 e as TACs mínimas são
               derivados pelas regras acima — não se digitam, para não existirem vinte e cinco
               lugares onde alguém possa pôr o D1 mais caro que o D0.{' '}
               <em>Dados insuficientes</em> é precificado como <em>improvável</em>.
@@ -438,7 +438,7 @@ export function PrecificacaoEditor() {
                         }
                       />
                       <Numero
-                        label="Comissão"
+                        label="Cashback"
                         sufixo="%"
                         passo="0.01"
                         valor={
@@ -492,7 +492,7 @@ export function PrecificacaoEditor() {
                 <Comparacao rotulo="Juros D0 médio" antes={`${num(antes.juros, 2)}%`} depois={`${num(depois.juros, 2)}%`} />
                 <Comparacao rotulo="TAC D0 média" antes={brl(antes.tac)} depois={brl(depois.tac)} />
                 <Comparacao
-                  rotulo="Comissão média"
+                  rotulo="Cashback médio"
                   antes={`${num(antes.comissao, 2)}%`}
                   depois={`${num(depois.comissao, 2)}%`}
                 />

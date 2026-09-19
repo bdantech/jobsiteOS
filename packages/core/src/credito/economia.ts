@@ -330,3 +330,39 @@ export function explicarValorEsperado(
   if (faixa === 'improvavel') return 'chance improvável'
   return 'chance desconhecida'
 }
+
+// ─── O limite SUGERIDO ao pedir a análise ───────────────────────────────────
+
+/**
+ * Arredonda o limite potencial para um número que uma pessoa pediria.
+ *
+ * ── O QUE ISTO CONSERTA ─────────────────────────────────────────────────────
+ * O diálogo de "Solicitar análise" nasce preenchido com o `limite_potencial`, e o RPC
+ * cai nele quando o campo fica em branco. Esse número é saída de modelo, com centavos:
+ * a JCB entrou na esteira pedindo R$ 18.156,87 e a PLANGEFF, R$ 435.764,96.
+ *
+ * Ninguém digita isso. E o número não fica só aqui dentro — ele é o valor que vai à
+ * seguradora no pedido de cobertura. Pedir 435.764,96 à Atradius anuncia que a conta foi
+ * feita por uma máquina e que ninguém olhou, o que é exatamente a impressão errada sobre
+ * a única parte do processo em que alguém olhou de fato.
+ *
+ * ── A RÉGUA ─────────────────────────────────────────────────────────────────
+ * Passo proporcional à grandeza, que é como as pessoas arredondam sozinhas: ninguém pede
+ * 18 mil em passos de 50 mil, nem 4 milhões em passos de mil.
+ *
+ * Ao MAIS PRÓXIMO, não para baixo. O potencial é a NOSSA estimativa do que a empresa
+ * sustenta, não um teto da apólice — quem decide o limite é a seguradora. Truncar para
+ * baixo pediria de menos por medo de um limite que não é nosso para impor.
+ *
+ * Isto é uma SUGESTÃO: o campo continua editável, e quem quiser pedir 437.500 pede.
+ */
+export function arredondarLimiteSugerido(valor: number | null | undefined): number | null {
+  if (valor === null || valor === undefined || !Number.isFinite(valor) || valor <= 0) return null
+
+  const passo =
+    valor >= 1_000_000 ? 50_000 : valor >= 100_000 ? 10_000 : valor >= 10_000 ? 5_000 : 1_000
+
+  // `max(passo)` para o valor pequeno não virar zero: um pedido de R$ 0 seria recusado
+  // lá na frente, e a pessoa não saberia que foi o arredondamento que fez isso.
+  return Math.max(passo, Math.round(valor / passo) * passo)
+}

@@ -154,6 +154,68 @@ mesma coisa:
 
 O envio à seguradora sai de `solicitada` **ou** de `docs_recebidos`.
 
+### Decidida não é fim de linha (0217)
+
+Uma análise `negada`, `aprovada` ou `aprovada_parcial` fecha, e **não reabre**: o desfecho
+dela continua sendo o que foi. Mas quem está lendo a negativa é justamente quem sabe o que
+mudou desde ela — balanço novo, protesto baixado, sócio trocado — e não tinha por onde
+pedir outra. O `app_solicitar_analise` já permitia; faltava a porta na tela.
+
+Ela agora existe em dois lugares, e os dois são onde o olho já está:
+
+- **Company 360**, ao lado do desfecho, que continua sendo a informação principal.
+- **Dentro da análise decidida**, no lugar de onde o "Mover para…" some quando ela decide.
+
+A nova análise abre em `solicitada`, e a tela leva para ela. A anterior fica no histórico
+como está.
+
+**O buraco que apareceu ao fazer isso:** a guarda de "já existe análise em andamento"
+listava cinco estágios e esquecia `docs_recebidos` — que `ESTAGIOS_ANALISE_ABERTOS` conta
+como aberto desde sempre. Dava para abrir uma segunda análise do mesmo CNPJ enquanto a
+primeira estava com a pasta conferida, esperando o envio: o pior momento possível, porque
+é logo antes da chamada paga. Corrigido na 0217.
+
+### O limite sugerido não tem centavos (0217)
+
+O diálogo de solicitação nasce preenchido com o `limite_potencial`, e o RPC cai nele
+quando o campo vem em branco. Esse número é saída crua do estimador:
+
+| empresa | pedido que entrou na esteira | de onde veio |
+|---|---|---|
+| JCB CONSTRUTORA | R$ 18.156,87 | `limite_potencial` |
+| PLANGEFF ENGENHARIA | R$ 435.764,96 | `limite_potencial` |
+
+Ninguém digitou nenhum dos dois — o campo já vinha assim e a pessoa confirmou, que é o
+que um campo pré-preenchido pede que se faça. E o número **não fica aqui dentro**: é ele
+que vai à seguradora no pedido de cobertura.
+
+`arredondarLimiteSugerido` (core, testado) e `app_arredondar_limite_sugerido` (SQL) são a
+mesma régua: passo proporcional à grandeza — 1k / 5k / 10k / 50k —, **ao mais próximo**.
+Ao mais próximo e não para baixo porque o potencial é a *nossa* estimativa do que a
+empresa sustenta, não um teto da apólice: quem decide o limite é a seguradora.
+
+Duas cópias de propósito: o TypeScript preenche o campo e o SQL cobre quem não passa pela
+tela (a API do 04n, um INSERT de rotina). Só uma delas deixaria o outro caminho com
+centavos. **Quem mexer numa mexe na outra** — os testes do core são a referência.
+
+O que a pessoa digita vale como digitado: o arredondamento é só do palpite da casa.
+
+### O campo `commission_percent` se chama Cashback (0217)
+
+Na tela. A **chave não muda** — `commission_percent` é o nome no contrato com a
+plataforma de produção, e renomeá-la quebraria a integração. O que estava errado nunca
+foi a chave, era o rótulo.
+
+O teto subiu de **3% para 10%**. O 3 era o teto da matriz semente (0185) e virou trava na
+negociação: quem precisava oferecer mais publicava "fora da faixa", e fora da faixa é o
+aviso que deveria significar exceção — quando vira rotina, ninguém mais lê nenhum deles.
+
+A mudança é na matriz **ativa** (versão 2, editada no lugar), não só no `MATRIZ_PADRAO` do
+core. Mudar só o core deixaria a tela oferecendo um teto que a matriz vigente recusa.
+Não virou versão 3 porque versão nova é para quando a matriz **precifica** diferente:
+nenhuma célula chega perto de 10, e toda condição já publicada continua dentro da faixa
+nova. `invest_back_commission_percent` é outro campo e segue como "Comissão invest back".
+
 ### O desfecho pela nossa decisão
 
 `app_concluir_analise` (migração 0187) move a esteira para `aprovada`, `aprovada_parcial`

@@ -92,7 +92,7 @@ export function PorqueDaSugestao({
           <p className="text-xs text-muted-foreground">A célula, antes dos ajustes</p>
           <p className="mt-1 text-sm tabular-nums">
             {e.celula.monthly_rate_d0.toLocaleString('pt-BR')}% a.m. · TAC {brl(e.celula.fee_d0)} ·
-            comissão {e.celula.commission_percent.toLocaleString('pt-BR')}%
+            cashback {e.celula.commission_percent.toLocaleString('pt-BR')}%
           </p>
         </div>
 
@@ -111,7 +111,7 @@ export function PorqueDaSugestao({
                   </Badge>
                 </div>
                 <p className="mt-1 text-muted-foreground tabular-nums">
-                  juros {pp(a.juros_pp)} · TAC {pctRel(a.fee_pct)} · comissão {pp(a.comissao_pp)}
+                  juros {pp(a.juros_pp)} · TAC {pctRel(a.fee_pct)} · cashback {pp(a.comissao_pp)}
                 </p>
               </li>
             ))}

@@ -3,13 +3,13 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { AlertTriangle, Landmark, ShieldQuestion } from 'lucide-react'
 import {
   ESTAGIO_ANALISE_LABELS,
   FAIXA_SCORE_LABELS,
   KNOCKOUT_LABELS,
   MOTIVO_SEM_POTENCIAL_LABELS,
+  ehEstagioDecidido,
   type EstagioAnalise,
   type FaixaScore,
   type Knockout,
@@ -17,21 +17,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
-import { solicitarAnaliseAction } from '@/actions/credito'
 import { cn } from '@/lib/utils'
 import { buscarEsteira, buscarScore, creditoKeys } from './queries'
+import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
 
 /**
  * Card "Crédito" da Company 360 (04d §3).
@@ -88,90 +77,6 @@ function BarraScore({ score, faixa }: { score: number | null; faixa: string }) {
   )
 }
 
-function SolicitarDialog({
-  aberto,
-  onOpenChange,
-  empresaId,
-  limiteSugerido,
-  onSalvo,
-}: {
-  aberto: boolean
-  onOpenChange: (v: boolean) => void
-  empresaId: string
-  limiteSugerido: number | null
-  onSalvo: () => void
-}) {
-  const [salvando, setSalvando] = React.useState(false)
-  const [erro, setErro] = React.useState<string | null>(null)
-
-  async function enviar(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    setSalvando(true)
-    setErro(null)
-    const r = await solicitarAnaliseAction({
-      empresa_id: empresaId,
-      limite_solicitado: String(fd.get('limite') ?? '') || undefined,
-      observacoes: String(fd.get('observacoes') ?? '') || undefined,
-    })
-    setSalvando(false)
-    if (!r.ok) {
-      setErro(r.message)
-      return
-    }
-    toast.success('Análise criada na esteira. O envio à seguradora é uma ação separada.')
-    onOpenChange(false)
-    onSalvo()
-  }
-
-  return (
-    <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={enviar}>
-          <DialogHeader>
-            <DialogTitle>Solicitar análise de crédito</DialogTitle>
-            <DialogDescription>
-              Cria a solicitação na esteira. <strong>Não envia à seguradora</strong> — o envio é
-              um passo separado, feito pelo time de Crédito, porque resolver o cadastro na
-              Atradius pode ser cobrado.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3 py-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="limite">Limite solicitado (R$)</Label>
-              <Input
-                id="limite"
-                name="limite"
-                type="number"
-                min={0}
-                step="0.01"
-                defaultValue={limiteSugerido ?? undefined}
-                placeholder="Usa o limite potencial se ficar em branco"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea id="observacoes" name="observacoes" rows={3} placeholder="Contexto para quem vai analisar." />
-            </div>
-          </div>
-
-          {erro ? <p className="pb-2 text-sm text-destructive">{erro}</p> : null}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={salvando}>
-              {salvando ? 'Criando…' : 'Solicitar'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export interface CreditoCardProps {
   empresaId: string
   cnpj: string
@@ -223,17 +128,36 @@ export function CreditoCard(props: CreditoCardProps) {
               confiança do limite é herdada do faturamento e não sobe pelo caminho.
             </CardDescription>
           </div>
-          {analise ? (
-            <Button variant="outline" size="sm" asChild className="shrink-0">
-              <Link href={`/credito/analises/${analise.id}`}>
-                {ESTAGIO_ANALISE_LABELS[analise.estagio as EstagioAnalise] ?? analise.estagio}
-              </Link>
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSolicitando(true)}>
-              Solicitar análise
-            </Button>
-          )}
+          {/*
+            ANÁLISE DECIDIDA NÃO É FIM DE LINHA, e a tela dizia que era.
+            O card mostrava só o desfecho — "Negada", "Aprovada" — e ficava sem saída:
+            quem estava olhando a negativa é justamente quem sabe o que mudou desde
+            ela (balanço novo, protesto baixado, sócio trocado) e não tinha por onde
+            pedir outra. O RPC já permitia; faltava a porta.
+
+            O par fica junto de propósito: o desfecho continua sendo a informação
+            principal, e "Nova análise" é a ação que ele sugere — não um botão solto
+            em outro canto da página.
+          */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {analise ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/credito/analises/${analise.id}`}>
+                  {ESTAGIO_ANALISE_LABELS[analise.estagio as EstagioAnalise] ?? analise.estagio}
+                </Link>
+              </Button>
+            ) : null}
+            {/*
+              Sem análise nenhuma, ou com uma já decidida. Enquanto uma está EM CURSO o
+              botão some: o RPC recusa ("já existe uma análise em andamento"), e oferecer
+              para depois recusar ensina que o sistema erra.
+            */}
+            {(analise === null || ehEstagioDecidido(analise.estagio)) && (
+              <Button variant="outline" size="sm" onClick={() => setSolicitando(true)}>
+                {analise ? 'Nova análise' : 'Solicitar análise'}
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -378,11 +302,12 @@ export function CreditoCard(props: CreditoCardProps) {
       </CardContent>
 
       {solicitando && (
-        <SolicitarDialog
+        <SolicitarAnaliseDialog
           aberto
           onOpenChange={(v) => !v && setSolicitando(false)}
           empresaId={props.empresaId}
-          limiteSugerido={props.limitePotencial}
+          limitePotencial={props.limitePotencial}
+          ehNova={analise !== null}
           onSalvo={() => void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })}
         />
       )}
