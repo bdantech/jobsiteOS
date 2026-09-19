@@ -414,6 +414,32 @@ A régua da tela é uma só: **quem discorda de um valor tem de conseguir refaze
 pedir nada a ninguém**. Por isso cada linha expande com o cálculo por extenso e o
 snapshot, e por isso existe o CSV — uma planilha é onde a pessoa confere de fato.
 
+### O preço aprovado aparece no card do funil (0218)
+
+A aba **Crédito e documentos** mostrava a esteira e a pasta, e parava no limite aprovado.
+O preço — juros D0/D1, TAC e TAC mínima dos dois produtos, cashback, teto por nota, prazo,
+multa, prorrogação, validade — ficava no módulo Crédito, que o comercial não abre.
+
+O efeito não era só "ir perguntar": **enquanto a resposta não vinha, a conversa com o
+cliente acontecia sobre a taxa padrão**, a única que se sabe de cabeça. A precificação por
+risco existe justamente para aquela conta não ser a padrão; uma condição publicada que o
+vendedor não lê é uma matriz que não chega ao cliente.
+
+- **Só `publicada`.** Rascunho é preço que o Crédito ainda está fechando.
+- **Sem condição ainda, silêncio** — não uma tarja. Precificar é passo seguinte do Crédito
+  e leva o tempo que leva; um aviso vermelho no card cobra a pessoa errada.
+- **Os ajustes aparecem.** Quem vai defender a taxa na frente do cliente é quem mais
+  precisa saber que ela foi ajustada sobre a sugestão da matriz — número tabelado não se
+  defende, se repassa.
+- **A TAC é proporcional**, e a tela diz isso: sem essa linha o vendedor leria "R$ 260" e
+  prometeria R$ 260 numa nota de mil reais.
+
+A régua de acesso é a porta estreita da 0129 (`app_ve_analise_pela_venda`), a mesma que já
+libera a análise e os documentos: a linha é visível porque está amarrada a uma venda que a
+pessoa é dona, não porque ela virou usuária do Crédito. **Ler o preço da própria conta e
+decidir o preço de qualquer conta são coisas diferentes** — a matriz e o editor continuam
+no módulo.
+
 ### Quem vê o quê
 
 A aba Comissões usa **duas** réguas, e a distinção não é burocracia:
