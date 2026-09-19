@@ -705,6 +705,33 @@ chance que a própria seguradora acabou de desmentir.
 existir. Os dois caminhos usam a mesma função de pontuar (`pontuarLote`), então não há
 onde a renormalização divergir.
 
+#### E depois de uma consulta de protesto (0218)
+
+O scorecard lê **três** fatos do protesto: se já foi consultado, o valor total e a data
+da consulta. O primeiro separa *"sem protesto"* de *"nunca olhamos"* — a distinção que
+sustenta o fator inteiro —, e o terceiro entra pela régua de recência
+(`recencia_protesto_dias`).
+
+Ou seja: **toda** consulta mexe numa entrada do score, inclusive a que não acha nada. E o
+recálculo dirigido existia só para a decisão da seguradora — quem consultasse protesto
+hoje via a faixa de ontem até a varredura mensal, com o valor esperado multiplicado por
+uma chance que os dados novos já tinham desmentido.
+
+O gatilho fica em `executarLote`, quando `lote.tipo === 'protestos'`, e não em cada
+entrada:
+
+- `protestos_atual` é **view** sobre `protestos_consultas`, e o único `insert` nessa
+  tabela está no processador de protestos — que todos os caminhos (sob demanda, fornecedor
+  avulso, mensal de clientes, lote do Radar) atravessam. Um ponto cobre os quatro.
+- **Uma chamada por lote**, com o conjunto de CNPJs: `recalcularScoresDeCnpjs` já é em
+  lote (uma leitura da régua, uma consulta, um `pontuarLote`). Por item seriam N idas ao
+  banco para a mesma pergunta.
+- Os CNPJs são **coletados durante a corrida**, não relidos de `lote_itens` no fim: lote
+  interrompido pelo teto de orçamento é re-executável, e reler marcaria de novo quem a
+  corrida anterior já consultou.
+- **Com catch próprio.** Falhar a repontuação não pode marcar como `falhou` um lote cujas
+  consultas já foram pagas. Vira log; a varredura mensal corrige.
+
 ## Potencial de aumento de limite (0103)
 
 A cadeia da 0073 corre no sentido da PROSPECÇÃO: faturamento → limite potencial → quanto

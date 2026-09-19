@@ -8,6 +8,7 @@ import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
 import { estadoOrcamento } from '../../radar/orcamento.js'
 import { todasAsPaginas } from '../../paginar.js'
 import { atualizarItem, registrarEnriquecimento } from '../../radar/persist.js'
+import { recalcularScoresDeCnpjs } from '../credito/potencial.js'
 
 /**
  * Harness de execução de lote (§6.3), compartilhado por domínio/contatos/protestos.
@@ -124,6 +125,14 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
     let custo = 0
     let processados = 0
     let alertou = false
+    /*
+     * Os CNPJs que este lote de protestos de fato consultou.
+     *
+     * Coletados aqui, e não relidos de `lote_itens` no fim, porque o lote pode ser
+     * RETOMADO: uma segunda corrida repontuaria de novo quem a primeira já consultou,
+     * e num lote mensal interrompido pelo teto de orçamento isso é a base inteira.
+     */
+    const cnpjsProtestados = new Set<string>()
 
     for (const item of itens) {
       // Teto de orçamento: bloqueia ANTES de gastar mais (§6.2).
@@ -182,8 +191,49 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
         erro: r.erro ?? null,
       })
 
+      if (lote.tipo === 'protestos' && r.status === 'sucesso' && item.cnpj) {
+        cnpjsProtestados.add(item.cnpj)
+      }
+
       custo += r.custo ?? 0
       processados++
+    }
+
+    /*
+     * PROTESTO CONSULTADO MUDA O SCORE, E ATÉ AQUI NÃO MUDAVA.
+     *
+     * O scorecard lê três fatos do protesto: se já foi consultado, o valor total e a
+     * data da consulta. O primeiro é o que separa "sem protesto" de "nunca olhamos" —
+     * a distinção que sustenta o fator inteiro —, e o terceiro entra pela régua de
+     * recência (`recencia_protesto_dias`).
+     *
+     * Ou seja: TODA consulta mexe numa entrada do score, mesmo a que não acha nada. E
+     * o score não era repontuado — ele só era, desde a 04d §3.3, depois de uma decisão
+     * da seguradora. Quem consultava protesto hoje via a faixa de ontem até a varredura
+     * mensal, e o valor esperado da conta seguia multiplicado por uma chance que os
+     * dados novos já tinham desmentido.
+     *
+     * UMA chamada por lote, com todos os CNPJs: `recalcularScoresDeCnpjs` já é em lote
+     * (uma leitura da régua, uma consulta, um `pontuarLote`). Por item seriam N idas ao
+     * banco para responder a mesma pergunta.
+     *
+     * FORA do try de cada item e DEPOIS do laço, mas ANTES de marcar o lote: falhar
+     * aqui não pode desfazer consultas que já foram pagas. Por isso o catch próprio —
+     * um erro de repontuação vira log, não um lote `falhou` com o dinheiro gasto.
+     */
+    if (cnpjsProtestados.size > 0) {
+      try {
+        const acc = await recalcularScoresDeCnpjs([...cnpjsProtestados])
+        logger.info(
+          { loteId, cnpjs: cnpjsProtestados.size, ...acc },
+          'Scores repontuados após consulta de protestos.',
+        )
+      } catch (e) {
+        logger.error(
+          { loteId, erro: String(e) },
+          'Protestos consultados, mas a repontuação falhou — a varredura mensal corrige.',
+        )
+      }
     }
 
     /*
