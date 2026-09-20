@@ -87,6 +87,16 @@ export interface SacadoProspeccaoCardProps {
 }
 
 /**
+ * Sem centavos no card, como no funil de Vendas: a tira é lida de relance, e
+ * "R$ 500.000" e "R$ 500.000,00" dizem a mesma coisa com pesos diferentes.
+ */
+const BRL_CARD = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 0,
+})
+
+/**
  * A faixa do score, para a barra e a cor do canto superior direito.
  *
  * Os mesmos cortes do scorecard (04c): é o número que decide se vale o tempo, e
@@ -278,33 +288,60 @@ export function SacadoProspeccaoCard({
    * A TIRA: UM fato que muda a decisão, no lugar onde os outros funis já o
    * colocam — o último elemento lido, o que faz o olho voltar ao card.
    *
-   * Aqui esse fato é o DESFECHO DA ANÁLISE. `analise_limite_aprovado` já vinha na
-   * consulta do card desde que o funil nasceu e não era desenhado em lugar
-   * nenhum: o card dizia "Esteira: aprovada" e obrigava a abrir a ficha para
-   * descobrir de quanto foi o limite — que é a única coisa que se quer saber.
+   * O desenho é o do funil de VENDAS, que resolveu a mesma pergunta antes:
+   * uma linha forte com o fato, e o detalhe embaixo em peso normal e opacidade
+   * reduzida. Lá é "R$ 500.000 aprovados" + o motivo da negativa; aqui é o
+   * limite + a CONDIÇÃO que o Crédito publicou.
    *
-   * A taxa NÃO entra aqui porque ela não existe na análise: a decisão interna
-   * aprova um limite, e o preço nasce depois, na condição comercial publicada
-   * pelo Crédito. Citar uma taxa que ainda não foi publicada seria inventar
-   * condição.
+   * ── A TAXA SÓ APARECE SE FOI PUBLICADA ────────────────────────────────────
+   * Ela não vem da análise: `analises_credito` aprova um LIMITE e não tem
+   * coluna de preço. O preço nasce quando o Crédito publica a condição
+   * comercial — e, enquanto não publicar, o card fica CALADO em vez de citar a
+   * régua padrão da matriz, que é estimativa nossa e não condição de ninguém.
+   * Hoje uma única empresa na base tem condição publicada; isto preenche
+   * conforme o Crédito publica as demais.
    */
+  const condicao =
+    sacado.condicao_taxa_am === null || sacado.condicao_taxa_am === undefined
+      ? null
+      : {
+          taxa: Number(sacado.condicao_taxa_am),
+          tac: sacado.condicao_tac === null ? null : Number(sacado.condicao_tac),
+          vencida: Boolean(
+            sacado.condicao_expira_em &&
+              new Date(sacado.condicao_expira_em) < new Date(new Date().toDateString()),
+          ),
+        }
+
+  const linhaDaCondicao = condicao ? (
+    <span className="block font-normal opacity-80">
+      {condicao.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% a.m.
+      {condicao.tac !== null ? ` · TAC ${BRL_CARD.format(condicao.tac)}` : ''}
+      {condicao.vencida
+        ? ` · condição vencida em ${formatarData(sacado.condicao_expira_em)}`
+        : ` · publicada em ${formatarData(sacado.condicao_publicada_em)}`}
+    </span>
+  ) : null
+
   const tira = (() => {
     const limite = Number(sacado.analise_limite_aprovado ?? 0)
     if (estagio === 'aprovado' || (sacado.analise_estagio ?? '') === 'aprovada') {
       return (
         <TiraDoCard tom="bom">
-          {limite > 0
-            ? `Aprovado — limite de ${formatarMoedaExata(limite)}`
-            : 'Aprovado na esteira'}
-          {sacado.analise_decidida_em ? ` · ${formatarData(sacado.analise_decidida_em)}` : ''}
+          {limite > 0 ? `${BRL_CARD.format(limite)} aprovados` : 'Aprovado na esteira'}
+          {linhaDaCondicao}
         </TiraDoCard>
       )
     }
     if (estagio === 'recusado' || (sacado.analise_estagio ?? '') === 'recusada') {
       return (
         <TiraDoCard tom="ruim">
-          Recusado na esteira
-          {sacado.motivo_saida ? ` — ${sacado.motivo_saida}` : ''}
+          Crédito recusado
+          {sacado.motivo_saida ? (
+            <span className="block font-normal opacity-80 line-clamp-2">
+              {sacado.motivo_saida}
+            </span>
+          ) : null}
         </TiraDoCard>
       )
     }
@@ -339,6 +376,20 @@ export function SacadoProspeccaoCard({
         <TiraDoCard tom="neutro">
           Na esteira desde {formatarData(sacado.estagio_alterado_em)} — a decisão move o card
           sozinha.
+        </TiraDoCard>
+      )
+    }
+    /*
+     * Condição publicada ANTES de o card chegar ao fim do funil: acontece quando
+     * a construtora já era cliente por outro caminho. O preço vale igual, e
+     * escondê-lo até o card "chegar" seria esconder o que a pessoa vai dizer na
+     * ligação.
+     */
+    if (condicao) {
+      return (
+        <TiraDoCard tom="neutro">
+          Condição publicada
+          {linhaDaCondicao}
         </TiraDoCard>
       )
     }

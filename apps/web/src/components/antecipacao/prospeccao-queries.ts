@@ -16,7 +16,18 @@ import { createClient } from '@/lib/supabase/client'
  * `prospeccao_notas`, autorizada pelo card.
  */
 
-export type SacadoProspeccao = Views<'sacados_prospeccao_view'>
+/*
+ * As colunas `condicao_*` nasceram na 0227 e `database.ts` é GERADO do banco: o
+ * tipo da view só as conhece depois que o `pnpm db:types` rodar. A extensão fica
+ * num lugar só e some nesse dia.
+ */
+export type SacadoProspeccao = Views<'sacados_prospeccao_view'> & {
+  /** Taxa mensal da condição comercial PUBLICADA pelo Crédito. Nula até publicar. */
+  condicao_taxa_am: number | null
+  condicao_tac: number | null
+  condicao_publicada_em: string | null
+  condicao_expira_em: string | null
+}
 export type QuebraFornecedor = Tables<'sacados_prospeccao_fornecedores'>
 
 export const prospeccaoKeys = {
@@ -78,7 +89,7 @@ export interface FiltrosProspeccao {
  * para `GenericStringError`, e o erro aparece nas linhas de USO, não no select.
  */
 const COLUNAS_CARD =
-  'id, cnpj_sacado, sacado_nome, nome_fantasia, municipio, uf, cnae_principal, porte_rfb, situacao_cadastral, data_inicio_atividade, empresa_id, originador_id, originador_origem, originador_nome, estagio, estagio_alterado_em, motivo_saida, observacao_saida, volume_30d, valor_operavel, qtd_nfs_30d, qtd_fornecedores, meses_com_emissao_6m, media_mensal_6m, prazo_medio_dias, ultima_nf_em, prazo_minimo_operavel_dias, prazo_minimo_origem, score_credito, score_completude, chance_concessao, faturamento_estimado, limite_potencial, valor_esperado_mensal, analise_credito_id, analise_estagio, analise_limite_aprovado, analise_decidida_em, entrou_em, atualizado_em'
+  'id, cnpj_sacado, sacado_nome, nome_fantasia, municipio, uf, cnae_principal, porte_rfb, situacao_cadastral, data_inicio_atividade, empresa_id, originador_id, originador_origem, originador_nome, estagio, estagio_alterado_em, motivo_saida, observacao_saida, volume_30d, valor_operavel, qtd_nfs_30d, qtd_fornecedores, meses_com_emissao_6m, media_mensal_6m, prazo_medio_dias, ultima_nf_em, prazo_minimo_operavel_dias, prazo_minimo_origem, score_credito, score_completude, chance_concessao, faturamento_estimado, limite_potencial, valor_esperado_mensal, analise_credito_id, analise_estagio, analise_limite_aprovado, analise_decidida_em, condicao_taxa_am, condicao_tac, condicao_publicada_em, condicao_expira_em, entrou_em, atualizado_em'
 
 export const PAGINA_PROSPECCAO = 40
 
@@ -125,7 +136,7 @@ export async function buscarFunilProspeccao(
 
   const { data, error, count } = await q
   if (error) throw new Error(`Falha ao carregar o funil de sacados: ${error.message}`)
-  return { linhas: (data ?? []) as SacadoProspeccao[], total: count ?? 0 }
+  return { linhas: (data ?? []) as unknown as SacadoProspeccao[], total: count ?? 0 }
 }
 
 export interface PainelProspeccao {
