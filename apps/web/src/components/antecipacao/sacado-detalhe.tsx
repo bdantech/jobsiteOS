@@ -119,7 +119,7 @@ export function SacadoDetalhe({ cnpj }: { cnpj: string }) {
 
   return (
     <div className="space-y-4">
-      <FichaVoltar href={prospect ? '/antecipacao/prospectar' : '/antecipacao/sacados'}>
+      <FichaVoltar href={prospect ? '/antecipacao/sacados-por-nf' : '/antecipacao/sacados'}>
         {prospect ? 'Sacados a prospectar' : 'Por sacado'}
       </FichaVoltar>
 

@@ -662,7 +662,175 @@ linhas visíveis — um número que conta a base inteira não bate com nenhuma l
 tabela. As opções do Select saem **dos dados**, não de uma lista fixa: `credito_status`
 vem cru da Onepay, e um status novo apareceria no badge da linha sem existir no filtro.
 
-## Sacados a prospectar: o recorte é por CNAE
+## Sacados por NF (04r): o funil que absorveu "Sacados a prospectar"
+
+A aba antiga listava construtoras que recebem NF e não estão na plataforma — uma tabela
+ordenada por valor recebido, **sem dono, sem estágio e sem ação**. A de hoje faz a
+pergunta que importa (conseguimos OPERAR isto?) e traz o que a responde. O que segue
+descreve as duas: primeiro o funil novo, depois o recorte por CNAE que ele herdou.
+
+### Por que é um funil próprio, e não uma faixa do funil de NFs
+
+Os dois leem a mesma nota, cada um por uma ponta. No funil de NFs o sacado tem crédito
+aprovado e a pergunta é "o fornecedor vai antecipar?"; aqui o sacado **não tem análise
+nenhuma**, e a pergunta é "conseguimos operar isso?". O gargalo é a esteira de crédito,
+não a conversa comercial — e estágios que descrevem conversa não descrevem esteira.
+
+**A unidade é o SACADO** (`unique (cnpj_sacado)`). Três cedentes emitindo contra a mesma
+construtora são UMA oportunidade com o triplo de evidência: a análise acontece uma vez por
+CNPJ, e três cards dariam três pedidos à mesma esteira — o segundo recusado com o
+originador sem entender por quê.
+
+### As seis medições que sustentam o desenho (20/09/2026)
+
+| Medida | Valor |
+| --- | --- |
+| Sacados não cadastrados recebendo NF de cedente nosso em 30 dias | 886 (1.425 notas, R$ 60,1 mi) |
+| Acima do corte de R$ 30 mil | 243 |
+| Desses, contratantes de obra (CNAE 41/42 ou 6810) | 114 (R$ 20,7 mi) |
+| Desses, ainda sem CNAE | 2 |
+| Mediana do prazo RESTANTE das 1.425 notas | 12 dias |
+| Volume que passaria de 55 dias de vida | R$ 436 mil (de R$ 60,1 mi) |
+| Análises decididas com prazo válido (amostra da esteira) | 7 |
+| Cedentes com titular vigente em `vendedor_carteira` | 1 de 130 |
+
+Cada linha decide alguma coisa: o corte de volume (886 → 243), o recorte por CNAE
+(243 → 114), a existência da coluna `valor_operavel` (R$ 60,1 mi → R$ 436 mil), a
+existência de `esteira_base_minima` (n = 7) e a existência do botão "Seguir" (1 de 130).
+
+### `valor_operavel` não é `volume_30d`
+
+**Volume 30d** é a evidência de que o fluxo existe. **Valor operável** é o que sobra
+depois da esteira: a soma apenas das notas cujo prazo **restante** — contra hoje, não
+contra a emissão — supera `tempo_medio_esteira + margem_prazo_dias`.
+
+A distinção é a feature inteira. Uma nota de 90 dias emitida há 80 tem dez de vida: ela
+não sobrevive à análise de um sacado novo. Usar o prazo original faria o card prometer um
+valor que já evaporou, e o originador descobriria duas semanas depois.
+
+Nota **sem vencimento** não conta como operável: "não sabemos" não pode virar "sim" numa
+coluna que existe justamente para evitar promessa.
+
+**O tempo de esteira é medido**, com a mesma régua do report semanal (`decidida_em is not
+null and decidida_em >= criada_em`, doze meses) — a média sobre a base inteira dava −152
+dias por causa do backfill da apólice. Com 7 análises a mediana é de horas, e usá-la
+marcaria como operável toda nota que vence amanhã: abaixo de `esteira_base_minima` a conta
+cai no default configurado, e o card grava em `prazo_minimo_origem` qual dos dois entrou.
+
+### Recorrência e média: mês civil, e divisão pela janela
+
+`meses_com_emissao_6m` conta **meses civis** distintos com emissão nos últimos seis (mês
+corrente incluído). 180 dias corridos partiriam meses ao meio e fariam "5 dos últimos 6
+meses" significar coisas diferentes conforme o dia em que a tela fosse aberta.
+
+`media_mensal_6m` divide o volume da janela pelos **meses da janela**, não pelos meses com
+emissão: dividir pelos meses com nota transformaria um pico único em "R$ 900 mil por mês".
+
+A ordenação default é `media_mensal_6m × chance_concessao × margem`. A margem sai dos
+MESMOS parâmetros que precificam o potencial no Crédito (`credito_config.economia`) — uma
+constante chutada aqui faria os dois módulos discordarem sobre qual sacado vale mais, a
+dois cliques um do outro.
+
+### O guardrail de relacionamento (§6, não negociável)
+
+A abordagem sai **pelo cedente**, nunca direto na construtora expondo o que vimos.
+Nenhuma mensagem, template ou tela voltada ao sacado pode exibir volume, nome de
+fornecedor ou detalhe de nota — é dado que o fornecedor nos cedeu para antecipar.
+
+Os dois templates de `prospeccao_config.templates` falam com o fornecedor, que é o dono do
+dado. Nenhum fala com a construtora, e a ausência está comentada no seed, na tela de
+settings e no retorno da tool `prospeccao.detalhe_sacado`.
+
+O **pedido de apresentação reusa `pedidos_apresentacao`** (04l), mas no sentido inverso:
+lá pedimos ao SACADO que nos apresente a um fornecedor dele; aqui pedimos ao CEDENTE que
+nos apresente à construtora. A coluna `direcao` foi acrescentada por isso — guardar o
+contato do fornecedor numa coluna chamada `contato_sacado_id` faria toda leitura futura
+mentir sobre com quem se falou.
+
+### O efeito no `grafo_sefaz`
+
+Todo sacado do funil recebe `grafo_sefaz = true` em **`mercado_universo`** — que é o que
+as regras da pirâmide (02) leem para promover — e também em `empresas`, de onde a tela lê.
+Marcar só a ficha deixaria a promoção automática cega para os CNPJs recém-descobertos.
+
+### O botão "Seguir" é load-bearing
+
+A população entra por cedente **seguido**: união de (a) titularidade espelhada de
+`vendedor_carteira` e (b) o clique manual. As duas coexistem na tabela, e é por isso que
+`origem` entra no índice único parcial — perder titularidade por dormência não pode
+fechar a linha que o botão abriu.
+
+**Qual papel:** o §2 do prompt diz `originacao`, mas em `vendedor_carteira` os dois nomes
+parecidos são coisas diferentes (ver `PAPEIS_CARTEIRA`): `originacao` é roteamento de NF
+(04g) e **`originador` é titular do CEDENTE** (04k §4) — que é o que o §2 descreve. A
+titularidade é lida de `originador`: ele cobre 8 dos 130 cedentes, `originacao` cobre 1.
+
+No §7 o papel gravado É `originacao`, e ali a spec está certa: o que a aprovação entrega ao
+originador é o roteamento das NFs daquele sacado.
+
+### A esteira move o card sozinha, e a aprovação cria a carteira
+
+Trigger em `analises_credito`, não job. A esteira é movimentada por quatro caminhos (a tela
+do Crédito, o poll da Atradius, o RPC de conclusão do 04j e a API de produção), e um job
+noturno faria o card dizer "em análise" por até 24h depois de aprovado — com a carteira do
+§7 nascendo na madrugada seguinte, e a comissão do 04k correndo a partir de uma data que
+não é a da aprovação.
+
+Aprovada → card `aprovado` + `vendedor_carteira` (papel `originacao`, origem
+`prospeccao_fluxo`) para quem descobriu, **fechando** o vínculo anterior em vez de
+sobrescrevê-lo: a tabela é uma linha do tempo, e é dela que o motor de comissões tira o
+dono NA DATA de cada operação. Card sem dono não cria carteira nenhuma — "ninguém
+descobriu" não é um dono.
+
+Negada → card `recusado`, com `motivo_saida = 'esteira_negada'` e o motivo da seguradora
+na observação. Ele não sai da lista de descarte comercial de propósito: "negada pela
+seguradora" não é uma decisão que alguém daqui tomou.
+
+### Onde "solicitar análise" passou a ter uma implementação só
+
+`app_solicitar_analise` exige módulo `credito` ou `empresas`; o público desta tela tem
+`antecipacao`. É o quinto achado da mesma família (0060, 0066, 0068, 0138), e a saída é a
+de sempre: o núcleo desceu para `app__abrir_analise_credito` — sem portão, revogada de
+todos os papéis de sessão — e cada porta põe a própria autorização em cima.
+
+`prospeccao_fluxo` vai em **`origem_motivo`**, não em `origem`: aquela coluna diz qual
+SISTEMA criou a análise (jobsiteos, atradius_backfill, api_producao), e esta nasceu aqui
+como qualquer outra. Escrevê-lo em `origem` inventaria um quarto sistema e quebraria a
+contagem por sistema do report semanal.
+
+### As notas vêm por RPC, e não por consulta direta
+
+A policy de `notas_fiscais` recorta por vendedor da nota ou por carteira de empresa. O
+originador deste funil não é nenhum dos dois: o sacado **não é cliente** (é o ponto da
+feature) e a nota costuma estar roteada para quem cuida do cedente. Lida direto, a
+expansão de um cedente viria **vazia** — com cara de resposta certa, numa tela cuja tese
+inteira é mostrar o fluxo. `prospeccao_notas` é SECURITY DEFINER e autoriza pelo CARD:
+quem enxerga o card enxerga as notas que o sustentam.
+
+### O que o job NÃO faz
+
+Protesto. Ele custa, e fica sob demanda no botão "Enriquecer", com o custo na tela antes e
+o teto mensal do originador conferido contra `prospeccao_enriquecimentos` (ledger próprio,
+não `descoberta_execucoes` — aquela tem `fornecedor_cnpj NOT NULL` e mede outra coisa;
+misturar as duas faria dois tetos virarem um). A economia certa é pagar protesto para as
+dezenas que já mostraram fluxo recorrente, não para os milhares da lista.
+
+A tool de IA `prospeccao.enriquecer` **planeja** o clique (custo, gasto do mês, saldo, se
+cabe) e não o executa — mesma decisão do `fornecedores.buscar_contatos` do 04l, e pela
+mesma razão: um modelo que decide sozinho consumir o teto de alguém é o agente autônomo
+gastando que o §10 põe fora de escopo.
+
+## Sacados a prospectar: o recorte é por CNAE (herdado pelo 04r)
+
+> **A TELA saiu** com o 04r — a aba e os componentes dela foram removidos. O que segue
+> descreve a `view` `antecipacao_sacados_a_prospectar`, que continua de pé e continua
+> sendo lida pela **ficha do sacado** (`/antecipacao/sacados/[cnpj]`), e sobretudo
+> descreve a LIÇÃO que o funil novo herdou: o recorte por CNAE. Ele voltou como
+> `prospeccao_config.exigir_contratante`, com uma diferença — a régua agora é a do
+> TypeScript (`tipoDeEmpresaPorCnae`: divisão 41/42 ou grupo 6810), porque a 0195
+> derrubou a cópia em SQL de propósito. A divisão 43 (serviços especializados) é
+> **prestador** por essa régua, e por isso o 04r conta 114 contratantes onde a régua
+> antiga contaria mais.
 
 Construtoras que **recebem NF** e **não estão na plataforma**. Duas condições, e só:
 

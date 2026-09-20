@@ -388,6 +388,80 @@ fonte `onepay_nf`, so the Ingestões screen and its re-run button work with no n
 `raw_xml` is **always** stored — it is the seed of the future Pricing module. A parse failure logs and
 carries on (`xml_parse_erro`); value and due date also come from the endpoint.
 
+### Sacados por NF: o fluxo que já vemos, do outro lado da nota (04r)
+
+Temos certificado digital de boa parte dos nossos **cedentes**, então enxergamos todas as notas que
+eles emitem — inclusive contra construtoras que ainda **não são clientes**. Cada uma é um sacado em
+potencial com **fluxo comercial observado**, não inferido. A aba fica em Antecipação → **Sacados por
+NF**, e ABSORVEU a antiga "Sacados a Prospectar" (uma tabela ordenada por valor, sem dono, sem estágio
+e sem ação).
+
+Funil próprio porque a pergunta é outra: no funil de NFs o sacado tem crédito aprovado e a dúvida é
+"o fornecedor vai antecipar?"; aqui o sacado não tem análise nenhuma, e a dúvida é "conseguimos operar
+isso?". O gargalo é a **esteira de crédito**, não a conversa.
+
+**A unidade é o SACADO.** Três cedentes emitindo contra a mesma construtora são UMA oportunidade com o
+triplo de evidência — a análise acontece uma vez por CNPJ.
+
+#### `valor_operavel` não é `volume_30d`, e a diferença é a feature inteira
+
+**Volume 30d** é a EVIDÊNCIA: existe fluxo entre um cedente nosso e aquela construtora, e nós o vimos.
+**Valor operável** é o que SOBRA depois da esteira — a soma apenas das notas cujo prazo **restante**
+(contra hoje, não contra a emissão) supera `tempo_medio_esteira + margem_prazo_dias`.
+
+Medido na base em 20/09/2026: das 1.425 notas da janela, a mediana tem **12 dias** até o vencimento, e
+de **R$ 60,1 milhões** emitidos em 30 dias apenas **R$ 436 mil** passariam de 55 dias de vida. Sem os
+dois números lado a lado, o originador trabalha um card de R$ 900 mil por duas semanas e descobre no
+fim que não sobrou nota nenhuma para operar.
+
+O tempo de esteira é **medido** em `analises_credito` (mesma régua do report semanal: só o decidido e
+só o que não veio do backfill). Abaixo de `esteira_base_minima` o número medido não vale e a conta cai
+no default configurado — com 7 análises decididas a mediana é de horas, e usá-la marcaria como
+operável toda nota que vence amanhã. O card diz qual dos dois entrou.
+
+#### A recorrência é medida em MESES CIVIS, e a média divide pela janela
+
+`meses_com_emissao_6m` conta meses civis distintos com nota nos últimos seis (o mês corrente inclusive).
+Não são 180 dias corridos: isso partiria meses ao meio e faria "5 dos últimos 6 meses" significar
+coisas diferentes conforme o dia em que a tela fosse aberta.
+
+`media_mensal_6m` divide o volume da janela pelos **meses da janela**, não pelos meses com emissão.
+Dividir pelos meses com nota transformaria um pico único em "R$ 900 mil por mês" e ordenaria a lista
+pelo que já acabou.
+
+A **ordenação default** é `media_mensal_6m × chance_concessao × margem` — o que se compra ao aprovar um
+limite é o fluxo FUTURO, e o snapshot de um mês premia o pico.
+
+#### O guardrail de relacionamento (não negociável)
+
+A abordagem sai **pelo cedente**, nunca direto na construtora expondo o que vimos. **Nenhuma mensagem,
+template ou tela voltada ao sacado pode exibir o volume, o nome do fornecedor ou o detalhe das notas** —
+é dado que o fornecedor nos cedeu para antecipar, e devolvê-lo ao sacado soa como vigilância.
+
+Os dois templates do módulo (`prospeccao_config.templates`) falam com o FORNECEDOR, que é o dono do
+dado. Nenhum fala com a construtora, e a ausência é a regra — está comentada no seed, na tela de
+settings e no retorno da tool de IA. É a mesma regra já aplicada no pedido de apresentação do 04l; o
+que mudou é a DIREÇÃO, que agora vive em `pedidos_apresentacao.direcao`.
+
+#### O efeito no `grafo_sefaz`
+
+Todo sacado que entra neste funil recebe `grafo_sefaz = true` — **em `mercado_universo`**, que é o que
+as regras da pirâmide (02) leem para promover, e também em `empresas`, de onde a tela lê. Marcar
+apenas a ficha deixaria a promoção automática cega justamente para os CNPJs recém-descobertos.
+
+A mesma descoberta alimenta o funil do originador **e** o SOM do SDR, sem trabalho extra: as métricas
+de fluxo ficam no card (`sacados_prospeccao`), e o sinal de mercado fica onde as regras o alcançam.
+
+#### Quem vê o quê, e por que o botão "Seguir" é load-bearing
+
+O funil só enxerga notas de cedentes **seguidos** — união de duas fontes: a titularidade espelhada de
+`vendedor_carteira` (papel `originador` = titular do cedente, 04k) e o botão "Seguir". As duas
+coexistem: perder a titularidade por dormência **não** apaga o seguir manual.
+
+Medido em 20/09/2026: **1 dos 130** cedentes que emitem contra sacados não cadastrados tem titular
+vigente. Quase todo card nasce órfão — e card sem dono é do gestor, como a Fila sem Dono do 04g. O
+caminho de saída não é afrouxar a policy: é seguir um cedente, e a tela diz isso quando está vazia.
+
 ### The cadence generates; a person approves
 
 Enabling a channel in `/comunicacao/disparos` does **not** enable sending. It enables *generation*: the

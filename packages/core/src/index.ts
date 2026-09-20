@@ -17,6 +17,9 @@ export * from './campanhas/index.js'
 export * from './comercial/index.js'
 export * from './comunicacao/index.js'
 export * from './fornecedores/index.js'
+// Sacados por NF (04r). Depois de fornecedores porque é o irmão direto dele: os dois
+// leem a mesma nota, cada um por uma ponta.
+export * from './prospeccao/index.js'
 export * from './perfil/index.js'
 export * from './juridico/index.js'
 export * from './reports/index.js'

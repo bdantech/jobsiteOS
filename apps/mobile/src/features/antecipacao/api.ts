@@ -237,16 +237,6 @@ export async function fetchSacadosSemCnae(): Promise<number> {
   return count ?? 0
 }
 
-export async function fetchSacadosAProspectar(): Promise<SacadoProspectar[]> {
-  const { data, error } = await supabase
-    .from('antecipacao_sacados_a_prospectar')
-    .select('*')
-    .order('valor_agregado', { ascending: false, nullsFirst: false })
-    .limit(100)
-  if (error) throw error
-  return (data ?? []) as SacadoProspectar[]
-}
-
 /**
  * O XML de UMA nota, sob demanda.
  *

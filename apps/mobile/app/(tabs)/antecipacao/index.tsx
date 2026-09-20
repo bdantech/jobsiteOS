@@ -150,11 +150,11 @@ export default function FunilScreen() {
           <Button
             variant="ghost"
             size="sm"
-            onPress={() => router.push('/antecipacao/prospectar')}
-            accessibilityLabel="Ver sacados a prospectar"
+            onPress={() => router.push('/antecipacao/sacados-por-nf')}
+            accessibilityLabel="Ver sacados por NF"
           >
             <Sparkles size={16} color={colors.mutedForeground} />
-            <Text className="text-xs">Prospectar</Text>
+            <Text className="text-xs">Sacados por NF</Text>
           </Button>
 
           {/*

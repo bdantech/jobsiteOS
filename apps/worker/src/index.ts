@@ -11,6 +11,7 @@ import { previewRegra } from './derivadas/reclassificar.js'
 import { processarWebhookApollo, segredoWebhookValido } from './radar/apollo-webhook.js'
 import { callbackEscavadorValido } from './juridico/callback-auth.js'
 import { registrarCallback } from './jobs/juridico/callbacks.js'
+import { enriquecerSacado } from './jobs/prospeccao/enriquecer.js'
 import {
   dispararCno,
   dispararMetricas,
@@ -85,6 +86,8 @@ import {
   dispararFuncionariosLote,
   dispararLookupCadastral,
   dispararProtestoFornecedor,
+  dispararFunilSacados,
+  dispararSincronizarSeguidos,
   dispararFunilFornecedores,
   dispararDescobertaFornecedores,
   dispararValidarContatos,
@@ -1175,6 +1178,55 @@ app.post('/jobs/antecipacao/protesto-fornecedor', (req: Request, res: Response, 
   } catch (erro) {
     next(erro)
   }
+})
+
+/*
+ * Funil de Sacados por NF (04r §9).
+ *
+ * As duas primeiras respondem 202 com um id: são varreduras, e ninguém fica olhando.
+ * O ENRIQUECER responde 200 com o resultado, e a exceção é a mesma do clique pago do
+ * 04l — a tela mostrou "este clique custa R$ 8,90" e perguntou se pode; devolver um id
+ * e mandar consultar depois transformaria uma decisão de gastar dinheiro em algo que a
+ * pessoa não vê acontecer.
+ */
+app.post('/jobs/prospeccao/atualizar-sacados', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararFunilSacados(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/prospeccao/sincronizar-seguidos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararSincronizarSeguidos(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+const enriquecerSacadoSchema = z.object({
+  cnpj: z.string().regex(/^[0-9]{14}$/),
+  originador_id: z.string().uuid().nullish(),
+  solicitado_por: z.string().uuid().nullish(),
+  forcar: z.boolean().optional(),
+})
+
+app.post('/jobs/prospeccao/enriquecer', (req: Request, res: Response, next: NextFunction) => {
+  void (async () => {
+    try {
+      const dados = enriquecerSacadoSchema.parse(req.body ?? {})
+      const r = await enriquecerSacado({
+        cnpj: dados.cnpj,
+        originadorId: dados.originador_id ?? null,
+        solicitadoPor: dados.solicitado_por ?? null,
+        forcar: dados.forcar ?? false,
+      })
+      res.status(200).json(r)
+    } catch (erro) {
+      next(erro)
+    }
+  })()
 })
 
 app.post('/jobs/antecipacao/lookup', (_req: Request, res: Response, next: NextFunction) => {

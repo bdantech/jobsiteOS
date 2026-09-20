@@ -33,6 +33,7 @@ import {
   type StatusConversoesInput,
 } from '../../antecipacao/schemas.js'
 import type { Json } from '../../types/database.js'
+import { prospeccaoTools } from './prospeccao-tools.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -284,6 +285,15 @@ export const antecipacaoModule: AppModule = {
   route: '/antecipacao',
   group: 'operacoes',
   tools: [
+    /*
+     * As tools do funil de Sacados por NF (04r) moram em arquivo próprio e entram aqui.
+     *
+     * São do módulo Antecipação porque a aba é da Antecipação e a régua de acesso é a
+     * mesma. Ficam separadas no arquivo porque são um domínio inteiro — funil de
+     * aquisição de sacado, quebra por cedente, esteira de crédito — que divide o menu
+     * com o funil de notas por vizinhança, não por parentesco.
+     */
+    ...prospeccaoTools,
     {
       id: 'antecipacao.resumo_funil',
       name: 'Resumo do funil',

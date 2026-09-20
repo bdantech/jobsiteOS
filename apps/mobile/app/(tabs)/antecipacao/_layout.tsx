@@ -19,7 +19,11 @@ export default function AntecipacaoLayout() {
       <Stack.Screen name="index" options={{ title: 'Funil' }} />
       <Stack.Screen name="fornecedores/[cnpj]" options={{ title: 'Fornecedor' }} />
       <Stack.Screen name="sacados" options={{ headerShown: false }} />
-      <Stack.Screen name="prospectar" options={{ title: 'Sacados a Prospectar' }} />
+      {/*
+        Sacados por NF (04r) ABSORVEU a antiga "Sacados a Prospectar": aquela era uma
+        lista ordenada por valor recebido, sem dono, sem estágio e sem ação.
+      */}
+      <Stack.Screen name="sacados-por-nf" options={{ title: 'Sacados por NF' }} />
     </ModuleStack>
   )
 }

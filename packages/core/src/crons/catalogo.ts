@@ -91,6 +91,18 @@ export const CRONS: readonly CronCatalogado[] = [
     encadeia: [
       'Sync de antecipações (conversão de nota em operação)',
       'Funil de cadastro de fornecedores (04l) — a munição dele vem exatamente das notas que acabaram de chegar; num relógio próprio, o card mostraria o volume de até quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban como lead',
+      'Funil de Sacados por NF (04r) — mesma razão pelo outro lado da nota, e aqui a defasagem seria pior: `valor_operavel` mede quanto de vida a nota AINDA tem, e num relógio próprio o card mostraria por horas um número que já encolheu',
+    ],
+  },
+  {
+    path: '/api/cron/prospeccao-seguidos',
+    nome: 'Cedentes seguidos e funil de sacados',
+    moduloId: 'antecipacao',
+    descricao:
+      'Espelha as titularidades de cedente (04k, papel `originador`) em `fornecedores_seguidos` e recompõe o funil de Sacados por NF em seguida. É este job que decide DE QUEM é cada card: quem ganhou a titularidade ontem precisa abrir a tela hoje já vendo os sacados dela, em vez de descobrir aos pedaços conforme os syncs de NF rodam. Às 4h40 para vir antes do diário da Antecipação — a lista de seguidos é a ENTRADA do funil, e recompô-lo com a lista de ontem seria refazer o trabalho.',
+    destino: 'POST /jobs/prospeccao/sincronizar-seguidos',
+    encadeia: [
+      'Funil de Sacados por NF — recalcula volume, valor operável, recorrência e o dono de cada card',
     ],
   },
   {

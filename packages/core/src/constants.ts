@@ -181,6 +181,30 @@ export const EVENTO_TIPOS = {
   APRESENTACAO_SOLICITADA: 'apresentacao.solicitada',
   ORCAMENTO_DESCOBERTA_ALERTA: 'orcamento_descoberta.alerta',
 
+  /*
+   * Sacados por NF (04r).
+   *
+   * `apresentacao.solicitada` NÃO ganha um gêmeo: pedir a ponte é o mesmo fato dos dois
+   * lados da nota, e o que muda é a direção — que agora vive em
+   * `pedidos_apresentacao.direcao`. Um segundo tipo partiria a timeline da empresa em
+   * duas metades que ninguém cruzaria.
+   *
+   * `sacado_prospeccao.aprovado` e `.recusado` existem separados de `analise.aprovada`
+   * porque dizem outra coisa: a análise fala do LIMITE, e estes falam do card e da
+   * carteira que nasce dele (§7). Quem assina um não quer necessariamente o outro.
+   *
+   * `sacado_prospeccao.analise_solicitada` está no §9 e NÃO existe aqui, pela mesma
+   * razão dos dois acima lida ao contrário: `app__abrir_analise_credito` já emite
+   * `analise.solicitada` na timeline da empresa, com `origem_motivo` no payload — que é
+   * exatamente o que separa "veio do funil de fluxo" de "veio do Crédito". Um segundo
+   * tipo para o mesmo fato daria duas metades que ninguém cruzaria.
+   */
+  SACADO_PROSPECCAO_IDENTIFICADO: 'sacado_prospeccao.identificado',
+  SACADO_PROSPECCAO_ESTAGIO_ALTERADO: 'sacado_prospeccao.estagio_alterado',
+  SACADO_PROSPECCAO_APROVADO: 'sacado_prospeccao.aprovado',
+  SACADO_PROSPECCAO_RECUSADO: 'sacado_prospeccao.recusado',
+  SACADO_PROSPECCAO_ENRIQUECIDO: 'sacado_prospeccao.enriquecido',
+
   // Ex-clientes pelas análises da plataforma (04h)
   CLIENTE_TORNOU_EX: 'cliente.tornou_ex',
   EXCLIENTE_CONFLITO_DADOS: 'excliente.conflito_dados',
@@ -350,7 +374,14 @@ export const EVENTO_LABELS: Record<string, string> = {
   'fornecedor.contatos_encontrados': 'Contatos do fornecedor encontrados',
   'fornecedor.sem_contato': 'Fornecedor sem contato encontrado',
   'fornecedor.cadastrado': 'Fornecedor cadastrado na plataforma',
-  'apresentacao.solicitada': 'Apresentação pedida ao sacado',
+  // Sem lado no rótulo: desde a 0222d o pedido tem direção, e ele tanto pode ir ao
+  // sacado (04l) quanto ao cedente (04r). A direção está na linha, não no nome do evento.
+  'apresentacao.solicitada': 'Apresentação pedida',
+  'sacado_prospeccao.identificado': 'Sacado identificado por fluxo de notas',
+  'sacado_prospeccao.estagio_alterado': 'Sacado por NF mudou de estágio',
+  'sacado_prospeccao.aprovado': 'Sacado descoberto por fluxo foi aprovado',
+  'sacado_prospeccao.recusado': 'Sacado descoberto por fluxo foi recusado',
+  'sacado_prospeccao.enriquecido': 'Sacado por NF enriquecido',
   'orcamento_descoberta.alerta': 'Orçamento de descoberta em alerta',
   'cliente.tornou_ex': 'Virou ex-cliente',
   'excliente.conflito_dados': 'Ex-cliente com dado conflitante',

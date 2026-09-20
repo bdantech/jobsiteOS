@@ -49,6 +49,8 @@ import {
   descobertaSobDemanda,
   validarContatosJob,
 } from './fornecedores/index.js'
+import { atualizarSacadosProspeccao } from './prospeccao/atualizar-sacados.js'
+import { sincronizarSeguidos } from './prospeccao/sincronizar-seguidos.js'
 import { sugerirPassivosJob } from './comercial/passivos.js'
 import {
   detectarPrimeiraOperacaoJob,
@@ -153,6 +155,8 @@ export type TipoJob =
   | 'fornecedores-descoberta'
   | 'fornecedores-clique'
   | 'fornecedores-validar'
+  | 'prospeccao-sacados'
+  | 'prospeccao-seguidos'
   | 'protestos-empresa'
   | 'contatos-empresa'
   | 'certificados'
@@ -671,9 +675,28 @@ export async function dispararSyncNfs(): Promise<string> {
         funilFornecedores = { erro: String(erro) }
       }
 
+      /*
+       * E o funil de SACADOS POR NF (04r §4) atrás do mesmo sync, pela mesma razão
+       * levada para o outro lado da nota: o volume observado, o valor operável e a
+       * recorrência vêm exatamente das notas que acabaram de chegar.
+       *
+       * Aqui a defasagem seria pior que no irmão: `valor_operavel` mede quanto de vida
+       * a nota AINDA tem, e num relógio próprio o card mostraria por horas um número
+       * que já encolheu. Best-effort pelo mesmo motivo — o funil se recompõe inteiro na
+       * próxima corrida, porque ele é recalculado e não incremental.
+       */
+      let funilSacados: unknown
+      try {
+        funilSacados = await atualizarSacadosProspeccao()
+      } catch (erro) {
+        logger.error({ erro: String(erro) }, 'Funil de sacados por NF falhou; o sync de NF segue.')
+        funilSacados = { erro: String(erro) }
+      }
+
       await anotarMeta(id, {
         sync, lookup, reclassificacao: reclass, antecipacoes, outbox,
         funil_fornecedores: funilFornecedores,
+        funil_sacados: funilSacados,
       })
       return {
         linhas_processadas: sync.notas,
@@ -1318,6 +1341,29 @@ export function dispararMaterializarSeriesReport(): string {
  */
 export function dispararFunilFornecedores(): string {
   return dispararAvulso('fornecedores-funil', async () => atualizarFunilFornecedores())
+}
+
+/**
+ * Funil de Sacados por NF (04r §9).
+ *
+ * `prospeccao-sacados` também roda encadeado atrás do sync de NF — este disparo avulso
+ * existe para a tela de operação e para o primeiro enchimento depois de alguém seguir
+ * um cedente, que é o único momento em que esperar quatro horas dói.
+ */
+export function dispararFunilSacados(): string {
+  return dispararAvulso('prospeccao-sacados', async () => atualizarSacadosProspeccao())
+}
+
+/** Espelha as titularidades de cedente em `fornecedores_seguidos`. Diário. */
+export function dispararSincronizarSeguidos(): string {
+  return dispararAvulso('prospeccao-seguidos', async () => {
+    const seguidos = await sincronizarSeguidos()
+    // Encadeado de propósito: quem ganhou (ou perdeu) titularidade de madrugada precisa
+    // ver o funil refletir isso no mesmo dia. Rodar só no sync seguinte deixaria o card
+    // com o dono de ontem por até quatro horas.
+    const funil = await atualizarSacadosProspeccao()
+    return { seguidos, funil }
+  })
 }
 
 export function dispararDescobertaFornecedores(limite?: number): string {

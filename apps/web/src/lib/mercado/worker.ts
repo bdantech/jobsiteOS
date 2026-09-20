@@ -417,6 +417,45 @@ export async function dispararValidarContatos(): Promise<DispararJobResultado> {
   return postar('/jobs/fornecedores/validar-contatos', {}, 'fornecedores-validar')
 }
 
+// ─── Sacados por NF (04r §9) ────────────────────────────────────────────────
+
+/**
+ * Enche o funil de sacados agora. Também roda encadeado atrás de cada sync de NF — este
+ * disparo existe para o momento em que alguém acaba de SEGUIR um cedente, que é o único
+ * em que esperar quatro horas dói: a tela ficaria vazia sem explicação.
+ */
+export async function dispararFunilSacados(): Promise<DispararJobResultado> {
+  return postar('/jobs/prospeccao/atualizar-sacados', {}, 'prospeccao-sacados')
+}
+
+export async function dispararSincronizarSeguidos(): Promise<DispararJobResultado> {
+  return postar('/jobs/prospeccao/sincronizar-seguidos', {}, 'prospeccao-seguidos')
+}
+
+/**
+ * O clique PAGO do card. Síncrono, e por isso com teto de dois minutos — a mesma
+ * decisão do clique de descoberta do 04l: quem acabou de autorizar um gasto precisa ver
+ * o resultado, não um id para consultar depois.
+ */
+export async function dispararEnriquecerSacado(input: {
+  cnpj: string
+  originadorId?: string | null
+  solicitadoPor?: string | null
+  forcar?: boolean
+}): Promise<DispararJobResultado> {
+  return postar(
+    '/jobs/prospeccao/enriquecer',
+    {
+      cnpj: input.cnpj,
+      originador_id: input.originadorId ?? undefined,
+      solicitado_por: input.solicitadoPor ?? undefined,
+      forcar: input.forcar ?? false,
+    },
+    'prospeccao-enriquecer',
+    120_000,
+  )
+}
+
 /** A segunda busca, mais profunda. Ela vasculha mais fontes: teto de três minutos. */
 export async function dispararBuscaAprofundada(input: {
   cnpj: string

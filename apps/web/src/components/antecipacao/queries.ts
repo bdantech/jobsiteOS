@@ -33,8 +33,6 @@ export const antecipacaoKeys = {
   metricas: () => [...antecipacaoKeys.all, 'metricas'] as const,
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
-  prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
-  prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
   prospectarFornecedores: () => [...antecipacaoKeys.all, 'prospectar-fornecedores'] as const,
   fornecedoresSemInteresse: () =>
     [...antecipacaoKeys.all, 'prospectar-fornecedores', 'sem-interesse'] as const,
@@ -424,25 +422,15 @@ export async function buscarSacados(): Promise<SacadoFunil[]> {
   return (data ?? []) as SacadoFunil[]
 }
 
-/**
- * Mesma lógica do teto por sacado: a ordenação da tela roda sobre o que veio.
+/*
+ * A LISTA "sacados a prospectar" SAIU DAQUI (04r).
  *
- * Era 200, e a lista já tem 279 construtoras — 79 estavam sendo cortadas em
- * silêncio, e nada na tela dizia isso. 500 dá folga real; se um dia encostar, a
- * tela avisa que a ordem vale sobre o recorte.
+ * Ela era uma tabela ordenada por valor recebido, sem dono, sem estágio e sem ação —
+ * e foi absorvida pela aba Sacados por NF, cujas leituras vivem em
+ * `prospeccao-queries.ts`. A VIEW continua de pé e continua sendo lida: a ficha do
+ * sacado (`/antecipacao/sacados/[cnpj]`) usa `SacadoProspectar` para o bloco de quem
+ * ainda não é cliente.
  */
-export const LIMITE_PROSPECTAR = 500
-
-export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from('antecipacao_sacados_a_prospectar')
-    .select('*')
-    .order('valor_agregado', { ascending: false, nullsFirst: false })
-    .limit(LIMITE_PROSPECTAR)
-  if (error) throw error
-  return (data ?? []) as SacadoProspectar[]
-}
 
 /**
  * Teto da lista de fornecedores a prospectar. Dimensionado para NÃO morder.
@@ -553,23 +541,6 @@ export async function buscarFornecedoresSemInteresse(): Promise<FornecedorSemInt
     .limit(1000)
   if (error) throw error
   return (data ?? []) as FornecedorSemInteresse[]
-}
-
-/**
- * Quantos sacados ainda não têm CNAE, e por isso NÃO aparecem na lista.
- *
- * O recorte por CNAE tira muito ruído, mas cria uma janela: entre a nota chegar e
- * o lookup cadastral responder, a construtora fica invisível. Mostrar o número é o
- * que impede que essa ausência pareça "não há oportunidade".
- */
-export async function contarSacadosSemCnae(): Promise<number> {
-  const supabase = createClient()
-  const { count } = await supabase
-    .from('cnpj_lookup_fila')
-    .select('cnpj', { count: 'exact', head: true })
-    .eq('motivo', 'sacado_nf')
-    .in('status', ['pendente', 'erro'])
-  return count ?? 0
 }
 
 export interface DetalheSacado {

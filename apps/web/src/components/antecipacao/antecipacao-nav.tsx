@@ -33,7 +33,10 @@ interface ItemNav {
 const ITENS: readonly ItemNav[] = [
   { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
   { href: '/antecipacao/sacados', label: 'Por Sacado', icon: Building2 },
-  { href: '/antecipacao/prospectar', label: 'Sacados a Prospectar', icon: Sparkles },
+  // Sacados por NF (04r) ABSORVEU a antiga "Sacados a Prospectar": aquela era uma
+  // tabela ordenada por valor, sem dono, sem estágio e sem ação. Esta pergunta o que
+  // importa — conseguimos operar isto? — e fica ao lado da irmã de propósito.
+  { href: '/antecipacao/sacados-por-nf', label: 'Sacados por NF', icon: Sparkles },
   // Ao lado da irmã de propósito: são a mesma pergunta pelos dois lados da nota —
   // quem RECEBE e não é nosso, quem EMITE para quem já é.
   { href: '/antecipacao/prospectar-fornecedores', label: 'Fornecedores a Prospectar', icon: Factory },

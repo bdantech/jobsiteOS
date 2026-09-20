@@ -16,7 +16,6 @@ export {
   useMinimoOperavelQuery,
   useMoverEstagio,
   useRegistrarToque,
-  useSacadosProspectarQuery,
   useSacadosQuery,
   useSacadosSemCnaeQuery,
 } from './queries'

@@ -27,7 +27,6 @@ import {
   fetchMinimoOperavel,
   fetchDetalheSacado,
   fetchSacados,
-  fetchSacadosAProspectar,
   fetchSacadosSemCnae,
 } from './api'
 import type {
@@ -36,7 +35,6 @@ import type {
   FiltrosFunil,
   PaginaFunil,
   SacadoFunil,
-  SacadoProspectar,
 } from './types'
 
 /**
@@ -53,7 +51,6 @@ export const antecipacaoKeys = {
   funil: (filtros: FiltrosFunil) => [...antecipacaoKeys.all, 'funil', filtros] as const,
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
-  prospectar: () => [...antecipacaoKeys.all, 'prospectar'] as const,
   prospectarPendentes: () => [...antecipacaoKeys.all, 'prospectar', 'pendentes'] as const,
   sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   minimo: () => [...antecipacaoKeys.all, 'minimo-operavel'] as const,
@@ -108,10 +105,6 @@ export function useDetalheFornecedorQuery(
 
 export function useSacadosQuery(): UseQueryResult<SacadoFunil[], Error> {
   return useQuery({ queryKey: antecipacaoKeys.sacados(), queryFn: fetchSacados })
-}
-
-export function useSacadosProspectarQuery(): UseQueryResult<SacadoProspectar[], Error> {
-  return useQuery({ queryKey: antecipacaoKeys.prospectar(), queryFn: fetchSacadosAProspectar })
 }
 
 export function useDetalheSacadoQuery(
