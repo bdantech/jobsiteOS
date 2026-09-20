@@ -47,6 +47,7 @@ import {
 import { useDebounce } from '@/components/empresas/use-debounce'
 import { cn } from '@/lib/utils'
 import { formatarInteiro, formatarMoeda } from './format'
+import { CabecalhoDaColuna, ColunaVazia } from '@/components/comercial/card-funil'
 import { NotaCard } from './nota-card'
 import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import {
@@ -734,13 +735,12 @@ function ColunaFunil({
         </header>
       ) : (
         <>
-          <header className="flex items-baseline justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
-            <h2 className="truncate text-sm font-medium">{TITULO_COLUNA[estagio]}</h2>
-            <Badge variant="secondary" className="tabular-nums">
-              {q.isPending ? '…' : formatarInteiro(total)}
-            </Badge>
-          </header>
-          <p className="px-1 text-xs tabular-nums text-muted-foreground">{subtitulo}</p>
+          {/* O mesmo cabeçalho dos funis de Reunião, Vendas e Certificados. */}
+          <CabecalhoDaColuna
+            titulo={TITULO_COLUNA[estagio]}
+            total={q.isPending ? '…' : formatarInteiro(total)}
+          />
+          <p className="px-0.5 text-xs tabular-nums text-muted-foreground">{subtitulo}</p>
         </>
       )}
 
@@ -761,11 +761,7 @@ function ColunaFunil({
             </Button>
           </div>
         ) : notas.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              {filtrando ? 'Nada com estes filtros.' : 'Nenhuma nota aqui.'}
-            </p>
-          </div>
+          <ColunaVazia>{filtrando ? 'Nada com estes filtros.' : 'Nenhuma nota aqui.'}</ColunaVazia>
         ) : (
           <>
             {notas.map((nota) => (

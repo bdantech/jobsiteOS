@@ -327,7 +327,7 @@ export function explicarValorEsperado(
   if (chancePresumida) return 'chance presumida (sem score) de 50%'
   if (faixa === 'alta') return 'chance alta'
   if (faixa === 'media') return 'chance média'
-  if (faixa === 'improvavel') return 'chance improvável'
+  if (faixa === 'improvavel') return 'chance baixa'
   return 'chance desconhecida'
 }
 

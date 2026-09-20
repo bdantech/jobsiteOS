@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { AlertTriangle, BadgeCheck, Files, Gavel } from 'lucide-react'
+import { Files, Gavel } from 'lucide-react'
 import {
   FAIXA_LABELS,
   TIPAGEM_LABELS,
@@ -16,13 +16,18 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import {
+  CardDoFunil,
+  ChipDoCard,
+  DonoNoRodape,
+  TiraDoCard,
+  type TomDoScore,
+} from '@/components/comercial/card-funil'
 import { MenuAcoesNota } from './acoes-nota'
 import { NotaModal } from './documento/nota-modal'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { AbaMensagens } from '@/components/comercial/modal-card'
 import {
-  FAIXA_BADGE,
-  TIPAGEM_BADGE,
   creditoBadge,
   formatarData,
   formatarMoedaExata,
@@ -32,21 +37,58 @@ import {
 import type { FornecedorFunil, NotaFunil } from './queries'
 
 /**
- * O card do funil.
+ * O card do funil de NFs.
  *
- * ENXUTO por decisão: o corpo mostra fornecedor, número/tipo da nota, valor,
- * sacado e crédito — e para. Receita esperada e vencimento saíram do corpo e
- * vivem no TOOLTIP, junto do nome completo do fornecedor (que quase sempre está
- * truncado). Uma coluna do Kanban tem 40 cards; cada linha a menos é uma linha a
+ * Divide o SHELL com Reuniões, Vendas e Certificados (`card-funil`): mesma caixa,
+ * mesma régua tipográfica, mesmo lugar para o score, os chips, o dono e a tira.
+ * Quem trabalha nos quatro funis no mesmo dia parava para reler o layout a cada
+ * troca de tela; a releitura era o custo.
+ *
+ * ── O QUE É PRÓPRIO DA NF ───────────────────────────────────────────────────
+ * O bloco da direita traz a FAIXA por extenso ("Boa"), e não um número: a faixa é
+ * uma classificação de três degraus e escrever "2 de 3" ali inventaria uma
+ * precisão que ela não tem.
+ *
+ * A barra embaixo é o PRAZO, e não o eco da faixa. Nos outros funis a barra
+ * repete o score porque o score é contínuo; aqui a faixa é categórica e uma barra
+ * de três degraus não se compara de relance. O prazo, sim: ele escorre todo dia e
+ * é o que decide se a nota ainda dá para operar. Era o sinal que o card do desktop
+ * tinha perdido para o tooltip quando o corpo foi enxugado — o mobile manteve a
+ * cor de urgência justamente porque lá não há hover para compensar.
+ *
+ * ENXUTO por decisão: o corpo mostra fornecedor, valor, líquido, faixa, tipo da
+ * nota e sacado — e para. Vencimento, receita esperada, emissão e taxa vivem no
+ * TOOLTIP. Uma coluna do Kanban tem 40 cards; cada linha a menos é uma linha a
  * mais de contexto visível sem rolar.
- *
- * Isso vale para o DESKTOP, onde existe hover. O card do mobile mantém o prazo
- * com cor de urgência — lá não há tooltip para compensar, e o §9 pede o sinal.
  *
  * CLICAR ABRE A NOTA como documento. O caminho para o fornecedor não se perdeu:
  * o nome é um link, o "+N notas" é um link, e o menu tem "Ver notas do
  * fornecedor" — três portas, nenhuma delas roubada pelo modal.
  */
+
+/** O tom do bloco da faixa. `alta` é âmbar aqui e verde no score de crédito. */
+const TOM_DA_FAIXA_NF: Record<Faixa, TomDoScore> = {
+  alta: 'alerta',
+  boa: 'bom',
+  media: 'info',
+}
+
+/**
+ * O horizonte da barra de prazo, em dias.
+ *
+ * 90 é o `max_due_date_days_default` da matriz de precificação: é o vencimento
+ * mais longo que a plataforma aceita, então é a régua em que "cheia" quer dizer
+ * "acabou de ser emitida" e "quase vazia" quer dizer "corre". Uma régua maior
+ * faria toda nota comum parecer urgente.
+ */
+const HORIZONTE_PRAZO = 90
+
+const TOM_DA_URGENCIA: Record<string, TomDoScore> = {
+  vencida: 'ruim',
+  critica: 'ruim',
+  atencao: 'alerta',
+  confortavel: 'bom',
+}
 
 export function NotaCard({
   nota,
@@ -110,221 +152,193 @@ export function NotaCard({
   const nomePrincipal = conta?.nome ?? nomeSacado
   const spe = speDoSacado(conta, nota.sacado_cnpj, nomeSacado)
 
+  /*
+   * A barra do prazo. Escorre de 90 dias até zero e troca de cor nos mesmos cortes
+   * que o texto do tooltip usa — é a mesma régua de `urgenciaDe`, desenhada.
+   *
+   * Nota vencida fica com a barra ZERADA e vermelha, e não negativa: o card precisa
+   * dizer "acabou", e uma barra que some diz isso melhor que um número negativo.
+   */
+  const barraPrazo =
+    typeof nota.dias_para_vencimento === 'number'
+      ? {
+          pct: Math.max(0, Math.min(100, (nota.dias_para_vencimento / HORIZONTE_PRAZO) * 100)),
+          tom: TOM_DA_URGENCIA[urgencia] ?? 'neutro',
+        }
+      : null
+
   return (
     <>
       {/* 700ms (o padrão, calibrado para o rail de ícones) é longo demais num card
           que a pessoa varre com o olho. */}
       <Tooltip delayDuration={300}>
+        {/*
+          `asChild` numa <div>, e não no card: o CardDoFunil já tem dentro dele o
+          <button> esticado que abre a nota, e o Radix precisa de um elemento que
+          repasse ref e handlers. A div é esse elemento e não rouba nada do botão.
+        */}
         <TooltipTrigger asChild>
-          <article
-            role="button"
-            tabIndex={0}
-            aria-label={`Abrir a nota ${nota.numero ?? nota.access_key} de ${nomeFornecedor}`}
-            onClick={() => {
-              setAba('documento')
-              setNotaAberta(true)
-            }}
-            onKeyDown={(e) => {
-              /*
-               * SÓ quando o card é o próprio alvo.
-               *
-               * Sem esta linha, digitar o motivo da perda abria a nota: no React
-               * o evento sobe pela ÁRVORE DE COMPONENTES, não pela do DOM, e o
-               * diálogo do menu — ainda que o Radix o renderize num portal no
-               * `body` — continua sendo filho deste `<article>`. Cada espaço
-               * digitado no textarea chegava aqui como `e.key === ' '`, era
-               * engolido pelo `preventDefault` e abria o modal por cima.
-               *
-               * `stopPropagation` no wrapper do menu resolveria este caso e
-               * deixaria o próximo controle aninhado com o mesmo defeito. A
-               * checagem de alvo vale para todos: o card só responde ao teclado
-               * quando o foco está NELE, que é o que `role="button"` promete.
-               */
-              if (e.target !== e.currentTarget) return
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
+          <div>
+            <CardDoFunil
+              rotuloAbrir={`Abrir a nota ${nota.numero ?? nota.access_key} de ${nomeFornecedor}`}
+              onAbrir={() => {
                 setAba('documento')
                 setNotaAberta(true)
-              }
-            }}
-            className={cn(
-              'cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-colors',
-              'hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              nota.fornecedor_suprimido && 'opacity-60',
-            )}
-          >
-            <header className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1 space-y-1">
-                {/* O link tem de parar a propagação: clicar no NOME vai para o
-                    fornecedor, clicar em qualquer outro lugar abre a nota. */}
+              }}
+              esmaecido={Boolean(nota.fornecedor_suprimido)}
+              titulo={
+                /* Clicar no NOME vai para o fornecedor; em qualquer outro lugar
+                   abre a nota. `z-10` para ficar acima do botão do card. */
                 <Link
                   href={`/antecipacao/fornecedores/${nota.fornecedor_cnpj}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="block truncate text-sm font-medium hover:underline"
+                  className="relative z-10 hover:underline"
                 >
                   {nomeFornecedor}
                 </Link>
-
-                <div className="flex flex-wrap items-center gap-1">
-                  {nota.faixa && (
-                    <Badge className={FAIXA_BADGE[nota.faixa as Faixa]}>
-                      {FAIXA_LABELS[nota.faixa as Faixa]}
-                    </Badge>
-                  )}
-                  {nota.fornecedor_tipagem && (
-                    <Badge className={TIPAGEM_BADGE[nota.fornecedor_tipagem as Tipagem]}>
-                      {TIPAGEM_LABELS[nota.fornecedor_tipagem as Tipagem]}
-                    </Badge>
-                  )}
-                  {nota.fornecedor_tem_protesto && (
-                    <Badge variant="outline" className="gap-1 text-destructive">
-                      <Gavel className="h-3 w-3" aria-hidden />
-                      Protesto
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/*
-                O menu no CARD, além do modal.
-                
-                Ele tinha saído daqui de propósito — "um clique de decisão tomado
-                sem abrir a nota" —, e a preocupação continua válida: mover para
-                "perdida" e marcar fornecedor sem interesse pedem motivo por texto,
-                e os dois diálogos continuam exigindo isso. O que mudou é o
-                reconhecimento de que quem varre uma coluna de trinta notas já sabe
-                o que fazer com a maioria delas, e obrigar a abrir cada uma para
-                mover uma etapa é atrito sem proteção.
-
-                `stopPropagation` porque o card inteiro é um botão que abre a nota:
-                sem isso, clicar no menu abriria o modal por baixo dele.
-              */}
-              <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                <MenuAcoesNota nota={nota} />
-              </div>
-            </header>
-
-            {/*
-              Identificação da nota + valor, numa linha só.
-
-              O VALOR É O QUE NÃO PODE CEDER. Sem `min-w-0` a identificação nunca
-              encolhe (um flex item tem largura mínima de conteúdo por padrão) e um
-              número de NF longo — sete, oito dígitos, mais a série — empurrava o
-              valor para fora do card, cortando justamente o número pelo qual a
-              pessoa varre a coluna. Agora quem trunca é o número, e o valor tem
-              `shrink-0`.
-            */}
-            <div className="mt-3 flex items-baseline justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-medium">
-                  {nota.tipo_nf ?? 'NFe'}
-                </Badge>
-                <span className="truncate tabular-nums">
-                  nº {nota.numero ?? '—'}
-                  {nota.serie ? `/${nota.serie}` : ''}
-                </span>
-              </span>
-              <span className="shrink-0 font-medium tabular-nums">
-                {formatarMoedaExata(nota.valor)}
-              </span>
-            </div>
-
-            {/*
-             * O LÍQUIDO ESTIMADO, debaixo do valor de face.
-             *
-             * É o número que o originador fala em voz alta: "cai R$ 98.010 na sua
-             * conta", e não "sua nota vale R$ 100.000" — isso o fornecedor já sabe.
-             * Fica menor e apagado de propósito: quem varre a coluna varre pelo
-             * valor de face, e o líquido é o que ele lê quando parou num card.
-             *
-             * Ele MUDA TODO DIA, e é isso que o "hoje" promete: um dia a menos de
-             * prazo é um deságio menor. Sem a palavra, o número parece uma proposta
-             * fechada — e amanhã estaria diferente sem explicação.
-             */}
-            {liquido !== null ? (
-              <div className="mt-0.5 flex items-baseline justify-end gap-1.5 text-[11px] text-muted-foreground">
-                <span>líquido hoje</span>
-                <span className="tabular-nums">{formatarMoedaExata(liquido)}</span>
-              </div>
-            ) : null}
-
-            {/* O dono, quando a lista não está recortada por vendedor. Fora do modal:
-                o clique abre o dropdown, não a nota. */}
-            {dono ? (
-              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                {dono}
-              </div>
-            ) : null}
-
-            {!compacto && (
-              <footer className="mt-3 space-y-2 border-t pt-2">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-muted-foreground">{nomePrincipal}</span>
-                  <Badge className={cn('shrink-0', creditoBadge(nota.sacado_credito_status))}>
-                    {labelCredito(nota.sacado_credito_status)}
-                  </Badge>
-                </div>
-                {spe ? (
-                  <p className="-mt-1 truncate text-[11px] text-muted-foreground/70">via {spe}</p>
-                ) : null}
-
-                {nota.sacado_credito_status === 'APPROVED' && !nota.sacado_limite_cobre_nota && (
-                  <p className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-300">
-                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-                    Aprovado, mas o limite não cobre esta nota.
-                  </p>
-                )}
-
-                {outras > 0 && (
-                  <Link
-                    href={`/antecipacao/fornecedores/${nota.fornecedor_cnpj}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  >
-                    <Files className="h-3 w-3" aria-hidden />+{outras} nota{outras > 1 ? 's' : ''} do
-                    fornecedor
-                  </Link>
-                )}
-
-                {nota.fornecedor_suprimido && (
-                  <p className="text-xs text-muted-foreground">
-                    Fornecedor suprimido — fora das faixas até a supressão expirar.
-                  </p>
-                )}
-
-                {/*
-                 * O selo da conversão automática (04e §6). Só aparece quando a
-                 * antecipação existe de verdade — é o que distingue uma nota que
-                 * alguém arrastou para "convertida" de uma que a plataforma
-                 * antecipou, e com que valores.
-                 */}
-                {nota.conversao_antecipacao_id && (
-                  <p
-                    className={cn(
-                      'flex items-start gap-1 text-xs',
-                      nota.conversao_em_disputa
-                        ? 'text-destructive'
-                        : 'text-emerald-700 dark:text-emerald-300',
-                    )}
-                  >
-                    {nota.conversao_em_disputa ? (
-                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-                    ) : (
-                      <BadgeCheck className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-                    )}
-                    <span>
-                      Convertida via antecipação #{nota.conversao_antecipacao_id}
-                      {nota.conversao_valor
-                        ? ` · ${formatarMoedaExata(nota.conversao_valor)}`
-                        : ''}
-                      {nota.conversao_taxa ? ` a ${nota.conversao_taxa}% a.m.` : ''}
-                      {nota.conversao_em_disputa ? ' — em disputa, revise.' : ''}
+              }
+              valor={
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[15px] font-bold leading-none tracking-[-0.02em]">
+                    {formatarMoedaExata(nota.valor)}
+                  </span>
+                  {/*
+                   * O LÍQUIDO, debaixo do valor de face.
+                   *
+                   * É o número que o originador fala em voz alta: "cai R$ 98.010 na
+                   * sua conta", e não "sua nota vale R$ 100.000" — isso o fornecedor
+                   * já sabe. Menor de propósito: quem varre a coluna varre pelo valor
+                   * de face, e o líquido é o que lê quando parou num card.
+                   *
+                   * Ele MUDA TODO DIA, e é isso que o "hoje" promete: um dia a menos
+                   * de prazo é um deságio menor. Sem a palavra, o número parece uma
+                   * proposta fechada — e amanhã estaria diferente sem explicação.
+                   */}
+                  {liquido !== null ? (
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      líquido hoje{' '}
+                      <span className="font-semibold text-foreground/80">
+                        {formatarMoedaExata(liquido)}
+                      </span>
                     </span>
-                  </p>
-                )}
-              </footer>
-            )}
-          </article>
+                  ) : null}
+                </span>
+              }
+              score={
+                nota.faixa
+                  ? {
+                      valor: null,
+                      faixa: nota.faixa,
+                      texto: FAIXA_LABELS[nota.faixa as Faixa] ?? nota.faixa,
+                      tom: TOM_DA_FAIXA_NF[nota.faixa as Faixa] ?? 'neutro',
+                      rotulo: 'nota',
+                    }
+                  : null
+              }
+              barra={barraPrazo}
+              chips={
+                <>
+                  <ChipDoCard forte>{nota.tipo_nf ?? 'NFe'}</ChipDoCard>
+                  <ChipDoCard className="tabular-nums">
+                    nº {nota.numero ?? '—'}
+                    {nota.serie ? `/${nota.serie}` : ''}
+                  </ChipDoCard>
+                  {nota.fornecedor_tipagem ? (
+                    <ChipDoCard tom="info" forte>
+                      {TIPAGEM_LABELS[nota.fornecedor_tipagem as Tipagem]}
+                    </ChipDoCard>
+                  ) : null}
+                  {nota.fornecedor_tem_protesto ? (
+                    <ChipDoCard tom="ruim" forte>
+                      <Gavel className="mr-1 size-3" aria-hidden />
+                      Protesto
+                    </ChipDoCard>
+                  ) : null}
+                  {/* O caminho para as outras notas do fornecedor continua aqui —
+                      virou chip para não gastar uma linha inteira do card. */}
+                  {outras > 0 ? (
+                    <Link
+                      href={`/antecipacao/fornecedores/${nota.fornecedor_cnpj}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="relative z-10"
+                    >
+                      <ChipDoCard className="hover:bg-muted-foreground/15">
+                        <Files className="mr-1 size-3" aria-hidden />+{outras} nota
+                        {outras > 1 ? 's' : ''}
+                      </ChipDoCard>
+                    </Link>
+                  ) : null}
+                </>
+              }
+              rodapeEsquerda={
+                // `z-10`: trocar de dono é interativo e precisa ficar ACIMA do botão
+                // que abre o card, senão trocar viraria abrir.
+                dono ? (
+                  <span className="relative z-10 block" onClick={(e) => e.stopPropagation()}>
+                    {dono}
+                  </span>
+                ) : undefined
+              }
+              rodapeDireita={
+                !compacto ? (
+                  <span className="flex items-center gap-1.5">
+                    <Badge className={cn('shrink-0', creditoBadge(nota.sacado_credito_status))}>
+                      {labelCredito(nota.sacado_credito_status)}
+                    </Badge>
+                    {/*
+                      O menu no CARD, além do modal. Quem varre uma coluna de trinta
+                      notas já sabe o que fazer com a maioria delas, e obrigar a abrir
+                      cada uma para mover uma etapa é atrito sem proteção. Mover para
+                      "perdida" e marcar fornecedor sem interesse continuam pedindo
+                      motivo por texto nos próprios diálogos.
+                    */}
+                    <span className="relative z-10" onClick={(e) => e.stopPropagation()}>
+                      <MenuAcoesNota nota={nota} />
+                    </span>
+                  </span>
+                ) : undefined
+              }
+              tira={
+                /*
+                  UMA tira, nesta ordem. A conversão vale mais que o limite porque
+                  encerra a pergunta: a nota já virou dinheiro, e o resto é história.
+                  Empilhar as duas faria um card resolvido parecer indeciso.
+                */
+                !compacto && nota.conversao_antecipacao_id ? (
+                  <TiraDoCard tom={nota.conversao_em_disputa ? 'ruim' : 'bom'}>
+                    Convertida via antecipação #{nota.conversao_antecipacao_id}
+                    {nota.conversao_valor ? ` · ${formatarMoedaExata(nota.conversao_valor)}` : ''}
+                    {nota.conversao_taxa ? ` a ${nota.conversao_taxa}% a.m.` : ''}
+                    {nota.conversao_em_disputa ? ' — em disputa, revise.' : ''}
+                  </TiraDoCard>
+                ) : !compacto &&
+                  nota.sacado_credito_status === 'APPROVED' &&
+                  !nota.sacado_limite_cobre_nota ? (
+                  <TiraDoCard tom="alerta">Aprovado, mas o limite não cobre esta nota.</TiraDoCard>
+                ) : !compacto && nota.fornecedor_suprimido ? (
+                  <TiraDoCard tom="neutro">
+                    Fornecedor suprimido — fora das faixas até a supressão expirar.
+                  </TiraDoCard>
+                ) : undefined
+              }
+            >
+              {!compacto ? (
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <span className="shrink-0 text-[11px] text-muted-foreground">Sacado</span>
+                    <span className="min-w-0 truncate text-[11.5px] font-semibold text-foreground">
+                      {nomePrincipal}
+                    </span>
+                  </div>
+                  {spe ? (
+                    <span className="truncate text-right text-[10.5px] text-muted-foreground/70">
+                      via {spe}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </CardDoFunil>
+          </div>
         </TooltipTrigger>
 
         {/*

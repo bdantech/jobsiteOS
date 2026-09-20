@@ -26,31 +26,50 @@ import { cn } from '@/lib/utils'
  * carregar o veredito, e o número sozinho não se compara entre dois cards de relance.
  */
 
-// ─── As faixas de score ─────────────────────────────────────────────────────
+// ─── A paleta ───────────────────────────────────────────────────────────────
 //
 // Semânticas do tema, e não os hexes do mock: o produto tem modo escuro e um
 // `#E6F4EC` fixo vira um retângulo branco brilhante no escuro. A GEOMETRIA é a do
 // mock; a paleta é a da casa.
+//
+// O tom é NOMEADO pelo que significa (bom/alerta/ruim), e não pela faixa que o
+// produziu, porque as faixas de dois módulos colidem: `alta` é verde no score de
+// crédito e âmbar na faixa da NF, e `media` é âmbar num e azul no outro. Mapear
+// cor a partir da chave daria ao card da NF as cores do card de venda sem que
+// nenhuma das duas telas estivesse errada.
 
-const FAIXA_BLOCO: Record<string, string> = {
-  alta: 'bg-emerald-100 dark:bg-emerald-500/15',
-  media: 'bg-amber-100 dark:bg-amber-500/15',
-  improvavel: 'bg-red-100 dark:bg-red-500/15',
-  dados_insuficientes: 'bg-muted',
+export type TomDoScore = 'bom' | 'alerta' | 'ruim' | 'info' | 'neutro'
+
+const TOM_BLOCO: Record<TomDoScore, string> = {
+  bom: 'bg-emerald-100 dark:bg-emerald-500/15',
+  alerta: 'bg-amber-100 dark:bg-amber-500/15',
+  ruim: 'bg-red-100 dark:bg-red-500/15',
+  info: 'bg-sky-100 dark:bg-sky-500/15',
+  neutro: 'bg-muted',
 }
 
-const FAIXA_ROTULO: Record<string, string> = {
-  alta: 'text-emerald-800 dark:text-emerald-300',
-  media: 'text-amber-800 dark:text-amber-300',
-  improvavel: 'text-red-800 dark:text-red-300',
-  dados_insuficientes: 'text-muted-foreground',
+const TOM_ROTULO: Record<TomDoScore, string> = {
+  bom: 'text-emerald-800 dark:text-emerald-300',
+  alerta: 'text-amber-800 dark:text-amber-300',
+  ruim: 'text-red-800 dark:text-red-300',
+  info: 'text-sky-800 dark:text-sky-300',
+  neutro: 'text-muted-foreground',
 }
 
-const FAIXA_BARRA: Record<string, string> = {
-  alta: 'bg-emerald-500',
-  media: 'bg-amber-500',
-  improvavel: 'bg-destructive',
-  dados_insuficientes: 'bg-muted-foreground/25',
+const TOM_BARRA: Record<TomDoScore, string> = {
+  bom: 'bg-emerald-500',
+  alerta: 'bg-amber-500',
+  ruim: 'bg-destructive',
+  info: 'bg-sky-500',
+  neutro: 'bg-muted-foreground/25',
+}
+
+/** As faixas do score de crédito, quando o card não diz o tom. */
+const TOM_DA_FAIXA: Record<string, TomDoScore> = {
+  alta: 'bom',
+  media: 'alerta',
+  improvavel: 'ruim',
+  dados_insuficientes: 'neutro',
 }
 
 /**
@@ -63,11 +82,20 @@ const FAIXA_BARRA: Record<string, string> = {
 export function ScoreDoCard({
   score,
   faixa,
+  texto,
+  tom: tomProprio,
   rotulo: rotuloProprio,
   sufixo,
 }: {
   score: number | null
   faixa: string
+  /**
+   * A PALAVRA no lugar do número, para a medida que não é 0–100. A faixa de uma
+   * NF é "Alta/Boa/Média" e não tem número por trás; escrever um 2 de 3 ali
+   * inventaria uma precisão que a classificação não tem.
+   */
+  texto?: string
+  tom?: TomDoScore
   /**
    * O rótulo sob o número. Por padrão é a faixa do score de crédito; os
    * Certificados passam o deles, porque ali o número é cobertura e chamá-lo de
@@ -77,37 +105,47 @@ export function ScoreDoCard({
   sufixo?: string
 }) {
   const rotulo = rotuloProprio ?? FAIXA_SCORE_LABELS[faixa as FaixaScore] ?? faixa
+  const tom = tomProprio ?? TOM_DA_FAIXA[faixa] ?? 'neutro'
+  const vazio = texto === undefined && score === null
   return (
     <div
       className={cn(
         'flex w-[54px] shrink-0 flex-col items-center gap-[3px] rounded-lg py-[7px]',
-        FAIXA_BLOCO[faixa] ?? FAIXA_BLOCO.dados_insuficientes,
+        TOM_BLOCO[tom],
       )}
       role="img"
-      aria-label={`Score ${score === null ? 'indisponível' : `${Math.round(score)} de 100`}, faixa ${rotulo}`}
+      aria-label={
+        texto !== undefined
+          ? `${rotulo}: ${texto}`
+          : `Score ${score === null ? 'indisponível' : `${Math.round(score)} de 100`}, faixa ${rotulo}`
+      }
     >
-      <span className="text-[18px] font-extrabold leading-none tracking-[-0.03em] tabular-nums text-foreground">
-        {score === null ? '—' : Math.round(score)}
-        {score !== null && sufixo ? <span className="text-[11px] font-bold">{sufixo}</span> : null}
-      </span>
       <span
         className={cn(
-          'text-[9.5px] font-semibold leading-none',
-          FAIXA_ROTULO[faixa] ?? FAIXA_ROTULO.dados_insuficientes,
+          'font-extrabold leading-none tracking-[-0.03em] tabular-nums text-foreground',
+          // A palavra é mais larga que o número e tem de caber nos 54px sem quebrar.
+          texto !== undefined ? 'text-[13px]' : 'text-[18px]',
         )}
       >
-        {score === null ? 'sem dados' : rotulo}
+        {texto ?? (score === null ? '—' : Math.round(score))}
+        {texto === undefined && score !== null && sufixo ? (
+          <span className="text-[11px] font-bold">{sufixo}</span>
+        ) : null}
+      </span>
+      <span className={cn('text-[9.5px] font-semibold leading-none', TOM_ROTULO[tom])}>
+        {vazio ? 'sem dados' : rotulo}
       </span>
     </div>
   )
 }
 
-export type TomDoChip = 'neutro' | 'info' | 'alerta' | 'destaque'
+export type TomDoChip = 'neutro' | 'info' | 'alerta' | 'ruim' | 'destaque'
 
 const CHIP_TOM: Record<TomDoChip, string> = {
   neutro: 'bg-muted text-muted-foreground',
   info: 'bg-blue-50 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
   alerta: 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  ruim: 'bg-destructive/10 text-destructive',
   destaque: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
@@ -142,12 +180,16 @@ export function ChipDoCard({
   )
 }
 
-export type TomDaTira = 'bom' | 'ruim' | 'neutro'
+export type TomDaTira = 'bom' | 'alerta' | 'ruim' | 'neutro'
 
 const TIRA_TOM: Record<TomDaTira, { caixa: string; ponto: string }> = {
   bom: {
     caixa: 'border-emerald-600/25 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
     ponto: 'bg-emerald-500',
+  },
+  alerta: {
+    caixa: 'border-amber-600/25 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
+    ponto: 'bg-amber-500',
   },
   ruim: {
     caixa: 'border-destructive/25 bg-destructive/5 text-destructive',
@@ -214,7 +256,24 @@ export interface CardDoFunilProps {
   titulo: React.ReactNode
   /** Logo abaixo do título, menor. O faturamento, o valor, o que der a escala. */
   valor?: React.ReactNode
-  score?: { valor: number | null; faixa: string; rotulo?: string; sufixo?: string } | null
+  score?: {
+    valor: number | null
+    faixa: string
+    texto?: string
+    tom?: TomDoScore
+    rotulo?: string
+    sufixo?: string
+  } | null
+  /**
+   * A barra, quando ela NÃO é o eco do score.
+   *
+   * O padrão é o score virar barra — a cor sozinha não carrega o veredito, e o
+   * número sozinho não se compara entre dois cards de relance. Mas a faixa de uma
+   * NF é categórica (Alta/Boa/Média) e uma barra de três degraus não diz nada,
+   * enquanto o PRAZO da nota é a medida que escorre e decide se ainda dá para
+   * operar. Quem tem uma medida melhor para a barra passa aqui a dela.
+   */
+  barra?: { pct: number; tom: TomDoScore } | null
   chips?: React.ReactNode
   /** Entre os chips e a barra. Conteúdo que só um dos funis tem. */
   children?: React.ReactNode
@@ -232,6 +291,7 @@ export function CardDoFunil({
   titulo,
   valor,
   score,
+  barra,
   chips,
   children,
   rodapeEsquerda,
@@ -240,8 +300,14 @@ export function CardDoFunil({
   esmaecido,
   className,
 }: CardDoFunilProps) {
-  const faixa = score?.faixa ?? 'dados_insuficientes'
-  const pct = score?.valor == null ? 0 : Math.max(0, Math.min(100, score.valor))
+  const barraFinal =
+    barra ??
+    (score
+      ? {
+          pct: score.valor == null ? 0 : Math.max(0, Math.min(100, score.valor)),
+          tom: score.tom ?? TOM_DA_FAIXA[score.faixa] ?? 'neutro',
+        }
+      : null)
 
   return (
     <div
@@ -286,7 +352,14 @@ export function CardDoFunil({
             ) : null}
           </div>
           {score !== undefined && score !== null ? (
-            <ScoreDoCard score={score.valor} faixa={score.faixa} rotulo={score.rotulo} sufixo={score.sufixo} />
+            <ScoreDoCard
+              score={score.valor}
+              faixa={score.faixa}
+              texto={score.texto}
+              tom={score.tom}
+              rotulo={score.rotulo}
+              sufixo={score.sufixo}
+            />
           ) : null}
         </div>
 
@@ -299,9 +372,12 @@ export function CardDoFunil({
         elemento dentro dele. Some quando não há score — uma barra vazia diz "zero",
         e "não sei" não é zero.
       */}
-      {score !== undefined && score !== null ? (
+      {barraFinal ? (
         <div className="h-1 w-full bg-muted" aria-hidden>
-          <div className={cn('h-full', FAIXA_BARRA[faixa] ?? FAIXA_BARRA.dados_insuficientes)} style={{ width: `${pct}%` }} />
+          <div
+            className={cn('h-full', TOM_BARRA[barraFinal.tom])}
+            style={{ width: `${Math.max(0, Math.min(100, barraFinal.pct))}%` }}
+          />
         </div>
       ) : null}
 
@@ -328,7 +404,14 @@ export function CardDoFunil({
  * o olho procura a contagem primeiro, e um número solto se confunde com o nome da
  * coluna vizinha.
  */
-export function CabecalhoDaColuna({ titulo, total }: { titulo: React.ReactNode; total: number }) {
+export function CabecalhoDaColuna({
+  titulo,
+  total,
+}: {
+  titulo: React.ReactNode
+  /** ReactNode, e não number, porque a contagem chega como "…" enquanto carrega. */
+  total: React.ReactNode
+}) {
   return (
     <div className="flex items-center justify-between gap-2 border-b-2 px-0.5 pb-2.5">
       <span className="truncate text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">

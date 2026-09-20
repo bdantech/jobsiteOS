@@ -52,19 +52,25 @@ export function SidebarNav({ grantedModuleIds }: SidebarNavProps) {
     <>
       {groups.map((group) => (
         /*
-         * O ESPAÇO VERTICAL DA NAV É APERTADO DE PROPÓSITO.
+         * O AR ENTRE SEÇÕES É O DOBRO DO AR ENTRE ITENS.
          *
-         * O default do componente gastava 24px de ar entre duas seções — 8 do fim de um
-         * grupo, 8 do `gap` do conteúdo, 8 do começo do próximo — e mais 4 entre cada
-         * item. Com seis seções isso empurra os últimos módulos para fora da dobra em
-         * telas de notebook, e uma lista de navegação que precisa de rolagem perde a
-         * função de deixar tudo à vista.
+         * O default do componente gastava 24px entre duas seções — 8 do fim de um
+         * grupo, 8 do `gap` do conteúdo, 8 do começo do próximo — e isso empurrava os
+         * últimos módulos para fora da dobra em telas de notebook. A primeira correção
+         * cortou para 8px (`py-1`) e foi longe demais na direção oposta: com 4px de ar
+         * dentro do grupo e 8px entre grupos, a separação entre "Inteligência" e
+         * "Operações" ficou quase indistinguível da separação entre dois itens da
+         * mesma seção, e o rótulo da seção passou a parecer mais um item da lista.
          *
-         * O que NÃO encolhe é a altura do botão (`h-8`): ela é o alvo do clique, e
-         * espremer alvo de clique para ganhar pixel é a troca errada. O que encolhe é o
-         * ar entre os alvos, que não é clicável e não é lido.
+         * `py-2` põe 16px entre seções contra os 2px do `gap-0.5` dos itens: a
+         * proporção é o que faz o agrupamento ser lido sem linha divisória, e o custo
+         * é uma seção a menos visível na dobra — que o rótulo compensa, porque agora
+         * se sabe onde procurar.
+         *
+         * O que NÃO encolhe nem cresce é a altura do botão (`h-8`): ela é o alvo do
+         * clique, e mexer em alvo de clique para ganhar pixel é a troca errada.
          */
-        <SidebarGroup key={group.id} className="px-2 py-1">
+        <SidebarGroup key={group.id} className="px-2 py-2">
           {/* 24px em vez de 32: o rótulo da seção é uma legenda, não um item. */}
           <SidebarGroupLabel className="h-6">{group.label}</SidebarGroupLabel>
 

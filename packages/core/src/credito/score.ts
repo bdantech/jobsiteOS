@@ -47,10 +47,20 @@ export const FATOR_SCORE_LABELS: Record<FatorScore, string> = {
 export const FAIXAS_SCORE = ['alta', 'media', 'improvavel', 'dados_insuficientes'] as const
 export type FaixaScore = (typeof FAIXAS_SCORE)[number]
 
+/**
+ * Os rótulos de tela. A CHAVE continua `improvavel` — é o que está gravado em
+ * milhares de análises e no filtro do Mercado —, mas o que se lê é "Baixa".
+ *
+ * "Improvável" era a palavra errada em dois sentidos. Ela quebrava a escala:
+ * Alta / Média / Improvável mistura duas réguas, e o olho que varre uma coluna
+ * de cards precisa de três degraus da MESMA medida. E ela julgava: "improvável"
+ * é um veredito sobre a empresa, enquanto "baixa" é a leitura de um número —
+ * que é tudo o que o scorecard tem a dizer.
+ */
 export const FAIXA_SCORE_LABELS: Record<FaixaScore, string> = {
   alta: 'Alta',
   media: 'Média',
-  improvavel: 'Improvável',
+  improvavel: 'Baixa',
   dados_insuficientes: 'Dados insuficientes',
 }
 

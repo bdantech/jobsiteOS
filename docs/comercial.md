@@ -473,11 +473,11 @@ costuma ser documento de cliente.
 Os anexos sobem **antes** da nota: se um falhar, nada é publicado. Uma nota que diz "segue
 o print" sem o print é pior que a recusa, porque ninguém descobre que faltou até precisar.
 
-### Um desenho só para os três funis (0221)
+### Um desenho só para os quatro funis (0221)
 
-Reuniões, Vendas e Certificados mostravam a mesma coisa de três jeitos: título em peso
-diferente, badge em tamanho diferente, score ora em barra ora em número solto. Quem
-trabalha nos três no mesmo dia relê o layout a cada troca de tela, e a releitura é o
+Reuniões, Vendas, Certificados e NFs mostravam a mesma coisa de quatro jeitos: título em
+peso diferente, badge em tamanho diferente, score ora em barra ora em número solto. Quem
+trabalha nos quatro no mesmo dia relê o layout a cada troca de tela, e a releitura é o
 custo.
 
 `card-funil.tsx` define a caixa e a régua tipográfica; **o conteúdo continua de cada
@@ -506,6 +506,18 @@ semânticas do tema.
 cobertura, e o rótulo é "coberto", não "Alta": a mesma geometria ensina onde olhar sem
 emprestar o vocabulário de outra medida. E ali a faixa "alta" exige 100% — um cliente com
 9 de 10 CNPJs cobertos ainda tem uma obra que não consegue antecipar.
+
+**A barra pode não ser o eco do score.** O padrão é o score virar barra, mas isso só
+funciona com medida contínua. A faixa de uma NF é categórica (Alta/Boa/Média) e uma barra
+de três degraus não se compara de relance — então lá a barra é o **prazo**, que escorre
+todo dia e é o que decide se a nota ainda dá para operar. Era o sinal que o card do
+desktop tinha perdido para o tooltip quando o corpo foi enxugado; o mobile nunca o perdeu,
+porque lá não há hover para compensar.
+
+**O tom é nomeado pelo que significa, não pela faixa que o produziu.** `alta` é verde no
+score de crédito e âmbar na faixa da NF; `media` é âmbar num e azul no outro. Derivar cor
+da chave daria ao card da NF as cores do card de venda sem que nenhuma das duas telas
+estivesse errada.
 
 **Acessibilidade continua sendo um `<button>` esticado**, não um `onClick` no `<div>`:
 entra na ordem de tabulação, responde a Enter e Espaço, e é anunciado por nome. O que for
