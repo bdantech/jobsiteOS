@@ -8,6 +8,7 @@ import { MOTIVO_NAO_LIGAR_LABELS, type MotivoNaoLigar } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -33,6 +34,12 @@ import { dataHora, telefoneLegivel } from './format'
  * A lista de recusadas, com o motivo. Sem ela, "a Ana não ligou para ninguém"
  * vira caça a bug onde existe regra: vencimento estimado, contato sem base
  * legal, número no Procon. Com ela, o time vê a fila que NÃO existe e por quê.
+ *
+ * ── O QUE É ABA E O QUE NÃO É ──────────────────────────────────────────────
+ * "Prontas para ligar" fica fora das abas, no topo: é a única lista onde se
+ * AGE, e escondê-la atrás de uma aba seria esconder a tela. As outras três
+ * respondem perguntas diferentes e raramente na mesma hora — o que está
+ * acontecendo, por que aquela nota não está lá em cima, e o que já aconteceu.
  */
 
 type VarianteBadge = 'success' | 'warning' | 'critical' | 'info' | 'neutral'
@@ -167,7 +174,8 @@ export function VozLigacoes() {
         </h2>
         {podem.length === 0 ? (
           <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-            Nenhuma nota passa no portão agora. A lista abaixo diz o que está faltando em cada uma.
+            Nenhuma nota passa no portão agora. A aba &ldquo;Não vão ser ligadas&rdquo; diz o que
+            está faltando em cada uma.
           </p>
         ) : (
           <div className="rounded-lg border bg-card">
@@ -230,11 +238,62 @@ export function VozLigacoes() {
         )}
       </section>
 
-      {naoPodem.length ? (
-        <section className="space-y-2">
-          <h2 className="text-sm font-medium">
-            Não vão ser ligadas <span className="text-muted-foreground">({naoPodem.length})</span>
-          </h2>
+      {/*
+        As três listas viram ABAS porque respondem perguntas diferentes e
+        raramente na mesma hora: "o que está acontecendo agora" (na fila), "por
+        que a nota que eu procuro não está lá em cima" (não vão ser ligadas) e
+        "o que já aconteceu" (encerradas). Empilhadas, a terceira ficava a três
+        rolagens do botão que é o motivo de a tela existir.
+
+        "Prontas para ligar" fica FORA das abas, acima: é a única lista onde se
+        age, e escondê-la atrás de uma aba seria esconder a tela.
+      */}
+      <Tabs defaultValue="na-fila" className="space-y-3">
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="na-fila">
+            Na fila
+            <span className="ml-1.5 text-muted-foreground">{naFila.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="nao-vao">
+            Não vão ser ligadas
+            <span className="ml-1.5 text-muted-foreground">{naoPodem.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="encerradas">
+            Encerradas
+            <span className="ml-1.5 text-muted-foreground">{encerradas.length}</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="na-fila" className="mt-0 space-y-2">
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fornecedor</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Desfecho</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Quando</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {naFila.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                      Nada esperando. A Ana liga uma por vez, em horário comercial.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  naFila.map((l) => <LinhaDaFila key={l.id_externo} l={l} />)
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="nao-vao" className="mt-0 space-y-2">
           <p className="text-sm text-muted-foreground">
             A Ana fala o líquido, a taxa e o vencimento em voz alta, numa ligação gravada. Dado
             duvidoso não vira ligação com ressalva — vira ligação que não acontece.
@@ -249,6 +308,13 @@ export function VozLigacoes() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {naoPodem.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-sm text-muted-foreground">
+                      Nenhuma nota recusada agora — todas as candidatas passam no portão.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {naoPodem.map((c) => (
                   <TableRow key={c.nota.access_key}>
                     <TableCell className="font-medium">{c.nota.fornecedor_nome ?? '—'}</TableCell>
@@ -265,44 +331,10 @@ export function VozLigacoes() {
               </TableBody>
             </Table>
           </div>
-        </section>
-      ) : null}
+        </TabsContent>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">
-          Na fila <span className="text-muted-foreground">({naFila.length})</span>
-        </h2>
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fornecedor</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Situação</TableHead>
-                <TableHead>Desfecho</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Quando</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {naFila.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-sm text-muted-foreground">
-                    Nada esperando. A Ana liga uma por vez, em horário comercial.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                naFila.map((l) => <LinhaDaFila key={l.id_externo} l={l} />)
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">Encerradas</h2>
-        <div className="rounded-lg border bg-card">
+        <TabsContent value="encerradas" className="mt-0 space-y-2">
+          <div className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -327,8 +359,9 @@ export function VozLigacoes() {
               )}
             </TableBody>
           </Table>
-        </div>
-      </section>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
