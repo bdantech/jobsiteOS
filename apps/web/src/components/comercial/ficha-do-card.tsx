@@ -2,10 +2,8 @@
 
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FAIXA_SCORE_LABELS, type FaixaScore } from '@jobsiteos/core'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { ChipDoCard } from './card-funil'
 import { buscarSubmissoesDaEmpresa, comercialKeys, type VendaComEmpresa } from './queries'
 
 /**
@@ -19,20 +17,6 @@ import { buscarSubmissoesDaEmpresa, comercialKeys, type VendaComEmpresa } from '
  *
  * Elas estavam todas a dois cliques, na aba Empresa de cada card.
  */
-
-const FAIXA_CLASSE: Record<string, string> = {
-  alta: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
-  media: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
-  improvavel: 'bg-red-100 text-red-900 dark:bg-red-500/20 dark:text-red-200',
-  dados_insuficientes: 'bg-muted text-muted-foreground',
-}
-
-const FAIXA_BARRA: Record<string, string> = {
-  alta: 'bg-emerald-500',
-  media: 'bg-amber-500',
-  improvavel: 'bg-destructive',
-  dados_insuficientes: 'bg-muted-foreground/40',
-}
 
 const TIPO_LABEL: Record<string, string> = {
   construtora: 'Construtora',
@@ -68,97 +52,81 @@ export interface EmpresaDaFicha {
   score_faixa: string | null
 }
 
-export interface FichaDoCardProps {
-  empresa: EmpresaDaFicha | null
-  /**
-   * O badge Inbound/Outbound. Ligado no Funil de Vendas, DESLIGADO no de Reuniões.
-   *
-   * Não é preferência: no card de reuniões já existe a <TagOrigem>, que diz a mesma
-   * coisa com mais precisão — ela distingue as TRÊS origens do lead (Outbound,
-   * Formulário, Manual), enquanto este badge colapsa tudo em dois. Mostrar os dois
-   * juntos seria repetir a informação, e repetir pela versão mais pobre.
-   */
-  origem?: 'inbound' | 'outbound' | null
+/*
+ * A TIRA ANTIGA SAIU AQUI (0221). Ela desenhava score, faturamento, tipo e origem
+ * numa linha e meia dentro do card, e o card novo distribui essas quatro coisas
+ * por três lugares — valor, bloco de score e chips. O que sobreviveu dela é o que
+ * vem abaixo: quem sabe LER a empresa continua sendo este arquivo, e os três funis
+ * chamam as mesmas funções em vez de cada um reinterpretar os campos.
+ */
+
+// ─── A empresa, nos espaços do card novo ────────────────────────────────────
+//
+// `FichaDoCard` acima desenhava score, faturamento, tipo e origem numa tira só.
+// O card novo distribui essas quatro coisas por três lugares diferentes — valor,
+// bloco de score e chips —, e quem sabe LER a empresa continua sendo este arquivo.
+// Sem isto, os três funis repetiriam a mesma leitura e divergiriam na primeira
+// vez que alguém corrigisse um deles.
+
+/** O faturamento, com a procedência colada: declarado e estimado não valem o mesmo. */
+export function ValorDaEmpresa({ empresa: e }: { empresa: EmpresaDaFicha | null }) {
+  if (!e) return null
+  const declarado = e.faturamento_origem === 'declarado_cliente'
+  return (
+    <>
+      {brlCurto(e.faturamento_anual)}{' '}
+      <span
+        className="font-normal text-muted-foreground"
+        title={declarado ? 'Faturamento declarado pelo cliente' : 'Faturamento estimado pelo modelo'}
+      >
+        {declarado ? 'declarado' : 'est.'}
+      </span>
+    </>
+  )
+}
+
+export function scoreDaEmpresa(e: EmpresaDaFicha | null): { valor: number | null; faixa: string } {
+  return {
+    valor: e?.score_credito == null ? null : Number(e.score_credito),
+    faixa: e?.score_faixa ?? 'dados_insuficientes',
+  }
+}
+
+/** "Score 87/100" — o rodapé repete o número por extenso, que a barra não diz. */
+export function textoDoScore(e: EmpresaDaFicha | null): string {
+  const s = e?.score_credito
+  return s == null ? 'Sem score' : `Score ${Math.round(Number(s))}/100`
 }
 
 /**
- * A tira compacta do card: barra e número do score, faturamento, o que a empresa é, e de
- * onde ela veio. Uma linha e meia — o card do funil não comporta mais que isso, e o
- * detalhe continua nas abas.
+ * Os chips do card: UF, o que a empresa é, e por onde ela entrou.
  *
- * Recebe a EMPRESA, e não a venda: o Funil de Reuniões usa a mesma tira, e lá o que
- * existe é um `sdr_leads`. Amarrá-la a `VendaComEmpresa` obrigaria a inventar uma venda
- * falsa para desenhar o card de um lead.
+ * A origem vem por ÚLTIMO e em peso maior nos dois estados. Um badge colorido ao
+ * lado de um cinza faz o cinza parecer desligado, e outbound não é ausência de
+ * nada: é a régua tendo escolhido a empresa. São duas procedências, e cada uma
+ * muda a primeira frase da ligação.
  */
-export function FichaDoCard({ empresa: e, origem }: FichaDoCardProps) {
-  if (!e) return null
-
-  const faixa = e.score_faixa ?? 'dados_insuficientes'
-  const score = e.score_credito === null ? null : Number(e.score_credito)
-  const pct = score === null ? 0 : Math.max(0, Math.min(100, score))
-  const declarado = e.faturamento_origem === 'declarado_cliente'
-  const inbound = origem === 'inbound'
-
+export function ChipsDaEmpresa({
+  empresa: e,
+  uf,
+  origem,
+}: {
+  empresa: EmpresaDaFicha | null
+  uf?: string | null
+  origem?: 'inbound' | 'outbound' | null
+}) {
   return (
-    <div className="space-y-1.5 border-t border-border/60 pt-1.5">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold tabular-nums leading-none">
-          {score === null ? '—' : Math.round(score)}
-        </span>
-        <div
-          className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
-          role="img"
-          aria-label={`Score de crédito ${score === null ? 'indisponível' : Math.round(score)} de 100, faixa ${
-            FAIXA_SCORE_LABELS[faixa as FaixaScore] ?? faixa
-          }`}
-        >
-          <div className={cn('h-full rounded-full', FAIXA_BARRA[faixa])} style={{ width: `${pct}%` }} />
-        </div>
-        {/* O rótulo da faixa ao lado da barra: a cor sozinha não pode carregar o veredito. */}
-        <Badge className={cn('shrink-0 px-1.5 py-0 text-[10px] font-normal', FAIXA_CLASSE[faixa])}>
-          {FAIXA_SCORE_LABELS[faixa as FaixaScore] ?? faixa}
-        </Badge>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-        <span
-          className="tabular-nums"
-          title={declarado ? 'Faturamento declarado pelo cliente' : 'Faturamento estimado pelo modelo'}
-        >
-          {brlCurto(e.faturamento_anual)}
-          {/* Declarado e estimado não valem o mesmo, e a tela não pode fingir que sim. */}
-          <span className="ml-1 opacity-70">{declarado ? 'declarado' : 'est.'}</span>
-        </span>
-        {e.tipo ? (
-          <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
-            {TIPO_LABEL[e.tipo] ?? e.tipo}
-          </Badge>
-        ) : null}
-        {origem ? (
-          /*
-           * `ml-auto`: empurra para a DIREITA da última linha do card, que é o
-           * canto inferior direito. Vira o lugar fixo de "por onde este lead
-           * entrou" — o olho aprende o canto e para de reler a linha inteira.
-           *
-           * Cor nos DOIS estados, não só no inbound. Um badge colorido ao lado de
-           * um cinza faz o cinza parecer desligado, e outbound não é ausência de
-           * nada: é a régua tendo escolhido a empresa. São duas procedências, e
-           * cada uma muda a primeira frase da ligação.
-           */
-          <Badge
-            variant="outline"
-            className={cn(
-              'ml-auto shrink-0 px-1.5 py-0 text-[10px] font-normal',
-              inbound
-                ? 'border-sky-500/40 bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
-                : 'border-amber-500/40 bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
-            )}
-          >
-            {inbound ? 'Inbound' : 'Outbound'}
-          </Badge>
-        ) : null}
-      </div>
-    </div>
+    <>
+      {uf ? (
+        <ChipDoCard forte>{uf}</ChipDoCard>
+      ) : null}
+      {e?.tipo ? <ChipDoCard>{TIPO_LABEL[e.tipo] ?? e.tipo}</ChipDoCard> : null}
+      {origem ? (
+        <ChipDoCard tom={origem === 'inbound' ? 'info' : 'alerta'} forte>
+          {origem === 'inbound' ? 'Inbound' : 'Outbound'}
+        </ChipDoCard>
+      ) : null}
+    </>
   )
 }
 

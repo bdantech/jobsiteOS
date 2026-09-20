@@ -125,6 +125,8 @@ export interface FaixasGlobais {
   }
   /** Onde a TAC proporcional para de crescer e atinge o `fee` cheio (§4). */
   limiar_proporcionalidade_tac: number
+  /** Onde a TAC proporcional para de CAIR e atinge o `fee_min` cheio (§4). */
+  piso_proporcionalidade_tac: number
   comissao: { min: number; max: number }
   max_invoice_amount_default: number
   max_due_date_days_default: number
@@ -176,6 +178,7 @@ export const MATRIZ_PADRAO: MatrizPrecificacao = {
       fee_d1_desconto_pct_max: 0.3,
     },
     limiar_proporcionalidade_tac: 10_000,
+    piso_proporcionalidade_tac: 1_000,
     /*
      * CASHBACK (o campo se chama `comissao`/`commission_percent` por dentro, que é o
      * nome do contrato com a plataforma de produção — renomear a chave quebraria a
@@ -271,25 +274,44 @@ export const MATRIZ_PADRAO: MatrizPrecificacao = {
 
 // ─── §4 A TAC proporcional ──────────────────────────────────────────────────
 
+/** Onde a rampa pousa no `fee_min`. Abaixo disso, a nota paga a tarifa mínima cheia. */
+export const PISO_PROPORCIONALIDADE_TAC_PADRAO = 1_000
+
 /**
  * `fee_min` NÃO é piso de segurança — é a TAC efetiva das notas pequenas.
  *
- * A tarifa cresce proporcionalmente ao valor da nota até o limiar (config, R$ 10.000
- * por padrão), onde atinge `fee` e para:
+ * A rampa tem DOIS pontos de parada, não um: abaixo do PISO (R$ 1.000) a nota paga o
+ * `fee_min` cheio; acima do LIMIAR (R$ 10.000) paga o `fee` cheio; entre os dois ela
+ * cresce em linha reta.
  *
- *     TAC = fee_min + (fee − fee_min) × min(valor_nf / limiar, 1)
+ *     TAC = fee_min + (fee − fee_min) × clamp((valor_nf − piso) ÷ (limiar − piso), 0, 1)
  *
- * Com `fee = 300`, `fee_min = 150` e limiar 10.000: NF de R$ 10.000 ou mais paga
- * R$ 300; de R$ 5.000 paga R$ 225; de R$ 1.000 paga R$ 165.
+ * Com `fee = 300`, `fee_min = 150`, piso 1.000 e limiar 10.000: NF de R$ 10.000 ou
+ * mais paga R$ 300; de R$ 5.500 paga R$ 225; de R$ 1.000 ou menos paga R$ 150.
  *
- * Ler isto como piso ("cobre no mínimo 150") produziria R$ 300 na nota de mil reais —
- * 30% do valor dela em tarifa. É a diferença entre uma tabela cara e uma tabela
- * predatória, e é por isso que o cálculo mora num lugar só, com teste.
+ * ─── POR QUE O PISO EXISTE (corrigido em 20/09/2026) ────────────────────────
+ * A primeira versão fazia a rampa começar em ZERO — `min(valor ÷ limiar, 1)` —, e com
+ * isso o `fee_min` era o nome de um número que nunca acontecia: a nota de mil reais
+ * pagava R$ 165, a de cem reais pagava R$ 151,50, e só uma nota de valor ZERO chegaria
+ * aos R$ 150. A mesa confirmou a régua real: o mínimo é atingido na nota de R$ 1.000
+ * ou menor. O `fee_min` só é "mínimo" de verdade quando a rampa pousa nele.
+ *
+ * Ler `fee_min` como piso de segurança ("cobre no mínimo 150") produziria R$ 300 na
+ * nota de mil reais — 30% do valor dela em tarifa. É a diferença entre uma tabela
+ * cara e uma tabela predatória, e é por isso que o cálculo mora num lugar só, com teste.
  */
-export function calcularTac(valorNf: number, fee: number, feeMin: number, limiar: number): number {
+export function calcularTac(
+  valorNf: number,
+  fee: number,
+  feeMin: number,
+  limiar: number,
+  piso: number = PISO_PROPORCIONALIDADE_TAC_PADRAO,
+): number {
   if (!Number.isFinite(valorNf) || valorNf <= 0) return 0
-  // Limiar zerado ou negativo faria a proporção explodir. Sem limiar, a TAC é cheia.
-  const proporcao = limiar > 0 ? Math.min(valorNf / limiar, 1) : 1
+  if (valorNf <= piso) return feeMin
+  // Rampa de largura zero (ou invertida) não é rampa: acima do piso, a TAC é cheia.
+  if (limiar <= piso) return fee
+  const proporcao = Math.min((valorNf - piso) / (limiar - piso), 1)
   return feeMin + (fee - feeMin) * proporcao
 }
 
@@ -335,11 +357,12 @@ export function simularTac(
   limiar: number,
   valores: readonly number[] = VALORES_SIMULACAO,
   prazoDias = 30,
+  piso: number = PISO_PROPORCIONALIDADE_TAC_PADRAO,
 ): LinhaSimulacaoTac[] {
   const meses = prazoDias / 30
   return valores.map((valor) => {
-    const tacD0 = calcularTac(valor, entrada.fee_d0, entrada.fee_min_d0, limiar)
-    const tacD1 = calcularTac(valor, entrada.fee_d1, entrada.fee_min_d1, limiar)
+    const tacD0 = calcularTac(valor, entrada.fee_d0, entrada.fee_min_d0, limiar, piso)
+    const tacD1 = calcularTac(valor, entrada.fee_d1, entrada.fee_min_d1, limiar, piso)
     const jurosD0 = (valor * entrada.monthly_rate_d0 * meses) / 100
     const jurosD1 = (valor * entrada.monthly_rate_d1 * meses) / 100
     return {

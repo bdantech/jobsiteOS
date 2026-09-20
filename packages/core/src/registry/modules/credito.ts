@@ -48,7 +48,11 @@ import {
   type CondicoesDoCnpjInput,
   type RodarAnaliseToolInput,
 } from '../../credito/schemas.js'
-import { calcularTac, VALORES_SIMULACAO } from '../../credito/precificacao.js'
+import {
+  calcularTac,
+  PISO_PROPORCIONALIDADE_TAC_PADRAO,
+  VALORES_SIMULACAO,
+} from '../../credito/precificacao.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -465,9 +469,12 @@ async function condicoesDoCnpj(input: CondicoesDoCnpjInput, ctx: ToolContext) {
   }
 
   const definicao = matrizRes.data?.definicao as
-    | { faixas?: { limiar_proporcionalidade_tac?: number } }
+    | { faixas?: { limiar_proporcionalidade_tac?: number; piso_proporcionalidade_tac?: number } }
     | null
   const limiar = Number(definicao?.faixas?.limiar_proporcionalidade_tac ?? 10_000)
+  const piso = Number(
+    definicao?.faixas?.piso_proporcionalidade_tac ?? PISO_PROPORCIONALIDADE_TAC_PADRAO,
+  )
   const n = (v: unknown): number => Number(v ?? 0)
 
   return {
@@ -480,8 +487,8 @@ async function condicoesDoCnpj(input: CondicoesDoCnpjInput, ctx: ToolContext) {
     comissao: `${n(c.commission_percent)}%`,
     tac_por_valor_de_nota: VALORES_SIMULACAO.map((valor) => ({
       nota: brl(valor),
-      tac_d0: brl(calcularTac(valor, n(c.fee_d0), n(c.fee_min_d0), limiar)),
-      tac_d1: brl(calcularTac(valor, n(c.fee_d1), n(c.fee_min_d1), limiar)),
+      tac_d0: brl(calcularTac(valor, n(c.fee_d0), n(c.fee_min_d0), limiar, piso)),
+      tac_d1: brl(calcularTac(valor, n(c.fee_d1), n(c.fee_min_d1), limiar, piso)),
     })),
     maximo_por_nota: brl(c.max_invoice_amount),
     prazo_maximo_dias: c.max_due_date_days,

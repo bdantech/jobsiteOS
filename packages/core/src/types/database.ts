@@ -4328,6 +4328,51 @@ export type Database = {
           },
         ]
       }
+      fornecedores_seguidos: {
+        Row: {
+          ate: string | null
+          criado_por: string | null
+          desde: string
+          fornecedor_cnpj: string
+          id: string
+          origem: string
+          originador_id: string
+        }
+        Insert: {
+          ate?: string | null
+          criado_por?: string | null
+          desde?: string
+          fornecedor_cnpj: string
+          id?: string
+          origem?: string
+          originador_id: string
+        }
+        Update: {
+          ate?: string | null
+          criado_por?: string | null
+          desde?: string
+          fornecedor_cnpj?: string
+          id?: string
+          origem?: string
+          originador_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedores_seguidos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedores_seguidos_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fornecedores_funil: {
         Row: {
           atualizado_em: string
@@ -6061,6 +6106,8 @@ export type Database = {
           serie: string | null
           sincronizada_em: string | null
           status_sync: string | null
+          seguro_estimado: number | null
+          tac_estimada: number | null
           taxa_usada: number | null
           tipo: string
           valor: number
@@ -6114,6 +6161,8 @@ export type Database = {
           serie?: string | null
           sincronizada_em?: string | null
           status_sync?: string | null
+          seguro_estimado?: number | null
+          tac_estimada?: number | null
           taxa_usada?: number | null
           tipo: string
           valor: number
@@ -6167,6 +6216,8 @@ export type Database = {
           serie?: string | null
           sincronizada_em?: string | null
           status_sync?: string | null
+          seguro_estimado?: number | null
+          tac_estimada?: number | null
           taxa_usada?: number | null
           tipo?: string
           valor?: number
@@ -6354,8 +6405,10 @@ export type Database = {
       pedidos_apresentacao: {
         Row: {
           comunicacao_id: string | null
+          contato_fornecedor_id: string | null
           contato_sacado_id: string | null
           criado_em: string
+          direcao: string
           fornecedor_cnpj: string
           id: string
           mensagem: string | null
@@ -6366,8 +6419,10 @@ export type Database = {
         }
         Insert: {
           comunicacao_id?: string | null
+          contato_fornecedor_id?: string | null
           contato_sacado_id?: string | null
           criado_em?: string
+          direcao?: string
           fornecedor_cnpj: string
           id?: string
           mensagem?: string | null
@@ -6378,8 +6433,10 @@ export type Database = {
         }
         Update: {
           comunicacao_id?: string | null
+          contato_fornecedor_id?: string | null
           contato_sacado_id?: string | null
           criado_em?: string
+          direcao?: string
           fornecedor_cnpj?: string
           id?: string
           mensagem?: string | null
@@ -6401,6 +6458,13 @@ export type Database = {
             columns: ["comunicacao_id"]
             isOneToOne: false
             referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_apresentacao_contato_fornecedor_id_fkey"
+            columns: ["contato_fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
             referencedColumns: ["id"]
           },
           {
@@ -6587,6 +6651,96 @@ export type Database = {
           nome?: string
         }
         Relationships: []
+      }
+      prospeccao_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospeccao_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospeccao_enriquecimentos: {
+        Row: {
+          cnpj_sacado: string
+          custo: number
+          erro: string | null
+          executado_em: string
+          fonte: string
+          id: string
+          lote_id: string | null
+          originador_id: string | null
+          solicitado_por: string | null
+          status: string
+        }
+        Insert: {
+          cnpj_sacado: string
+          custo?: number
+          erro?: string | null
+          executado_em?: string
+          fonte: string
+          id?: string
+          lote_id?: string | null
+          originador_id?: string | null
+          solicitado_por?: string | null
+          status: string
+        }
+        Update: {
+          cnpj_sacado?: string
+          custo?: number
+          erro?: string | null
+          executado_em?: string
+          fonte?: string
+          id?: string
+          lote_id?: string | null
+          originador_id?: string | null
+          solicitado_por?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospeccao_enriquecimentos_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_enriquecimento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospeccao_enriquecimentos_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospeccao_enriquecimentos_solicitado_por_fkey"
+            columns: ["solicitado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       processo_briefings: {
         Row: {
@@ -7758,6 +7912,201 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sacados_prospeccao: {
+        Row: {
+          analise_credito_id: string | null
+          atualizado_em: string
+          chance_concessao: number | null
+          cnpj_sacado: string
+          empresa_id: string | null
+          entrou_em: string
+          estagio: string
+          estagio_alterado_em: string | null
+          estagio_alterado_por: string | null
+          faturamento_estimado: number | null
+          id: string
+          limite_potencial: number | null
+          media_mensal_6m: number | null
+          meses_com_emissao_6m: number | null
+          motivo_saida: string | null
+          observacao_saida: string | null
+          originador_id: string | null
+          originador_origem: string
+          prazo_medio_dias: number | null
+          prazo_minimo_operavel_dias: number | null
+          prazo_minimo_origem: string | null
+          qtd_fornecedores: number | null
+          qtd_nfs_30d: number | null
+          sacado_nome: string | null
+          score_completude: number | null
+          score_credito: number | null
+          ultima_nf_em: string | null
+          valor_esperado_mensal: number | null
+          valor_operavel: number | null
+          volume_30d: number | null
+        }
+        Insert: {
+          analise_credito_id?: string | null
+          atualizado_em?: string
+          chance_concessao?: number | null
+          cnpj_sacado: string
+          empresa_id?: string | null
+          entrou_em?: string
+          estagio?: string
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          faturamento_estimado?: number | null
+          id?: string
+          limite_potencial?: number | null
+          media_mensal_6m?: number | null
+          meses_com_emissao_6m?: number | null
+          motivo_saida?: string | null
+          observacao_saida?: string | null
+          originador_id?: string | null
+          originador_origem?: string
+          prazo_medio_dias?: number | null
+          prazo_minimo_operavel_dias?: number | null
+          prazo_minimo_origem?: string | null
+          qtd_fornecedores?: number | null
+          qtd_nfs_30d?: number | null
+          sacado_nome?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          ultima_nf_em?: string | null
+          valor_esperado_mensal?: number | null
+          valor_operavel?: number | null
+          volume_30d?: number | null
+        }
+        Update: {
+          analise_credito_id?: string | null
+          atualizado_em?: string
+          chance_concessao?: number | null
+          cnpj_sacado?: string
+          empresa_id?: string | null
+          entrou_em?: string
+          estagio?: string
+          estagio_alterado_em?: string | null
+          estagio_alterado_por?: string | null
+          faturamento_estimado?: number | null
+          id?: string
+          limite_potencial?: number | null
+          media_mensal_6m?: number | null
+          meses_com_emissao_6m?: number | null
+          motivo_saida?: string | null
+          observacao_saida?: string | null
+          originador_id?: string | null
+          originador_origem?: string
+          prazo_medio_dias?: number | null
+          prazo_minimo_operavel_dias?: number | null
+          prazo_minimo_origem?: string | null
+          qtd_fornecedores?: number | null
+          qtd_nfs_30d?: number | null
+          sacado_nome?: string | null
+          score_completude?: number | null
+          score_credito?: number | null
+          ultima_nf_em?: string | null
+          valor_esperado_mensal?: number | null
+          valor_operavel?: number | null
+          volume_30d?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sacados_prospeccao_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_estagio_alterado_por_fkey"
+            columns: ["estagio_alterado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sacados_prospeccao_fornecedores: {
+        Row: {
+          fornecedor_cnpj: string
+          fornecedor_empresa_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          media_mensal_6m: number | null
+          meses_com_emissao_6m: number | null
+          na_carteira_do_originador: boolean
+          qtd_nfs_30d: number | null
+          sacado_prospeccao_id: string
+          ultima_nf_em: string | null
+          valor_30d: number | null
+          valor_operavel: number | null
+        }
+        Insert: {
+          fornecedor_cnpj: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          media_mensal_6m?: number | null
+          meses_com_emissao_6m?: number | null
+          na_carteira_do_originador?: boolean
+          qtd_nfs_30d?: number | null
+          sacado_prospeccao_id: string
+          ultima_nf_em?: string | null
+          valor_30d?: number | null
+          valor_operavel?: number | null
+        }
+        Update: {
+          fornecedor_cnpj?: string
+          fornecedor_empresa_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          media_mensal_6m?: number | null
+          meses_com_emissao_6m?: number | null
+          na_carteira_do_originador?: boolean
+          qtd_nfs_30d?: number | null
+          sacado_prospeccao_id?: string
+          ultima_nf_em?: string | null
+          valor_30d?: number | null
+          valor_operavel?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sacados_prospeccao_fornecedores_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_fornecedores_sacado_prospeccao_id_fkey"
+            columns: ["sacado_prospeccao_id"]
+            isOneToOne: false
+            referencedRelation: "sacados_prospeccao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_fornecedores_sacado_prospeccao_id_fkey"
+            columns: ["sacado_prospeccao_id"]
+            isOneToOne: false
+            referencedRelation: "sacados_prospeccao_view"
             referencedColumns: ["id"]
           },
         ]
@@ -10056,6 +10405,8 @@ export type Database = {
           serie: string | null
           sincronizada_em: string | null
           status_sync: string | null
+          seguro_estimado: number | null
+          tac_estimada: number | null
           taxa_usada: number | null
           tipo_nf: string | null
           valor: number | null
@@ -10151,6 +10502,73 @@ export type Database = {
           },
         ]
       }
+      sacados_prospeccao_view: {
+        Row: {
+          analise_credito_id: string | null
+          analise_decidida_em: string | null
+          analise_estagio: string | null
+          analise_limite_aprovado: number | null
+          atualizado_em: string | null
+          chance_concessao: number | null
+          cnae_principal: string | null
+          cnpj_sacado: string | null
+          data_inicio_atividade: string | null
+          empresa_id: string | null
+          entrou_em: string | null
+          estagio: string | null
+          estagio_alterado_em: string | null
+          faturamento_estimado: number | null
+          id: string | null
+          limite_potencial: number | null
+          media_mensal_6m: number | null
+          meses_com_emissao_6m: number | null
+          motivo_saida: string | null
+          municipio: string | null
+          nome_fantasia: string | null
+          observacao_saida: string | null
+          originador_id: string | null
+          originador_nome: string | null
+          originador_origem: string | null
+          porte_rfb: string | null
+          prazo_medio_dias: number | null
+          prazo_minimo_operavel_dias: number | null
+          prazo_minimo_origem: string | null
+          qtd_fornecedores: number | null
+          qtd_nfs_30d: number | null
+          sacado_nome: string | null
+          score_completude: number | null
+          score_credito: number | null
+          situacao_cadastral: string | null
+          uf: string | null
+          ultima_nf_em: string | null
+          valor_esperado_mensal: number | null
+          valor_operavel: number | null
+          volume_30d: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sacados_prospeccao_analise_credito_id_fkey"
+            columns: ["analise_credito_id"]
+            isOneToOne: false
+            referencedRelation: "analises_credito"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sacados_prospeccao_originador_id_fkey"
+            columns: ["originador_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       protestos_atual: {
         Row: {
           cartorios: Json | null
@@ -10205,6 +10623,37 @@ export type Database = {
       }
     }
     Functions: {
+      app_prospeccao_descartar: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["sacados_prospeccao"]["Row"]
+      }
+      app_prospeccao_mover: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["sacados_prospeccao"]["Row"]
+      }
+      app_prospeccao_pedir_apresentacao: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["pedidos_apresentacao"]["Row"]
+      }
+      app_prospeccao_reatribuir: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["sacados_prospeccao"]["Row"]
+      }
+      app_prospeccao_seguir: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["fornecedores_seguidos"]["Row"]
+      }
+      app_prospeccao_solicitar_analise: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["analises_credito"]["Row"]
+      }
+      app_sacado_prospeccao_visivel: { Args: { p_cnpj: string }; Returns: boolean }
+      app_salvar_prospeccao_config: {
+        Args: { p: Json }
+        Returns: Database["public"]["Tables"]["prospeccao_config"]["Row"]
+      }
+      prospeccao_notas: { Args: { p: Json }; Returns: Json }
+      prospeccao_painel: { Args: { p_originador_id?: string | null }; Returns: Json }
       analise_propria_painel: {
         Args: { p_analise_credito_id: string }
         Returns: Json
@@ -12272,6 +12721,8 @@ export type Database = {
           serie: string | null
           sincronizada_em: string | null
           status_sync: string | null
+          seguro_estimado: number | null
+          tac_estimada: number | null
           taxa_usada: number | null
           tipo: string
           valor: number

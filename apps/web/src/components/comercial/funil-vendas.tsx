@@ -29,10 +29,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { atribuirVendaAction, moverVendaAction } from '@/actions/comercial'
-import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { AbaReuniao } from './aba-reuniao'
-import { AbaFormulario, FichaDoCard, ehInbound } from './ficha-do-card'
+import {
+  AbaFormulario,
+  ChipsDaEmpresa,
+  ValorDaEmpresa,
+  ehInbound,
+  scoreDaEmpresa,
+  textoDoScore,
+} from './ficha-do-card'
+import {
+  CabecalhoDaColuna,
+  CardDoFunil,
+  ChipDoCard,
+  ColunaVazia,
+  DonoNoRodape,
+  TiraDoCard,
+} from './card-funil'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
@@ -263,138 +277,98 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
               </p>
             </div>
           ) : vista === 'kanban' ? (
-            <div className="flex gap-3 overflow-x-auto pb-2">
+            <div className="flex gap-5 overflow-x-auto pb-3">
               {ESTAGIOS_VENDA.map((coluna) => {
                 const itens = porEstagio.get(coluna) ?? []
                 const seguinte = proximo(coluna)
                 return (
-                  <div key={coluna} className="w-64 shrink-0 space-y-2">
-                    <div className="flex items-baseline justify-between gap-2 border-b pb-1">
-                      <p className="text-xs font-medium">{ESTAGIO_VENDA_LABELS[coluna]}</p>
-                      <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                    </div>
-                    <div className="space-y-2">
+                  <div key={coluna} className="w-[300px] shrink-0 space-y-3">
+                    <CabecalhoDaColuna titulo={ESTAGIO_VENDA_LABELS[coluna]} total={itens.length} />
+                    <div className="space-y-3">
                       {itens.map((v) => (
-                        <div
+                        <CardDoFunil
                           key={v.id}
-                          className={cn(
-                            'relative space-y-1.5 rounded-md border p-2 text-sm transition-colors',
-                            'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
-                            SITUACAO_CLASSE[v.situacao as SituacaoVenda],
-                            v.primeira_operacao_em && 'opacity-70',
-                          )}
-                        >
-                          {/*
-                           * O card INTEIRO abre o negócio, e a área clicável é um <button>
-                           * de verdade esticado sobre ele — não um onClick no <div>.
-                           *
-                           * A diferença aparece em tudo que não é mouse: o botão entra na
-                           * ordem de tabulação, responde a Enter e Espaço, e é anunciado
-                           * como "Abrir {empresa}" em vez de silêncio. Um div com onClick
-                           * dá a mesma área e nada disso.
-                           *
-                           * O nome deixou de ser link para a empresa: dois destinos no
-                           * mesmo card fazem o clique virar loteria. A empresa continua a
-                           * um clique, na aba do modal.
-                           */}
-                          <button
-                            type="button"
-                            aria-label={`Abrir ${v.empresas?.razao_social ?? 'negócio'}`}
-                            onClick={() => setAberto(v)}
-                            className="absolute inset-0 z-0 rounded-md focus:outline-none"
-                          />
-                          <p className="line-clamp-2 font-medium">
-                            {v.empresas?.razao_social ?? 'Empresa'}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {v.empresas?.uf ? (
-                              <Badge variant="outline" className="text-[10px]">{v.empresas.uf}</Badge>
-                            ) : null}
-                            {/* Situação no card, não na coluna: o negócio tem as duas coisas. */}
-                            {v.situacao !== 'em_andamento' ? (
-                              <Badge
-                                variant={v.situacao === 'perdido' ? 'destructive' : 'default'}
-                                className={cn(
-                                  'text-[10px]',
-                                  v.situacao === 'ganho' &&
-                                    'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200',
-                                )}
-                              >
-                                {SITUACAO_VENDA_LABELS[v.situacao as SituacaoVenda]}
-                              </Badge>
-                            ) : null}
-                            {v.primeira_operacao_em ? (
-                              <Badge variant="secondary" className="text-[10px]">Já operando</Badge>
-                            ) : null}
-                          </div>
-                          {/* Só sem filtro: com ele o nome repetiria em cada card o
-                              que o seletor no topo já diz. */}
-                          {!vendedorId && (
-                            // `z-10`: o seletor de dono é interativo e precisa ficar ACIMA
-                            // da área que abre o card, senão trocar de dono viraria abrir.
-                            <div className="relative z-10">
-                            <DonoDoCard
-                              nome={nomePorId.get(v.vendedor_id) ?? null}
-                              tipos={['vendedor']}
-                              podeTrocar={ehGestor}
-                              ocupado={agindo}
-                              onTrocar={(id) => reatribuir(v, id)}
-                            />
-                            </div>
-                          )}
-                          {/* A ficha da empresa no card. Quem varre a coluna escolhe em
-                              qual negócio mexer ANTES de abrir qualquer um, e escolhia
-                              pelo nome e pela UF — score, tamanho, o que a empresa é e
-                              como ela chegou estavam todos a dois cliques. */}
-                          <FichaDoCard
-                            empresa={v.empresas}
-                            origem={ehInbound(v) ? 'inbound' : 'outbound'}
-                          />
-                          {/* O limite aprovado no CARD, e não só no modal: é o número que
-                              decide se vale seguir, e quem varre a coluna precisa dele sem
-                              abrir oito negócios. */}
-                          {v.analises_credito?.limite_aprovado ? (
-                            <p className="text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
-                              {BRL_CARD.format(Number(v.analises_credito.limite_aprovado))} aprovados
-                              {v.analises_credito.estagio === 'aprovada_parcial' ? ' (parcial)' : ''}
-                            </p>
-                          ) : null}
-                          {/*
-                            A RECUSA TAMBÉM É RETORNO DA ESTEIRA, e ela sumia do card.
-                            Só o valor aprovado aparecia aqui: um negócio negado ficava
-                            visualmente igual a um que ninguém analisou, e a diferença
-                            entre os dois é a única que importa nessa coluna. O motivo
-                            vem cortado — o inteiro está no modal, na aba Crédito.
-                          */}
-                          {v.analises_credito?.estagio === 'negada' ? (
-                            <p className="text-[11px] font-medium text-destructive">
-                              Crédito negado
-                              {v.analises_credito.motivo ? (
-                                <span className="block font-normal text-muted-foreground line-clamp-2">
-                                  {v.analises_credito.motivo}
-                                </span>
+                          rotuloAbrir={`Abrir ${v.empresas?.razao_social ?? 'negócio'}`}
+                          onAbrir={() => setAberto(v)}
+                          esmaecido={Boolean(v.primeira_operacao_em)}
+                          className={SITUACAO_CLASSE[v.situacao as SituacaoVenda]}
+                          titulo={v.empresas?.razao_social ?? 'Empresa'}
+                          valor={<ValorDaEmpresa empresa={v.empresas} />}
+                          score={scoreDaEmpresa(v.empresas)}
+                          chips={
+                            <>
+                              <ChipsDaEmpresa
+                                empresa={v.empresas}
+                                uf={v.empresas?.uf}
+                                origem={ehInbound(v) ? 'inbound' : 'outbound'}
+                              />
+                              {/* Situação no card, não na coluna: o negócio tem as duas coisas. */}
+                              {v.situacao !== 'em_andamento' ? (
+                                <ChipDoCard tom={v.situacao === 'perdido' ? 'neutro' : 'destaque'} forte>
+                                  {SITUACAO_VENDA_LABELS[v.situacao as SituacaoVenda]}
+                                </ChipDoCard>
                               ) : null}
-                            </p>
-                          ) : null}
-                          {coluna === 'em_analise_credito' && v.situacao === 'em_andamento' && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {v.analises_credito
-                                ? `Crédito: ${ESTAGIO_ANALISE_LABELS[v.analises_credito.estagio as EstagioAnalise] ?? v.analises_credito.estagio}.`
-                                : 'Aguardando a seguradora. O card anda sozinho quando ela decidir.'}
-                            </p>
-                          )}
-                          {v.situacao === 'ganho' && !v.primeira_operacao_em && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Ganho, sem operar ainda — sai do funil na primeira antecipação.
-                            </p>
-                          )}
-                        </div>
+                              {v.primeira_operacao_em ? <ChipDoCard>Já operando</ChipDoCard> : null}
+                            </>
+                          }
+                          rodapeEsquerda={
+                            !vendedorId ? (
+                              // `z-10`: trocar de dono é interativo e precisa ficar ACIMA
+                              // do botão que abre o card, senão trocar viraria abrir.
+                              <span className="relative z-10 block">
+                                <DonoDoCard
+                                  nome={nomePorId.get(v.vendedor_id) ?? null}
+                                  tipos={['vendedor']}
+                                  podeTrocar={ehGestor}
+                                  ocupado={agindo}
+                                  onTrocar={(id) => reatribuir(v, id)}
+                                />
+                              </span>
+                            ) : (
+                              <DonoNoRodape nome={nomePorId.get(v.vendedor_id) ?? null} />
+                            )
+                          }
+                          rodapeDireita={textoDoScore(v.empresas)}
+                          tira={
+                            /*
+                              UMA tira, e nesta ordem de prioridade. O limite aprovado é o
+                              número que decide se vale seguir; a negativa é o único fato
+                              que vale mais que ele. Empilhar as duas faria um card
+                              decidido parecer indeciso.
+
+                              A RECUSA ESTAVA FALTANDO no card antigo: um negócio negado
+                              ficava visualmente igual a um que ninguém analisou, e a
+                              diferença entre os dois é a única que importa nessa coluna.
+                            */
+                            v.analises_credito?.estagio === 'negada' ? (
+                              <TiraDoCard tom="ruim">
+                                Crédito negado
+                                {v.analises_credito.motivo ? (
+                                  <span className="block font-normal opacity-80 line-clamp-2">
+                                    {v.analises_credito.motivo}
+                                  </span>
+                                ) : null}
+                              </TiraDoCard>
+                            ) : v.analises_credito?.limite_aprovado ? (
+                              <TiraDoCard tom="bom">
+                                {BRL_CARD.format(Number(v.analises_credito.limite_aprovado))} aprovados
+                                {v.analises_credito.estagio === 'aprovada_parcial' ? ' (parcial)' : ''}
+                              </TiraDoCard>
+                            ) : coluna === 'em_analise_credito' && v.situacao === 'em_andamento' ? (
+                              <TiraDoCard tom="neutro">
+                                {v.analises_credito
+                                  ? `Crédito: ${ESTAGIO_ANALISE_LABELS[v.analises_credito.estagio as EstagioAnalise] ?? v.analises_credito.estagio}.`
+                                  : 'Aguardando a seguradora. O card anda sozinho quando ela decidir.'}
+                              </TiraDoCard>
+                            ) : v.situacao === 'ganho' && !v.primeira_operacao_em ? (
+                              <TiraDoCard tom="neutro">
+                                Ganho, sem operar ainda — sai do funil na primeira antecipação.
+                              </TiraDoCard>
+                            ) : undefined
+                          }
+                        />
                       ))}
-                      {itens.length === 0 && (
-                        <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
-                          vazio
-                        </p>
-                      )}
+                      {itens.length === 0 && <ColunaVazia>Nenhum negócio</ColunaVazia>}
                     </div>
                   </div>
                 )

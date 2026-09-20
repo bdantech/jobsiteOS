@@ -473,6 +473,45 @@ costuma ser documento de cliente.
 Os anexos sobem **antes** da nota: se um falhar, nada é publicado. Uma nota que diz "segue
 o print" sem o print é pior que a recusa, porque ninguém descobre que faltou até precisar.
 
+### Um desenho só para os três funis (0221)
+
+Reuniões, Vendas e Certificados mostravam a mesma coisa de três jeitos: título em peso
+diferente, badge em tamanho diferente, score ora em barra ora em número solto. Quem
+trabalha nos três no mesmo dia relê o layout a cada troca de tela, e a releitura é o
+custo.
+
+`card-funil.tsx` define a caixa e a régua tipográfica; **o conteúdo continua de cada
+funil** — o shell não sabe o que é uma venda nem o que é um certificado.
+
+A hierarquia responde uma pergunta por vez, nesta ordem:
+
+| posição | pergunta | elemento |
+|---|---|---|
+| título | de quem é isto? | o maior elemento do card |
+| abaixo | quanto vale? | faturamento, menor |
+| direita | vale meu tempo? | bloco de score, isolado e com cor |
+| chips | o que é isso? | só se leem quando os três acima passam |
+| barra | — | repete o score em FORMA: a cor não carrega o veredito sozinha, e o número não se compara de relance entre dois cards |
+| rodapé | de quem é a bola? | dono à esquerda, score por extenso à direita |
+| tira | o fato que decide | limite aprovado, crédito negado, matriz sem certificado |
+
+**A tira é uma só, e há ordem de prioridade.** No Funil de Vendas a negativa de crédito
+vence o limite aprovado: empilhar as duas faria um negócio decidido parecer indeciso.
+
+**A paleta é a da casa, a geometria é a do mock.** O produto tem modo escuro e um
+`#E6F4EC` fixo vira um retângulo branco brilhante no escuro — os blocos de score usam as
+semânticas do tema.
+
+**O bloco de score empresta a forma, não o significado.** Em Certificados o número é
+cobertura, e o rótulo é "coberto", não "Alta": a mesma geometria ensina onde olhar sem
+emprestar o vocabulário de outra medida. E ali a faixa "alta" exige 100% — um cliente com
+9 de 10 CNPJs cobertos ainda tem uma obra que não consegue antecipar.
+
+**Acessibilidade continua sendo um `<button>` esticado**, não um `onClick` no `<div>`:
+entra na ordem de tabulação, responde a Enter e Espaço, e é anunciado por nome. O que for
+interativo dentro do card (trocar dono, abrir a Carteira) sobe com `z-10` e continua
+clicável por cima dele.
+
 ### Quem vê o quê
 
 A aba Comissões usa **duas** réguas, e a distinção não é burocracia:

@@ -529,8 +529,35 @@ export const CONFIG_FUNIL_PADRAO: ConfigFunil = {
 
 export interface ConfigEconomia {
   taxa_mensal_padrao: number
+  /**
+   * Seguro cobrado POR NOTA antecipada. Tarifa nova: aparece em toda operação
+   * desde 15/09/2026 e em nenhuma antes. Fica em config e não no código porque é
+   * preço, e preço muda sem deploy.
+   */
+  seguro_por_nota: number
+  /**
+   * A TAC de quem ainda não tem condição comercial publicada. Mesma régua da
+   * matriz de precificação: `min + (max − min) × min(valor/limiar, 1)` — a nota
+   * pequena paga a proporcional, a grande paga a cheia. Os padrões são os da
+   * matriz semente (0185); o sacado COM condição publicada usa a dele.
+   */
+  tac_min_padrao: number
+  tac_max_padrao: number
+  tac_limiar_padrao: number
+  /** Onde a rampa pousa no mínimo: NF deste valor ou menor paga `tac_min_padrao`. */
+  tac_piso_padrao: number
+  /** NF deste valor ou MENOS não é operável — o custo fixo não cabe nela. */
+  valor_minimo_operavel: number
 }
-export const CONFIG_ECONOMIA_PADRAO: ConfigEconomia = { taxa_mensal_padrao: 1.99 }
+export const CONFIG_ECONOMIA_PADRAO: ConfigEconomia = {
+  taxa_mensal_padrao: 1.99,
+  seguro_por_nota: 125,
+  tac_min_padrao: 150,
+  tac_max_padrao: 300,
+  tac_limiar_padrao: 10_000,
+  tac_piso_padrao: 1_000,
+  valor_minimo_operavel: 500,
+}
 
 export interface ConfigDisparo {
   cooldown_dias_padrao: number

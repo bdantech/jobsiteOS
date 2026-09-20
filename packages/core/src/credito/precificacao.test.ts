@@ -19,12 +19,20 @@ import {
 
 // ─── §4 A TAC proporcional ──────────────────────────────────────────────────
 
-test('a TAC cresce com o valor da nota até o limiar — fee_min NÃO é piso', () => {
+test('a TAC cresce do piso ao limiar — fee_min NÃO é piso de segurança', () => {
   const tac = (v: number) => calcularTac(v, 300, 150, 10_000)
-  // Os três exemplos do 04o §4, na ordem em que ele os escreve.
   assert.equal(tac(10_000), 300)
-  assert.equal(tac(5_000), 225)
-  assert.equal(tac(1_000), 165)
+  // O meio da rampa é o meio entre 1.000 e 10.000, e não o meio entre 0 e 10.000.
+  assert.equal(tac(5_500), 225)
+  assert.equal(tac(1_000), 150)
+})
+
+test('abaixo do piso a TAC pousa na mínima: é o valor que dá nome ao fee_min', () => {
+  // A régua antiga — rampa saindo do zero — nunca chegava aqui: a nota de mil pagava
+  // 165, a de cem pagava 151,50, e o fee_min era o nome de um número que não acontecia.
+  assert.equal(calcularTac(1_000, 300, 150, 10_000), 150)
+  assert.equal(calcularTac(100, 300, 150, 10_000), 150)
+  assert.equal(calcularTac(1, 300, 150, 10_000), 150)
 })
 
 test('acima do limiar a TAC para de crescer: é teto, não rampa infinita', () => {
@@ -36,14 +44,24 @@ test('a leitura errada (fee_min como piso) cobraria 30% da nota de mil reais', (
   // Este teste existe para documentar o erro que ele evita: com fee_min tratado como
   // piso de segurança, a NF de R$ 1.000 pagaria a TAC cheia de R$ 300.
   const correto = calcularTac(1_000, 300, 150, 10_000)
-  assert.equal(correto, 165)
+  assert.equal(correto, 150)
   assert.ok(correto < 300)
 })
 
-test('nota sem valor não gera TAC, e limiar zerado devolve a TAC cheia', () => {
+test('a régua do sacado não é a da matriz: a tarifa real da plataforma manda', () => {
+  // Valores reais de `analises_plataforma`, que a régua padrão 300/150 desmentiria.
+  assert.equal(calcularTac(50_000, 500, 100, 10_000), 500) // KINAROS
+  assert.equal(calcularTac(50_000, 25, 25, 10_000), 25) // CONSTRUPOWER
+  // Régua de fee == fee_min é plana: não há rampa a percorrer.
+  assert.equal(calcularTac(500, 25, 25, 10_000), 25)
+})
+
+test('nota sem valor não gera TAC, e rampa degenerada não inverte o preço', () => {
   assert.equal(calcularTac(0, 300, 150, 10_000), 0)
   assert.equal(calcularTac(-5, 300, 150, 10_000), 0)
-  assert.equal(calcularTac(1_000, 300, 150, 0), 300)
+  // Limiar no piso (ou abaixo) não é rampa, é degrau: acima do piso, TAC cheia.
+  assert.equal(calcularTac(1_000, 300, 150, 0), 150)
+  assert.equal(calcularTac(1_001, 300, 150, 0), 300)
 })
 
 test('o simulador mostra a regressividade: a taxa efetiva do ticket pequeno é a maior', () => {
@@ -65,10 +83,10 @@ test('o simulador mostra a regressividade: a taxa efetiva do ticket pequeno é a
   // Com prazo de 30 dias, a parcela de juros da taxa efetiva É a taxa mensal.
   const mil = linhas[0]!
   assert.equal(mil.juros_d0, 29)
-  assert.equal(mil.tac_d0, 165)
-  assert.equal(mil.custo_total_d0, 194)
-  assert.equal(Math.round(mil.taxa_efetiva_d0 * 100) / 100, 19.4)
-  // 19,4% na nota de mil contra 3,5% na de cinquenta mil: mesma tabela, preços opostos.
+  assert.equal(mil.tac_d0, 150)
+  assert.equal(mil.custo_total_d0, 179)
+  assert.equal(Math.round(mil.taxa_efetiva_d0 * 100) / 100, 17.9)
+  // 17,9% na nota de mil contra 3,5% na de cinquenta mil: mesma tabela, preços opostos.
   const cinquenta = linhas[3]!
   assert.ok(cinquenta.taxa_efetiva_d0 < mil.taxa_efetiva_d0)
   assert.equal(Math.round(cinquenta.taxa_efetiva_d0 * 100) / 100, 3.5)

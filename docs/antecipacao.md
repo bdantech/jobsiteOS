@@ -147,6 +147,119 @@ papel na nota (a cliente era a emitente daquelas quatro) nem `empresas.tipo` (CN
 chama de `fornecedor` quem é conta na prática). Para essas empresas o card só anda **à
 mão**, pelo funil, com autor e histórico. Detalhe em [`comunicacao.md`](comunicacao.md).
 
+## O líquido da NF desconta juros, TAC e seguro (0221)
+
+O card mostra **Líquido estimado** — o que o fornecedor recebe se antecipar hoje. Era
+`valor − receita_esperada`, e `receita_esperada` é só o **juros**. Faltavam a TAC e o
+seguro, e o número saía alto justamente na tela de onde ele vai para a ligação.
+
+```
+valor = juros + tac + seguro + líquido
+```
+
+A invariante antiga (`valor = receita + líquido`) morreu de propósito: a receita da casa
+é juros + TAC, o seguro é repasse, e manter a conta velha exigiria esconder uma das
+parcelas — foi a parcela escondida que produziu o erro.
+
+### A composição saiu das operações reais, não de um combinado
+
+`antecipacoes` guarda o que a plataforma efetivamente pagou:
+
+| evidência | o que diz |
+|---|---|
+| `net = gross − total_spread − 125,00` em 55 operações, `− 0,00` em 1.022 | o seguro existe e é R$ 125 |
+| as 55 são **todas** de 15/09/2026 em diante, sem exceção antes | é tarifa nova; vale daqui para frente |
+| o documento 251 foi antecipado em 5 parcelas e **cada uma** debitou 125 | o seguro é por NOTA, não por lote |
+| regressão do spread × valor (3,0% a.m., 31 dias, 57 ops, r² = 0,995) | parcela fixa de **R$ 226,20** dentro do spread — a TAC |
+
+Ou seja: `total_spread` da plataforma embute juros **e** TAC. Nosso `receita_esperada`
+calculava só o juros, e é por isso que faltavam as duas parcelas.
+
+### De onde vem a TAC de uma nota
+
+Da tarifa do **sacado** — é o risco dele que precifica a nota, mesma lógica da taxa, e o
+produto é o D0 nos dois casos. A ordem das fontes:
+
+| ordem | fonte | cobertura |
+| ----- | ----- | --------- |
+| 1 | `analises_plataforma.fee_d0` / `min_fee_d0` | 245 CNPJs — a tarifa que a plataforma **debita de fato** |
+| 2 | `condicoes_comerciais` publicada | 1 CNPJ — o que o Crédito publicou daqui |
+| 3 | régua padrão da config (`antecipacao_config.economia`) | o resto |
+
+**A ordem não é óbvia e foi corrigida na 0223.** A primeira versão leu só
+`condicoes_comerciais` — a nossa tabela, o registro do que publicamos. Parece a fonte
+certa e é a fonte quase vazia: condição publicada só existe para as empresas **novas**
+que estamos mandando agora. A base inteira, que já operava antes desta tela existir, não
+tem nenhuma — e caiu toda na régua padrão 300/150 como se ninguém tivesse preço próprio.
+A tarifa real dessas empresas chega pelo sync da análise de crédito, e os números lá
+dentro desmentem a régua padrão com folga: KINAROS cobra 500/100, COSAMPA 400/200,
+CONSTRUPOWER 25/25, PLANOVA 150/75. Nenhum desses é 300/150.
+
+Quando as duas existem, vale a da plataforma: **quem cobra é ela**. Uma condição
+recém-publicada que ela ainda não ingeriu fica atrás por uma janela de sync, e é melhor
+errar para o que será cobrado hoje do que para o que passará a valer quando o outro lado
+processar.
+
+A régua é a de `calcularTac` (04o §4), com os **dois** pontos de parada:
+
+```
+tac = tac_min + (tac_max − tac_min) × clamp((valor − piso) ÷ (limiar − piso), 0, 1)
+```
+
+A TAC máxima vale da NF de **R$ 10.000** (limiar) para cima; abaixo disso ela decresce em
+linha reta até a mínima, atingida na nota de **R$ 1.000** (piso) ou menor. Com 300/150:
+nota de 10.000+ paga 300, de 5.500 paga 225, de 1.000 ou menos paga 150.
+
+O **piso também foi correção da 0223**. A conta anterior era `min(valor ÷ limiar, 1)` —
+uma reta saindo do zero —, e com ela o `tac_min` era o nome de um número que nunca
+acontecia: a nota de mil pagava 165, a de cem pagava 151,50, e só uma nota de valor zero
+chegaria aos 150. O mínimo só é mínimo quando a rampa pousa nele.
+
+O **limiar e o piso vêm da matriz que precificou aquela régua** (`matriz_versao`) quando
+a fonte é a condição publicada, e não da matriz de hoje — misturar o fee de uma versão
+com o limiar de outra inventa um terceiro preço que ninguém aprovou. Para a análise da
+plataforma, que não guarda versão, vale a matriz **ativa**.
+
+### O piso de operação: R$ 500
+
+**Nota de R$ 500 ou menos não se opera.** Não é regra de risco — é aritmética: o custo
+fixo (TAC + R$ 125 de seguro) passa do valor da nota. Antes do piso, 19,6% das notas
+vivas do funil (15.098) tinham líquido zero ou negativo, cada uma um card que alguém
+podia abrir e ligar para o fornecedor sem ter o que oferecer.
+
+O corte é pelo **valor**, e não pelo líquido calculado. Cortar por "líquido ≤ 0" seria
+mais justo e é errado: o líquido depende da TAC do sacado e da taxa do dia, então a mesma
+nota entraria e sairia do funil conforme a precificação mudasse, e o fornecedor ouviria
+resposta diferente a cada ligação. *"Abaixo de quinhentos reais não operamos"* é uma
+frase que o vendedor repete ao telefone; *"depende da tarifa vigente do seu sacado"* não
+é.
+
+Os dois critérios não coincidem, nas duas direções — e é de propósito:
+
+| nota | líquido | opera? | por quê |
+| ---- | ------- | ------ | ------- |
+| R$ 480, TAC 150 | R$ 203 (positivo) | **não** | abaixo do piso |
+| R$ 600, TAC 500 | R$ 0 | **sim** | acima do piso; quem decide caso a caso é a mesa |
+
+O piso entra por `operavel` (0224), o mesmo mecanismo da natureza da operação (0104), e a
+natureza vem primeiro no motivo: uma remessa não gera crédito em valor nenhum, e dizer
+"abaixo de R$ 500" sobre ela explicaria a coisa errada. **`operavel_manual` continua por
+cima** — a view lê `coalesce(operavel_manual, operavel)`, então uma nota pequena
+recuperada à mão volta ao funil. O piso é o padrão, não uma tranca.
+
+Configurável em `antecipacao_config.economia.valor_minimo_operavel`. Inclusivo: R$ 500,00
+exatos não opera.
+
+### Gravado, não calculado na leitura
+
+`tac_estimada` e `seguro_estimado` ficam em `notas_fiscais` pela mesma razão que
+`taxa_usada` existe: a estimativa de ontem tem de continuar auditável depois que a
+precificação mudar. Uma view que recalcula reescreve o passado toda vez que alguém edita
+a matriz. O worker grava no sync; a view só soma.
+
+**O líquido negativo vira zero.** Nota de R$ 200 com R$ 275 de tarifa não sobra nada — e
+um número negativo na tela seria lido como bug, não como "essa nota não se antecipa".
+
 ## A régua gera; quem aprova é gente
 
 Ligar um canal em `/comunicacao/disparos` **não liga envio**. Liga a *geração* da fila:

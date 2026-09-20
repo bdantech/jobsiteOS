@@ -1,4 +1,5 @@
 import { normalizeCnpj } from '../schemas/cnpj.js'
+import { abaixoDoMinimoOperavel, motivoValorAbaixoDoMinimo } from './economia.js'
 import { avaliarNatureza, motivoNaoOperavel } from './natureza-operacao.js'
 import { parseNfeXml, vencimentoDasParcelas, type ParcelaXml } from './nfe-xml.js'
 import { vencimentoDeTextoLivre } from './vencimento-texto.js'
@@ -172,6 +173,7 @@ export type ResultadoNormalizacao =
 export function normalizarNfPayload(
   item: NfPayload,
   hoje: Date = new Date(),
+  valorMinimoOperavel?: number,
 ): ResultadoNormalizacao {
   const parsed = parseNfeXml(item.rawXml ?? item.xml)
 
@@ -221,6 +223,10 @@ export function normalizarNfPayload(
   }
 
   const natureza = avaliarNatureza(parsed.natureza_operacao)
+  // Duas razões independentes para a nota não ser operável. A natureza vem primeiro
+  // porque é a mais fundamental: uma remessa não gera crédito em valor NENHUM, e
+  // dizer "abaixo de R$ 500" sobre ela explicaria a coisa errada.
+  const abaixoDoMinimo = abaixoDoMinimoOperavel(valor, valorMinimoOperavel)
 
   return {
     ok: true,
@@ -236,8 +242,10 @@ export function normalizarNfPayload(
       vencimento,
       vencimento_origem: vencimentoOrigem,
       natureza_operacao: parsed.natureza_operacao,
-      operavel: natureza.operavel,
-      nao_operavel_motivo: motivoNaoOperavel(natureza.termo),
+      operavel: natureza.operavel && !abaixoDoMinimo,
+      nao_operavel_motivo:
+        motivoNaoOperavel(natureza.termo) ??
+        (abaixoDoMinimo ? motivoValorAbaixoDoMinimo(valorMinimoOperavel) : null),
       parcelas: parsed.parcelas,
       status_sync: texto(item.status),
       // `syncedAt` é o carimbo do LADO DE LÁ. Preferi-lo a now() é o que torna

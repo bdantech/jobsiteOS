@@ -28,6 +28,8 @@ import {
   type ModoSync,
 } from '../../../../../packages/core/src/antecipacao/sync-plano.js'
 import { lerConfigEconomia, lerConfigSync } from '../../antecipacao/config.js'
+import type { ConfigEconomia } from '../../../../../packages/core/src/antecipacao/schemas.js'
+import { calcularTac } from '../../../../../packages/core/src/credito/precificacao.js'
 import { materializarContato, somarContatos } from './contatos-nf.js'
 
 /**
@@ -203,7 +205,7 @@ export async function sincronizarNotasFiscais(
       acc.paginas++
 
       for (const item of itens) {
-        const r = await processarNota(item, cfgEconomia.taxa_mensal_padrao)
+        const r = await processarNota(item, cfgEconomia)
         acc.notas++
         if (r.ignorada) acc.ignoradas++
         if (r.nova) acc.novas++
@@ -258,10 +260,10 @@ const NADA: ResultadoNota = {
   falhaParse: false,
 }
 
-async function processarNota(item: NfPayload, taxaPadrao: number): Promise<ResultadoNota> {
+async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<ResultadoNota> {
   // Toda a leitura do payload (e do XML) acontece no core, testada contra o
   // payload real. Aqui só sobra o que precisa do banco.
-  const r = normalizarNfPayload(item)
+  const r = normalizarNfPayload(item, undefined, cfg.valor_minimo_operavel)
   if (!r.ok) {
     logger.warn({ id: r.id, motivo: r.motivo }, 'NF descartada no sync.')
     return NADA
@@ -277,8 +279,12 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     valor: nota.valor,
     diasParaVencimento: dias,
     taxaMensal: nota.credito?.monthlyRateD0 ?? (await taxaDoUltimoSnapshot(sacadoCnpj)),
-    taxaPadrao,
+    taxaPadrao: cfg.taxa_mensal_padrao,
   })
+
+  // A TAC e o seguro entram no líquido desde a 0221. São PREÇO, não tempo: não
+  // andam com o prazo como o deságio anda, e por isso são gravados uma vez.
+  const tac = calcularTac(nota.valor ?? 0, ...(await tacDoSacado(sacadoCnpj, cfg)))
 
   const [fornecedor, sacado] = await Promise.all([
     resolverEmpresa(fornecedorCnpj, item.supplier ?? null),
@@ -317,6 +323,8 @@ async function processarNota(item: NfPayload, taxaPadrao: number): Promise<Resul
     contato_fornecedor: nota.contato_fornecedor as never,
     receita_esperada: receita,
     taxa_usada: taxa,
+    tac_estimada: tac,
+    seguro_estimado: cfg.seguro_por_nota,
     dias_para_vencimento: dias,
     credit_status: nota.credito?.status ?? null,
     credit_role: nota.credito?.role ?? null,
@@ -398,6 +406,122 @@ async function taxaDoUltimoSnapshot(cnpj: string): Promise<number | null> {
     .limit(1)
     .maybeSingle()
   return data?.monthly_rate_d0 ?? null
+}
+
+/**
+ * A régua da TAC deste sacado: `[max, min, limiar, piso]`, na ordem de `calcularTac`.
+ *
+ * ── DO SACADO, COMO A TAXA ──────────────────────────────────────────────────
+ * É o risco dele que precifica a nota, então é a tarifa DELE que diz quanto custa a
+ * operação. Sem tarifa conhecida, a régua padrão da config — que nasce com os números
+ * da matriz semente.
+ *
+ * ── A ANÁLISE DA PLATAFORMA VEM ANTES DA CONDIÇÃO PUBLICADA ─────────────────
+ * A tentação é ler `condicoes_comerciais`: é a nossa tabela, é o que o Crédito
+ * publicou. Mas publicada só existe para as empresas NOVAS que estamos mandando
+ * agora — a base inteira, que já operava antes desta tela existir, não tem nenhuma.
+ * A tarifa real dessas empresas chega pelo sync da análise de crédito
+ * (`analises_plataforma.fee_d0` / `min_fee_d0`), e é ela que a plataforma vai
+ * debitar de fato: 245 CNPJs contra 1. Estimar o líquido com a régua padrão quando
+ * existe a tarifa verdadeira é errar por preguiça de procurar na tabela certa.
+ *
+ * A ordem também resolve o desempate: quando as duas existem, vale a da plataforma,
+ * porque quem cobra é ela. Uma condição recém-publicada que ela ainda não ingeriu
+ * fica atrás por uma janela de sync — e é melhor errar para o que SERÁ cobrado hoje
+ * do que para o que passará a valer quando o outro lado processar.
+ *
+ * ── O LIMIAR E O PISO VÊM DA MATRIZ QUE PRECIFICOU AQUELA RÉGUA ─────────────
+ * Para a condição publicada, a matriz é a `matriz_versao` que ela guarda, e não a de
+ * hoje: a proporcionalidade faz parte da mesma tabela de preços que gerou o fee, e
+ * misturar o fee de uma versão com o limiar de outra inventa um terceiro preço que
+ * ninguém aprovou. Para a análise da plataforma, que não guarda versão, vale a matriz
+ * ATIVA — é o que sabemos hoje sobre o formato da rampa.
+ *
+ * ── CACHE POR CNPJ ──────────────────────────────────────────────────────────
+ * Um sync varre milhares de notas e um punhado de sacados se repete em quase
+ * todas. Sem o cache seriam duas consultas por nota para ler um número que não
+ * muda no meio da execução.
+ */
+type ReguaTac = [max: number, min: number, limiar: number, piso: number]
+
+const cacheTac = new Map<string, ReguaTac>()
+const cacheMatriz = new Map<number | 'ativa', [number, number]>()
+
+/** `[limiar, piso]` da versão pedida; `'ativa'` lê a matriz em vigor. */
+async function rampaDaMatriz(
+  versao: number | 'ativa',
+  cfg: ConfigEconomia,
+): Promise<[number, number]> {
+  const guardado = cacheMatriz.get(versao)
+  if (guardado) return guardado
+
+  const consulta = supabaseAdmin.from('precificacao_matriz').select('definicao')
+  const { data } =
+    versao === 'ativa'
+      ? await consulta.eq('ativa', true).limit(1).maybeSingle()
+      : await consulta.eq('versao', versao).maybeSingle()
+
+  const def = data?.definicao as {
+    faixas?: { limiar_proporcionalidade_tac?: number; piso_proporcionalidade_tac?: number }
+  } | null
+
+  const bruto = (valor: unknown, padrao: number): number => {
+    const n = Number(valor ?? padrao)
+    return Number.isFinite(n) && n > 0 ? n : padrao
+  }
+  const rampa: [number, number] = [
+    bruto(def?.faixas?.limiar_proporcionalidade_tac, cfg.tac_limiar_padrao),
+    bruto(def?.faixas?.piso_proporcionalidade_tac, cfg.tac_piso_padrao),
+  ]
+
+  cacheMatriz.set(versao, rampa)
+  return rampa
+}
+
+async function tacDoSacado(cnpj: string, cfg: ConfigEconomia): Promise<ReguaTac> {
+  const guardado = cacheTac.get(cnpj)
+  if (guardado) return guardado
+
+  // D0, e não D1, porque é a `monthlyRateD0` que precifica o juros desta nota —
+  // as duas parcelas têm de falar do mesmo produto.
+  const daPlataforma = await supabaseAdmin
+    .from('analises_plataforma')
+    .select('fee_d0, min_fee_d0')
+    .eq('cnpj', cnpj)
+    .not('fee_d0', 'is', null)
+    .order('sincronizada_em', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  let regua: ReguaTac | null = null
+
+  const feeP = Number(daPlataforma.data?.fee_d0 ?? Number.NaN)
+  const feeMinP = Number(daPlataforma.data?.min_fee_d0 ?? Number.NaN)
+  if (Number.isFinite(feeP) && Number.isFinite(feeMinP)) {
+    regua = [feeP, feeMinP, ...(await rampaDaMatriz('ativa', cfg))]
+  }
+
+  if (!regua) {
+    const { data } = await supabaseAdmin
+      .from('condicoes_comerciais')
+      .select('fee_d0, fee_min_d0, matriz_versao')
+      .eq('cnpj', cnpj)
+      .eq('status', 'publicada')
+      .order('publicada_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const fee = Number(data?.fee_d0 ?? Number.NaN)
+    const feeMin = Number(data?.fee_min_d0 ?? Number.NaN)
+    if (Number.isFinite(fee) && Number.isFinite(feeMin)) {
+      regua = [fee, feeMin, ...(await rampaDaMatriz(Number(data?.matriz_versao ?? 0), cfg))]
+    }
+  }
+
+  regua ??= [cfg.tac_max_padrao, cfg.tac_min_padrao, cfg.tac_limiar_padrao, cfg.tac_piso_padrao]
+
+  cacheTac.set(cnpj, regua)
+  return regua
 }
 
 // ─── Itens ──────────────────────────────────────────────────────────────────

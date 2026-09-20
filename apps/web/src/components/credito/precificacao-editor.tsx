@@ -118,6 +118,8 @@ function resumir(linhas: LinhaAmostra[], matriz: MatrizPrecificacao): Resumo {
       },
       matriz.faixas.limiar_proporcionalidade_tac,
       [1_000],
+      30,
+      matriz.faixas.piso_proporcionalidade_tac,
     )
     efetiva += mil?.taxa_efetiva_d0 ?? 0
   }
@@ -237,6 +239,12 @@ export function PrecificacaoEditor() {
               label="TAC mínima, % da TAC cheia"
               valor={m.faixas.tac.fee_min_d0_pct_do_fee}
               onChange={(n) => set((d) => { d.faixas.tac.fee_min_d0_pct_do_fee = n })}
+            />
+            <Numero
+              label="Piso da TAC proporcional"
+              sufixo="R$"
+              valor={m.faixas.piso_proporcionalidade_tac}
+              onChange={(n) => set((d) => { d.faixas.piso_proporcionalidade_tac = n })}
             />
             <Numero
               label="Limiar da TAC proporcional"

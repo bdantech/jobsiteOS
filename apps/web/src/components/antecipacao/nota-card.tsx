@@ -85,7 +85,12 @@ export function NotaCard({
   const [contatoEscolhido, setContatoEscolhido] = React.useState<string | null>(null)
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
-  const liquido = valorLiquidoEstimado(nota.valor, nota.receita_esperada)
+  const liquido = valorLiquidoEstimado({
+    valor: nota.valor,
+    receitaEsperada: nota.receita_esperada,
+    tac: nota.tac_estimada,
+    seguro: nota.seguro_estimado,
+  })
   const nomeFornecedor = nota.fornecedor_nome ?? nota.fornecedor_cnpj ?? '—'
   const nomeSacado = nota.sacado_nome ?? nota.sacado_cnpj ?? '—'
   /*

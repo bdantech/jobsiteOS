@@ -504,7 +504,11 @@ export function CondicoesComerciais({ analiseId }: { analiseId: string }) {
           </CardContent>
         </Card>
 
-        <SimuladorTac condicoes={form} limiar={f.limiar_proporcionalidade_tac} />
+        <SimuladorTac
+          condicoes={form}
+          limiar={f.limiar_proporcionalidade_tac}
+          piso={f.piso_proporcionalidade_tac}
+        />
 
         <Card>
           <CardHeader className="pb-3">

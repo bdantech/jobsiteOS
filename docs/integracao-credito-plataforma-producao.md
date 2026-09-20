@@ -681,21 +681,28 @@ e que valem a pena vocês repetirem no Zod de vocês:
 Este é o ponto do documento que mais custa caro se for lido errado.
 
 `feeMin` **não** é "o mínimo que se cobra". É a **TAC efetiva das notas pequenas**.
-A tarifa cresce proporcionalmente ao valor da nota até um limiar (hoje **R$
-10.000**), onde atinge `fee` e para:
+A rampa tem **dois** pontos de parada: abaixo do **piso** (hoje **R$ 1.000**) a nota
+paga o `feeMin` cheio; acima do **limiar** (hoje **R$ 10.000**) paga o `fee` cheio;
+entre os dois ela cresce em linha reta.
 
 ```
-TAC = feeMin + (fee − feeMin) × min(valor_da_nota / 10000, 1)
+TAC = feeMin + (fee − feeMin) × clamp((valor_da_nota − 1000) / (10000 − 1000), 0, 1)
 ```
 
 Com `feeD0 = 300` e `feeMinD0 = 150`:
 
 | Valor da nota | TAC cobrada | Conta |
 | ------------- | ----------- | ----- |
-| R$ 1.000 | **R$ 165,00** | 150 + 150 × 0,10 |
-| R$ 5.000 | **R$ 225,00** | 150 + 150 × 0,50 |
+| R$ 500 | **R$ 150,00** | abaixo do piso: a mínima cheia |
+| R$ 1.000 | **R$ 150,00** | 150 + 150 × 0,00 (pousou no piso) |
+| R$ 5.500 | **R$ 225,00** | 150 + 150 × 0,50 (meio da rampa) |
 | R$ 10.000 | **R$ 300,00** | 150 + 150 × 1,00 (atingiu o limiar) |
 | R$ 50.000 | **R$ 300,00** | trava no limiar, não cresce mais |
+
+> **Correção de 20/09/2026.** A versão anterior deste parágrafo fazia a rampa sair do
+> **zero** (`min(valor / 10000, 1)`), o que dava R$ 165 na nota de mil reais e fazia o
+> `feeMin` ser um valor que nunca acontecia — só uma nota de valor zero chegaria nele.
+> A régua correta é a acima: **o mínimo é atingido na nota de R$ 1.000 ou menor**.
 
 Lido como piso, uma nota de R$ 1.000 pagaria R$ 300 — **30% do valor dela em
 tarifa**, quase o dobro do correto. É a diferença entre uma tabela cara e uma
@@ -888,9 +895,11 @@ Percorram na ordem. Cada item tem um critério objetivo.
       `subjectName`, e nunca os dois. Testem os dois cenários: um sacado já
       cadastrado na plataforma e um que nunca operou.
 - [ ] **18. TAC proporcional** — com `feeD0 = 300` e `feeMinD0 = 150`, o seu
-      cálculo de tarifa precisa dar **R$ 165** numa nota de R$ 1.000 e **R$ 300**
-      numa de R$ 10.000. Se der R$ 300 nas duas, vocês implementaram `feeMin` como
-      piso — releiam o §8.5.
+      cálculo de tarifa precisa dar **R$ 150** numa nota de R$ 1.000, **R$ 225**
+      numa de R$ 5.500 e **R$ 300** numa de R$ 10.000. Se der R$ 300 nas três,
+      vocês implementaram `feeMin` como piso de segurança; se der R$ 165 na de mil,
+      vocês estão com a rampa saindo do zero, que é a versão antiga do §8.5 —
+      releiam a correção de 20/09/2026.
 - [ ] **19. Republicação** — peçam uma segunda publicação na mesma análise. Vocês
       recebem um novo `credito.condicoes_definidas`, com `definidas_em` mais
       recente. Confirmem que o seu lado ATUALIZA a análise, em vez de criar uma

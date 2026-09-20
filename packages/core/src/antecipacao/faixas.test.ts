@@ -8,10 +8,13 @@ import {
   descreverFaixa,
 } from './faixas.ts'
 import {
+  abaixoDoMinimoOperavel,
   calcularReceitaEsperada,
   calcularTipagem,
+  motivoValorAbaixoDoMinimo,
   renderizarTemplate,
   urgenciaDe,
+  custosDaAntecipacao,
   valorLiquidoEstimado,
 } from './economia.ts'
 
@@ -208,21 +211,88 @@ test('template: chave desconhecida fica visível em vez de sumir', () => {
   assert.equal(texto, 'Olá ACME, 3 notas. {inexistente}')
 })
 
-test('o líquido é o valor menos o deságio, e fecha com a receita', () => {
-  assert.equal(valorLiquidoEstimado(100_000, 1_990), 98_010)
-  // A propriedade que justifica derivar em vez de recalcular.
+test('o líquido desconta juros, TAC e seguro — e as quatro parcelas fecham o valor', () => {
+  assert.equal(valorLiquidoEstimado({ valor: 100_000, receitaEsperada: 1_990, tac: 300, seguro: 125 }), 97_585)
+
+  // A invariante nova: valor = juros + tac + seguro + líquido.
   const valor = 43_210.55
   const receita = calcularReceitaEsperada({ valor, diasParaVencimento: 47, taxaMensal: 2.3 }).receita!
-  assert.equal(Math.round((receita + valorLiquidoEstimado(valor, receita)!) * 100) / 100, valor)
+  const c = custosDaAntecipacao({ receitaEsperada: receita, tac: 226.2, seguro: 125 })!
+  const liquido = valorLiquidoEstimado({ valor, receitaEsperada: receita, tac: 226.2, seguro: 125 })!
+  assert.equal(Math.round((c.juros + c.tac + c.seguro + liquido) * 100) / 100, valor)
 })
 
-test('nota vencida não tem deságio, então o líquido é o valor cheio', () => {
+test('o caso real da plataforma: net = bruto − spread − 125', () => {
+  // Documento 759, 31 dias, 3,0% a.m. O spread da plataforma embute juros E TAC,
+  // então aqui ele entra inteiro como `receitaEsperada` e a TAC vai a zero.
+  const liquido = valorLiquidoEstimado({
+    valor: 83_495.89,
+    receitaEsperada: 2_824.52,
+    tac: 0,
+    seguro: 125,
+  })
+  assert.equal(liquido, 80_546.37)
+})
+
+test('nota vencida não tem deságio, mas AINDA tem tarifa', () => {
   const { receita } = calcularReceitaEsperada({ valor: 5_000, diasParaVencimento: -3 })
   assert.equal(receita, 0)
-  assert.equal(valorLiquidoEstimado(5_000, receita), 5_000)
+  // O deságio zera com o prazo; a TAC e o seguro não são tempo, são preço.
+  assert.equal(valorLiquidoEstimado({ valor: 5_000, receitaEsperada: receita, tac: 225, seguro: 125 }), 4_650)
+})
+
+test('tarifa maior que a nota não devolve negativo — devolve zero', () => {
+  // Nota de R$ 200 com R$ 275 de tarifa. Um negativo na tela seria lido como bug;
+  // o zero é a verdade: não sobra nada, e essa nota não se antecipa.
+  assert.equal(valorLiquidoEstimado({ valor: 200, receitaEsperada: 5, tac: 150, seguro: 125 }), 0)
+})
+
+test('as parcelas ausentes valem zero, mas o juros ausente ainda anula a conta', () => {
+  // TAC desconhecida é 0 — é o pior caso para NÓS (líquido maior), e some quando
+  // o sync grava a estimativa. Juros desconhecido é `null`: sem ele não há conta.
+  assert.equal(valorLiquidoEstimado({ valor: 1_000, receitaEsperada: 10 }), 990)
+  assert.equal(valorLiquidoEstimado({ valor: 1_000, receitaEsperada: null, tac: 150 }), null)
 })
 
 test('sem receita não há líquido — um traço é melhor que o valor cheio', () => {
-  assert.equal(valorLiquidoEstimado(1_000, null), null)
-  assert.equal(valorLiquidoEstimado(null, 10), null)
+  assert.equal(valorLiquidoEstimado({ valor: 1_000, receitaEsperada: null }), null)
+  assert.equal(valorLiquidoEstimado({ valor: null, receitaEsperada: 10 }), null)
+})
+
+// ─── O piso de operação ─────────────────────────────────────────────────────
+
+test('NF de R$ 500 ou menos não é operável — o limite é inclusivo', () => {
+  assert.equal(abaixoDoMinimoOperavel(500), true)
+  assert.equal(abaixoDoMinimoOperavel(499.99), true)
+  assert.equal(abaixoDoMinimoOperavel(48), true)
+  assert.equal(abaixoDoMinimoOperavel(500.01), false)
+  assert.equal(abaixoDoMinimoOperavel(30_000), false)
+})
+
+test('valor ausente não esconde a nota: só a presença de um motivo desqualifica', () => {
+  // Mesma regra da natureza vazia — ausência de informação não é motivo.
+  assert.equal(abaixoDoMinimoOperavel(null), false)
+  assert.equal(abaixoDoMinimoOperavel(undefined), false)
+  assert.equal(abaixoDoMinimoOperavel(Number.NaN), false)
+})
+
+test('o piso é configurável, e o corte acompanha', () => {
+  assert.equal(abaixoDoMinimoOperavel(800, 1_000), true)
+  assert.equal(abaixoDoMinimoOperavel(800, 500), false)
+})
+
+test('o motivo é frase de tela, no formato do motivo de natureza', () => {
+  assert.match(motivoValorAbaixoDoMinimo(500), /^Abaixo de R\$\s?500,00 — /)
+})
+
+test('o corte é pelo VALOR, não pelo líquido — e os dois NÃO coincidem', () => {
+  // Uma NF de R$ 480 com uma TAC barata ainda dá líquido POSITIVO (R$ 203), e mesmo
+  // assim não se opera: o piso é uma regra de negócio, não o resultado da conta.
+  assert.equal(valorLiquidoEstimado({ valor: 480, receitaEsperada: 2, tac: 150, seguro: 125 }), 203)
+  assert.equal(abaixoDoMinimoOperavel(480), true)
+
+  // E o inverso também acontece: nota acima do piso pode ter líquido zero se a TAC
+  // do sacado for cara. Essa segue operável — quem decide é a mesa, não o funil.
+  assert.equal(valorLiquidoEstimado({ valor: 600, receitaEsperada: 5, tac: 500, seguro: 125 }), 0)
+  assert.equal(abaixoDoMinimoOperavel(600), false)
 })

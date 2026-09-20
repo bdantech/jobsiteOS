@@ -74,13 +74,94 @@ export function calcularReceitaEsperada(input: {
  * Sem receita não há líquido: `null` é "não sei", e um card que mostra o valor
  * cheio como se fosse líquido é pior que um traço.
  */
-export function valorLiquidoEstimado(
-  valor: number | null | undefined,
-  receitaEsperada: number | null | undefined,
-): number | null {
+export interface CustosDaAntecipacao {
+  /** O deságio do período. É a `receita_esperada` gravada na nota. */
+  juros: number
+  /** Tarifa de análise/cadastro. Proporcional ao valor até o limiar da matriz. */
+  tac: number
+  /** Seguro da operação — fixo POR NOTA. */
+  seguro: number
+  /** O que sai do valor de face antes de o dinheiro cair na conta. */
+  total: number
+}
+
+/**
+ * Tudo que é descontado de uma NF antecipada.
+ *
+ * ── O QUE FALTAVA, E COMO SE DESCOBRIU ──────────────────────────────────────
+ * O líquido era `valor − receita_esperada`, e `receita_esperada` é só o JUROS.
+ * Faltavam a TAC e o seguro — o número na tela era maior que o que o fornecedor
+ * recebe, que é o erro mais caro possível num número dito em voz alta na ligação.
+ *
+ * As antecipações reais da plataforma provam a composição:
+ *
+ *   net_value = gross_value − total_spread − 125,00
+ *
+ * e `total_spread` embute juros E TAC. Numa amostra homogênea (3,0% a.m., 31
+ * dias, 57 operações, r² = 0,995) a regressão do spread contra o valor devolve
+ * uma parcela FIXA de R$ 226,20 — a TAC, dentro da faixa 150–300 da matriz. Os
+ * R$ 125 aparecem como linha separada em toda operação desde 15/09/2026 e em
+ * nenhuma antes: é tarifa nova, e vale daqui para frente.
+ *
+ * ── O SEGURO É POR NOTA, NÃO POR OPERAÇÃO ───────────────────────────────────
+ * O documento 251 foi antecipado em cinco parcelas (251/1 a 251/5) e cada uma
+ * debitou os seus R$ 125. A palavra "operação" na tarifa é a linha de
+ * antecipação, e cada linha é uma nota.
+ *
+ * ── A INVARIANTE MUDOU, E ISSO É DELIBERADO ─────────────────────────────────
+ * Antes valia `valor = receita + líquido`. Agora vale
+ * `valor = juros + tac + seguro + líquido`. A receita da casa é juros + TAC; o
+ * seguro é repasse. Manter a invariante velha exigiria esconder uma das parcelas,
+ * e é justamente a parcela escondida que produziu o número errado.
+ */
+export function custosDaAntecipacao(input: {
+  receitaEsperada: number | null | undefined
+  tac: number | null | undefined
+  seguro: number | null | undefined
+}): CustosDaAntecipacao | null {
+  const juros = input.receitaEsperada
+  // Sem juros não há conta: `null` é "não sei", e um líquido que ignora a parcela
+  // desconhecida mente com a confiança de quem mostra um número exato.
+  if (typeof juros !== 'number' || !Number.isFinite(juros)) return null
+
+  const tac = typeof input.tac === 'number' && Number.isFinite(input.tac) ? input.tac : 0
+  const seguro =
+    typeof input.seguro === 'number' && Number.isFinite(input.seguro) ? input.seguro : 0
+  const cem = (n: number) => Math.round(n * 100) / 100
+
+  return { juros: cem(juros), tac: cem(tac), seguro: cem(seguro), total: cem(juros + tac + seguro) }
+}
+
+/**
+ * O que o FORNECEDOR recebe se antecipar hoje: `valor − juros − tac − seguro`.
+ *
+ * É o número que o comercial fala em voz alta na ligação, e por isso ele desce
+ * de propósito: errar para baixo é uma boa surpresa; errar para cima é uma
+ * promessa que a plataforma não cumpre.
+ *
+ * ── ELE ANDA SOZINHO, TODO DIA ─────────────────────────────────────────────
+ * `dias_para_vencimento` é calculado ao vivo na view e a `receita_esperada` é
+ * regravada pela reclassificação encadeada ao sync diário. Um dia a menos de
+ * prazo é um deságio menor e um líquido maior, sem ninguém tocar em nada. A TAC
+ * e o seguro não andam: são tarifa, não tempo.
+ */
+export function valorLiquidoEstimado(input: {
+  valor: number | null | undefined
+  receitaEsperada: number | null | undefined
+  tac?: number | null
+  seguro?: number | null
+}): number | null {
+  const { valor } = input
   if (typeof valor !== 'number' || !Number.isFinite(valor)) return null
-  if (typeof receitaEsperada !== 'number' || !Number.isFinite(receitaEsperada)) return null
-  return Math.round((valor - receitaEsperada) * 100) / 100
+  const custos = custosDaAntecipacao({
+    receitaEsperada: input.receitaEsperada,
+    tac: input.tac,
+    seguro: input.seguro,
+  })
+  if (!custos) return null
+  // Nota pequena com tarifa alta pode dar negativo, e o zero é a verdade: não
+  // sobra nada. Um número negativo na tela seria lido como erro de sistema.
+  return Math.max(0, Math.round((valor - custos.total) * 100) / 100)
 }
 
 /**
@@ -90,6 +171,42 @@ export function valorLiquidoEstimado(
  *   ativacao    → cadastrado e nunca usou (o problema é ativação, não venda);
  *   recorrencia → já antecipou e deixou uma nota de fora.
  */
+/**
+ * O PISO DE OPERAÇÃO: nota de R$ 500 ou menos não se opera.
+ *
+ * Não é regra de risco nem de crédito — é aritmética. O custo fixo de uma operação
+ * é a TAC mais o seguro de R$ 125, e numa nota pequena ele passa do valor da nota:
+ * uma NF de R$ 48 com R$ 150 de TAC devolveria líquido NEGATIVO. Antes deste piso,
+ * 19,6% das notas vivas do funil tinham líquido zero ou negativo — cada uma delas
+ * um card que alguém podia abrir, ligar para o fornecedor e descobrir na conversa
+ * que não havia o que oferecer.
+ *
+ * O corte fica no VALOR da nota, e não no líquido calculado, de propósito: o líquido
+ * depende da TAC do sacado e da taxa do dia, então a mesma nota entraria e sairia do
+ * funil conforme a precificação mudasse. "Abaixo de quinhentos reais não operamos" é
+ * uma frase que o vendedor consegue repetir ao telefone; "abaixo de quinhentos reais
+ * depende da tarifa vigente do seu sacado" não é.
+ *
+ * Inclusivo no limite: R$ 500,00 exatos NÃO opera.
+ */
+export const VALOR_MINIMO_OPERAVEL_PADRAO = 500
+
+export function abaixoDoMinimoOperavel(
+  valor: number | null | undefined,
+  minimo: number = VALOR_MINIMO_OPERAVEL_PADRAO,
+): boolean {
+  // Valor ausente não é motivo para esconder a nota — mesma regra da natureza vazia.
+  if (typeof valor !== 'number' || !Number.isFinite(valor)) return false
+  return valor <= minimo
+}
+
+/** Frase pronta para a interface, no mesmo formato de `motivoNaoOperavel`. */
+export function motivoValorAbaixoDoMinimo(
+  minimo: number = VALOR_MINIMO_OPERAVEL_PADRAO,
+): string {
+  return `Abaixo de ${formatarMoeda(minimo)} — o custo fixo da operação não cabe na nota.`
+}
+
 export function calcularTipagem(input: {
   cadastrado: boolean | null | undefined
   jaAntecipou: boolean | null | undefined

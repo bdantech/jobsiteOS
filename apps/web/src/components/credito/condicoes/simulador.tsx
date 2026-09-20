@@ -1,7 +1,11 @@
 'use client'
 
 import * as React from 'react'
-import { simularTac, type CondicoesFormulario } from '@jobsiteos/core'
+import {
+  PISO_PROPORCIONALIDADE_TAC_PADRAO,
+  simularTac,
+  type CondicoesFormulario,
+} from '@jobsiteos/core'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { brl } from '../analise-propria/resultado'
 
@@ -29,10 +33,12 @@ const pct = (n: number): string => `${n.toLocaleString('pt-BR', { maximumFractio
 export function SimuladorTac({
   condicoes,
   limiar,
+  piso = PISO_PROPORCIONALIDADE_TAC_PADRAO,
   prazoDias = 30,
 }: {
   condicoes: CondicoesFormulario
   limiar: number
+  piso?: number
   prazoDias?: number
 }) {
   const linhas = React.useMemo(
@@ -49,8 +55,9 @@ export function SimuladorTac({
         limiar,
         undefined,
         prazoDias,
+        piso,
       ),
-    [condicoes, limiar, prazoDias],
+    [condicoes, limiar, piso, prazoDias],
   )
 
   return (
@@ -58,9 +65,10 @@ export function SimuladorTac({
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Simulador</CardTitle>
         <CardDescription>
-          A TAC cresce com o valor da nota até <strong>{brl(limiar)}</strong> e para lá.{' '}
-          <strong>A TAC mínima não é piso de segurança</strong> — é o que a nota pequena paga. A
-          taxa efetiva é (juros + TAC) ÷ valor, para {prazoDias} dias.
+          A TAC é a mínima até <strong>{brl(piso)}</strong>, cresce em linha reta daí até{' '}
+          <strong>{brl(limiar)}</strong>, e para lá. <strong>A TAC mínima não é piso de
+          segurança</strong> — é o que a nota pequena paga. A taxa efetiva é (juros + TAC) ÷ valor,
+          para {prazoDias} dias.
         </CardDescription>
       </CardHeader>
       <CardContent>

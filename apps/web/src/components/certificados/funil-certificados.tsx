@@ -39,6 +39,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AbaNotas } from '@/components/comercial/aba-notas'
+import {
+  CabecalhoDaColuna,
+  CardDoFunil,
+  ChipDoCard,
+  ColunaVazia,
+  TiraDoCard,
+} from '@/components/comercial/card-funil'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import { AbaMensagens, ModalDoCard } from '@/components/comercial/modal-card'
@@ -182,7 +189,21 @@ function ListaCnpjs({ cnpjs }: { cnpjs: CnpjDoCard[] }) {
  * (é a que decide se dá para ganhar), agora do tamanho de um selo; a frase inteira
  * mora no modal, onde é lida uma vez e importa.
  */
-function CardDoFunil({
+/**
+ * A faixa de cobertura, pelo mesmo vocabulário de cor dos outros funis.
+ *
+ * Os cortes não são os do score de crédito: aqui 100% é o único estado bom de
+ * verdade — um cliente com 9 de 10 CNPJs cobertos ainda tem uma obra que não
+ * consegue antecipar. Por isso "alta" exige o pleno, e não 80%.
+ */
+function faixaDaCobertura(pct: number, total: number): string {
+  if (total === 0) return 'dados_insuficientes'
+  if (pct >= 100) return 'alta'
+  if (pct >= 50) return 'media'
+  return 'improvavel'
+}
+
+function CardDoCertificado({
   c,
   onAbrir,
   mostrarDono,
@@ -191,35 +212,64 @@ function CardDoFunil({
   onAbrir: () => void
   mostrarDono: boolean
 }) {
+  const pct = pctCobertura(c.cobertos, c.total) ?? 0
   return (
-    <div className="w-full space-y-2 rounded-md border p-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent/40">
-      <button type="button" onClick={onAbrir} className="w-full space-y-2 text-left">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 space-y-0.5">
-          <p className="line-clamp-2 font-medium">{c.nome}</p>
-          <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{formatCnpj(c.cnpj)}</p>
-        </div>
-        {c.matriz_coberta ? (
-          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Matriz em dia" />
+    <CardDoFunil
+      rotuloAbrir={`Abrir ${c.nome}`}
+      onAbrir={onAbrir}
+      titulo={c.nome}
+      valor={<span className="font-mono text-[11.5px]">{formatCnpj(c.cnpj)}</span>}
+      /*
+       * O bloco da direita mostra COBERTURA, não score de crédito. É a mesma
+       * geometria dos outros funis de propósito — quem varre os três no mesmo dia
+       * já sabe que o canto superior direito responde "vale meu tempo?" —, e o
+       * rótulo próprio evita que a forma emprestada empreste também o significado.
+       */
+      score={{ valor: c.total === 0 ? null : pct, faixa: faixaDaCobertura(pct, c.total), rotulo: 'coberto', sufixo: '%' }}
+      chips={
+        <>
+          <ChipDoCard forte>
+            {c.cobertos} de {c.total} CNPJs
+          </ChipDoCard>
+          {c.pendentes > 0 ? (
+            <ChipDoCard tom="alerta">{c.pendentes} sem certificado</ChipDoCard>
+          ) : null}
+        </>
+      }
+      rodapeEsquerda={
+        mostrarDono ? (
+          /*
+           * Só MOSTRA. Aqui o dono não é do card: vem da carteira de originação, e
+           * trocar moveria a empresa inteira — NFs e comissão junto. O link leva
+           * para a Carteira, onde a decisão tem o contexto que exige.
+           *
+           * `z-10`: é um link, e precisa ficar acima da área que abre o card.
+           */
+          <span className="relative z-10 block">
+            <DonoDoCard
+              nome={c.dono_nome}
+              tipos={['originador']}
+              podeTrocar={false}
+              href="/comercial/carteira"
+            />
+          </span>
+        ) : undefined
+      }
+      rodapeDireita={c.total === 0 ? 'Sem CNPJs' : `${pct}% coberto`}
+      tira={
+        /*
+         * A MATRIZ é o fato que decide, e por isso ganhou a tira em vez do ícone
+         * discreto que era antes. Sem o certificado da matriz não se opera nada do
+         * grupo — é diferente de ter uma filial faltando, e o card não podia dizer
+         * as duas coisas com o mesmo peso.
+         */
+        c.matriz_coberta ? (
+          <TiraDoCard tom="bom">Certificado da matriz em dia</TiraDoCard>
         ) : (
-          <ShieldAlert className="h-4 w-4 shrink-0 text-destructive" aria-label="Matriz sem certificado" />
-        )}
-      </div>
-        <Cobertura cobertos={c.cobertos} total={c.total} />
-      </button>
-
-      {/*
-       * Só MOSTRA. Aqui o dono não é do card: vem da carteira de originação, e trocar
-       * moveria a empresa inteira — NFs e comissão junto. O link leva para a Carteira,
-       * onde a decisão tem o contexto que exige.
-       *
-       * Fora do <button> do card: um link dentro de botão é HTML inválido e o clique
-       * dispararia os dois.
-       */}
-      {mostrarDono && (
-        <DonoDoCard nome={c.dono_nome} tipos={['originador']} podeTrocar={false} href="/comercial/carteira" />
-      )}
-    </div>
+          <TiraDoCard tom="ruim">Matriz sem certificado — o grupo não opera</TiraDoCard>
+        )
+      }
+    />
   )
 }
 
@@ -557,28 +607,28 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
               </p>
             </div>
           ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2">
+            <div className="flex gap-5 overflow-x-auto pb-3">
               {COLUNAS.map((coluna) => {
                 const itens = abertos.filter((c) => c.estagio === coluna)
                 return (
-                  <div key={coluna} className="w-72 shrink-0 space-y-2">
+                  <div key={coluna} className="w-[300px] shrink-0 space-y-3">
                     {/*
                      * ALTURA FIXA no cabeçalho. As ajudas têm uma, duas ou três linhas,
                      * e sem isto cada coluna começava numa altura diferente: a régua
                      * horizontal virava escada e os cards não se comparavam de relance.
                      */}
-                    <div className="flex h-16 flex-col justify-between border-b pb-1.5">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <p className="text-xs font-medium">{ESTAGIO_CERTIFICADO_LABELS[coluna]}</p>
-                        <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                      </div>
-                      <p className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">
+                    <div className="flex h-[72px] flex-col justify-between">
+                      <CabecalhoDaColuna
+                        titulo={ESTAGIO_CERTIFICADO_LABELS[coluna]}
+                        total={itens.length}
+                      />
+                      <p className="line-clamp-2 px-0.5 text-[10px] leading-tight text-muted-foreground">
                         {ESTAGIO_CERTIFICADO_AJUDA[coluna]}
                       </p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {itens.map((c) => (
-                        <CardDoFunil
+                        <CardDoCertificado
                           key={c.card_id}
                           c={c}
                           onAbrir={() => setAbertoId(c.card_id)}
@@ -587,6 +637,7 @@ export function FunilCertificados({ ehGestor }: { ehGestor: boolean }) {
                           mostrarDono={!vendedorId && (ehGestor || originadores.length > 1)}
                         />
                       ))}
+                      {itens.length === 0 && <ColunaVazia>Nenhum cliente</ColunaVazia>}
                     </div>
                   </div>
                 )

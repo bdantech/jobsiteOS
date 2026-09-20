@@ -45,10 +45,24 @@ import { cn } from '@/lib/utils'
 import { AbaEmpresa } from './aba-empresa'
 import { AbaReuniao } from './aba-reuniao'
 import { AbaPitch } from './aba-pitch'
-import { AbaFormulario, FichaDoCard } from './ficha-do-card'
+import {
+  AbaFormulario,
+  ChipsDaEmpresa,
+  ValorDaEmpresa,
+  scoreDaEmpresa,
+  textoDoScore,
+} from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { AbaNotas } from './aba-notas'
+import {
+  CabecalhoDaColuna,
+  CardDoFunil,
+  ChipDoCard,
+  ColunaVazia,
+  DonoNoRodape,
+  TiraDoCard,
+} from './card-funil'
 import { EtapasDoFunil } from './etapas-funil'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
@@ -451,95 +465,82 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               </p>
             </div>
           ) : vista === 'kanban' ? (
-            <div className="flex gap-3 overflow-x-auto pb-2">
+            <div className="flex gap-5 overflow-x-auto pb-3">
               {COLUNAS.map((coluna) => {
                 const itens = porEstagio.get(coluna) ?? []
                 return (
-                  <div key={coluna} className="w-64 shrink-0 space-y-2">
-                    <div className="flex items-baseline justify-between gap-2 border-b pb-1">
-                      <p className="text-xs font-medium">{ESTAGIO_SDR_LABELS[coluna]}</p>
-                      <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                    </div>
-                    <div className="space-y-2">
+                  <div key={coluna} className="w-[300px] shrink-0 space-y-3">
+                    <CabecalhoDaColuna titulo={ESTAGIO_SDR_LABELS[coluna]} total={itens.length} />
+                    <div className="space-y-3">
                       {itens.map((l) => (
-                        <div
+                        <CardDoFunil
                           key={l.id}
-                          className={cn(
-                            'relative space-y-1.5 rounded-md border p-2 text-sm transition-colors',
-                            'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
-                            classeDoLead(l),
-                            l.encerrado_em && 'opacity-70',
-                          )}
-                        >
-                          {/* Ver funil-vendas: <button> esticado, não onClick no <div> —
-                              é o que mantém teclado e leitor de tela funcionando. */}
-                          <button
-                            type="button"
-                            aria-label={`Abrir ${l.empresas?.razao_social ?? 'lead'}`}
-                            onClick={() => setAberto(l)}
-                            className="absolute inset-0 z-0 rounded-md focus:outline-none"
-                          />
-                          <p className="line-clamp-2 font-medium">
-                            {l.empresas?.razao_social ?? 'Empresa'}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                            {l.empresas?.uf ? <Badge variant="outline" className="text-[10px]">{l.empresas.uf}</Badge> : null}
-                            {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
-                            {l.fit === true ? (
-                              <Badge className="bg-emerald-100 text-[10px] text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">
-                                Com fit
-                              </Badge>
-                            ) : l.fit === false ? (
-                              <Badge variant="destructive" className="text-[10px]">Sem fit</Badge>
-                            ) : null}
-                            {l.encerrado_motivo === 'expirado' ? (
-                              <Badge variant="secondary" className="text-[10px]">Expirado</Badge>
-                            ) : null}
-                          </div>
-
-                          {/*
-                            A ficha da empresa, a mesma tira do Funil de Vendas: quem
-                            varre a coluna escolhe para quem ligar ANTES de abrir
-                            qualquer card, e escolhia pelo nome, pela UF e pelo valor
-                            esperado — score, tamanho e o que a empresa é estavam todos
-                            a dois cliques, na aba Empresa.
-
-                            COM o badge de origem, no canto inferior direito. A
-                            <TagOrigem> saiu do card: ela separa três origens
-                            (Outbound, Formulário, Manual) e o card não tinha altura
-                            para essa nuance — quem varre a coluna precisa saber se
-                            a pessoa procurou a gente ou se a régua a escolheu, e
-                            isso são dois estados. A distinção fina continua na
-                            tabela e no cabeçalho do modal, onde há espaço.
-                          */}
-                          <FichaDoCard
-                            empresa={l.empresas}
-                            origem={l.origem === 'inbound' ? 'inbound' : 'outbound'}
-                          />
-                          {/*
-                            O dono só aparece na lista NÃO filtrada: com o filtro
-                            ligado ele repetiria em cada card o que o seletor no topo
-                            já diz, e informação constante rouba espaço do que varia.
-                          */}
-                          {!sdrId && (
-                            // `z-10`: interativo, tem de ficar acima da área que abre o card.
-                            <div className="relative z-10">
-                              <DonoDoCard
-                                nome={nomeDoVendedor(l.sdr_id)}
-                                tipos={['sdr']}
-                                podeTrocar={ehGestor}
-                                ocupado={agindo}
-                                onTrocar={(id) => reatribuir(l, id)}
+                          rotuloAbrir={`Abrir ${l.empresas?.razao_social ?? 'lead'}`}
+                          onAbrir={() => setAberto(l)}
+                          esmaecido={Boolean(l.encerrado_em)}
+                          className={classeDoLead(l)}
+                          titulo={l.empresas?.razao_social ?? 'Empresa'}
+                          valor={<ValorDaEmpresa empresa={l.empresas} />}
+                          score={scoreDaEmpresa(l.empresas)}
+                          chips={
+                            <>
+                              {/*
+                                A <TagOrigem> continua fora do card: ela separa TRÊS
+                                origens (Outbound, Formulário, Manual) e aqui o que
+                                decide a primeira frase da ligação são duas — a pessoa
+                                nos procurou, ou a régua a escolheu. A nuance fica na
+                                tabela e no cabeçalho do modal, onde há espaço.
+                              */}
+                              <ChipsDaEmpresa
+                                empresa={l.empresas}
+                                uf={l.empresas?.uf}
+                                origem={l.origem === 'inbound' ? 'inbound' : 'outbound'}
                               />
-                            </div>
-                          )}
-                        </div>
+                              {/* O fit fica no card, não na coluna: é atributo, não lugar. */}
+                              {l.fit === true ? (
+                                <ChipDoCard tom="destaque" forte>Com fit</ChipDoCard>
+                              ) : l.fit === false ? (
+                                <ChipDoCard tom="alerta" forte>Sem fit</ChipDoCard>
+                              ) : null}
+                              {l.encerrado_motivo === 'expirado' ? <ChipDoCard>Expirado</ChipDoCard> : null}
+                            </>
+                          }
+                          rodapeEsquerda={
+                            !sdrId ? (
+                              // `z-10`: interativo, tem de ficar acima da área que abre o card.
+                              <span className="relative z-10 block">
+                                <DonoDoCard
+                                  nome={nomeDoVendedor(l.sdr_id)}
+                                  tipos={['sdr']}
+                                  podeTrocar={ehGestor}
+                                  ocupado={agindo}
+                                  onTrocar={(id) => reatribuir(l, id)}
+                                />
+                              </span>
+                            ) : (
+                              <DonoNoRodape nome={nomeDoVendedor(l.sdr_id)} />
+                            )
+                          }
+                          rodapeDireita={textoDoScore(l.empresas)}
+                          tira={
+                            /* A reunião marcada é o único compromisso com hora que o card
+                               carrega — e quem varre a coluna às 9h da manhã procura
+                               exatamente por ela. */
+                            l.reuniao_em ? (
+                              <TiraDoCard tom="neutro">
+                                Reunião em{' '}
+                                {new Date(l.reuniao_em).toLocaleString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </TiraDoCard>
+                            ) : undefined
+                          }
+                        />
                       ))}
-                      {itens.length === 0 && (
-                        <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
-                          vazio
-                        </p>
-                      )}
+                      {itens.length === 0 && <ColunaVazia>Nenhum lead</ColunaVazia>}
                     </div>
                   </div>
                 )

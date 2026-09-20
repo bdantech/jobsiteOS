@@ -32,7 +32,7 @@ import type {
 
 /** Em UMA string literal: supabase-js parseia o select no nível de tipo. */
 const COLUNAS_CARD =
-  'access_key, numero, serie, valor, vencimento, vencimento_origem, dias_para_vencimento, receita_esperada, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
+  'access_key, numero, serie, valor, vencimento, vencimento_origem, dias_para_vencimento, receita_esperada, tac_estimada, seguro_estimado, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
 
 export const PAGINA_FUNIL = 30
 

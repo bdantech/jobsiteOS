@@ -1,6 +1,7 @@
 import {
   STATUS_CONDICOES_LABELS,
   calcularTac,
+  PISO_PROPORCIONALIDADE_TAC_PADRAO,
   simularTac,
   type StatusCondicoes,
   type Tables,
@@ -41,6 +42,7 @@ const pct = (v: number | null | undefined, casas = 2): string =>
 interface CondicoesMobile {
   vigente: Tables<'condicoes_comerciais'> | null
   limiar: number
+  piso: number
 }
 
 async function buscar(analiseCreditoId: string): Promise<CondicoesMobile> {
@@ -55,12 +57,17 @@ async function buscar(analiseCreditoId: string): Promise<CondicoesMobile> {
   ])
   if (condRes.error) throw new Error(condRes.error.message)
 
-  const definicao = matrizRes.data?.definicao as { faixas?: { limiar_proporcionalidade_tac?: number } } | null
+  const definicao = matrizRes.data?.definicao as {
+    faixas?: { limiar_proporcionalidade_tac?: number; piso_proporcionalidade_tac?: number }
+  } | null
   return {
     vigente: (condRes.data ?? null) as Tables<'condicoes_comerciais'> | null,
-    // Sem matriz ativa, o limiar cai no padrão do 04o §4 — a leitura continua
+    // Sem matriz ativa, a rampa cai no padrão do 04o §4 — a leitura continua
     // possível, e é melhor que uma tela vazia por causa de uma config ausente.
     limiar: Number(definicao?.faixas?.limiar_proporcionalidade_tac ?? 10_000),
+    piso: Number(
+      definicao?.faixas?.piso_proporcionalidade_tac ?? PISO_PROPORCIONALIDADE_TAC_PADRAO,
+    ),
   }
 }
 
@@ -87,6 +94,9 @@ export function CondicoesComerciaisMobile({ analiseCreditoId }: { analiseCredito
       fee_min_d1: n(c.fee_min_d1),
     },
     data.limiar,
+    undefined,
+    30,
+    data.piso,
   )
 
   return (
