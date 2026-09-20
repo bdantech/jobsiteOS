@@ -29,6 +29,7 @@ export const prospeccaoKeys = {
     [...prospeccaoKeys.all, 'notas', cnpj, fornecedor] as const,
   config: () => [...prospeccaoKeys.all, 'config'] as const,
   seguidos: () => [...prospeccaoKeys.all, 'seguidos'] as const,
+  buscaCedentes: (termo: string) => [...prospeccaoKeys.all, 'busca-cedentes', termo] as const,
   custoProtesto: () => [...prospeccaoKeys.all, 'custo-protesto'] as const,
 }
 
@@ -248,6 +249,8 @@ export interface CedenteSeguido {
   fornecedor_cnpj: string
   origem: string
   desde: string
+  /** Vem da nota mais recente, por RPC: o CNPJ seguido pode estar fora da carteira. */
+  nome: string | null
 }
 
 export async function buscarCedentesSeguidos(): Promise<CedenteSeguido[]> {
@@ -258,7 +261,51 @@ export async function buscarCedentesSeguidos(): Promise<CedenteSeguido[]> {
     .is('ate', null)
     .order('desde', { ascending: false })
   if (error) throw new Error(`Falha ao carregar os cedentes seguidos: ${error.message}`)
-  return data ?? []
+  const linhas = data ?? []
+  if (!linhas.length) return []
+
+  /*
+   * O nome vem de `notas_fiscais`, que é recortada por carteira — e o CNPJ que
+   * você SEGUE pode estar fora dela. Por isso ele é resolvido por uma RPC
+   * `security definer` (0226), e não por um join: com a RLS de quem lê, o
+   * filtro voltaria a ser uma lista de números justamente para quem segue um
+   * cedente de fora.
+   */
+  const nomes = new Map<string, string | null>()
+  await Promise.all(
+    [...new Set(linhas.map((l) => l.fornecedor_cnpj))].map(async (cnpj) => {
+      const { data: nome } = await supabase.rpc('app__nome_do_cedente' as never, {
+        p_cnpj: cnpj,
+      } as never)
+      nomes.set(cnpj, (nome as string | null) ?? null)
+    }),
+  )
+  return linhas.map((l) => ({ ...l, nome: nomes.get(l.fornecedor_cnpj) ?? null }))
+}
+
+export interface CedenteAchado {
+  fornecedor_cnpj: string
+  nome: string | null
+  notas: number
+  ultima_emissao: string | null
+  ja_seguido: boolean
+}
+
+/**
+ * Acha um cedente pelo NOME ou por um pedaço do CNPJ.
+ *
+ * Vai por RPC e não por `select` porque o universo tem de ser o mesmo que o
+ * `seguir` aceita — cedente nosso, com nota na base —, e esse universo é maior
+ * que a carteira de quem procura. Com a RLS do usuário, o originador digitaria
+ * o nome certo, não acharia nada, e o mesmo CNPJ colado à mão funcionaria.
+ */
+export async function buscarCedentes(termo: string): Promise<CedenteAchado[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_prospeccao_buscar_cedentes' as never, {
+    p: { termo, limite: 12 },
+  } as never)
+  if (error) throw new Error(`Falha ao buscar cedentes: ${error.message}`)
+  return (data ?? []) as unknown as CedenteAchado[]
 }
 
 /**
