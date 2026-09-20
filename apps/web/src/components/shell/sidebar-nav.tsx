@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { grantedModuleGroups } from '@jobsiteos/core'
 import { moduleIcon } from '@/components/shell/icons'
+import { cn } from '@/lib/utils'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -50,27 +51,32 @@ export function SidebarNav({ grantedModuleIds }: SidebarNavProps) {
 
   return (
     <>
-      {groups.map((group) => (
+      {groups.map((group, i) => (
         /*
-         * O AR ENTRE SEÇÕES É O DOBRO DO AR ENTRE ITENS.
+         * O AR SEPARA AS SEÇÕES, E SÓ ELAS.
          *
          * O default do componente gastava 24px entre duas seções — 8 do fim de um
          * grupo, 8 do `gap` do conteúdo, 8 do começo do próximo — e isso empurrava os
-         * últimos módulos para fora da dobra em telas de notebook. A primeira correção
-         * cortou para 8px (`py-1`) e foi longe demais na direção oposta: com 4px de ar
-         * dentro do grupo e 8px entre grupos, a separação entre "Inteligência" e
+         * últimos módulos para fora da dobra em telas de notebook. `py-1` cortou para
+         * 8px e foi longe demais na direção oposta: a separação entre "Inteligência" e
          * "Operações" ficou quase indistinguível da separação entre dois itens da
-         * mesma seção, e o rótulo da seção passou a parecer mais um item da lista.
+         * mesma seção, e o rótulo passou a parecer mais um item da lista.
          *
-         * `py-2` põe 16px entre seções contra os 2px do `gap-0.5` dos itens: a
-         * proporção é o que faz o agrupamento ser lido sem linha divisória, e o custo
-         * é uma seção a menos visível na dobra — que o rótulo compensa, porque agora
-         * se sabe onde procurar.
+         * O ar que corrige isso é MARGEM ENTRE GRUPOS, não padding dentro deles.
+         * Engordar o `py` também afasta o rótulo dos próprios itens e solta o último
+         * item da seção — o grupo inteiro fica mais frouxo, e a distância que cresce
+         * não é só a que se queria crescer. `mt-2` no grupo põe os 8px exatamente na
+         * junta: 16px entre seções (4 do fim de um grupo + 8 + 4 do começo do outro)
+         * contra os mesmos 2px de sempre entre dois itens.
          *
-         * O que NÃO encolhe nem cresce é a altura do botão (`h-8`): ela é o alvo do
-         * clique, e mexer em alvo de clique para ganhar pixel é a troca errada.
+         * `i > 0` em vez de `first:` porque o seletor depende da posição no DOM, e
+         * este componente é renderizado dentro de containers que podem ter irmãos
+         * antes dele — o primeiro grupo ganharia uma margem que ninguém pediu.
+         *
+         * O que NÃO muda é a altura do botão (`h-8`): ela é o alvo do clique, e mexer
+         * em alvo de clique para ganhar pixel é a troca errada.
          */
-        <SidebarGroup key={group.id} className="px-2 py-2">
+        <SidebarGroup key={group.id} className={cn('px-2 py-1', i > 0 && 'mt-2')}>
           {/* 24px em vez de 32: o rótulo da seção é uma legenda, não um item. */}
           <SidebarGroupLabel className="h-6">{group.label}</SidebarGroupLabel>
 
