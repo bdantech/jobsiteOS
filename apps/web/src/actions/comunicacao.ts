@@ -8,6 +8,7 @@ import {
   fatosDaNotaDoFunil,
   montarPedidoDeLigacao,
   normalizarTelefoneBr,
+  telefonesNoProcon,
   MOTIVO_NAO_LIGAR_LABELS,
   type ContatoDaLigacao,
   type NotaDoFunil,
@@ -251,6 +252,15 @@ export async function descartarSugestaoAction(input: unknown): Promise<ActionRes
   }
 }
 
+/*
+ * Literal ÚNICO, e não montado com `+`: o `select` do supabase-js é lido como
+ * template no tipo, e uma concatenação vira `GenericStringError` — com o erro
+ * aparecendo nas linhas de USO, longe daqui. Mesma lista da tela (`queries.ts`),
+ * de propósito: as duas montam os mesmos fatos a partir da mesma view.
+ */
+const COLUNAS_NOTA_DA_LIGACAO =
+  'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, taxa_analise_am, taxa_analise_origem, receita_esperada, tac_estimada, seguro_estimado, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_razao_social, contato_fornecedor'
+
 /**
  * Põe uma nota na fila da Ana, a partir da tela.
  *
@@ -270,12 +280,7 @@ export async function enfileirarLigacaoAction(input: {
   try {
     const { data: nota, error: erroNota } = await supabase
       .from('notas_funil')
-      .select(
-        'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, ' +
-          'receita_esperada, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, ' +
-          'fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, ' +
-          'sacado_nome, sacado_razao_social, contato_fornecedor',
-      )
+      .select(COLUNAS_NOTA_DA_LIGACAO)
       .eq('access_key', input.accessKey)
       .maybeSingle()
     if (erroNota) return { ok: false, message: erroNota.message, code: 'db' }
@@ -310,6 +315,19 @@ export async function enfileirarLigacaoAction(input: {
           base_legal: 'dado_publico_nfe',
         }
       }
+    }
+
+    /*
+     * O Procon, lido AQUI e não na tela: a marca vive na evidência do
+     * enriquecimento e o portão só tem o booleano. Ligar para quem está na lista
+     * é risco jurídico, e o clique é o último ponto em que dá para recusar.
+     */
+    if (contato?.telefone_e164) {
+      const { data: evidencias } = await supabase
+        .from('contatos_descobertos')
+        .select('valor, evidencia')
+        .eq('valor', contato.telefone_e164)
+      contato.no_procon = telefonesNoProcon(evidencias ?? []).has(contato.telefone_e164)
     }
 
     // A config do banco manda: `kill_switch` para tudo sem apagar a fila, e

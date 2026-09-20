@@ -61,7 +61,7 @@ export interface AbaModal {
   id: string
   label: string
   conteudo: React.ReactNode
-  /** Desabilitada com motivo no title — usada pela aba de mensagens, que ainda não existe. */
+  /** Desabilitada com motivo no title — usada pela aba de comunicação, que ainda não existe. */
   desabilitada?: boolean
 }
 
@@ -105,7 +105,7 @@ export function ModalDoCard({
   const inicial = abas.some((a) => a.id === abaInicial) ? (abaInicial as string) : (abas[0]?.id ?? '')
   const [ativa, setAtiva] = React.useState(inicial)
 
-  // Ao trocar de card, volta para a aba inicial: herdar "Mensagens" do card anterior
+  // Ao trocar de card, volta para a aba inicial: herdar "Comunicação" do card anterior
   // faria o próximo abrir numa aba que não é a resposta da pergunta que se fez.
   React.useEffect(() => {
     if (aberto) setAtiva(inicial)
@@ -178,7 +178,7 @@ export function ModalDoCard({
 }
 
 /**
- * A aba de mensagens, em todos os cinco funis (05A §9).
+ * A aba de comunicação, em todos os cinco funis (05A §9).
  *
  * ── ELA MOSTRA A THREAD DA PESSOA, NÃO A DO CARD ───────────────────────────
  * O filtro é a EMPRESA, e o que partiu deste card ganha uma marca — não um
@@ -308,7 +308,7 @@ export function AbaMensagens({
 }
 
 /**
- * Os contatos descobertos que ainda não são da ficha, no vazio da aba de mensagens.
+ * Os contatos descobertos que ainda não são da ficha, no vazio da aba de comunicação.
  *
  * NÃO é a segunda cópia do agente de contato: aqui não há busca paga, orçamento nem
  * cadastro à mão — isso é da aba Fornecedor, e continua lá. Aqui há uma lista de

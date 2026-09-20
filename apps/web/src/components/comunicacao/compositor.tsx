@@ -32,7 +32,7 @@ import {
 } from './queries'
 
 /**
- * O COMPOSITOR (§5). O mesmo componente na Company 360, na aba "Mensagens" do
+ * O COMPOSITOR (§5). O mesmo componente na Company 360, na aba "Comunicação" do
  * card e no inbox.
  *
  * ── O PREVIEW É RENDERIZADO, NÃO O TEMPLATE ────────────────────────────────

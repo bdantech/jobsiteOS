@@ -16,7 +16,7 @@ import { comercialKeys, type PitchDoLeadRow } from './queries'
  *
  * ─── POR QUE ELA É A PRIMEIRA ABA ───────────────────────────────────────────
  * O card do funil de reuniões abre para uma coisa: ligar. "Lead" diz em que ponto
- * o lead está, "Empresa" diz o cadastro, "Mensagens" diz o que já se falou — todas
+ * o lead está, "Empresa" diz o cadastro, "Comunicação" diz o que já se falou — todas
  * úteis DEPOIS de saber o que dizer. O pitch é a resposta da pergunta que se faz ao
  * abrir, e uma resposta que exige um clique a mais é uma resposta que não se lê com
  * o telefone chamando.

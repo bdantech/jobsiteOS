@@ -615,7 +615,7 @@ export function FichaFornecedor({
           },
           {
             id: 'mensagens',
-            label: 'Mensagens',
+            label: 'Comunicação',
             conteudo: (
               /*
                * O CNPJ vai junto do `empresa_id` porque a maioria dos cards deste

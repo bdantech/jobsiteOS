@@ -99,7 +99,7 @@ export async function promoverContatoAction(input: unknown): Promise<ActionResul
  * O contato escrito à mão, do card da NF.
  *
  * A RPC cria a ficha da empresa quando ela não existe — é o que destrava a aba
- * "Mensagens" para o fornecedor que só existe como nota. A visibilidade é checada
+ * "Comunicação" para o fornecedor que só existe como nota. A visibilidade é checada
  * DENTRO dela (0155), como em todas as outras: repetir aqui daria duas regras.
  */
 export async function criarContatoManualFornecedorAction(

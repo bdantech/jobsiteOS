@@ -3,10 +3,12 @@ import { test } from 'node:test'
 import {
   acaoDoDesfecho,
   diasAteOVencimento,
+  fatosDaNotaDoFunil,
   montarPedidoDeLigacao,
   podeLigar,
   type FatosDaLigacao,
 } from './pedido.ts'
+import { telefonesNoProcon } from './procon.ts'
 import { pedidoLigacaoSchema, resultadoLigacaoSchema } from './schemas.ts'
 
 const AGORA = new Date('2026-09-16T13:00:00Z')
@@ -31,10 +33,12 @@ const FATOS: FatosDaLigacao = {
     vencimento_origem: 'xml',
     valor: 62000,
     taxa_am: 3.49,
-    taxa_padrao: false,
+    taxa_origem: 'sacado',
     valor_desconto: 4327.6,
+    valor_tac: 300,
+    valor_seguro: 125,
     valor_iof: 0,
-    valor_liquido: 57672.4,
+    valor_liquido: 57247.4,
     cancelada: false,
   },
   fornecedor: {
@@ -72,7 +76,11 @@ test('o pedido sai no formato que a fila da Ana aceita', () => {
   assert.equal(r.pedido.telefone, '+5531988776655')
   assert.equal(r.pedido.oferta.recebiveis[0]?.prazo_dias, 56)
   assert.equal(r.pedido.oferta.recebiveis[0]?.data_emissao, '2026-09-12')
-  assert.equal(r.pedido.oferta.resumo_oferta.valor_liquido_total, 57672.4)
+  // 62.000 − 4.327,60 de deságio − 300 de TAC − 125 de seguro. A conta sem a TAC
+  // e o seguro dava 57.672,40: R$ 425 a mais, ditos em voz alta.
+  assert.equal(r.pedido.oferta.recebiveis[0]?.valor_tac, 300)
+  assert.equal(r.pedido.oferta.recebiveis[0]?.valor_seguro, 125)
+  assert.equal(r.pedido.oferta.resumo_oferta.valor_liquido_total, 57247.4)
 })
 
 test('a supressão vem antes de tudo que não seja o kill switch', () => {
@@ -126,8 +134,16 @@ test('nota vencida ou vencendo hoje não tem o que antecipar', () => {
 })
 
 test('taxa do default não pode ser dita como condição', () => {
-  assert.deepEqual(podeLigar(comNota({ taxa_padrao: true })), { pode: false, motivo: 'taxa_padrao' })
-  assert.deepEqual(podeLigar(comNota({ taxa_am: null })), { pode: false, motivo: 'sem_taxa' })
+  // Sem análise — nem do sacado, nem da empresa-mãe — a única taxa que existe é
+  // o default da config, e ele não é condição de ninguém.
+  assert.deepEqual(podeLigar(comNota({ taxa_origem: null })), { pode: false, motivo: 'taxa_padrao' })
+  assert.deepEqual(podeLigar(comNota({ taxa_am: null })), { pode: false, motivo: 'taxa_padrao' })
+  // Análise existe e traz taxa quebrada: é dado ruim, não oferta.
+  assert.deepEqual(podeLigar(comNota({ taxa_am: 0 })), { pode: false, motivo: 'sem_taxa' })
+})
+
+test('sem a TAC o líquido sairia alto, então não sai ligação', () => {
+  assert.deepEqual(podeLigar(comNota({ valor_tac: null })), { pode: false, motivo: 'sem_tac' })
 })
 
 test('sem o deságio ou sem o líquido a ligação não sai', () => {
@@ -202,4 +218,68 @@ test('resultado com desfecho fora da lista é recusado, não adivinhado', () => 
       outcome: 'inventado',
     }),
   )
+})
+
+test('a taxa e o deságio que a Ana fala saem da mesma conta', () => {
+  // `receita_esperada` da view foi calculada com `taxa_usada`, que pode ser o
+  // default. Dizer a taxa da análise e o deságio da view seria falar dois números
+  // que não fecham entre si — e quem atende tem calculadora.
+  const fatos = fatosDaNotaDoFunil(
+    {
+      access_key: 'k',
+      numero: '1',
+      vencimento: '2026-10-15',
+      valor: 100000,
+      taxa_usada: 5, // o default: NÃO é o que a Ana diz
+      taxa_analise_am: 2,
+      taxa_analise_origem: 'holding',
+      receita_esperada: 8333.33, // o deságio dos 5%, que também não vale aqui
+      tac_estimada: 300,
+      seguro_estimado: 125,
+      fornecedor_cnpj: '33444555000166',
+      sacado_cnpj: '55666777000188',
+    },
+    { nome: 'Sandra', telefone_e164: '+5531988776655', base_legal: 'relacao_comercial' },
+    { agora: new Date('2026-09-15T12:00:00Z') },
+  )
+
+  assert.equal(fatos.nota.taxa_am, 2)
+  assert.equal(fatos.nota.taxa_origem, 'holding')
+  // 30 dias a 2% a.m. sobre 100.000 — o deságio da taxa DITA, não o da view.
+  assert.equal(fatos.nota.valor_desconto, 2000)
+  assert.equal(fatos.nota.valor_liquido, 97575)
+  assert.deepEqual(podeLigar(fatos), { pode: true })
+})
+
+test('sem análise do sacado nem da mãe, a nota não vira ligação', () => {
+  const fatos = fatosDaNotaDoFunil(
+    {
+      access_key: 'k',
+      numero: '1',
+      vencimento: '2026-10-15',
+      valor: 100000,
+      taxa_usada: 5,
+      taxa_analise_am: null,
+      taxa_analise_origem: null,
+      receita_esperada: 8333.33,
+      tac_estimada: 300,
+      seguro_estimado: 125,
+      fornecedor_cnpj: '33444555000166',
+      sacado_cnpj: '55666777000188',
+    },
+    { nome: 'Sandra', telefone_e164: '+5531988776655', base_legal: 'relacao_comercial' },
+    { agora: new Date('2026-09-15T12:00:00Z') },
+  )
+  assert.deepEqual(podeLigar(fatos), { pode: false, motivo: 'taxa_padrao' })
+})
+
+test('o Procon sai da evidência do enriquecimento', () => {
+  const fora = telefonesNoProcon([
+    { valor: '+5531988776655', evidencia: 'Nova Vida TI · telefone da empresa (celular, VIVO, no Procon, com WhatsApp)' },
+    { valor: '+5531999998888', evidencia: 'Nova Vida TI · telefone da empresa (fixo, VIVO)' },
+    { valor: '+5531977776666', evidencia: null },
+  ])
+  assert.equal(fora.has('+5531988776655'), true)
+  assert.equal(fora.has('+5531999998888'), false)
+  assert.equal(fora.has('+5531977776666'), false)
 })

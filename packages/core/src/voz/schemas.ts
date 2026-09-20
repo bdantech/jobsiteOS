@@ -70,7 +70,11 @@ export const recebivelVozSchema = z.object({
   valor_face: z.number(),
   taxa_am: z.number(),
   valor_desconto: z.number(),
+  /** A TAC do sacado e o seguro por nota: tarifa, não juros (0221/0223). */
+  valor_tac: z.number(),
+  valor_seguro: z.number(),
   valor_iof: z.number(),
+  /** `valor_face − valor_desconto − valor_tac − valor_seguro`. */
   valor_liquido: z.number(),
 })
 

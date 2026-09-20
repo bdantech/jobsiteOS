@@ -22,7 +22,7 @@ import { buscarThread, buscarThreadDaEmpresa, type MensagemThread } from './quer
 import { dataHora } from './format'
 
 /**
- * A thread, e é a mesma em todos os lugares: no inbox, na aba "Mensagens" do card
+ * A thread, e é a mesma em todos os lugares: no inbox, na aba "Comunicação" do card
  * e na Company 360.
  *
  * ── O DESTAQUE DO CARD NÃO É UM FILTRO ─────────────────────────────────────

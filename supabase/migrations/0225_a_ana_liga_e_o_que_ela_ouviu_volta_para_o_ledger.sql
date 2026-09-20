@@ -1,5 +1,5 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- 0211 — A Ana liga, e o que ela ouviu volta para o ledger
+-- 0225 — A Ana liga, e o que ela ouviu volta para o ledger
 --
 -- ─── O QUE É A ANA ──────────────────────────────────────────────────────────
 -- Um serviço de voz da OnePay, fora deste repositório: recebe uma oferta de
@@ -30,10 +30,28 @@
 -- duvidoso não vira ligação com ressalva — vira ligação que não acontece, com o
 -- motivo gravado em `motivo_recusa` para aparecer na tela.
 --
+-- ─── A TAXA QUE ELA FALA VEM DA ANÁLISE, E SOBE PARA A MÃE ──────────────────
+-- `taxa_usada` serve para ORDENAR o funil: quando o sacado não tem análise, ela
+-- cai no default da config e o card continua útil, porque o que ele promete é
+-- "esta nota vale mais que aquela". Dito ao telefone, o mesmo número deixa de
+-- ordenar e passa a ser condição — e o default não é condição de ninguém.
+--
+-- A fonte certa é a análise de crédito da plataforma (`analises_plataforma`), que
+-- é quem de fato precifica. Quando o sacado é SPE ou filial, ele não tem análise
+-- própria: quem tem é a construtora dona dele. Subir até ela é o mesmo caminho
+-- que `app_holding_do_sacado` já percorre para a carteira — vínculo explícito,
+-- mesmo CNPJ, mesma raiz, e por fim o grupo da SPE.
+--
+-- Nas 385 notas que a tela ofereceria hoje: 213 têm análise do próprio sacado,
+-- 142 só têm pela mãe, e 30 não têm nenhuma. Sem a subida, 37% das ligações
+-- diriam a taxa padrão como se fosse a da empresa.
+--
 -- ─── O QUE ESTA MIGRAÇÃO FAZ ────────────────────────────────────────────────
 -- §1 `voz_ligacoes`: a fila do nosso lado, espelho do que está na Ana.
 -- §2 `comunicacoes.provedor` aceita `voz`.
 -- §3 `app__voz_registrar_resultado`: o desfecho vira ledger, estágio e supressão.
+-- §4 `app_voz_enfileirar`: a fila feita à mão, pela tela.
+-- §5 A taxa da análise, com a subida para a empresa-mãe, gravada na nota.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- ─── §1 A fila ──────────────────────────────────────────────────────────────
@@ -115,10 +133,21 @@ comment on column public.voz_ligacoes.resultado is
 
 alter table public.voz_ligacoes enable row level security;
 
--- Só leitura para quem tem o módulo: a escrita é do worker (service_role) e da
--- RPC do §3. Mesma régua de `notas_fiscais`.
+-- Só leitura: a escrita é do worker (service_role) e das RPCs dos §3 e §4.
+--
+-- A régua não é "tem o módulo" — é a MESMA de `notas_fiscais`, herdada em vez de
+-- copiada. Uma ligação carrega o telefone de quem atende e o resumo do que foi
+-- falado; quem não pode ver a nota não pode ver a conversa que ela gerou. Um
+-- `exists` sobre a tabela com RLS ligada aplica a policy dela para quem consulta,
+-- então carteira, vendedores visíveis e gestor comercial valem aqui sem uma
+-- segunda versão da regra para sair do lugar com o tempo.
 create policy voz_ligacoes_select on public.voz_ligacoes
-  for select to authenticated using ((select public.app_tem_modulo('antecipacao')));
+  for select to authenticated using (
+    exists (
+      select 1 from public.notas_fiscais nf
+       where nf.access_key = voz_ligacoes.access_key
+    )
+  );
 
 grant select on public.voz_ligacoes to authenticated;
 
@@ -172,7 +201,12 @@ begin
 
   -- Pelo `id_externo`, que é o que a Ana devolve: a segunda tentativa da mesma
   -- nota é outra linha, e fechar a errada apagaria o resultado da primeira.
-  select * into v_linha from public.voz_ligacoes where id_externo = v_access_key;
+  --
+  -- `for update` porque a Ana reenvia até receber 2xx, e duas entregas podem
+  -- chegar juntas. Sem o lock, as duas passam pelo teste de `encerrada_em` antes
+  -- de qualquer uma escrever, e a ligação vira duas linhas de ledger.
+  select * into v_linha from public.voz_ligacoes
+   where id_externo = v_access_key for update;
   if not found then
     raise exception 'Ligação desconhecida: %.', v_access_key using errcode = 'no_data_found';
   end if;
@@ -207,8 +241,38 @@ begin
   -- a alguém. Enchê-lo de não-atendimentos transformaria o histórico da pessoa
   -- num relatório de discagem.
   if v_linha.status = 'concluida' then
+    /*
+     * A FICHA DA EMPRESA É CRIADA AQUI QUANDO NÃO EXISTE, E ISSO NÃO É DETALHE.
+     *
+     * A aba Comunicação do card lê o ledger POR EMPRESA. Sem `empresa_id` a
+     * ligação existe no banco e não aparece em lugar nenhum — nem na aba, nem no
+     * `ultima_conversa_em` da empresa, que é mantido por gatilho sobre esta mesma
+     * tabela. E fornecedor de NF quase nunca tem ficha: das 385 notas que a tela
+     * oferece hoje, 334 não têm.
+     *
+     * `app__promover_fornecedor_para_empresa` é o mesmo núcleo que a promoção de
+     * contato usa desde a 0138d — a ficha nasce igual, tenha vindo de um clique
+     * na aba Fornecedor ou de uma ligação que aconteceu.
+     */
     select id, coalesce(razao_social, nome_fantasia) into v_empresa, v_nome
       from public.empresas where cnpj = v_linha.fornecedor_cnpj;
+    if v_empresa is null then
+      /*
+       * A promoção RECUSA quem ainda não foi enriquecido no universo (12 dos 236
+       * fornecedores candidatos de hoje). Essa recusa não pode derrubar o resto:
+       * o ledger ainda vale, e a supressão de quem pediu para não ser procurado
+       * vale muito mais. Ela fica sem empresa, aparece na tela de Ligações, e
+       * entra na aba no dia em que o lookup alcançar o CNPJ.
+       */
+      begin
+        v_empresa := (public.app__promover_fornecedor_para_empresa(
+          v_linha.fornecedor_cnpj, v_linha.enfileirada_por, 'antecipacao')).id;
+        select coalesce(razao_social, nome_fantasia) into v_nome
+          from public.empresas where id = v_empresa;
+      exception when others then
+        v_empresa := null;
+      end;
+    end if;
 
     -- A ligação não abre thread própria: entra na conversa de WhatsApp do mesmo
     -- número, como já faz o toque manual (0174).
@@ -217,17 +281,20 @@ begin
       v_conversa := public.app__conversa_para('whatsapp', v_ident, v_empresa, v_linha.contato_id, null);
     end if;
 
+    -- `usuario_id` é quem PÔS NA FILA, não quem falou: a thread mostra o autor da
+    -- linha, e sem ele a ligação aparece no card como bolha sem dono. Quem falou
+    -- já está dito por `por_ia`, e o número que a Ana discou está na fila.
     insert into public.comunicacoes (
       conversa_id, empresa_id, contato_id, canal, direcao,
       por_ia, corpo, preview, provedor, id_externo, status_envio,
-      origem, funil, funil_card_id, enviado_em
+      origem, funil, funil_card_id, enviado_em, usuario_id
     ) values (
       v_conversa, v_empresa, v_linha.contato_id, 'ligacao', 'saida',
       true,
       v_resumo,
       'Ana ligou: ' || coalesce(v_outcome, 'sem desfecho') || '.',
       'voz', v_linha.chamada_id, 'enviada',
-      'agente', 'nfs', v_access_key, now()
+      'agente', 'nfs', v_access_key, now(), v_linha.enfileirada_por
     )
     returning id into v_comunicacao;
 
@@ -312,8 +379,12 @@ declare
   v_id_externo text;
   v_linha public.voz_ligacoes;
 begin
-  if not public.app_tem_modulo('comunicacao') then
-    raise exception 'Sem acesso ao módulo Comunicação.' using errcode = '42501';
+  -- Os DOIS módulos, e não só o da tela: a nota só é legível para quem tem
+  -- Antecipação (é a policy de `notas_fiscais`), então exigir apenas Comunicação
+  -- fazia a tela abrir vazia para o SDR, sem dizer por quê.
+  if not public.app_tem_modulo('comunicacao') or not public.app_tem_modulo('antecipacao') then
+    raise exception 'A fila de ligações exige os módulos Comunicação e Antecipação.'
+      using errcode = '42501';
   end if;
   if v_access_key is null or v_telefone is null then
     raise exception 'Informe a nota e o telefone.' using errcode = '23514';
@@ -384,3 +455,137 @@ comment on function public.app__voz_registrar_resultado(jsonb) is
 
 revoke execute on function public.app__voz_registrar_resultado(jsonb) from public, anon, authenticated;
 grant execute on function public.app__voz_registrar_resultado(jsonb) to service_role;
+
+-- ─── §5 A taxa que a Ana fala ───────────────────────────────────────────────
+--
+-- `taxa_usada` existe para ORDENAR o funil, e para isso o default da config
+-- serve: o card promete "esta nota vale mais que aquela", e um chute bom cumpre
+-- isso. Dita ao telefone, a mesma taxa deixa de ordenar e vira CONDIÇÃO — e o
+-- default não é condição de ninguém.
+--
+-- A fonte certa é `analises_plataforma`: é o que a plataforma cobra de fato, a
+-- mesma que a 0223 elegeu para a TAC pelo mesmo motivo. E quando o sacado é SPE
+-- ou filial, ele não tem análise própria — quem tem é a construtora dona dele.
+-- `app_holding_do_sacado` já sabe subir: vínculo explícito, mesmo CNPJ, mesma
+-- raiz, e por fim o grupo da SPE.
+--
+-- Gravada na nota, e não calculada na leitura, pelo mesmo motivo de `taxa_usada`
+-- e `tac_estimada`: a condição dita numa ligação gravada tem de continuar
+-- auditável depois que a precificação mudar.
+
+alter table public.notas_fiscais
+  add column if not exists taxa_analise_am numeric,
+  add column if not exists taxa_analise_origem text
+    constraint notas_fiscais_taxa_analise_origem_check
+      check (taxa_analise_origem is null or taxa_analise_origem in ('sacado', 'holding'));
+
+comment on column public.notas_fiscais.taxa_analise_am is
+  'A taxa mensal da análise de crédito da plataforma para este sacado (0225). '
+  'Diferente de `taxa_usada`, que cai no default da config quando não há análise: '
+  'esta é nula quando não existe, porque é a que a Ana diz em voz alta.';
+comment on column public.notas_fiscais.taxa_analise_origem is
+  '`sacado` quando a análise é do próprio, `holding` quando veio da empresa-mãe '
+  '(SPE ou filial, resolvida por `app_holding_do_sacado`). Nula com a taxa nula.';
+
+-- ─── Uma resolução só, para o backfill e para o sync ────────────────────────
+--
+-- Função e não SQL solto: o worker precisa da MESMA regra ao gravar a nota nova,
+-- e duas cópias da escada de fallback divergem na primeira vez que alguém mexer
+-- numa delas.
+
+create or replace function public.app__taxa_da_analise(p_sacado_cnpj text)
+returns table (taxa numeric, origem text)
+language sql stable security definer set search_path = '' as $$
+  -- Cada ramo entre parênteses: sem elas o `order by`/`limit` valeria para o
+  -- UNION inteiro, e o ramo da mãe poderia ganhar do ramo do próprio sacado.
+  select t.taxa, t.origem from (
+    (select a.monthly_rate_d0 as taxa, 'sacado'::text as origem, 1 as ordem
+       from public.analises_plataforma a
+      where a.cnpj = p_sacado_cnpj and a.monthly_rate_d0 is not null
+      order by a.sincronizada_em desc nulls last
+      limit 1)
+    union all
+    (select a.monthly_rate_d0, 'holding'::text, 2
+       from public.analises_plataforma a
+       join public.empresas e on e.cnpj = a.cnpj
+      where e.id = public.app_holding_do_sacado(p_sacado_cnpj)
+        and a.monthly_rate_d0 is not null
+      order by a.sincronizada_em desc nulls last
+      limit 1)
+  ) t
+  order by t.ordem
+  limit 1;
+$$;
+
+comment on function public.app__taxa_da_analise(text) is
+  'A taxa mensal que a plataforma cobra deste sacado: a análise dele primeiro, a '
+  'da empresa-mãe depois (SPE e filial não têm análise própria). Nula quando não '
+  'existe nenhuma — e taxa nula é ligação que não acontece.';
+
+revoke execute on function public.app__taxa_da_analise(text) from public, anon;
+grant execute on function public.app__taxa_da_analise(text) to authenticated, service_role;
+
+-- ─── O que já está gravado ──────────────────────────────────────────────────
+--
+-- Só notas VIVAS, como na 0223: mexer na estimativa de uma nota já convertida
+-- mudaria o retrato de uma decisão já tomada.
+
+-- A resolução vive num SELECT, e não no `from` do UPDATE: o lateral de um UPDATE
+-- não enxerga a tabela-alvo, e a taxa precisa ser correlacionada com o sacado de
+-- CADA nota. É a mesma forma da 0223, pelo mesmo motivo.
+with alvo as (
+  select nf.access_key, t.taxa, t.origem
+    from public.notas_fiscais nf
+    -- `left join`, e não `cross`: a nota sem análise nenhuma precisa CHEGAR ao
+    -- update com nulo, senão ela nunca é limpa quando a análise some do outro lado.
+    left join lateral public.app__taxa_da_analise(nf.sacado_cnpj) t on true
+   where nf.conversao_antecipacao_id is null
+     and nf.sacado_cnpj is not null
+)
+update public.notas_fiscais nf
+   set taxa_analise_am = a.taxa,
+       taxa_analise_origem = a.origem
+  from alvo a
+ where a.access_key = nf.access_key
+   and (nf.taxa_analise_am is distinct from a.taxa
+     or nf.taxa_analise_origem is distinct from a.origem);
+
+-- ─── A view mostra as duas ──────────────────────────────────────────────────
+--
+-- Mesmo método da 0221: a definição VIVA é lida e as colunas novas entram logo
+-- antes do `FROM`. Recolar a definição de um arquivo antigo perderia o que as
+-- migrações seguintes acrescentaram.
+
+do $$
+declare
+  v_def text;
+  v_ancora text := E'\n   FROM notas_fiscais nf';
+  v_novas text;
+begin
+  select pg_get_viewdef('public.notas_funil'::regclass, true) into v_def;
+  if position(v_ancora in v_def) = 0 then
+    raise exception 'A âncora do FROM mudou em notas_funil — revise a 0225 à mão.';
+  end if;
+
+  v_novas :=
+    ',' || E'\n' ||
+    '    nf.taxa_analise_am,' || E'\n' ||
+    '    nf.taxa_analise_origem';
+
+  execute 'create or replace view public.notas_funil as '
+       || overlay(v_def placing v_novas || v_ancora
+                  from position(v_ancora in v_def) for length(v_ancora));
+end $$;
+
+/*
+ * ── A REAFIRMAÇÃO NÃO É REDUNDANTE, É A CONVENÇÃO DA 0099 ──────────────────
+ * `create or replace view` NÃO preserva reloptions. Toda migração que recria a
+ * `notas_funil` reafirma a opção logo abaixo — a convenção existe exatamente
+ * porque ela se perde, e a 0099 é a cicatriz de quando alguém esqueceu: de 09/08
+ * até a correção, a view rodava com as permissões do OWNER e ignorava a RLS de
+ * `notas_fiscais`, entregando as notas inteiras para qualquer usuário logado.
+ *
+ * Esta migração encontrou a opção JÁ PERDIDA: a 0221 recriou a view hoje e não
+ * reafirmou. Estava aberta desde então, e o `alter` abaixo é o que fecha.
+ */
+alter view public.notas_funil set (security_invoker = on);

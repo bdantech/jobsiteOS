@@ -558,7 +558,7 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
             },
             {
               id: 'mensagens',
-              label: 'Mensagens',
+              label: 'Comunicação',
               conteudo: (
                 <AbaMensagens
                   empresaId={aberto.empresas?.id ?? null}

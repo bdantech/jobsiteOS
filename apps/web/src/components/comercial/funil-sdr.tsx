@@ -740,7 +740,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             {
               id: 'mensagens',
-              label: 'Mensagens',
+              label: 'Comunicação',
               conteudo: (
                 <AbaMensagens
                   empresaId={aberto.empresas?.id ?? null}

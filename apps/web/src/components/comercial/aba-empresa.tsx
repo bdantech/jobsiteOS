@@ -227,7 +227,7 @@ export function AbaEmpresa({
                     {/*
                       ESCOLHER AQUI, ESCREVER LÁ.
                       
-                      A aba "Mensagens" abria sempre no primeiro contato da lista e
+                      A aba "Comunicação" abria sempre no primeiro contato da lista e
                       deixava a troca para um seletor dentro do compositor — o que
                       obriga a decidir para quem falar numa tela que já está pedindo
                       o que falar. A decisão é desta aba, onde os contatos estão com

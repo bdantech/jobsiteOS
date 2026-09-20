@@ -3,7 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Bot, FileText, Inbox, Link2Off, MailCheck, MessageCircle, PhoneOutgoing, Send, Settings } from 'lucide-react'
+import {
+  BarChart3,
+  Bot,
+  FileText,
+  Inbox,
+  Link2Off,
+  MailCheck,
+  MessageCircle,
+  PhoneOutgoing,
+  Send,
+  Settings,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { contarNaoVinculadas } from './queries'
 import { useEscopoFila } from './use-escopo-fila'

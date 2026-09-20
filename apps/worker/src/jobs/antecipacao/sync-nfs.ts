@@ -286,6 +286,12 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
   // andam com o prazo como o deságio anda, e por isso são gravados uma vez.
   const tac = calcularTac(nota.valor ?? 0, ...(await tacDoSacado(sacadoCnpj, cfg)))
 
+  // A taxa da ANÁLISE, separada de `taxa_usada` (0225): esta é a que a Ana diz em
+  // voz alta, e ela é nula quando não existe análise — nem do sacado, nem da
+  // empresa-mãe. `taxa_usada` continua caindo no default, porque ordenar o funil
+  // com um chute bom é melhor que não ordenar.
+  const analise = await taxaDaAnalise(sacadoCnpj)
+
   const [fornecedor, sacado] = await Promise.all([
     resolverEmpresa(fornecedorCnpj, item.supplier ?? null),
     resolverEmpresa(sacadoCnpj, item.recipient ?? null),
@@ -335,7 +341,20 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
     sincronizada_em: nota.sincronizada_em,
   }
 
-  const { error } = await supabaseAdmin.from('notas_fiscais').upsert(linha, { onConflict: 'access_key' })
+  /*
+   * `taxa_analise_*` nasceu na 0225 e `database.ts` é GERADO do banco: o tipo do
+   * insert só conhece a coluna depois que o `pnpm db:types` rodar. O cast fica
+   * num lugar só e some nesse dia.
+   */
+  const comTaxaDaAnalise = {
+    ...linha,
+    taxa_analise_am: analise.taxa,
+    taxa_analise_origem: analise.origem,
+  } as typeof linha
+
+  const { error } = await supabaseAdmin
+    .from('notas_fiscais')
+    .upsert(comTaxaDaAnalise, { onConflict: 'access_key' })
   if (error) {
     logger.error({ accessKey, erro: error.message }, 'Falha no upsert da NF.')
     return NADA
@@ -446,6 +465,7 @@ type ReguaTac = [max: number, min: number, limiar: number, piso: number]
 
 const cacheTac = new Map<string, ReguaTac>()
 const cacheMatriz = new Map<number | 'ativa', [number, number]>()
+const cacheTaxaAnalise = new Map<string, { taxa: number | null; origem: string | null }>()
 
 /** `[limiar, piso]` da versão pedida; `'ativa'` lê a matriz em vigor. */
 async function rampaDaMatriz(
@@ -476,6 +496,44 @@ async function rampaDaMatriz(
 
   cacheMatriz.set(versao, rampa)
   return rampa
+}
+
+/**
+ * A taxa da análise de crédito deste sacado — e da empresa-mãe quando ele não tem
+ * uma própria.
+ *
+ * SPE e filial não são analisadas: quem é analisada é a construtora dona delas, e
+ * é a condição dela que a plataforma aplica. `app__taxa_da_analise` (0225) é a
+ * mesma escada que o backfill percorreu, chamada aqui para que a nota que chega
+ * amanhã nasça com o mesmo número que a de ontem.
+ */
+async function taxaDaAnalise(
+  cnpj: string,
+): Promise<{ taxa: number | null; origem: string | null }> {
+  const guardado = cacheTaxaAnalise.get(cnpj)
+  if (guardado) return guardado
+
+  // Mesma razão do cast do upsert: a função nasceu na 0225.
+  const rpc = supabaseAdmin.rpc as unknown as (
+    nome: string,
+    args: Record<string, unknown>,
+  ) => Promise<{
+    data: { taxa: number | null; origem: string | null }[] | null
+    error: { message: string } | null
+  }>
+  const { data, error } = await rpc('app__taxa_da_analise', { p_sacado_cnpj: cnpj })
+  if (error) {
+    logger.warn({ cnpj, erro: error.message }, 'Falha ao resolver a taxa da análise.')
+    return { taxa: null, origem: null }
+  }
+  const linha = Array.isArray(data) ? data[0] : null
+  const taxa = Number(linha?.taxa ?? Number.NaN)
+  const resolvido = {
+    taxa: Number.isFinite(taxa) ? taxa : null,
+    origem: (linha?.origem as string | null) ?? null,
+  }
+  cacheTaxaAnalise.set(cnpj, resolvido)
+  return resolvido
 }
 
 async function tacDoSacado(cnpj: string, cfg: ConfigEconomia): Promise<ReguaTac> {

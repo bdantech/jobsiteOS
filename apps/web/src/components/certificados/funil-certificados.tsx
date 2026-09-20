@@ -424,7 +424,7 @@ function DetalheDoCard({
         { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={c.empresa_id} /> },
         {
           id: 'mensagens',
-          label: 'Mensagens',
+          label: 'Comunicação',
           conteudo: <AbaMensagens empresaId={c.empresa_id} funil="certificados" funilCardId={c.card_id} />,
         },
       ]}

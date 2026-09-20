@@ -50,14 +50,54 @@ motivo em `voz_ligacoes.motivo_recusa`:
 ```
 kill_switch → suprimido → sem_contato → sem_base_legal → no_procon → telefone_invalido
 → nota_cancelada → nao_operavel → sem_numero_da_nota → sem_vencimento
-→ vencimento_estimado → vencida → sem_taxa → taxa_padrao → sem_desconto → sem_liquido
+→ vencimento_estimado → vencida → taxa_padrao → sem_taxa → sem_tac → sem_desconto
+→ sem_liquido
 ```
 
 Da mais permanente para a mais temporária, como no outro portão. Quem está no Procon nunca
 vai ser ligado; a nota com vencimento estimado passa a poder no dia em que o XML trouxer a
 data de verdade.
 
+O `no_procon` não é campo do nosso cadastro: a marca chega do enriquecimento dentro de
+`contatos_descobertos.evidencia` ("… celular, VIVO, no Procon, com WhatsApp"), e é de lá
+que a tela e a action a leem (`packages/core/src/voz/procon.ts`). Enquanto não for coluna,
+é ali que ela mora — e sem essa leitura o portão parecia fechado e estava aberto.
+
 ---
+
+## A taxa que ela fala vem da análise — e sobe para a mãe
+
+`taxa_usada` existe para **ordenar** o funil: sem análise do sacado ela cai no default
+da config, e para "esta nota vale mais que aquela" um chute bom cumpre o papel. Dita ao
+telefone, a mesma taxa deixa de ordenar e vira **condição** — e o default não é condição
+de ninguém.
+
+Por isso a Ana fala `notas_fiscais.taxa_analise_am`, resolvida por `app__taxa_da_analise`:
+
+```
+análise do próprio sacado  →  análise da EMPRESA-MÃE  →  não liga
+   (analises_plataforma)      (app_holding_do_sacado)     (taxa_padrao)
+```
+
+SPE e filial não têm análise própria: quem tem é a construtora dona delas, e é a
+condição dela que a plataforma aplica. A subida é a mesma de `app_holding_do_sacado`,
+que a carteira já usa — vínculo explícito, mesmo CNPJ, mesma raiz, grupo da SPE.
+
+Nas 385 notas que a tela ofereceria hoje: **213** têm análise do próprio sacado, **142**
+só têm pela mãe, e **30** não têm nenhuma. Sem a subida, 37% das ligações diriam a taxa
+padrão como se fosse a da empresa.
+
+E o deságio é **recalculado** com essa taxa, em vez de lido da view: dizer a taxa da
+análise e o deságio calculado com outra seria falar dois números que não fecham entre si,
+e quem atende tem calculadora.
+
+## O líquido desconta TAC e seguro
+
+`valor − deságio` era a conta até a 0221 mostrar que faltavam a TAC do sacado e os R$ 125
+de seguro por nota. Nas notas desta tela são **R$ 282 a mais em média, até R$ 573** —
+ditos em voz alta, numa ligação gravada, dois dias antes de a proposta escrita chegar
+com o número certo. O pedido leva `valor_tac` e `valor_seguro` explícitos para que a
+composição feche.
 
 ## O IOF: resolvido
 
@@ -70,21 +110,12 @@ calcula. O campo `valor_iof` continua no contrato, opcional e zero, para o caso 
 existir operação que tenha — e, com zero, a Ana **não menciona IOF em nenhum momento**: ela
 não fala de imposto que não existe.
 
-## Duas decisões em aberto
+## Uma decisão em aberto
 
-São decisões de negócio, não de código, e estão aqui para serem decididas em vez de
-descobertas numa ligação gravada.
+É decisão de negócio, não de código, e está aqui para ser decidida em vez de descoberta
+numa ligação gravada.
 
-### 1. A taxa pode ser a padrão
-
-`calcularReceitaEsperada` cai no default do `antecipacao_config` quando o sacado não tem
-snapshot de crédito, e marca `taxa_padrao: true`. Na tela isso é "estimativa menos
-confiável"; na ligação seria a Ana dizendo uma condição que não é a real.
-
-O campo `taxa_padrao` do portão existe e hoje chega sempre `false`, porque a `notas_funil`
-não expõe o flag. Enquanto não expuser, a ausência de taxa é o único sinal.
-
-### 2. O vencimento pode ser estimado
+### 1. O vencimento pode ser estimado
 
 `notas_fiscais.vencimento_origem` admite `estimado`. A Ana diz a data em voz alta; com data
 estimada ela erra na frente de quem sabe a data de cor. O portão recusa.
@@ -121,7 +152,11 @@ Tudo isso fica cru em `voz_ligacoes.resultado`; o que entra no ledger é o resum
 
 1. fecha a linha em `voz_ligacoes`;
 2. grava a conversa em **`comunicacoes`** (`canal = 'ligacao'`, `provedor = 'voz'`,
-   `por_ia = true`) — o ledger continua sendo a única fonte do que foi falado;
+   `por_ia = true`) — o ledger continua sendo a única fonte do que foi falado. A ficha
+   da empresa é CRIADA aqui quando não existe (`app__promover_fornecedor_para_empresa`):
+   a aba Comunicação do card lê o ledger por empresa, e fornecedor de NF quase nunca tem
+   ficha — sem isso a ligação existiria no banco sem aparecer em lugar nenhum, e o
+   `ultima_conversa_em` da empresa não andaria;
 3. move `estagio_funil` para `em_negociacao` quando a ligação fechou algo, e só a partir de
    `a_prospectar`/`em_prospeccao` — uma ligação não desfaz o que um humano moveu adiante, e
    `convertida` continua sendo carimbo do sync da plataforma;

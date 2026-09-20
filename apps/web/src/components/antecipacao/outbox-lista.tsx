@@ -47,7 +47,7 @@ import { antecipacaoKeys, buscarOutbox, type FiltrosOutbox } from './queries'
  *
  * Por isso ela também deixou de ser HISTÓRICO. O corpo some da linha no instante
  * do envio (`mensagens_outbox_sem_copia_do_ledger`), e o que foi dito passa a
- * viver em `comunicacoes` — que é onde a aba "Mensagens" e a Company 360 leem. Uma
+ * viver em `comunicacoes` — que é onde a aba "Comunicação" e a Company 360 leem. Uma
  * linha `enviada` aqui é um recibo, não uma cópia.
  *
  * Cada linha mostra o destinatário escolhido e — importante — SE ele veio do ponto

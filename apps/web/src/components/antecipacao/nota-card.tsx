@@ -464,7 +464,7 @@ export function NotaCard({
             },
             {
               id: 'mensagens',
-              label: 'Mensagens',
+              label: 'Comunicação',
               conteudo: (
                 <AbaMensagens
                   empresaId={nota.fornecedor_empresa_id}

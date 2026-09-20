@@ -1,7 +1,10 @@
 import {
+  CONFIG_VOZ_PADRAO,
   fatosDaNotaDoFunil,
   normalizarTelefoneBr,
   podeLigar,
+  telefonesNoProcon,
+  type ConfigVoz,
   type ContatoDaLigacao,
   type NotaDoFunil,
   type Tables,
@@ -129,7 +132,7 @@ export async function buscarThread(conversaId: string): Promise<MensagemThread[]
 }
 
 /**
- * A thread da EMPRESA, que é o que a aba "Mensagens" do card mostra.
+ * A thread da EMPRESA, que é o que a aba "Comunicação" do card mostra.
  *
  * Filtra pela empresa e não pelo card: a mesma pessoa fala com o SDR, com o
  * originador e com o closer, e o card serve para destacar o que partiu dali —
@@ -428,13 +431,23 @@ export interface CandidataDeVoz {
   contato: ContatoDaLigacao | null
   contatoId: string | null
   veredicto: VeredictoLigacao
+  /**
+   * O que a Ana vai DIZER — não o `liquido_estimado` da view.
+   *
+   * Os dois divergem quando a taxa da análise não é a `taxa_usada` que
+   * precificou a nota no funil. A tela mostra o número da ligação, porque é o
+   * que a pessoa está decidindo prometer.
+   */
+  liquido: number | null
+  taxa: number | null
 }
 
+/*
+ * Literal ÚNICO: `select` montado com `+` vira `GenericStringError` no tipo, e o
+ * erro aparece nas linhas de uso, não aqui. Mesma lista da action.
+ */
 const COLUNAS_CANDIDATA =
-  'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, ' +
-  'receita_esperada, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, ' +
-  'fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, ' +
-  'sacado_nome, sacado_razao_social, contato_fornecedor'
+  'access_key, numero, serie, emitida_em, vencimento, vencimento_origem, valor, taxa_usada, taxa_analise_am, taxa_analise_origem, receita_esperada, tac_estimada, seguro_estimado, status_sync, operavel, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_razao_social, contato_fornecedor'
 
 /**
  * As notas que PODERIAM virar ligação — e, para cada uma que não pode, o motivo.
@@ -442,6 +455,13 @@ const COLUNAS_CANDIDATA =
  * O portão roda aqui no navegador porque ele é função pura do core: a tela
  * mostra exatamente o mesmo veredicto que o job daria de madrugada. Quem monta
  * o pedido de verdade é a action, no servidor; aqui é só o que a pessoa vê.
+ *
+ * ── A SUPRESSÃO É CONSULTADA PELOS NÚMEROS EM JOGO ─────────────────────────
+ * Antes vinha a tabela inteira para o navegador, o que é a lista de todo mundo
+ * que pediu para não ser procurado — telefone, e-mail e CNPJ — baixada numa tela
+ * de prospecção. E vinha cortada em mil linhas pelo limite do PostgREST: acima
+ * disso, um suprimido aparecia como "pronto para ligar" e só era barrado no
+ * clique. Perguntar pelos números desta tela resolve as duas coisas.
  */
 export async function buscarCandidatasDeVoz(): Promise<CandidataDeVoz[]> {
   const supabase = createClient()
@@ -457,7 +477,7 @@ export async function buscarCandidatasDeVoz(): Promise<CandidataDeVoz[]> {
   if (!linhas.length) return []
 
   const empresaIds = [...new Set(linhas.map((n) => n.fornecedor_empresa_id).filter(Boolean))]
-  const [{ data: contatos }, { data: suprimidos }, jaNaFila] = await Promise.all([
+  const [{ data: contatos }, jaNaFila, cfg] = await Promise.all([
     empresaIds.length
       ? supabase
           .from('contatos')
@@ -465,53 +485,104 @@ export async function buscarCandidatasDeVoz(): Promise<CandidataDeVoz[]> {
           .in('empresa_id', empresaIds as string[])
           .order('ponto_focal', { ascending: false })
       : Promise.resolve({ data: [] as Tables<'contatos'>[] }),
-    supabase
-      .from('supressao')
-      .select('escopo, valor')
-      .or(`expira_em.is.null,expira_em.gte.${new Date().toISOString().slice(0, 10)}`),
     buscarLigacoesDeVoz(),
+    lerConfigDaVoz(),
   ])
 
-  const bloqueados = new Set((suprimidos ?? []).map((s) => s.valor))
-  const abertas = new Set(
-    jaNaFila.filter((l) => l.status === 'a_enviar' || l.status === 'enviada').map((l) => l.access_key),
-  )
-
-  const saida: CandidataDeVoz[] = []
-  for (const nota of linhas) {
-    if (abertas.has(nota.access_key)) continue
+  // Quem atende cada nota, resolvido ANTES de perguntar pela supressão: é a lista
+  // de telefones daqui que vira a pergunta.
+  const escolhidos = linhas.map((nota) => {
     const daEmpresa = (contatos ?? []).filter((c) => c.empresa_id === nota.fornecedor_empresa_id)
-    let contato: ContatoDaLigacao | null = null
-    let contatoId: string | null = null
     for (const c of daEmpresa) {
       const tel = normalizarTelefoneBr(c.whatsapp ?? c.telefone)
       if (!tel.valido || !tel.e164) continue
-      contato = {
+      const contato: ContatoDaLigacao = {
         nome: c.nome,
         cargo: c.cargo,
         telefone_e164: tel.e164,
         email: c.email,
         base_legal: c.base_legal,
       }
-      contatoId = c.id
-      break
+      return { nota, contato, contatoId: c.id }
     }
-    if (!contato) {
-      const doPayload = nota.contato_fornecedor as { name?: string; phone?: string } | null
-      const tel = normalizarTelefoneBr(doPayload?.phone)
-      if (tel.valido && tel.e164) {
-        contato = {
+    const doPayload = nota.contato_fornecedor as { name?: string; phone?: string } | null
+    const tel = normalizarTelefoneBr(doPayload?.phone)
+    if (tel.valido && tel.e164) {
+      return {
+        nota,
+        contato: {
           nome: doPayload?.name ?? nota.fornecedor_nome ?? null,
           telefone_e164: tel.e164,
           base_legal: 'dado_publico_nfe',
-        }
+        } as ContatoDaLigacao,
+        contatoId: null,
       }
     }
-    const digitos = (contato?.telefone_e164 ?? '').replace(/\D/g, '')
-    const fatos = fatosDaNotaDoFunil(nota, contato, {
-      suprimido: bloqueados.has(digitos) || bloqueados.has(nota.fornecedor_cnpj),
+    return { nota, contato: null, contatoId: null }
+  })
+
+  const telefones = [
+    ...new Set(escolhidos.map((e) => e.contato?.telefone_e164).filter(Boolean) as string[]),
+  ]
+  const digitosDe = (e164: string) => e164.replace(/\D/g, '')
+  const alvos = [...new Set([...telefones.map(digitosDe), ...linhas.map((n) => n.fornecedor_cnpj)])]
+
+  const [{ data: suprimidos }, { data: evidencias }] = await Promise.all([
+    alvos.length
+      ? supabase
+          .from('supressao')
+          .select('escopo, valor')
+          .in('valor', alvos)
+          .or(`expira_em.is.null,expira_em.gte.${new Date().toISOString().slice(0, 10)}`)
+      : Promise.resolve({ data: [] as { escopo: string; valor: string }[] }),
+    // O Procon mora na evidência do enriquecimento, não em `contatos` — ver
+    // `packages/core/src/voz/procon.ts`.
+    telefones.length
+      ? supabase.from('contatos_descobertos').select('valor, evidencia').in('valor', telefones)
+      : Promise.resolve({ data: [] as { valor: string; evidencia: string | null }[] }),
+  ])
+
+  const bloqueados = new Set((suprimidos ?? []).map((s) => s.valor))
+  const noProcon = telefonesNoProcon(evidencias ?? [])
+  const abertas = new Set(
+    jaNaFila.filter((l) => l.status === 'a_enviar' || l.status === 'enviada').map((l) => l.access_key),
+  )
+
+  const saida: CandidataDeVoz[] = []
+  for (const { nota, contato, contatoId } of escolhidos) {
+    if (abertas.has(nota.access_key)) continue
+    const telefone = contato?.telefone_e164 ?? ''
+    const comProcon = contato ? { ...contato, no_procon: noProcon.has(telefone) } : null
+    const fatos = fatosDaNotaDoFunil(nota, comProcon, {
+      killSwitch: cfg.kill_switch,
+      validadeDias: cfg.validade_dias,
+      suprimido: bloqueados.has(digitosDe(telefone)) || bloqueados.has(nota.fornecedor_cnpj),
     })
-    saida.push({ nota, contato, contatoId, veredicto: podeLigar(fatos) })
+    saida.push({
+      nota,
+      contato: comProcon,
+      contatoId,
+      veredicto: podeLigar(fatos),
+      liquido: fatos.nota.valor_liquido,
+      taxa: fatos.nota.taxa_am,
+    })
   }
   return saida
+}
+
+/**
+ * A config da voz, para a tela dizer a mesma coisa que a action diria.
+ *
+ * `kill_switch` valia só no servidor: a tela mostrava o card verde e o clique
+ * falhava com "Disparos desligados", que é a tela mentindo por omissão.
+ */
+async function lerConfigDaVoz(): Promise<ConfigVoz> {
+  const { data } = await createClient()
+    .from('antecipacao_config')
+    .select('valor')
+    .eq('chave', 'voz')
+    .maybeSingle()
+  const valor = data?.valor
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return CONFIG_VOZ_PADRAO
+  return { ...CONFIG_VOZ_PADRAO, ...(valor as Partial<ConfigVoz>) }
 }

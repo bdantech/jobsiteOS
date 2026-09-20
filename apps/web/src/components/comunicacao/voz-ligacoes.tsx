@@ -76,8 +76,17 @@ const DESFECHO_LABEL: Record<string, string> = {
   indefinido: 'Indefinido',
 }
 
+/**
+ * O link do painel vem do corpo do webhook — texto de um serviço de fora. Só
+ * `https://` vira link: um `javascript:` aqui seria script nosso rodando por
+ * conta de quem mandou o resultado.
+ */
+function linkSeguro(url: string | null | undefined): string | null {
+  return typeof url === 'string' && url.startsWith('https://') ? url : null
+}
+
 function LinhaDaFila({ l }: { l: LigacaoDeVoz }) {
-  const painel = l.resultado?.links?.painel ?? null
+  const painel = linkSeguro(l.resultado?.links?.painel)
   return (
     <TableRow>
       <TableCell className="font-medium">
@@ -107,7 +116,7 @@ function LinhaDaFila({ l }: { l: LigacaoDeVoz }) {
       <TableCell className="text-right">
         {painel ? (
           <Button asChild size="sm" variant="ghost">
-            <a href={painel} target="_blank" rel="noreferrer">
+            <a href={painel} target="_blank" rel="noreferrer noopener">
               <Headphones className="h-4 w-4" aria-hidden /> Ouvir
             </a>
           </Button>
@@ -184,9 +193,16 @@ export function VozLigacoes() {
                       </p>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{c.nota.numero ?? '—'}</TableCell>
+                    {/* O que a Ana vai DIZER: deságio pela taxa da análise, menos
+                        TAC e seguro (0221/0225). A conta que estava aqui — valor
+                        menos deságio — ia R$ 282 alta em média, até R$ 573. */}
                     <TableCell className="text-right">
-                      {formatarMoeda(
-                        Number(c.nota.valor ?? 0) - Number(c.nota.receita_esperada ?? 0),
+                      {c.liquido === null ? '—' : formatarMoeda(c.liquido)}
+                      {c.taxa === null ? null : (
+                        <p className="text-xs text-muted-foreground">
+                          {c.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% a.m.
+                          {c.nota.taxa_analise_origem === 'holding' ? ' (da matriz)' : null}
+                        </p>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">

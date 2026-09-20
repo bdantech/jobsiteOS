@@ -29,7 +29,7 @@ import { brlExato, exibirValor, linkDoContato, rotuloConfianca, rotuloFonte, rot
 /**
  * O AGENTE DE CONTATO NO CARD DA NOTA (04l §5 alcançado a partir do funil de NFs).
  *
- * A aba "Mensagens" de um card de NF era um beco: ela pede empresa, e 3.542 dos
+ * A aba "Comunicação" de um card de NF era um beco: ela pede empresa, e 3.542 dos
  * 3.705 fornecedores com nota viva não têm ficha nenhuma. A tela explicava o
  * impasse ("sem empresa não há contato") e não oferecia saída — que é a definição
  * de uma aba sem uso.
