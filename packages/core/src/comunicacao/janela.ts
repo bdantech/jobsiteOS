@@ -80,3 +80,42 @@ export function proximaAbertura(instante: Date, janela: JanelaEnvio): Date {
   // Silenciar por 14 dias seria pior que a etiqueta que a janela protege.
   return instante
 }
+
+/**
+ * A próxima abertura DEPOIS DA VIRADA DO DIA local.
+ *
+ * ── PARA QUE SERVE ──────────────────────────────────────────────────────────
+ * Teto diário — da conta (warmup) ou da thread — não é "espere um pouco": é "hoje
+ * acabou". O que a fila precisa saber é quando o contador ZERA, e ele zera na virada
+ * do dia local, não daqui a N horas.
+ *
+ * ── A CICATRIZ ──────────────────────────────────────────────────────────────
+ * A fila adiava com `agora + 12h`, sob um comentário que dizia "adia para a próxima
+ * abertura". Doze horas não são a próxima abertura de nada: uma mensagem barrada pelo
+ * teto às 10h15 de uma terça reaparecia às 22h15 da terça — de noite, e ainda no
+ * mesmo dia cujo teto ela tinha estourado.
+ *
+ * Em 15/09/2026 foram 36 mensagens assim, num dia de 82 pedidas contra um teto de
+ * warmup de ~40. O SDR relatou mensagens saindo 22h30. Elas saíram porque o adiamento
+ * errado se somou a um segundo defeito (ver `forcar_janela` na 0219): o campo que
+ * guardava o adiamento era o MESMO que dizia "esta mensagem pode furar a janela".
+ *
+ * Voltando pela virada do dia, o teto de amanhã é outro e a janela volta a valer.
+ */
+export function proximaAberturaAposVirada(instante: Date, janela: JanelaEnvio): Date {
+  const hoje = partesNoFuso(instante, janela.timezone)
+  const cursor = new Date(instante.getTime())
+  cursor.setUTCSeconds(0, 0)
+  cursor.setUTCMinutes(0)
+
+  // Três dias de margem: qualquer fuso vira em menos de 24h, e o excedente só existe
+  // para que uma config estranha não vire laço infinito.
+  for (let i = 0; i < 24 * 3; i++) {
+    cursor.setUTCHours(cursor.getUTCHours() + 1)
+    const l = partesNoFuso(cursor, janela.timezone)
+    if (l.dia !== hoje.dia || l.mes !== hoje.mes || l.ano !== hoje.ano) {
+      return proximaAbertura(cursor, janela)
+    }
+  }
+  return proximaAbertura(instante, janela)
+}

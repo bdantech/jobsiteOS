@@ -1,6 +1,7 @@
 import {
   intervaloEntreEnvios,
   podeEnviar,
+  proximaAberturaAposVirada,
   tetoDiarioDaConta,
   exigeDescadastro,
   variaveisPendentes,
@@ -87,12 +88,13 @@ interface LinhaFila {
   funil_card_id: string | null
   tentativas: number
   agendada_para: string | null
+  forcar_janela: boolean
   fornecedor_empresa_id: string | null
   campanha_id: string | null
 }
 
 const COLUNAS =
-  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, fornecedor_empresa_id, campanha_id'
+  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, forcar_janela, fornecedor_empresa_id, campanha_id'
 
 export async function enviarFila(limite = 100): Promise<ResultadoEnvioFila> {
   const cfg = await lerConfigComunicacao(true)
@@ -258,10 +260,18 @@ async function processar(
     tetoDaConta: conta ? tetoDiarioDaConta(conta, cfg, agora) : 0,
     ultimoToqueEm: await ultimoToqueEm(linha.destinatario_contato_id),
     agora,
-    // O compositor já gravou a decisão de furar a janela em `agendada_para`; o
-    // cooldown, quando furado, foi checado na transação que enfileirou. Aqui o
-    // que resta é a janela e os tetos.
-    forcarJanela: linha.agendada_para !== null,
+    /*
+     * A LICENÇA DE FURAR A JANELA É DA PESSOA, e agora tem coluna própria (0219).
+     *
+     * Era `agendada_para !== null`, porque o compositor gravava `agendada_para =
+     * now()` ao marcar "forçar janela". O problema é que o adiamento por teto diário
+     * — logo abaixo, feito por ESTE job — escreve no mesmo campo: a mensagem voltava
+     * à fila carregando uma licença que ninguém tinha dado, e saía de madrugada.
+     *
+     * Um booleano que só o compositor escreve não pode ser produzido por engano por
+     * uma rotina.
+     */
+    forcarJanela: linha.forcar_janela,
   }
 
   // O cooldown já foi decidido no enfileiramento (que é onde a pessoa viu o
@@ -279,11 +289,19 @@ async function processar(
       return { desfecho: 'reagendadas', conta }
     }
     if (veredito.motivo === 'teto_conta' || veredito.motivo === 'teto_thread') {
-      // Teto é do DIA: adia para a próxima abertura, não descarta.
-      const amanha = new Date(agora.getTime() + 12 * 3_600_000)
+      /*
+       * Teto é do DIA: adia para a próxima abertura DEPOIS DA VIRADA, não descarta.
+       *
+       * Era `agora + 12h`, sob este mesmo comentário — e doze horas não são a próxima
+       * abertura de nada. Barrada às 10h15 de uma terça, a mensagem voltava às 22h15
+       * da MESMA terça: de noite, e ainda dentro do dia cujo teto ela tinha estourado.
+       * Somado ao `forcarJanela` acima, que ela herdava sem querer, era assim que
+       * WhatsApp saía 22h30 (0219).
+       */
+      const volta = proximaAberturaAposVirada(agora, cfg.janela)
       await supabaseAdmin
         .from('mensagens_outbox')
-        .update({ agendada_para: amanha.toISOString() })
+        .update({ agendada_para: volta.toISOString() })
         .eq('id', linha.id)
       return { desfecho: 'reagendadas', conta }
     }

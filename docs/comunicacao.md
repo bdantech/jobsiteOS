@@ -100,9 +100,9 @@ check (comunicacao_id is null or mensagem is null)
 **Nada sai sem passar por aqui** — humano ou IA, compositor, outbox ou agente. O portão
 tem duas metades, e a divisão não é arbitrária:
 
-- **fato do banco** (supressão, base legal, ponto focal, cooldown) é checado na transação
-  que **enfileira** (`app_comunicacao_enfileirar`). Recusar ali é a única forma de a
-  pessoa ver o motivo na tela;
+- **fato do banco** (supressão, ponto focal) é checado na transação que **enfileira**
+  (`app_comunicacao_enfileirar`). Recusar ali é a única forma de a pessoa ver o motivo na
+  tela. Base legal saiu na 0213; o cooldown, na 0219 — ver abaixo;
 - **fato do relógio e da conta** (janela, teto do número, warmup, intervalo entre envios) é
   do worker, porque só ele sabe quantas mensagens aquele número já mandou hoje e que horas
   são quando a fila for consumida.
@@ -111,11 +111,23 @@ A função pura está em `packages/core/src/comunicacao/portao.ts` e devolve a *
 recusa nesta ordem, da mais permanente para a mais temporária:
 
 ```
-kill switch → supressão → base legal → teto da thread → teto da conta → cooldown → janela
+kill switch → supressão → teto da thread → teto da conta → cooldown → janela
 ```
 
 A ordem é o que faz a mensagem de erro dizer a coisa mais importante em vez da mais
-recente.
+recente. Base legal saiu da fila na 0213 (continua gravada, e continua decidindo o link de
+descadastro).
+
+#### O cooldown é do robô, não de quem escreve (0219)
+
+Eram 3 dias entre duas mensagens ao mesmo contato, e a recusa vinha **depois** de a pessoa
+ter escrito. A régua nasceu para a cadência automática; aplicada a quem escreve à mão, ela
+dizia não no meio de uma negociação — e o caminho que sobrava era mandar pelo celular,
+fora do sistema e sem registro nenhum.
+
+Saiu do caminho humano (`app_comunicacao_enfileirar`, que só o compositor chama).
+**Continua valendo para `origem = 'outbox'`**, que é o robô: o portão do worker ainda
+aplica `cooldown_dias` nesse caso.
 
 ### Fora da janela é adiamento, não descarte
 
@@ -125,6 +137,34 @@ terceira saída — a linha continua `aprovada`, o worker é que não a pega ain
 
 Um envio manual **pode furar a janela** com confirmação explícita. Nunca a supressão:
 supressão é um pedido da pessoa, janela é etiqueta.
+
+#### `forcar_janela` é coluna, não inferência (0219)
+
+A licença de furar a janela era lida de `agendada_para is not null` — porque o
+enfileiramento gravava `agendada_para = now()` quando a pessoa marcava a caixa. O campo
+fazia **duas coisas**: guardava *quando* retentar e, de quebra, *quem pode furar*.
+
+O worker também escreve `agendada_para`, ao adiar por teto diário. Então o adiamento do
+sistema herdava a licença da pessoa, e a mensagem voltava à fila com a janela desligada.
+
+Somado a um segundo defeito — o adiamento era `agora + 12h` sob um comentário que dizia
+"próxima abertura" —, o resultado foi WhatsApp saindo **22h30** para fornecedor:
+
+| pedida | agendada | enviada |
+|---|---|---|
+| 15/09 10:15 | 15/09 22:15 | 22:26 |
+| 15/09 10:38 | 15/09 22:38 | 22:45 |
+| 16/09 14:13 | 17/09 02:13 | 02:15 |
+
+Sempre `+12h00`, minuto a minuto — a assinatura de uma constante no código, não de fila
+congestionada. Em 15/09 foram 36 mensagens assim, de 82 pedidas contra um teto de warmup
+de ~40/dia.
+
+As duas correções são independentes e ambas necessárias: `forcar_janela` vira coluna que
+**só o compositor escreve**, e o adiamento por teto passa a usar
+`proximaAberturaAposVirada` — teto diário zera na virada do dia local, e é para lá que a
+mensagem vai. Sozinho, o adiamento errado só atrasaria; sozinha, a inferência nunca
+dispararia. Juntos, viraram permissão para a madrugada.
 
 ### Base legal e descadastro
 

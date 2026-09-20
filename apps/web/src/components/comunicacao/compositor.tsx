@@ -60,6 +60,13 @@ import {
  * mandar a mensagem. O valor continua gravado e continua decidindo o link de
  * descadastro (`exigeDescadastro`); ele só não recusa mais o envio, aqui, no portão
  * do worker nem no `app_comunicacao_enfileirar`.
+ *
+ * O COOLDOWN DE 3 DIAS TAMBÉM SAIU DAQUI (0219). Ele recusava uma segunda mensagem
+ * ao mesmo contato dentro de três dias — e recusava DEPOIS de a pessoa ter escrito.
+ * A régua nasceu para a cadência do robô; aplicada a quem escreve à mão, ela dizia
+ * não justamente no meio de uma negociação, e o caminho que sobrava era mandar pelo
+ * celular, fora do sistema e sem registro. Continua valendo para `origem = 'outbox'`,
+ * que é o robô.
  */
 
 export function Compositor({
@@ -339,7 +346,8 @@ export function Compositor({
         />
         <span>
           <Clock className="mr-1 inline h-3 w-3" aria-hidden />
-          Enviar mesmo fora da janela (seg–sex, 9h–18h). Supressão e cooldown continuam valendo.
+          Enviar mesmo fora da janela (seg–sex, 9h–18h). A supressão continua valendo — ela é
+          a pessoa pedindo para não receber, e nada aqui fura isso.
         </span>
       </label>
 

@@ -5048,6 +5048,7 @@ export type Database = {
           fornecedor_nome: string | null
           funil: string | null
           funil_card_id: string | null
+          forcar_janela: boolean
           id: string
           motivo_descarte: string | null
           origem: string
@@ -5085,6 +5086,7 @@ export type Database = {
           fornecedor_nome?: string | null
           funil?: string | null
           funil_card_id?: string | null
+          forcar_janela?: boolean
           id?: string
           motivo_descarte?: string | null
           origem?: string
@@ -5122,6 +5124,7 @@ export type Database = {
           fornecedor_nome?: string | null
           funil?: string | null
           funil_card_id?: string | null
+          forcar_janela?: boolean
           id?: string
           motivo_descarte?: string | null
           origem?: string
@@ -10335,6 +10338,7 @@ export type Database = {
           fornecedor_nome: string | null
           funil: string | null
           funil_card_id: string | null
+          forcar_janela: boolean
           id: string
           motivo_descarte: string | null
           origem: string
@@ -10494,6 +10498,7 @@ export type Database = {
           fornecedor_nome: string | null
           funil: string | null
           funil_card_id: string | null
+          forcar_janela: boolean
           id: string
           motivo_descarte: string | null
           origem: string
@@ -10887,6 +10892,7 @@ export type Database = {
           fornecedor_nome: string | null
           funil: string | null
           funil_card_id: string | null
+          forcar_janela: boolean
           id: string
           motivo_descarte: string | null
           origem: string
@@ -11459,6 +11465,7 @@ export type Database = {
           fornecedor_nome: string | null
           funil: string | null
           funil_card_id: string | null
+          forcar_janela: boolean
           id: string
           motivo_descarte: string | null
           origem: string

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { dentroDaJanela, proximaAbertura } from './janela.ts'
+import { dentroDaJanela, partesNoFuso, proximaAbertura, proximaAberturaAposVirada } from './janela.ts'
 import type { JanelaEnvio } from './schemas.ts'
 
 const JANELA: JanelaEnvio = {
@@ -64,4 +64,54 @@ test('às 7h de uma terça, a abertura é às 9h da MESMA terça', () => {
 test('janela impossível não trava o worker num laço', () => {
   const impossivel: JanelaEnvio = { ...JANELA, dias_semana: [] }
   assert.equal(proximaAbertura(quintaAs10, impossivel).getTime(), quintaAs10.getTime())
+})
+
+// ─── Teto diário: a virada do dia, não "daqui a 12h" ────────────────────────
+
+const JANELA_SP: JanelaEnvio = {
+  timezone: 'America/Sao_Paulo',
+  dias_semana: [1, 2, 3, 4, 5],
+  hora_inicio: 9,
+  hora_fim: 18,
+}
+
+/** 15/09/2026 é uma terça. 10h15 em SP = 13h15 UTC. */
+test('o caso real: barrada às 10h15 de terça volta na QUARTA às 9h, não às 22h15 da terça', () => {
+  const quandoBarrou = new Date('2026-09-15T13:15:00Z')
+  const volta = proximaAberturaAposVirada(quandoBarrou, JANELA_SP)
+
+  const l = partesNoFuso(volta, 'America/Sao_Paulo')
+  assert.equal(l.dia, 16)
+  assert.equal(l.hora, 9)
+  // O defeito antigo dava exatamente isto, e é o que não pode voltar.
+  assert.notEqual(volta.getTime(), quandoBarrou.getTime() + 12 * 3_600_000)
+})
+
+test('barrada de madrugada ainda assim espera a virada — o teto é do DIA, não das horas', () => {
+  // 02h00 de quarta em SP: já é fora da janela, mas o contador do dia é o de quarta.
+  const volta = proximaAberturaAposVirada(new Date('2026-09-16T05:00:00Z'), JANELA_SP)
+  const l = partesNoFuso(volta, 'America/Sao_Paulo')
+  assert.equal(l.dia, 17)
+  assert.equal(l.hora, 9)
+})
+
+test('barrada na sexta pula o fim de semana', () => {
+  // Sexta, 18/09/2026, 15h em SP.
+  const volta = proximaAberturaAposVirada(new Date('2026-09-18T18:00:00Z'), JANELA_SP)
+  const l = partesNoFuso(volta, 'America/Sao_Paulo')
+  assert.equal(l.diaSemana, 1)
+  assert.equal(l.dia, 21)
+  assert.equal(l.hora, 9)
+})
+
+test('o que volta está sempre DENTRO da janela — é o contrato inteiro desta função', () => {
+  for (const iso of [
+    '2026-09-15T13:15:00Z',
+    '2026-09-16T05:00:00Z',
+    '2026-09-18T18:00:00Z',
+    '2026-09-19T12:00:00Z',
+    '2026-09-20T23:59:00Z',
+  ]) {
+    assert.equal(dentroDaJanela(proximaAberturaAposVirada(new Date(iso), JANELA_SP), JANELA_SP), true, iso)
+  }
 })
