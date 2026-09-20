@@ -4459,6 +4459,54 @@ export type Database = {
           },
         ]
       }
+      funil_notas: {
+        Row: {
+          anexos: Json
+          autor_usuario_id: string
+          card_id: string
+          conteudo: string
+          criado_em: string
+          empresa_id: string | null
+          funil: string
+          id: string
+        }
+        Insert: {
+          anexos?: Json
+          autor_usuario_id: string
+          card_id: string
+          conteudo: string
+          criado_em?: string
+          empresa_id?: string | null
+          funil: string
+          id?: string
+        }
+        Update: {
+          anexos?: Json
+          autor_usuario_id?: string
+          card_id?: string
+          conteudo?: string
+          criado_em?: string
+          empresa_id?: string | null
+          funil?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funil_notas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funil_notas_autor_usuario_id_fkey"
+            columns: ["autor_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funil_transicoes: {
         Row: {
           de: string | null
@@ -11113,6 +11161,27 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "lotes_enriquecimento"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app__md_carteira_passiva: { Args: { p_passiva: string[] }; Returns: string[] }
+      app_ve_card_do_funil: { Args: { p_funil: string; p_card_id: string }; Returns: boolean }
+      app_criar_nota_funil: {
+        Args: { p: Json }
+        Returns: {
+          anexos: Json
+          autor_usuario_id: string
+          card_id: string
+          conteudo: string
+          criado_em: string
+          empresa_id: string | null
+          funil: string
+          id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "funil_notas"
           isOneToOne: true
           isSetofReturn: false
         }

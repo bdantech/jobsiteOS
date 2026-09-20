@@ -37,6 +37,7 @@ import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
 import { EtapasDoFunil } from './etapas-funil'
 import { AbaCredito } from './aba-credito'
+import { AbaNotas } from './aba-notas'
 import {
   buscarMotivos, buscarVendas, buscarVendedores, buscarVendedoresVisiveis, comercialKeys,
   haOutroAoAlcance,
@@ -564,6 +565,12 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
                   },
                 ]
               : []),
+            /*
+              Notas vêm ANTES de Empresa: é o que a pessoa escreveu, e quem abre um card
+              que já conhece vem ler a última coisa que ficou combinada — não a ficha
+              cadastral, que não muda.
+            */
+            { id: 'notas', label: 'Notas', conteudo: <AbaNotas funil="vendedor" cardId={aberto.id} /> },
             { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={aberto.empresas?.id ?? null} /> },
             /*
              * O que a PESSOA escreveu. A aba Empresa mostra o que o sistema descobriu

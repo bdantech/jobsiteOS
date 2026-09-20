@@ -48,6 +48,7 @@ import { AbaPitch } from './aba-pitch'
 import { AbaFormulario, FichaDoCard } from './ficha-do-card'
 import { DonoDoCard } from './dono-do-card'
 import { AbaMensagens, ModalDoCard } from './modal-card'
+import { AbaNotas } from './aba-notas'
 import { EtapasDoFunil } from './etapas-funil'
 import {
   buscarLeads, buscarMotivos, buscarTerritoriosCloser, buscarVendedores, buscarVendedoresVisiveis,
@@ -666,6 +667,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               label: 'Pitch',
               conteudo: <AbaPitch leadId={aberto.id} vivo={!aberto.encerrado_em} />,
             },
+            /*
+              Notas logo depois do Pitch: o card do funil de reuniões é aberto para
+              ligar, e o que se faz DEPOIS de ligar é anotar como foi.
+            */
+            { id: 'notas', label: 'Notas', conteudo: <AbaNotas funil="sdr" cardId={aberto.id} /> },
             /*
               O que a PESSOA escreveu. Só existe para quem chegou por formulário —
               lead de distribuição nunca preencheu um, e a aba diz isso em vez de

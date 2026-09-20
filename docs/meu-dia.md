@@ -145,7 +145,7 @@ bloco que aparece na tela e não aparece nas configurações.
 | Reuniões pendentes de aceite | `sdr_aceites` pendentes com destino nele | — |
 | Crédito decidido | `vendas` + `analises_credito` aprovada/parcial/negada | — |
 | Propostas sem resposta | `vendas` em `proposta_enviada` | dias parada (4) |
-| Carteira ociosa | `clientes_onepay` da carteira do closer — parada há N dias **ou** apontada pelo temperature report. Traz as duas naturezas (`passivo` e `prospeccao_ativa`), e a tela filtra por elas | dias sem antecipar (30), limite mínimo (50k) |
+| Carteira ociosa | `clientes_onepay` da carteira **passiva** do closer — parada há N dias **ou** apontada pelo temperature report. Desde a 0220 exclui `prospeccao_ativa`, igual ao mapa | dias sem antecipar (30), limite mínimo (50k) |
 | Novos clientes | `empresas.marco_ativacao` dentro da janela | janela em dias (60) |
 | Certificados vencendo | `certificados` das empresas da carteira | avisar faltando (30) |
 | Análises expirando | `analises_credito.expira_em` | avisar faltando (60) |
@@ -190,6 +190,21 @@ manuais.
 > carrega o `gestao_operacao`, e o widget filtra entre ambas / passiva / ativa. O teto do
 > bloco subiu de 12 para 20 porque um teto aplicado ANTES do filtro faz o filtro mentir.
 >
+> **E o bloco passou a ser só de passivas também (0220).** A decisão acima foi revista
+> por quem usa o indicador, e o argumento é de negócio, não de código: limite ocioso é
+> problema de conta que **já opera e parou**. Conta em prospecção ativa tem limite por
+> estrear — outro trabalho, outra conversa —, e somar as duas dá um número que não
+> responde nenhuma das duas perguntas. Na carteira do Fabio o bloco caiu de **11 itens /
+> R$ 10,99 mi** para **3 / R$ 1,22 mi**: oito dos onze eram prospecção ativa, e respondiam
+> por R$ 9,8 dos R$ 11 milhões.
+>
+> O filtro entra em `app__md_montar`, **onde `v_passiva` nasce**, e não no bloco: assim o
+> mapa e o bloco — que ficam lado a lado na mesma tela — concordam por construção, e não
+> há como corrigir um e esquecer o outro. A régua é a mesma do mapa
+> (`is distinct from 'prospeccao_ativa'`, não `= 'passivo'`): conta sem classificação
+> continua aparecendo, porque sumir do dia do dono por causa de um campo em branco é o
+> erro que ninguém descobre.
+
 > **O MAPA, esse, é mesmo só das passivas (0202).** Ele lia a mesma `v_passiva` e não
 > tinha filtro nenhum — o resultado era a Ribeiro Caram, conta em prospecção ativa com
 > R$ 7 milhões de limite, sendo o maior retângulo de um widget intitulado "Minha carteira

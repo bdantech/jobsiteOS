@@ -440,6 +440,39 @@ pessoa é dona, não porque ela virou usuária do Crédito. **Ler o preço da pr
 decidir o preço de qualquer conta são coisas diferentes** — a matriz e o editor continuam
 no módulo.
 
+### Notas no card do funil (0220)
+
+Anotação livre do vendedor nos funis de **reunião (sdr)**, **vendas (vendedor)** e
+**certificados**, com anexos. Publicada na hora, listada da mais recente para a mais antiga.
+
+**DO CARD, não da empresa.** Foi a escolha de quem pediu, e ela tem consequência: o que o
+SDR anotou na reunião **não** aparece no funil de vendas. Cada card tem a sua conversa. O
+`empresa_id` é gravado junto mesmo assim — desnormalizado de propósito, para que "todas as
+notas desta empresa" seja uma consulta e não uma migração, no dia em que alguém quiser a
+visão unificada.
+
+O endereçamento `(funil, card_id)` é o mesmo de `funil_transicoes` e `mensagens_outbox`.
+Não há FK para o card: não existe uma tabela para apontar. Quem guarda é
+`app_ve_card_do_funil`, que repete a régua de cada funil — RLS de uma tabela não herda a
+da outra.
+
+| decisão | por quê |
+|---|---|
+| **Nota não se edita, só se apaga** | Uma anotação é o registro do que alguém sabia *naquele* momento. Reescrevê-la depois de o negócio mudar transforma o histórico em versão dos vencedores. Não há policy de UPDATE, e a ausência é a regra. |
+| **Só o autor apaga** | Errar o card ao escrever é comum e o texto fica visível para o time. A RLS garante; o botão escondido para os outros é cortesia, não permissão. |
+| **`autor_usuario_id = auth.uid()` no `with check`** | Um campo que a tela preenche é um campo que a tela pode mentir. A nota é assinada; a assinatura não se escolhe. |
+| **`empresa_id` derivado na RPC** | Mesma razão, e é ele que vai sustentar a visão por empresa. |
+| **Anexos em `jsonb`** | O anexo não tem vida própria: nasce com a nota, morre com ela, e ninguém consulta anexos sem a nota. Mesmo desenho de `comunicacoes.anexos`. |
+
+Os arquivos ficam no bucket privado `funil-notas`, 20 MB por arquivo, no caminho
+`{funil}/{card_id}/{arquivo}` — e é o caminho que carrega a permissão: a policy do bucket
+lê as duas primeiras pastas e pergunta ao mesmo `app_ve_card_do_funil`. Sem isso, qualquer
+um do Comercial leria o anexo de qualquer card, e o anexo é justamente a parte da nota que
+costuma ser documento de cliente.
+
+Os anexos sobem **antes** da nota: se um falhar, nada é publicado. Uma nota que diz "segue
+o print" sem o print é pior que a recusa, porque ninguém descobre que faltou até precisar.
+
 ### Quem vê o quê
 
 A aba Comissões usa **duas** réguas, e a distinção não é burocracia:

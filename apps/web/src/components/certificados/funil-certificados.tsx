@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AbaNotas } from '@/components/comercial/aba-notas'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import { AbaMensagens, ModalDoCard } from '@/components/comercial/modal-card'
@@ -368,6 +369,8 @@ function DetalheDoCard({
       </div>
           ),
         },
+        /* O que a pessoa escreveu vem antes do que o sistema descobriu sozinho. */
+        { id: 'notas', label: 'Notas', conteudo: <AbaNotas funil="certificado" cardId={c.card_id} /> },
         { id: 'empresa', label: 'Empresa', conteudo: <AbaEmpresa empresaId={c.empresa_id} /> },
         {
           id: 'mensagens',
