@@ -551,6 +551,29 @@ export interface EstadoGoogle {
   tem_escopo_agenda: boolean
 }
 
+/**
+ * O veredito de quem sentou na reunião — a fila de aceite (§5) vista de dentro
+ * do card. É ele que decide se a reunião virou comissão do SDR, e por isso ele
+ * pertence à aba tanto quanto o horário: quem abre o lead para entender por que
+ * aquela reunião não pagou não deveria ter de ir procurar a linha em Comissões.
+ *
+ * `decidido_por` é separado de `vendedor` de propósito: um gestor também pode
+ * decidir pelo vendedor, e atribuir a recusa a quem não a fez seria uma frase
+ * falsa sobre dinheiro.
+ */
+export interface AceiteDaReuniao {
+  id: string
+  status: 'pendente' | 'aceita' | 'recusada'
+  /** Aceita por decurso de prazo: ninguém respondeu, e o relógio decidiu. */
+  automatico: boolean
+  motivo_recusa: string | null
+  prazo_em: string
+  decidido_em: string | null
+  /** Quem recebeu a reunião — de quem se espera a confirmação. */
+  vendedor: string | null
+  decidido_por: string | null
+}
+
 export interface ReuniaoDoCard {
   id: string
   titulo: string
@@ -565,6 +588,8 @@ export interface ReuniaoDoCard {
   participantes: ParticipanteDaReuniao[]
   anfitriao: PessoaDaCasa
   acompanhantes: PessoaDaCasa[]
+  /** Nulo no funil de vendas e enquanto a reunião não entrou na fila de aceite. */
+  aceite: AceiteDaReuniao | null
   google: EstadoGoogle
 }
 

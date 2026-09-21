@@ -7,10 +7,13 @@ import {
   AlertTriangle,
   CalendarClock,
   Check,
+  Clock,
   Copy,
   ExternalLink,
   Loader2,
   MapPin,
+  ThumbsDown,
+  ThumbsUp,
   Users,
   Video,
 } from 'lucide-react'
@@ -24,7 +27,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { salvarReuniaoAction } from '@/actions/comercial'
 import { buscarContatos } from '@/components/comunicacao/queries'
-import { buscarReuniaoDoCard, comercialKeys, type ReuniaoDoCard } from './queries'
+import {
+  buscarReuniaoDoCard,
+  comercialKeys,
+  type AceiteDaReuniao,
+  type ReuniaoDoCard,
+} from './queries'
 
 /**
  * A aba Reunião, nos dois funis.
@@ -42,6 +50,12 @@ import { buscarReuniaoDoCard, comercialKeys, type ReuniaoDoCard } from './querie
  * essa pergunta exatamente onde ela estava. As três causas são diferentes e se
  * resolvem em lugares diferentes — ainda na fila, falhou por um motivo, ou o
  * anfitrião nunca conectou o Google — e a aba diz qual é.
+ *
+ * ─── E O QUE O VENDEDOR ACHOU DELA DEPOIS ──────────────────────────────────
+ * No funil de reuniões a aba vai até o DEPOIS: o vendedor que sentou na reunião
+ * confirma que ela aconteceu, ou recusa dizendo por quê, e é essa resposta que
+ * decide se ela vira comissão do SDR. Ela só existia na fila de aceite, em
+ * Comissões — longe do card onde a pergunta nasce.
  */
 
 const MODALIDADES: ModalidadeReuniao[] = ['meet', 'presencial', 'telefone']
@@ -120,6 +134,7 @@ export function AbaReuniao({ vendaId, sdrLeadId, empresaId }: AbaReuniaoProps) {
   return (
     <div className="space-y-4">
       <Cabecalho r={r} />
+      <VereditoDoVendedor a={r.aceite} />
       <Onde r={r} />
       <Convidados r={r} />
       <EstadoDoGoogle r={r} />
@@ -160,6 +175,95 @@ function Cabecalho({ r }: { r: ReuniaoDoCard }) {
         </Badge>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * O veredito de quem recebeu a reunião — a resposta que vale dinheiro.
+ *
+ * ─── POR QUE AQUI, E LOGO ABAIXO DO HORÁRIO ─────────────────────────────────
+ * Tudo o mais nesta aba é sobre o ANTES da reunião: onde, por qual link, quem
+ * foi convidado. Esta é a única linha sobre o DEPOIS, e é a que o SDR procura
+ * quando a comissão não veio. Ela morava só na fila de aceite, dentro de
+ * Comissões — quem abrisse o card do lead para entender o que houve tinha de
+ * sair da tela e achar a empresa numa lista.
+ *
+ * ─── O PENDENTE TAMBÉM É RESPOSTA, E FICA DISCRETO ──────────────────────────
+ * "Ainda não respondeu" explica a ausência do lançamento tão bem quanto uma
+ * recusa, e sem ele o silêncio pareceria um veredito negativo. Mas é estado de
+ * espera, não notícia: fica em cinza, e a regra do SLA vai junto porque é ela
+ * que diz o que acontece se ninguém fizer nada.
+ *
+ * DECIDIR fica de fora de propósito: quem decide é o vendedor destino ou um
+ * gestor, e a porta disso é a fila — com o prazo à vista e uma decisão por vez.
+ * Um botão solto num card faria a recusa (que tira comissão de alguém) caber
+ * num clique de passagem.
+ */
+function VereditoDoVendedor({ a }: { a: AceiteDaReuniao | null }) {
+  if (!a) return null
+
+  const base = 'flex items-start gap-2 rounded-md border p-3 text-xs'
+  const quando = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : ''
+  const quem = a.vendedor ?? 'o vendedor que a recebeu'
+  /* Só quando DIVERGE: "Fabio recusou (decidida por Fabio)" é ruído, mas um
+     gestor tendo decidido pelo vendedor muda quem assinou a decisão. */
+  const porOutro =
+    a.decidido_por && a.vendedor && a.decidido_por !== a.vendedor
+      ? ` Decidida por ${a.decidido_por}.`
+      : ''
+
+  if (a.status === 'pendente') {
+    return (
+      <p className={cn(base, 'border-dashed text-muted-foreground')}>
+        <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          Esperando a confirmação de <strong>{quem}</strong> — é ela que libera a comissão do
+          SDR. Sem resposta até {quando(a.prazo_em)}, a reunião conta como realizada.
+        </span>
+      </p>
+    )
+  }
+
+  if (a.status === 'recusada') {
+    return (
+      <p className={cn(base, 'border-destructive/40 bg-destructive/5 text-destructive')}>
+        <ThumbsDown className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          <strong>{quem}</strong> recusou esta reunião
+          {a.decidido_em ? ` em ${quando(a.decidido_em)}` : ''}
+          {a.motivo_recusa ? `: “${a.motivo_recusa}”.` : '.'} Ela não conta para a comissão do
+          SDR.{porOutro}
+        </span>
+      </p>
+    )
+  }
+
+  return (
+    <p className={cn(base, 'border-emerald-500/40 text-emerald-800 dark:text-emerald-300')}>
+      <ThumbsUp className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+      {/* O aceite por decurso de prazo NÃO pode se passar por confirmação: ninguém
+          disse que a reunião foi boa, o relógio é que decidiu por regra. */}
+      {a.automatico ? (
+        <span>
+          Ninguém respondeu até {quando(a.prazo_em)}: pelo prazo da fila de aceite, a reunião
+          conta como realizada para a comissão do SDR.
+        </span>
+      ) : (
+        <span>
+          <strong>{quem}</strong> confirmou que esta reunião aconteceu
+          {a.decidido_em ? ` em ${quando(a.decidido_em)}` : ''}. Ela conta para a comissão do
+          SDR.{porOutro}
+        </span>
+      )}
+    </p>
   )
 }
 
