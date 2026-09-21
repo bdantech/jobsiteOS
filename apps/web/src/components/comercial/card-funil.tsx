@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { FAIXA_SCORE_LABELS, type FaixaScore } from '@jobsiteos/core'
 import { cn } from '@/lib/utils'
 
@@ -250,9 +251,25 @@ export function DonoNoRodape({ nome }: { nome: string | null }) {
 }
 
 export interface CardDoFunilProps {
-  /** O que o leitor de tela anuncia no botão que cobre o card. */
+  /** O que o leitor de tela anuncia na área que cobre o card. */
   rotuloAbrir: string
-  onAbrir: () => void
+  /**
+   * Abrir é um CLIQUE — o card revela uma quebra, um modal, uma gaveta. É o caso
+   * dos cinco funis que nasceram com este shell.
+   */
+  onAbrir?: () => void
+  /**
+   * Abrir é IR A OUTRA PÁGINA. Então a área que cobre o card é uma âncora de
+   * verdade, e não um botão que navega: o meio do mouse abre em nova aba, o menu
+   * de contexto copia o endereço, e o leitor de tela anuncia "link para X" em vez
+   * de "botão". Um `router.push` num `onClick` perde as três coisas de uma vez, e
+   * a perda é silenciosa — tudo continua funcionando para quem usa o mouse
+   * esquerdo.
+   *
+   * Um dos dois, nunca os dois: duas áreas clicáveis sobrepostas no mesmo card
+   * dão dois destinos para o mesmo gesto.
+   */
+  href?: string
   titulo: React.ReactNode
   /** Logo abaixo do título, menor. O faturamento, o valor, o que der a escala. */
   valor?: React.ReactNode
@@ -288,6 +305,7 @@ export interface CardDoFunilProps {
 export function CardDoFunil({
   rotuloAbrir,
   onAbrir,
+  href,
   titulo,
   valor,
   score,
@@ -320,20 +338,27 @@ export function CardDoFunil({
       )}
     >
       {/*
-        O card INTEIRO abre, e a área clicável é um <button> de verdade esticado
+        O card INTEIRO abre, e a área clicável é um elemento de verdade esticado
         sobre ele — não um onClick no <div>. A diferença aparece em tudo que não é
-        mouse: o botão entra na ordem de tabulação, responde a Enter e Espaço, e é
-        anunciado por nome em vez de silêncio.
+        mouse: ele entra na ordem de tabulação, responde ao teclado, e é anunciado
+        por nome em vez de silêncio.
+
+        BOTÃO ou ÂNCORA conforme o card abra algo aqui mesmo ou leve a outra
+        página. A escolha não é cosmética: veja o comentário de `href`.
 
         `z-0` e não um z alto: o que for interativo dentro do card (trocar dono,
         abrir a empresa) sobe com `z-10` e continua clicável por cima dele.
       */}
-      <button
-        type="button"
-        aria-label={rotuloAbrir}
-        onClick={onAbrir}
-        className="absolute inset-0 z-0 focus:outline-none"
-      />
+      {href ? (
+        <Link href={href} aria-label={rotuloAbrir} className="absolute inset-0 z-0 focus:outline-none" />
+      ) : (
+        <button
+          type="button"
+          aria-label={rotuloAbrir}
+          onClick={onAbrir}
+          className="absolute inset-0 z-0 focus:outline-none"
+        />
+      )}
 
       <div className="flex flex-col gap-[11px] p-[14px]">
         <div className="flex items-start gap-3">

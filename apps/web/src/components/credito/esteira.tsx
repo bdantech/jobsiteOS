@@ -6,17 +6,27 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, LayoutGrid, Table2 } from 'lucide-react'
 import {
   COLUNAS_ESTEIRA,
+  DECISAO_FINAL_LABELS,
   ESTAGIO_ANALISE_LABELS,
+  ehEstagioDecidido,
   formatCnpj,
+  type DecisaoFinal,
   type EstagioAnalise,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  CabecalhoDaColuna,
+  CardDoFunil,
+  ChipDoCard,
+  ColunaVazia,
+  TiraDoCard,
+  type TomDaTira,
+} from '@/components/comercial/card-funil'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
 import { buscarEsteira, creditoKeys, type AnaliseNaEsteira } from './queries'
 
 /**
@@ -43,93 +53,189 @@ const moeda = (v: number | null): string =>
     ? '—'
     : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
-const ESTAGIO_CLASSE: Partial<Record<EstagioAnalise, string>> = {
-  docs_recebidos: 'border-sky-500/40 bg-sky-500/5',
-  aprovada: 'border-emerald-500/40 bg-emerald-500/5',
-  aprovada_parcial: 'border-amber-500/40 bg-amber-500/5',
-  negada: 'border-destructive/40 bg-destructive/5',
+/** `expira_em` é `date`: sem o `T00:00:00` o fuso rouba um dia no Brasil. */
+const data = (v: string | null): string => {
+  if (!v) return '—'
+  const d = new Date(v.length <= 10 ? `${v}T00:00:00` : v)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR')
+}
+
+/** Dias inteiros de hoje até a data, negativo quando já passou. */
+function diasAte(v: string | null): number | null {
+  if (!v) return null
+  const d = new Date(v.length <= 10 ? `${v}T00:00:00` : v)
+  if (Number.isNaN(d.getTime())) return null
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - hoje.getTime()) / 86_400_000)
+}
+
+/**
+ * O tom do desfecho, UMA vez, para o bloco da direita e para a tira.
+ *
+ * Fora dos três estágios decididos não há veredito nenhum — e `neutro` é o que
+ * diz isso. Pintar de cinza é diferente de não pintar: aqui o bloco some.
+ */
+const TOM_DO_ESTAGIO: Partial<Record<EstagioAnalise, TomDaTira>> = {
+  aprovada: 'bom',
+  aprovada_parcial: 'alerta',
+  negada: 'ruim',
 }
 
 function nomeDe(a: AnaliseNaEsteira): string {
   return a.razao_social ?? a.nome_fantasia ?? formatCnpj(a.cnpj)
 }
 
+/**
+ * O card da esteira, no desenho dos outros funis (`CardDoFunil`).
+ *
+ * Ele era o último com geometria própria — borda tingida por estágio, tipografia
+ * e espaçamentos que não batiam com NFs, Sacados, Vendas, SDR e Certificados.
+ * Quem trabalha em dois funis no mesmo dia reaprendia onde olhar em cada um.
+ *
+ * A BORDA TINGIDA POR ESTÁGIO SAIU e não faz falta: no kanban o estágio é a
+ * COLUNA, e repeti-lo na cor do card gastava o recurso mais escasso da tela para
+ * dizer o que o cabeçalho acima já diz. O tom passa a carregar o que varia DENTRO
+ * da coluna — quanto do pedido foi aprovado, e o que a seguradora condicionou.
+ *
+ * O CARD CONTINUA SENDO UM LINK, e é por isso que `CardDoFunil` ganhou `href`:
+ * nos outros cinco funis abrir é revelar algo ali mesmo, aqui é ir para outra
+ * página. Trocar a âncora por um `onClick` que navega perderia abrir em nova aba,
+ * copiar o endereço e o anúncio "link para {empresa}" — em silêncio, porque para
+ * o mouse esquerdo tudo continuaria igual.
+ */
 function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
+  const decidida = ehEstagioDecidido(a.estagio)
+  const tom = TOM_DO_ESTAGIO[a.estagio as EstagioAnalise] ?? 'neutro'
+
+  const aprovado = a.limite_aprovado === null ? null : Number(a.limite_aprovado)
+  const solicitado = a.limite_solicitado === null ? null : Number(a.limite_solicitado)
+  const operacional = a.limite_operacional === null ? null : Number(a.limite_operacional)
+
+  /*
+   * O BLOCO DA DIREITA responde "vale meu tempo?", e aqui isso é: quanto do que
+   * pedimos a seguradora concedeu. Uma parcial de 30% e uma de 95% moram na mesma
+   * coluna e são decisões comerciais opostas — e o card antigo mostrava as duas
+   * como "Aprovada parcial".
+   *
+   * Só aparece com DECISÃO e com PEDIDO. Sem o pedido não há fração: 500 mil
+   * aprovados sobre um denominador que ninguém registrou é uma conta sem chão, e
+   * o card prefere não desenhar o bloco a desenhar um número inventado.
+   */
+  const fracaoDoPedido =
+    decidida && solicitado !== null && solicitado > 0
+      ? Math.max(0, Math.min(100, ((aprovado ?? 0) / solicitado) * 100))
+      : null
+
+  const dias = diasAte(a.expira_em)
+  const vencida = dias !== null && dias < 0
+
+  /*
+   * A TIRA leva a condição da seguradora — o mesmo texto que antes ficava no
+   * corpo em três linhas. Ela não mudou de importância, mudou de lugar: a tira é
+   * o último elemento lido e é o que faz o olho voltar ao card. "É condição
+   * suspensiva a existência de garantia incondicional" não é detalhe jurídico, é
+   * um limite que só vale se alguém providenciar a garantia.
+   *
+   * Sem botão de expandir, como antes: o card inteiro é um link para o detalhe,
+   * onde o texto aparece inteiro, e um "ver mais" competiria com essa área.
+   */
+  const tira = a.motivo ? (
+    <TiraDoCard tom={tom}>
+      <span className="line-clamp-3 font-normal">{a.motivo}</span>
+    </TiraDoCard>
+  ) : undefined
+
   return (
-    /*
-     * O CARD INTEIRO abre o detalhe, mas o link continua sendo o nome.
-     *
-     * O `after:absolute after:inset-0` estica a área clicável da âncora até as bordas do
-     * card, que é `relative`. Parece um truque e é o contrário de um: um `onClick` no
-     * `div` daria a mesma área e quebraria tudo que faz de um link um link — abrir em
-     * nova aba com o meio do mouse, copiar o endereço, chegar nele pelo teclado, e o
-     * leitor de tela anunciar "link para {empresa}" em vez de silêncio.
-     *
-     * Nada mais dentro do card é clicável, e é de propósito: o envio à seguradora —
-     * que era a razão do checkbox que morava aqui — foi para a página de detalhe, onde
-     * dá para ver o que justifica gastar a consulta antes de gastá-la.
-     */
-    <div
-      className={cn(
-        'relative rounded-md border p-2 text-sm transition-colors',
-        'hover:border-foreground/25 focus-within:ring-1 focus-within:ring-ring',
-        ESTAGIO_CLASSE[a.estagio as EstagioAnalise],
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <Link
-            href={`/credito/analises/${a.id}`}
-            className="line-clamp-2 font-medium after:absolute after:inset-0 hover:underline"
-          >
-            {nomeDe(a)}
-          </Link>
-          <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{formatCnpj(a.cnpj)}</p>
-          <p className="mt-1 text-xs tabular-nums">
-            {a.limite_aprovado !== null ? (
-              <span className="font-medium">{moeda(a.limite_aprovado)} aprovado</span>
+    <CardDoFunil
+      rotuloAbrir={`Abrir a análise de ${nomeDe(a)}`}
+      href={`/credito/analises/${a.id}`}
+      titulo={nomeDe(a)}
+      valor={
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[15px] font-bold leading-none tracking-[-0.02em]">
+            {moeda(decidida ? aprovado : solicitado)}
+          </span>
+          {/*
+            A SEGUNDA LINHA, no lugar que o "líquido hoje" ocupa no card de NF e
+            pelo mesmo motivo: é o que se lê depois de ter PARADO no card.
+
+            E é o número que a Antecipação de fato usa. Pelo comentário da coluna:
+            `limite_operacional` é "o limite com que a casa DECIDIU operar",
+            distinto do da seguradora — existe operacional sem aprovado e aprovado
+            sem operacional. O card nunca mostrou o nosso, e é ele que decide se a
+            nota é operável.
+          */}
+          <span className="text-[11px] font-normal text-muted-foreground">
+            {operacional !== null && operacional !== aprovado ? (
+              <>
+                operamos com{' '}
+                <span className="font-semibold text-foreground/80">{moeda(operacional)}</span>
+              </>
+            ) : decidida && solicitado !== null ? (
+              <>de {moeda(solicitado)} solicitados</>
             ) : (
-              <span className="text-muted-foreground">{moeda(a.limite_solicitado)} solicitado</span>
+              'solicitado'
             )}
-          </p>
-          {a.motivo && (
+          </span>
+        </span>
+      }
+      score={
+        fracaoDoPedido === null
+          ? null
+          : {
+              valor: fracaoDoPedido,
+              faixa: a.estagio,
+              tom,
+              rotulo: 'do pedido',
+              sufixo: '%',
+            }
+      }
+      chips={
+        <>
+          <ChipDoCard className="font-mono tabular-nums">{formatCnpj(a.cnpj)}</ChipDoCard>
+          {/* A validade era uma coluna só da vista em tabela. Um limite aprovado
+              que vence em 9 dias é outra conversa que um que vence em 9 meses. */}
+          {a.expira_em && decidida ? (
+            <ChipDoCard tom={vencida ? 'ruim' : dias !== null && dias <= 30 ? 'alerta' : 'neutro'}>
+              {vencida ? `vencida em ${data(a.expira_em)}` : `vence ${data(a.expira_em)}`}
+            </ChipDoCard>
+          ) : null}
+          {a.decisao_interna ? (
+            <ChipDoCard tom={a.decisao_interna === 'nao_operar' ? 'ruim' : 'destaque'} forte>
+              {DECISAO_FINAL_LABELS[a.decisao_interna as DecisaoFinal] ?? a.decisao_interna}
+            </ChipDoCard>
+          ) : null}
+          {a.origem === 'atradius_backfill' ? (
+            // A marca importa: a esteira não pode levar crédito por decisões que
+            // ela não tomou, e o funil de conversão ficaria errado se elas
+            // entrassem juntas.
+            <ChipDoCard>da apólice</ChipDoCard>
+          ) : null}
+          {a.origem_externa === 'plataforma_producao' ? (
             /*
-             * A CONDIÇÃO DA SEGURADORA, no card.
-             *
-             * É onde mora a informação que muda a decisão de operar: "é uma condição
-             * suspensiva a existência de garantia incondicional" não é detalhe jurídico,
-             * é um limite que só vale se alguém providenciar a garantia. Enterrada na
-             * página de detalhe, ela era vista depois de a decisão já ter sido tomada.
-             *
-             * Três linhas e sem botão de expandir: o card inteiro já é um link para o
-             * detalhe, onde o texto aparece completo. Um "ver mais" aqui competiria com
-             * essa área clicável e daria duas formas de fazer a mesma coisa.
+             * Veio pela API (04n §4). A marca e o `external_id` ficam no card
+             * porque a primeira pergunta sobre uma dessas análises é sempre "de
+             * qual pedido lá deles isso veio?" — e a resposta é o número que o
+             * suporte da produção vai citar no chamado.
              */
-            <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-muted-foreground">
-              {a.motivo}
-            </p>
-          )}
-          {a.origem === 'atradius_backfill' && (
-            // A marca importa: a esteira não pode levar crédito por decisões que ela não
-            // tomou, e o funil de conversão ficaria errado se elas entrassem juntas.
-            <Badge variant="outline" className="mt-1 text-[10px]">
-              da apólice
-            </Badge>
-          )}
-          {a.origem_externa === 'plataforma_producao' && (
-            /*
-             * Veio pela API (04n §4). A marca e o `external_id` ficam no card porque
-             * a primeira pergunta sobre uma dessas análises é sempre "de qual pedido
-             * lá deles isso veio?" — e a resposta é o número que o suporte da
-             * produção vai citar no chamado.
-             */
-            <Badge variant="outline" className="mt-1 max-w-full text-[10px]">
-              <span className="truncate">plataforma de produção · {a.external_id ?? 'sem id'}</span>
-            </Badge>
-          )}
-        </div>
-      </div>
-    </div>
+            <ChipDoCard tom="info" className="max-w-full">
+              <span className="truncate">produção · {a.external_id ?? 'sem id'}</span>
+            </ChipDoCard>
+          ) : null}
+        </>
+      }
+      /* O rodapé dos outros funis é do dono. A esteira não tem dono; tem RELÓGIO,
+         e o quadro já vem ordenado por ele. Numa coluna de espera — documentos
+         pendentes, enviada à seguradora — "parada há 12 dias" é a única coisa que
+         distingue dois cards, e ela não estava em lugar nenhum da tela. */
+      rodapeEsquerda={
+        <span className="text-[11.5px] text-muted-foreground">
+          atualizada em {data(a.atualizada_em)}
+        </span>
+      }
+      tira={tira}
+    />
   )
 }
 
@@ -265,24 +371,23 @@ export function Esteira() {
             </div>
           ) : vista === 'kanban' ? (
             <div className="space-y-2">
-              <div className="flex gap-3 overflow-x-auto pb-2">
+              {/* Mesmas medidas dos outros funis — 300px de coluna, `gap-5` entre
+                  elas, `space-y-3` entre cards. O desenho do card só vale como
+                  desenho compartilhado se a régua em volta dele for a mesma. */}
+              <div className="flex gap-5 overflow-x-auto pb-3">
                 {COLUNAS_ESTEIRA.map((estagio) => {
                   const itens = porEstagio.get(estagio) ?? []
                   return (
-                    <div key={estagio} className="w-56 shrink-0 space-y-2">
-                      <div className="flex items-baseline justify-between gap-2 border-b pb-1">
-                        <p className="text-xs font-medium">{ESTAGIO_ANALISE_LABELS[estagio]}</p>
-                        <span className="text-xs tabular-nums text-muted-foreground">{itens.length}</span>
-                      </div>
-                      <div className="space-y-2">
+                    <div key={estagio} className="w-[300px] shrink-0 space-y-3">
+                      <CabecalhoDaColuna
+                        titulo={ESTAGIO_ANALISE_LABELS[estagio]}
+                        total={itens.length}
+                      />
+                      <div className="space-y-3">
                         {itens.map((a) => (
                           <CartaoAnalise key={a.id} a={a} />
                         ))}
-                        {itens.length === 0 && (
-                          <p className="rounded-md border border-dashed p-3 text-center text-[11px] text-muted-foreground">
-                            vazio
-                          </p>
-                        )}
+                        {itens.length === 0 && <ColunaVazia>vazio</ColunaVazia>}
                       </div>
                     </div>
                   )
