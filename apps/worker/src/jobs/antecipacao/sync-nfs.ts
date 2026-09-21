@@ -653,8 +653,19 @@ async function taxaDaAnalise(
   const guardado = cacheTaxaAnalise.get(cnpj)
   if (guardado) return guardado
 
-  // Mesma razão do cast do upsert: a função nasceu na 0225.
-  const rpc = supabaseAdmin.rpc as unknown as (
+  /*
+   * `.bind` e não `supabaseAdmin.rpc` solto — e o cast é justamente o que escondia
+   * isso. `rpc()` do supabase-js faz `return this.rest.rpc(...)`; arrancado do
+   * objeto, `this` é undefined (módulo ES é strict) e a chamada estoura com
+   * "Cannot read properties of undefined (reading 'rest')" na PRIMEIRA nota do
+   * sync, antes do upsert — ou seja, a corrida inteira morre.
+   *
+   * O `as unknown as` some com o erro em typecheck porque promete uma função
+   * livre, que é o que ela deixou de ser ao ser destacada. Continua necessário
+   * (a função nasceu na 0225 e `database.ts` é gerado do banco), mas agora sobre
+   * algo que já está amarrado ao receptor.
+   */
+  const rpc = supabaseAdmin.rpc.bind(supabaseAdmin) as unknown as (
     nome: string,
     args: Record<string, unknown>,
   ) => Promise<{
