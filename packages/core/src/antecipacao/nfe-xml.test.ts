@@ -164,3 +164,83 @@ test('item sem nItem cai no índice da ordem', () => {
     ],
   )
 })
+
+// ─── Os três layouts (migração da plataforma, 12/09/2026) ───────────────────
+//
+// O sync lia só `infNFe`. Quando a plataforma passou a mandar NFS-e nacional com
+// `amount: null` no JSON, o valor existia apenas em `vServ` e a nota era
+// descartada por "sem valor" — 9.463 delas em nove dias. Estes testes travam os
+// dois layouts novos nos campos de que o sync depende.
+
+const RESUMO = `<?xml version="1.0" encoding="UTF-8"?>
+<resNFe versao="1.01">
+  <chNFe>35260712345678000190550010000088211000088219</chNFe>
+  <CNPJ>98765432000110</CNPJ>
+  <xNome>FORNECEDOR EXEMPLO SA</xNome>
+  <dhEmi>2026-09-16T10:15:00-03:00</dhEmi>
+  <tpNF>1</tpNF>
+  <vNF>15230.55</vNF>
+  <cSitNFe>1</cSitNFe>
+</resNFe>`
+
+const NFSE_NACIONAL = `<?xml version="1.0" encoding="UTF-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse">
+  <infNFSe Id="NFS35260712345678000190000000000123456789012345678901">
+    <nNFSe>123</nNFSe>
+    <dhProc>2026-09-16T09:00:00-03:00</dhProc>
+    <vLiq>9500.00</vLiq>
+    <DPS>
+      <infDPS Id="DPS3550308298765432000110000010000000045">
+        <serie>00001</serie><nDPS>45</nDPS>
+        <dhEmi>2026-09-16T08:55:00-03:00</dhEmi>
+        <prest><CNPJ>98765432000110</CNPJ></prest>
+        <toma><CNPJ>12345678000190</CNPJ></toma>
+        <serv><cServ><xDescServ>MEDICAO 3 - VENCIMENTO EM 30 DIAS</xDescServ></cServ></serv>
+        <valores><vServPrest><vServ>10000.00</vServ></vServPrest></valores>
+        <xInfComp>OBRA TORRE NORTE</xInfComp>
+      </infDPS>
+    </DPS>
+  </infNFSe>
+</NFSe>`
+
+test('a NFS-e nacional entrega valor, CNPJs e chave de 50', () => {
+  const r = parseNfeXml(NFSE_NACIONAL)
+  assert.equal(r.layout, 'nfse')
+  // `vServ` é o valor do serviço — o que se antecipa. Era este o número que
+  // faltava quando `amount` passou a vir nulo.
+  assert.equal(r.valor_total, 10000)
+  assert.equal(r.emitente_cnpj, '98765432000110')
+  assert.equal(r.destinatario_cnpj, '12345678000190')
+  assert.equal(r.access_key?.length, 50)
+  assert.equal(r.numero, '123')
+})
+
+test('sem vServ, a NFS-e cai no vLiq em vez de ficar sem valor', () => {
+  const r = parseNfeXml(NFSE_NACIONAL.replace(/<vServPrest>[\s\S]*?<\/vServPrest>/, ''))
+  assert.equal(r.valor_total, 9500)
+})
+
+test('a descrição do serviço vira texto livre — é onde mora o vencimento da NFS-e', () => {
+  const r = parseNfeXml(NFSE_NACIONAL)
+  assert.match(r.texto_livre ?? '', /VENCIMENTO EM 30 DIAS/)
+})
+
+test('o resumo (resNFe) entrega chave, emitente e valor, e se declara resumo', () => {
+  const r = parseNfeXml(RESUMO)
+  assert.equal(r.layout, 'resumo')
+  assert.equal(r.valor_total, 15230.55)
+  assert.equal(r.emitente_cnpj, '98765432000110')
+  assert.equal(r.access_key?.length, 44)
+  // O destinatário NÃO está no resumo — quem sabe de qual empresa é a nota é o
+  // JSON do endpoint. Inventar um aqui seria pior que deixar nulo.
+  assert.equal(r.destinatario_cnpj, null)
+  assert.deepEqual(r.itens, [])
+  assert.deepEqual(r.parcelas, [])
+})
+
+test('a NFe completa continua sendo lida como antes, e se declara nfe', () => {
+  const r = parseNfeXml(XML)
+  assert.equal(r.layout, 'nfe')
+  assert.equal(r.destinatario_cnpj, '98765432000110')
+  assert.equal(r.access_key?.length, 44)
+})

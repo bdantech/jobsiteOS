@@ -65,6 +65,13 @@ export const EVENTO_TIPOS = {
   NF_SINCRONIZADA: 'nf.sincronizada',
   NF_FAIXA_ALTERADA: 'nf.faixa_alterada',
   NF_EXPIRADA: 'nf.expirada',
+  /**
+   * A nota foi cancelada (ou denegada) no emissor DEPOIS de já estar aqui. É
+   * evento próprio, e não uma variação de `nf.expirada`: expirar é o calendário
+   * passando, cancelar é o documento deixando de existir — e pode pegar alguém no
+   * meio de uma negociação, que é justamente quem precisa ser avisado.
+   */
+  NF_CANCELADA: 'nf.cancelada',
   NF_ESTAGIO_ALTERADO: 'nf.estagio_alterado',
   NF_CONVERTIDA: 'nf.convertida',
   NF_PERDIDA: 'nf.perdida',
@@ -316,6 +323,7 @@ export const EVENTO_LABELS: Record<string, string> = {
   'nf.sincronizada': 'Nota fiscal sincronizada',
   'nf.faixa_alterada': 'Faixa da nota alterada',
   'nf.expirada': 'Nota expirada',
+  'nf.cancelada': 'Nota cancelada no emissor',
   'nf.estagio_alterado': 'Estágio da nota alterado',
   'nf.convertida': 'Nota convertida',
   'nf.perdida': 'Nota perdida',

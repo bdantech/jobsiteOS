@@ -35,8 +35,26 @@ export interface ParcelaXml {
   valor: number | null
 }
 
+/**
+ * Qual dos três documentos chegou.
+ *
+ * `resumo` e `nfse` existem porque a plataforma passou a mandar os dois, e cada um
+ * esconde um campo em outro lugar:
+ *
+ *   nfe     `<nfeProc>`/`<infNFe>` — o layout completo, com itens e cobrança.
+ *   resumo  `<resNFe>` — o que a SEFAZ entrega ANTES da manifestação. Tem chave,
+ *           emitente e valor; não tem destinatário, itens nem duplicata. Vira `nfe`
+ *           sozinho quando a nota é manifestada, e é por isso que ele precisa ser
+ *           RELIDO e não só aceito.
+ *   nfse    `<infNFSe>`/`<infDPS>` — padrão nacional. O valor mora em `vServ`, e não
+ *           em `ICMSTot/vNF`. Ler só a tag da NFe aqui devolvia `valor_total: null`,
+ *           que é exatamente o descarte `sem_valor`.
+ */
+export type LayoutFiscal = 'nfe' | 'resumo' | 'nfse' | 'desconhecido'
+
 export interface NfeParseado {
-  /** Chave de acesso (infNFe/@Id sem o prefixo "NFe"). */
+  layout: LayoutFiscal
+  /** Chave de acesso: 44 dígitos na NFe e no resumo, 50 na NFS-e nacional. */
   access_key: string | null
   numero: string | null
   serie: string | null
@@ -135,23 +153,122 @@ function data(valor: string | null): string | null {
 
 // ─── O parse ────────────────────────────────────────────────────────────────
 
-export function parseNfeXml(xml: string | null | undefined): NfeParseado {
-  const vazio: NfeParseado = {
-    access_key: null,
-    numero: null,
-    serie: null,
-    emitida_em: null,
-    valor_total: null,
-    emitente_cnpj: null,
-    destinatario_cnpj: null,
-    parcelas: [],
-    itens: [],
-    natureza_operacao: null,
-    texto_livre: null,
-    erro: null,
+const VAZIO: NfeParseado = {
+  layout: 'desconhecido',
+  access_key: null,
+  numero: null,
+  serie: null,
+  emitida_em: null,
+  valor_total: null,
+  emitente_cnpj: null,
+  destinatario_cnpj: null,
+  parcelas: [],
+  itens: [],
+  natureza_operacao: null,
+  texto_livre: null,
+  erro: null,
+}
+
+/**
+ * Qual layout chegou, pela tag raiz — e a ORDEM importa.
+ *
+ * `resNFe` é testado antes de `infNFe` porque o resumo vem dentro de um
+ * `<procEventoNFe>` que também cita a chave; e `infNFSe`/`infDPS` vêm por último
+ * porque a NFS-e nacional não tem nenhuma das duas primeiras.
+ */
+export function detectarLayoutFiscal(xml: string): LayoutFiscal {
+  if (/<(?:\w+:)?resNFe\b/.test(xml)) return 'resumo'
+  if (/<(?:\w+:)?infNFe\b/.test(xml)) return 'nfe'
+  if (/<(?:\w+:)?(?:infNFSe|infDPS)\b/.test(xml)) return 'nfse'
+  return 'desconhecido'
+}
+
+/**
+ * A chave só vale no comprimento certo: 44 na NFe, 50 na NFS-e nacional. Um `Id`
+ * truncado que passasse daqui viraria uma linha nova em `notas_fiscais` com uma
+ * chave que nunca mais casa com a nota de verdade.
+ */
+function chaveValida(bruta: string | null, ...tamanhos: number[]): string | null {
+  return bruta && tamanhos.includes(bruta.length) ? bruta : null
+}
+
+/**
+ * O RESUMO (`resNFe`): o que a SEFAZ entrega ao destinatário antes da
+ * manifestação. Traz chave, emitente e valor — e NÃO traz destinatário, itens nem
+ * duplicata, porque esses só existem no XML completo. Quem preenche o
+ * destinatário é o JSON do endpoint, que sabe de qual empresa da plataforma é a
+ * nota.
+ */
+function lerResumo(xml: string): NfeParseado {
+  const res = tagRe('resNFe', '').exec(xml)?.[1] ?? xml
+  return {
+    ...VAZIO,
+    layout: 'resumo',
+    access_key: chaveValida(somenteDigitos(texto(res, 'chNFe')), 44),
+    emitida_em: texto(res, 'dhEmi'),
+    valor_total: numero(texto(res, 'vNF')),
+    emitente_cnpj: somenteDigitos(texto(res, 'CNPJ')),
   }
+}
+
+/**
+ * A NFS-e NACIONAL, só os campos do sync — o leitor rico continua em
+ * `documento-fiscal.ts`, que é outra pergunta (desenhar o documento).
+ *
+ * O valor é `vServPrest/vServ`, com `vLiq` atrás: `vServ` é o valor do serviço,
+ * que é o que se antecipa; `vLiq` já desconta retenção e seria um número menor
+ * que o da nota. Ter os dois evita a nota sem valor quando o município só
+ * preenche um.
+ */
+function lerNfse(xml: string): NfeParseado {
+  const inf = tagRe('infNFSe', '').exec(xml)?.[1] ?? xml
+  const dps = tagRe('infDPS', '').exec(inf)?.[1] ?? tagRe('infDPS', '').exec(xml)?.[1] ?? ''
+  const prest = tagRe('prest', '').exec(dps)?.[1] ?? tagRe('emit', '').exec(inf)?.[1] ?? ''
+  const toma = tagRe('toma', '').exec(dps)?.[1] ?? ''
+  const valores = tagRe('valores', '').exec(dps)?.[1] ?? tagRe('valores', '').exec(inf)?.[1] ?? ''
+  const vServPrest = tagRe('vServPrest', '').exec(valores)?.[1] ?? valores
+
+  const idAttr =
+    /<(?:\w+:)?infNFSe[^>]*\bId\s*=\s*"([^"]+)"/i.exec(xml)?.[1] ??
+    /<(?:\w+:)?infDPS[^>]*\bId\s*=\s*"([^"]+)"/i.exec(xml)?.[1] ??
+    null
+
+  return {
+    ...VAZIO,
+    layout: 'nfse',
+    access_key: chaveValida(
+      somenteDigitos(texto(inf, 'chaveAcesso')) ?? somenteDigitos(idAttr),
+      44,
+      50,
+    ),
+    numero: texto(inf, 'nNFSe') ?? texto(dps, 'nDPS'),
+    serie: texto(dps, 'serie'),
+    emitida_em: texto(dps, 'dhEmi') ?? texto(inf, 'dhProc'),
+    valor_total: numero(texto(vServPrest, 'vServ')) ?? numero(texto(inf, 'vLiq')),
+    emitente_cnpj: somenteDigitos(texto(prest, 'CNPJ')),
+    destinatario_cnpj: somenteDigitos(texto(toma, 'CNPJ')),
+    // A NFS-e não tem bloco de cobrança: a descrição do serviço é o único lugar
+    // onde um vencimento pode estar escrito, e é o que a cascata de vencimento lê.
+    texto_livre:
+      [texto(xml, 'xDescServ'), texto(xml, 'xInfComp')]
+        .filter((t): t is string => Boolean(t))
+        .join(' \n ') || null,
+  }
+}
+
+export function parseNfeXml(xml: string | null | undefined): NfeParseado {
+  const vazio = VAZIO
 
   if (!xml || xml.trim() === '') return { ...vazio, erro: 'XML ausente.' }
+
+  const layout = detectarLayoutFiscal(xml)
+  if (layout === 'resumo' || layout === 'nfse') {
+    try {
+      return layout === 'resumo' ? lerResumo(xml) : lerNfse(xml)
+    } catch (erro) {
+      return { ...vazio, layout, erro: erro instanceof Error ? erro.message : String(erro) }
+    }
+  }
 
   try {
     const ide = tagRe('ide', '').exec(xml)?.[1] ?? xml
@@ -195,7 +312,8 @@ export function parseNfeXml(xml: string | null | undefined): NfeParseado {
         .join(' \n ') || null
 
     return {
-      access_key: accessKey && accessKey.length === 44 ? accessKey : null,
+      layout,
+      access_key: chaveValida(accessKey, 44),
       numero: texto(ide, 'nNF'),
       serie: texto(ide, 'serie'),
       emitida_em: texto(ide, 'dhEmi') ?? texto(ide, 'dEmi'),
@@ -210,7 +328,7 @@ export function parseNfeXml(xml: string | null | undefined): NfeParseado {
     }
   } catch (erro) {
     // Um regex catastrófico ou um XML gigante não pode derrubar o sync inteiro.
-    return { ...vazio, erro: erro instanceof Error ? erro.message : String(erro) }
+    return { ...vazio, layout, erro: erro instanceof Error ? erro.message : String(erro) }
   }
 }
 

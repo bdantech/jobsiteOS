@@ -117,6 +117,75 @@ function data(v: unknown): string | null {
 
 export type MotivoDescarte = 'sem_access_key' | 'sem_cnpj' | 'sem_valor'
 
+export const MOTIVOS_DESCARTE: readonly MotivoDescarte[] = [
+  'sem_access_key',
+  'sem_cnpj',
+  'sem_valor',
+] as const
+
+/**
+ * A situação fiscal da nota, NORMALIZADA — e é por isso que ela existe.
+ *
+ * Depois da migração de 12/09/2026 a plataforma passou a conviver com dois
+ * vocabulários de `status`: as notas migradas seguem em português
+ * (`sincronizado`/`cancelado`) e as nativas vêm em inglês (`authorized`,
+ * `cancelled`, `denied`, `active`). Comparar a string crua contra uma lista
+ * significa acertar metade da base e errar a outra, em silêncio.
+ *
+ * `status_sync` continua gravado CRU — é a evidência do que o outro lado disse.
+ * Esta é a leitura, e é ela que decide se a nota sai do funil.
+ */
+export type SituacaoNota = 'valida' | 'cancelada' | 'denegada'
+
+function semAcento(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+export function situacaoDaNota(status: string | null | undefined): SituacaoNota {
+  const s = semAcento(String(status ?? '').trim().toLowerCase())
+  // `includes` e não igualdade: `cancelado`, `cancelled` e `cancelada` são a mesma
+  // coisa dita de três jeitos, e a lista de grafias cresce a cada migração deles.
+  if (s.includes('cancel')) return 'cancelada'
+  if (s.includes('deneg') || s.includes('denied')) return 'denegada'
+  return 'valida'
+}
+
+/**
+ * `NFe` ou `NFSe`, tolerante à grafia e com o XML como desempate.
+ *
+ * A versão anterior era `type.toUpperCase() === 'NFSE'`: `"NFS-e"` já cairia em
+ * `NFe` sem um ruído sequer. Quando o `type` não resolve, o layout do XML resolve
+ * — ele é o documento em si, não um rótulo sobre ele.
+ */
+export function tipoDaNota(
+  type: string | null | undefined,
+  layout?: 'nfe' | 'resumo' | 'nfse' | 'desconhecido',
+): 'NFe' | 'NFSe' {
+  const t = semAcento(String(type ?? '')).toUpperCase().replace(/[^A-Z]/g, '')
+  if (t === 'NFSE') return 'NFSe'
+  if (t === 'NFE') return 'NFe'
+  return layout === 'nfse' ? 'NFSe' : 'NFe'
+}
+
+const DIRECOES_EMITIDA = new Set(['issued', 'emitida', 'emitidas', 'saida', 'outbound'])
+
+/**
+ * `issued` ou `received`. Devolve também se o valor foi RECONHECIDO: cair no
+ * padrão calado é como uma nota emitida vira uma nota recebida sem ninguém notar,
+ * e o worker precisa poder logar o valor novo em vez de engoli-lo.
+ */
+export function direcaoDaNota(direction: string | null | undefined): {
+  direction: 'issued' | 'received'
+  conhecida: boolean
+} {
+  const d = semAcento(String(direction ?? '')).trim().toLowerCase()
+  if (DIRECOES_EMITIDA.has(d)) return { direction: 'issued', conhecida: true }
+  if (d === 'received' || d === 'recebida' || d === 'entrada' || d === 'inbound') {
+    return { direction: 'received', conhecida: true }
+  }
+  return { direction: 'received', conhecida: d === '' }
+}
+
 export interface NotaNormalizada {
   access_key: string
   nf_id_externo: string | null
@@ -138,7 +207,18 @@ export interface NotaNormalizada {
   operavel: boolean
   nao_operavel_motivo: string | null
   parcelas: ParcelaXml[]
+  /** O que o outro lado disse, cru. A leitura dele é `situacao`. */
   status_sync: string | null
+  situacao: SituacaoNota
+  /**
+   * A NFe recebida chega primeiro como RESUMO (`resNFe`) e só ganha o XML
+   * completo depois da manifestação. Enquanto isto for `true` a nota está
+   * incompleta — sem itens e sem duplicata, logo sem vencimento real — e precisa
+   * ser relida. É o que alimenta a fila de promoção.
+   */
+  xml_resumo: boolean
+  /** Valores de enum que não reconhecemos. O worker loga; ninguém engole calado. */
+  avisos: string[]
   sincronizada_em: string
   sacado_cnpj: string
   sacado_nome: string | null
@@ -186,6 +266,17 @@ export function normalizarNfPayload(
     return { ok: false, motivo: 'sem_cnpj', id: texto(item.id) }
   }
 
+  /*
+   * O XML não é rede de segurança aqui — é a FONTE, hoje.
+   *
+   * Desde a migração de 12/09/2026 toda NFS-e nativa vem com `amount: null` (229 de
+   * 229 na amostra que a plataforma mediu), e o valor só existe em `vServ`, dentro
+   * do `rawXml`. Enquanto `parseNfeXml` só sabia ler `ICMSTot/vNF`, este `??` caía
+   * em null e a nota morria em `sem_valor` — foram nove dias e 9.463 notas.
+   *
+   * A ordem continua a mesma de propósito: quando a plataforma corrigir o campo,
+   * `amount` volta a ganhar do XML sem uma linha de código nova.
+   */
   const valor = numero(item.amount) ?? numero(item.value) ?? parsed.valor_total
   if (valor === null) return { ok: false, motivo: 'sem_valor', id: texto(item.id) }
 
@@ -222,6 +313,10 @@ export function normalizarNfPayload(
     }
   }
 
+  const direcao = direcaoDaNota(item.direction)
+  const avisos: string[] = []
+  if (!direcao.conhecida) avisos.push(`direction desconhecida: ${String(item.direction)}`)
+
   const natureza = avaliarNatureza(parsed.natureza_operacao)
   // Duas razões independentes para a nota não ser operável. A natureza vem primeiro
   // porque é a mais fundamental: uma remessa não gera crédito em valor NENHUM, e
@@ -233,8 +328,8 @@ export function normalizarNfPayload(
     nota: {
       access_key: accessKey,
       nf_id_externo: texto(item.id),
-      tipo: (texto(item.type) ?? 'NFe').toUpperCase() === 'NFSE' ? 'NFSe' : 'NFe',
-      direction: texto(item.direction) === 'issued' ? 'issued' : 'received',
+      tipo: tipoDaNota(item.type, parsed.layout),
+      direction: direcao.direction,
       numero: texto(item.number) ?? parsed.numero,
       serie: texto(item.series) ?? parsed.serie,
       valor,
@@ -248,6 +343,9 @@ export function normalizarNfPayload(
         (abaixoDoMinimo ? motivoValorAbaixoDoMinimo(valorMinimoOperavel) : null),
       parcelas: parsed.parcelas,
       status_sync: texto(item.status),
+      situacao: situacaoDaNota(item.status),
+      xml_resumo: parsed.layout === 'resumo',
+      avisos,
       // `syncedAt` é o carimbo do LADO DE LÁ. Preferi-lo a now() é o que torna
       // "quando esta nota entrou" uma pergunta respondível depois de um backfill:
       // com now(), 60 dias de nota antiga chegariam todos carimbados com o mesmo

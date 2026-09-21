@@ -108,6 +108,8 @@ import {
   dispararCampanhasMetricas,
   statusJob,
   JobEmExecucaoError,
+  dispararRecuperacaoNfs,
+  dispararPromocaoResumos,
 } from './jobs/index.js'
 import {
   processarWebhookResend,
@@ -879,6 +881,36 @@ app.post('/jobs/antecipacao/sync-nfs', async (_req: Request, res: Response, next
   try {
     const id = await dispararSyncNfs()
     res.status(202).json({ ingestao_id: id, status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * Recuperação de NFs por janela de EMISSÃO, insert-only.
+ *
+ * `de`/`ate` inclusivos, fatiados em blocos de 10 dias (o teto do endpoint) pelo
+ * job. Nota que já existe aqui é contada em `preservadas` e deixada exatamente
+ * como está: o objetivo é trazer o que faltou, não reescrever o que alguém já
+ * trabalhou.
+ */
+const recuperarNfsSchema = z.object({
+  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+})
+
+app.post('/jobs/antecipacao/recuperar-nfs', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const janela = recuperarNfsSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararRecuperacaoNfs(janela), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/antecipacao/promover-resumos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararPromocaoResumos(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

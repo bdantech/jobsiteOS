@@ -89,7 +89,11 @@ import {
   processarAnalisePropria,
   sugerirReanalises,
 } from './credito/analise-propria.js'
-import { sincronizarNotasFiscais } from './antecipacao/sync-nfs.js'
+import {
+  promoverResumosDeNf,
+  recuperarNotasPorEmissao,
+  sincronizarNotasFiscais,
+} from './antecipacao/sync-nfs.js'
 import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
@@ -129,6 +133,8 @@ import { plantaoDeEventos } from '../comunicacao/plantao.js'
  */
 
 export type TipoJob =
+  | 'antecipacao-recuperar-nfs'
+  | 'antecipacao-promover-resumos'
   | 'webhooks-entregar'
   | 'credito-baixar-documento'
   | 'receita'
@@ -635,6 +641,29 @@ export async function dispararSyncNfs(): Promise<string> {
     id,
     async (client) => {
       const sync = await sincronizarNotasFiscais()
+
+      /*
+       * A promoção dos resumos vem LOGO DEPOIS do sync e ANTES da reclassificação,
+       * e a ordem é o ponto.
+       *
+       * A NFe de material entra como `resNFe` — resumo da SEFAZ, sem itens e sem
+       * duplicata —, e enquanto está assim o vencimento dela é o palpite de
+       * emissão + 30. Quando o XML completo chega, a duplicata real chega junto e o
+       * vencimento muda; a faixa e a receita esperada dependem do vencimento. Rodar
+       * a promoção depois da reclassificação deixaria a nota um ciclo inteiro
+       * classificada pelo palpite, com o dado certo já gravado ao lado.
+       *
+       * Best-effort, como a varredura do diário: o endpoint fora do ar não pode
+       * impedir o resto da corrente de rodar sobre o que já chegou.
+       */
+      let promocao: unknown
+      try {
+        promocao = await promoverResumosDeNf()
+      } catch (erro) {
+        logger.error({ erro: String(erro) }, 'Promoção de resumos falhou; o sync de NF segue.')
+        promocao = { erro: String(erro) }
+      }
+
       // O lookup ENTRE o sync e a reclassificação, não depois: o fornecedor chega na
       // nota só com nome e CNPJ, e é o cadastro dele (capital, situação, Simples) que
       // as variáveis de faixa leem. Rodando só no diário, toda nota sincronizada
@@ -696,7 +725,7 @@ export async function dispararSyncNfs(): Promise<string> {
       }
 
       await anotarMeta(id, {
-        sync, lookup, reclassificacao: reclass, antecipacoes, outbox,
+        sync, promocao, lookup, reclassificacao: reclass, antecipacoes, outbox,
         funil_fornecedores: funilFornecedores,
         funil_sacados: funilSacados,
       })
@@ -710,6 +739,33 @@ export async function dispararSyncNfs(): Promise<string> {
   )
 
   return id
+}
+
+/**
+ * Recuperação de uma janela de emissão, INSERT-ONLY.
+ *
+ * Existe para o buraco de 13/09/2026, e para o próximo: quando um campo do
+ * payload muda de forma e o sync passa a descartar uma classe inteira de nota, o
+ * incremental de 4 horas não alcança o que já passou, e a varredura de 30 dias
+ * também não, se a descoberta demorar mais que isso.
+ *
+ * É avulso e não tem cron de propósito. Uma reimportação larga mexe no funil de
+ * muita gente ao mesmo tempo — são milhares de cards nascendo de uma vez —, e essa
+ * é uma decisão de quem está olhando a tela, não de um relógio.
+ */
+export function dispararRecuperacaoNfs(janela: { de: string; ate: string }): string {
+  return dispararAvulso('antecipacao-recuperar-nfs', async () =>
+    recuperarNotasPorEmissao(janela.de, janela.ate),
+  )
+}
+
+/**
+ * Promoção dos resumos sob demanda. No ciclo normal ela roda encadeada ao sync de
+ * 4 em 4 horas; esta rota existe para quando alguém está esperando o vencimento
+ * real de uma nota específica e não quer aguardar o próximo ciclo.
+ */
+export function dispararPromocaoResumos(): string {
+  return dispararAvulso('antecipacao-promover-resumos', async () => promoverResumosDeNf())
 }
 
 /**

@@ -260,6 +260,110 @@ a matriz. O worker grava no sync; a view só soma.
 **O líquido negativo vira zero.** Nota de R$ 200 com R$ 275 de tarifa não sobra nada — e
 um número negativo na tela seria lido como bug, não como "essa nota não se antecipa".
 
+## A plataforma migrou, e o sync parou de ver metade das notas (0230)
+
+Em **12/09/2026** a plataforma trocou de sistema. A API ficou no mesmo endereço,
+com os mesmos endpoints e sem nenhum campo removido ou renomeado — o que mudou foi
+o **conteúdo**. E foi o suficiente para tirar **9.463 notas** do funil em nove dias,
+com HTTP 200 em todas as corridas.
+
+```
+sincronizadas por dia      NFe    NFSe
+2026-09-11                 685    3.255
+2026-09-12                 352       97
+2026-09-13                   6        0   ←
+2026-09-14 … 09-21     21–808        0
+```
+
+### A causa: `amount` virou nulo, e a NFS-e não tinha segunda fonte
+
+Toda NFS-e nativa passou a sair com `amount: null` (229 de 229 na amostra que a
+própria plataforma mediu). O valor continua existindo — em `vServ`, dentro do
+`rawXml`. Só que `parseNfeXml` lia `ICMSTot/vNF`, que é tag de NF-e:
+
+```ts
+const valor = numero(item.amount) ?? numero(item.value) ?? parsed.valor_total
+if (valor === null) return { ok: false, motivo: 'sem_valor', ... }
+```
+
+**A NF-e tem duas fontes; a NFS-e tinha uma.** Por isso a mesma mudança derrubou
+100% de um tipo e 0% do outro — e por isso o parser passou a ler os **três
+layouts** (`nfe`, `resumo`, `nfse`), e não só o completo da NF-e.
+
+### O descarte era mudo, e é isso que fez durar nove dias
+
+`ignoradas` era um número solto. Ele saltou de 0,4% para 94% numa corrida e ficou
+meses de trabalho parado sem disparar nada, porque o motivo só existia num
+`logger.warn`. Agora o `meta` da ingestão traz a quebra:
+
+```
+descartes: { sem_access_key, sem_cnpj, sem_valor, erro_upsert }
+```
+
+Um contador agregado responde "quantas?"; a pergunta que importa é "**por quê?**",
+e ela precisa estar onde alguém olha.
+
+### `situacao` é a leitura; `status_sync` é a evidência
+
+A plataforma passou a conviver com dois vocabulários de status, e os dois são
+válidos ao mesmo tempo:
+
+| origem | valores |
+| --- | --- |
+| migrada | `sincronizado`, `cancelado`, `autorizado` |
+| nativa (NFe) | `authorized`, `cancelled`, `denied` |
+| nativa (NFSe) | `active`, `cancelled` |
+
+`status_sync` continua gravado **cru** — é o que o outro lado disse, e é a prova.
+`situacao` (`valida` | `cancelada` | `denegada`) é a **leitura**, e é ela que
+decide o funil. Separar os dois é o que permite o vocabulário mudar de novo sem
+reescrever uma regra sequer.
+
+**A nota cancelada sai do funil pelo `operavel`**, que é o mesmo mecanismo da
+natureza da operação (0104) e do piso de R$ 500 (0224) — uma segunda porta seria
+mais um lugar para esquecer de filtrar. Com uma diferença: aqui `operavel_manual`
+**não** manda. Recuperar à mão uma nota pequena é decisão comercial; recuperar à
+mão uma nota que não existe mais na SEFAZ é operar um recebível que ninguém pode
+ceder.
+
+E o cancelamento **depois** do nosso sync virou evento (`nf.cancelada`) na timeline
+do fornecedor, separado de `nf.expirada`: expirar é o calendário passando, cancelar
+é o documento deixando de existir — e pode pegar alguém no meio da negociação.
+
+### A NF de material chega pela metade, e volta inteira depois
+
+A NF-e recebida entra primeiro como **resumo** (`resNFe`): a SEFAZ entrega chave,
+emitente e valor ao destinatário, e o XML completo só aparece depois da
+manifestação. Hoje ~97% das NF-e do dia estão assim. Enquanto a nota está em
+resumo ela **não tem duplicata**, então o vencimento dela é o palpite de emissão +
+30 — um chute ocupando o lugar do dado.
+
+Esperar o sync de 4 em 4 horas não resolve: o incremental pergunta "o que foi
+**sincronizado** nas últimas 4h", e a promoção do XML nem sempre mexe no `syncedAt`
+do outro lado. Daí `promoverResumosDeNf()`, encadeado ao sync:
+
+- a nota carrega `xml_resumo`, e o job relê os **dias de emissão** dos resumos mais
+  antigos — por dia, porque o endpoint filtra por emissão e não por chave, e o dia
+  inteiro traz de brinde as notas que entraram na plataforma depois da primeira
+  passada;
+- o carimbo `resumo_relido_em` vai em **todas** as notas daqueles dias, e não só nas
+  que mudaram: uma nota ainda não manifestada não vira completa hoje e precisa ir
+  para o fim da fila, senão o job releria os mesmos dias para sempre;
+- roda **antes** da reclassificação, porque a duplicata que chega junto muda o
+  vencimento, e faixa e receita esperada dependem dele.
+
+### Recuperar o passado é insert-only
+
+`POST /jobs/antecipacao/recuperar-nfs { de, ate }` traz o que faltou numa janela de
+emissão, em blocos de 10 dias, **sem tocar no que já está gravado**. Nota que já
+existe é contada em `preservadas` e deixada como está: ela pode ter estágio movido,
+vendedor atribuído ou `operavel_manual`, e isso é trabalho humano que uma releitura
+de três meses apagaria em silêncio.
+
+Sem cron, de propósito. Uma reimportação larga faz milhares de cards nascerem de
+uma vez no funil de muita gente ao mesmo tempo — é decisão de quem está olhando a
+tela, não de um relógio.
+
 ## A régua gera; quem aprova é gente
 
 Ligar um canal em `/comunicacao/disparos` **não liga envio**. Liga a *geração* da fila:

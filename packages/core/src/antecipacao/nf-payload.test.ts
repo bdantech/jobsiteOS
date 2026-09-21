@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { extrairNotas, normalizarNfPayload, totalDePaginas, type RespostaNf } from './nf-payload.ts'
+import {
+  direcaoDaNota,
+  extrairNotas,
+  normalizarNfPayload,
+  situacaoDaNota,
+  tipoDaNota,
+  totalDePaginas,
+  type RespostaNf,
+} from './nf-payload.ts'
 
 /**
  * O fixture é o payload REAL do endpoint, colado inteiro.
@@ -241,4 +249,120 @@ test('CNPJ pontuado é normalizado para 14 dígitos', () => {
   )
   assert.ok(r.ok)
   assert.equal(r.ok && r.nota.sacado_cnpj, '12345678000190')
+})
+
+// ─── Depois da migração da plataforma (12/09/2026) ──────────────────────────
+//
+// Três enums do payload mudaram de vocabulário e um campo passou a vir nulo. Os
+// testes abaixo existem porque NENHUM desses quatro quebra typecheck: eles
+// aparecem como nota que some do funil, ou pior, como nota gravada errado.
+
+const NFSE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse">
+  <infNFSe Id="NFS35260712345678000190000000000123456789012345678901">
+    <nNFSe>123</nNFSe><dhProc>2026-09-16T09:00:00-03:00</dhProc>
+    <DPS><infDPS>
+      <nDPS>45</nDPS><dhEmi>2026-09-16T08:55:00-03:00</dhEmi>
+      <prest><CNPJ>98765432000110</CNPJ></prest>
+      <toma><CNPJ>12345678000190</CNPJ></toma>
+      <valores><vServPrest><vServ>10000.00</vServ></vServPrest></valores>
+    </infDPS></DPS>
+  </infNFSe>
+</NFSe>`
+
+test('NFSe nativa com amount nulo entra pelo XML, em vez de ser descartada', () => {
+  // Era este o caso: 100% das NFSe nativas saem com `amount: null` desde a
+  // migração, e o descarte por "sem valor" tirou 9.463 notas do funil.
+  const r = normalizarNfPayload({
+    id: 'NFSe-90487',
+    type: 'NFSe',
+    direction: 'issued',
+    status: 'active',
+    amount: null,
+    dueDate: null,
+    recipient: { taxId: '12345678000190' },
+    supplier: { taxId: '98765432000110' },
+    rawXml: NFSE_XML,
+  })
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  assert.equal(r.nota.valor, 10000)
+  assert.equal(r.nota.tipo, 'NFSe')
+  assert.equal(r.nota.direction, 'issued')
+  assert.equal(r.nota.situacao, 'valida')
+  assert.equal(r.nota.xml_resumo, false)
+  // `dueDate` é sempre nulo em NFSe nativa e não há duplicata no XML: a cascata
+  // tem de chegar ao estimado em vez de deixar a nota sem vencimento.
+  assert.equal(r.nota.vencimento_origem, 'estimado')
+})
+
+test('os dois vocabulários de status caem na mesma situação', () => {
+  // Migradas falam português, nativas falam inglês — e as duas convivem.
+  assert.equal(situacaoDaNota('sincronizado'), 'valida')
+  assert.equal(situacaoDaNota('authorized'), 'valida')
+  assert.equal(situacaoDaNota('active'), 'valida')
+  assert.equal(situacaoDaNota('cancelado'), 'cancelada')
+  assert.equal(situacaoDaNota('cancelled'), 'cancelada')
+  assert.equal(situacaoDaNota('denied'), 'denegada')
+  assert.equal(situacaoDaNota(null), 'valida')
+})
+
+test('o tipo tolera a grafia e cai no layout do XML quando o rótulo não resolve', () => {
+  assert.equal(tipoDaNota('NFSe'), 'NFSe')
+  assert.equal(tipoDaNota('NFS-e'), 'NFSe')
+  assert.equal(tipoDaNota('nfse'), 'NFSe')
+  assert.equal(tipoDaNota('NFe'), 'NFe')
+  // Rótulo que não conhecemos: quem decide é o documento.
+  assert.equal(tipoDaNota('service', 'nfse'), 'NFSe')
+  assert.equal(tipoDaNota(null, 'nfe'), 'NFe')
+})
+
+test('direção desconhecida vira received, mas AVISA', () => {
+  assert.deepEqual(direcaoDaNota('issued'), { direction: 'issued', conhecida: true })
+  assert.deepEqual(direcaoDaNota('received'), { direction: 'received', conhecida: true })
+  // O ternário antigo transformava qualquer valor novo em `received` sem ruído —
+  // uma nota emitida viraria recebida e ninguém veria.
+  assert.deepEqual(direcaoDaNota('OUTBOUND'), { direction: 'issued', conhecida: true })
+  assert.deepEqual(direcaoDaNota('xpto'), { direction: 'received', conhecida: false })
+})
+
+test('a NFe em resumo entra e se declara incompleta', () => {
+  const resumo = `<resNFe><chNFe>35260712345678000190550010000088211000088219</chNFe>
+    <CNPJ>98765432000110</CNPJ><dhEmi>2026-09-16T10:15:00-03:00</dhEmi><vNF>15230.55</vNF></resNFe>`
+  const r = normalizarNfPayload({
+    id: 'NFe-33001',
+    type: 'NFe',
+    direction: 'received',
+    status: 'authorized',
+    amount: 15230.55,
+    recipient: { taxId: '12345678000190' },
+    supplier: { taxId: '98765432000110' },
+    rawXml: resumo,
+  })
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  // Sem itens e sem duplicata: a nota vale, mas precisa ser relida quando a
+  // manifestação promover o XML para completo.
+  assert.equal(r.nota.xml_resumo, true)
+  assert.deepEqual(r.nota.itens, [])
+  assert.equal(r.nota.vencimento_origem, 'estimado')
+})
+
+test('nota cancelada é reconhecida nos dois vocabulários, e o status cru é preservado', () => {
+  const nota = (status: string) =>
+    normalizarNfPayload({
+      accessKey: '3'.repeat(44),
+      status,
+      amount: 100,
+      recipient: { taxId: '12345678000190' },
+      supplier: { taxId: '98765432000110' },
+    })
+  for (const s of ['cancelado', 'cancelled']) {
+    const r = nota(s)
+    assert.equal(r.ok, true)
+    if (!r.ok) return
+    assert.equal(r.nota.situacao, 'cancelada')
+    // Cru, porque é a evidência do que o outro lado disse.
+    assert.equal(r.nota.status_sync, s)
+  }
 })

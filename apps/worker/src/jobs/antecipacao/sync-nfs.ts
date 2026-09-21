@@ -7,9 +7,11 @@ import {
   formatarMoeda,
 } from '../../../../../packages/core/src/antecipacao/economia.js'
 import {
+  MOTIVOS_DESCARTE,
   extrairNotas,
   normalizarNfPayload,
   totalDePaginas,
+  type MotivoDescarte,
   type CreditAnalysisPayload,
   type NfPayload,
   type NotaNormalizada,
@@ -23,9 +25,11 @@ import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import {
+  fatiarJanela,
   montarPlanoSync,
   querystringSync,
   type ModoSync,
+  type RequisicaoSync,
 } from '../../../../../packages/core/src/antecipacao/sync-plano.js'
 import { lerConfigEconomia, lerConfigSync } from '../../antecipacao/config.js'
 import type { ConfigEconomia } from '../../../../../packages/core/src/antecipacao/schemas.js'
@@ -72,7 +76,41 @@ export interface ResultadoSyncNfs {
   contatos_completados: number
   eventos: number
   ignoradas: number
+  /**
+   * POR QUE cada nota foi ignorada. `ignoradas` sozinha é um número que não
+   * responde nada: ela saltou de 0,4% para 94% em 14/09/2026 e ficou nove dias
+   * assim, com 9.463 notas descartadas, sem um alerta — porque o motivo só
+   * existia num `logger.warn` que ninguém lê. Agora ele entra no `meta` da
+   * ingestão, que é o que a tela de Ingestões mostra.
+   */
+  descartes: Record<MotivoDescarte | 'erro_upsert', number>
   falhas_parse: number
+  /** Notas que chegaram em resumo (resNFe) e vão precisar de releitura. */
+  resumos: number
+  /** Notas que estavam válidas aqui e vieram canceladas/denegadas agora. */
+  canceladas: number
+  /** Só no modo insert-only: nota que já existe e foi deixada como está. */
+  preservadas: number
+  /** Resumos que ganharam o XML completo nesta corrida. */
+  promovidas: number
+}
+
+/**
+ * O que muda entre as três formas de chamar o sync.
+ *
+ * `requisicoes` substitui o plano inteiro: o backfill e a promoção de resumos
+ * sabem exatamente qual janela querem, e passar por `montarPlanoSync` só faria
+ * essa janela ser recalculada a partir do último sync — que é outra pergunta.
+ *
+ * `apenasNovas` é INSERT-ONLY, e existe porque recuperar o que faltou e reescrever
+ * o que já está gravado são decisões diferentes. Uma nota que alguém já trabalhou
+ * aqui (estágio movido, vendedor atribuído, nota recuperada à mão) não pode ser
+ * atropelada por uma releitura de três meses atrás.
+ */
+export interface OpcoesSync {
+  requisicoes?: RequisicaoSync[]
+  descricao?: string
+  apenasNovas?: boolean
 }
 
 // ─── O plano de requisições ─────────────────────────────────────────────────
@@ -152,6 +190,7 @@ function dataOuNulo(v: unknown): string | null {
 
 export async function sincronizarNotasFiscais(
   modo: ModoSync = 'incremental',
+  opcoes: OpcoesSync = {},
 ): Promise<ResultadoSyncNfs> {
   if (!env.ONEPAY_NF_URL && !env.ONEPAY_BI_URL) {
     throw new Error(
@@ -165,7 +204,13 @@ export async function sincronizarNotasFiscais(
     lerConfigEconomia(),
     ultimoSyncConcluido(),
   ])
-  const plano = montarPlanoSync({ modo, ultimoSync, agora: new Date(), cfg: cfgSync })
+  const plano = opcoes.requisicoes
+    ? {
+        modo: 'recuperacao' as const,
+        requisicoes: opcoes.requisicoes,
+        descricao: opcoes.descricao ?? `janela explícita (${opcoes.requisicoes.length} bloco(s))`,
+      }
+    : montarPlanoSync({ modo, ultimoSync, agora: new Date(), cfg: cfgSync })
   const base = urlBase()
 
   const acc: ResultadoSyncNfs = {
@@ -183,7 +228,12 @@ export async function sincronizarNotasFiscais(
     contatos_completados: 0,
     eventos: 0,
     ignoradas: 0,
+    descartes: descartesZerados(),
     falhas_parse: 0,
+    resumos: 0,
+    canceladas: 0,
+    preservadas: 0,
+    promovidas: 0,
   }
 
   logger.info({ plano: plano.descricao, requisicoes: plano.requisicoes.length, base }, 'Sync de NFs iniciado.')
@@ -205,9 +255,14 @@ export async function sincronizarNotasFiscais(
       acc.paginas++
 
       for (const item of itens) {
-        const r = await processarNota(item, cfgEconomia)
+        const r = await processarNota(item, cfgEconomia, opcoes.apenasNovas === true)
         acc.notas++
+        if (r.preservada) acc.preservadas++
+        if (r.promovida) acc.promovidas++
         if (r.ignorada) acc.ignoradas++
+        if (r.motivo) acc.descartes[r.motivo]++
+        if (r.resumo) acc.resumos++
+        if (r.cancelada) acc.canceladas++
         if (r.nova) acc.novas++
         if (r.atualizada) acc.atualizadas++
         acc.itens += r.itens
@@ -234,8 +289,20 @@ export async function sincronizarNotasFiscais(
   return acc
 }
 
+function descartesZerados(): ResultadoSyncNfs['descartes'] {
+  const zero = { erro_upsert: 0 } as ResultadoSyncNfs['descartes']
+  for (const m of MOTIVOS_DESCARTE) zero[m] = 0
+  return zero
+}
+
 interface ResultadoNota {
   ignorada: boolean
+  /** Preenchido só quando `ignorada`: é o que explica a corrida estranha. */
+  motivo: MotivoDescarte | 'erro_upsert' | null
+  resumo: boolean
+  cancelada: boolean
+  preservada: boolean
+  promovida: boolean
   nova: boolean
   atualizada: boolean
   itens: number
@@ -249,6 +316,11 @@ interface ResultadoNota {
 
 const NADA: ResultadoNota = {
   ignorada: true,
+  motivo: null,
+  resumo: false,
+  cancelada: false,
+  preservada: false,
+  promovida: false,
   nova: false,
   atualizada: false,
   itens: 0,
@@ -260,16 +332,31 @@ const NADA: ResultadoNota = {
   falhaParse: false,
 }
 
-async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<ResultadoNota> {
+async function processarNota(
+  item: NfPayload,
+  cfg: ConfigEconomia,
+  apenasNovas = false,
+): Promise<ResultadoNota> {
   // Toda a leitura do payload (e do XML) acontece no core, testada contra o
   // payload real. Aqui só sobra o que precisa do banco.
   const r = normalizarNfPayload(item, undefined, cfg.valor_minimo_operavel)
   if (!r.ok) {
-    logger.warn({ id: r.id, motivo: r.motivo }, 'NF descartada no sync.')
-    return NADA
+    logger.warn({ id: r.id, motivo: r.motivo, tipo: item.type }, 'NF descartada no sync.')
+    return { ...NADA, motivo: r.motivo }
   }
   const nota: NotaNormalizada = r.nota
   const { access_key: accessKey, fornecedor_cnpj: fornecedorCnpj, sacado_cnpj: sacadoCnpj } = nota
+
+  /*
+   * O que já está gravado é lido ANTES da precificação, e não depois: no modo
+   * insert-only a resposta é "pula", e calcular taxa, TAC e cadastro das duas
+   * pontas para depois jogar fora custaria quatro consultas por nota num backfill
+   * que roda sobre dezenas de milhares delas.
+   */
+  const gravada = await notaGravada(accessKey)
+  if (apenasNovas && gravada.existe) {
+    return { ...NADA, ignorada: false, preservada: true }
+  }
 
   const dias = diasParaVencimento(nota.vencimento)
 
@@ -297,7 +384,14 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
     resolverEmpresa(sacadoCnpj, item.recipient ?? null),
   ])
 
-  const jaExistia = await notaExiste(accessKey)
+  const jaExistia = gravada.existe
+  // Passou a cancelada/denegada AGORA. Só conta como transição quem estava válida
+  // aqui: a nota que já chegou cancelada é cadastro, não notícia.
+  const virouCancelada = jaExistia && gravada.situacao === 'valida' && nota.situacao !== 'valida'
+
+  if (nota.avisos.length > 0) {
+    logger.warn({ accessKey, avisos: nota.avisos }, 'Valor de enum desconhecido no payload de NF.')
+  }
 
   const linha: TablesInsert<'notas_fiscais'> = {
     access_key: accessKey,
@@ -350,6 +444,12 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
     ...linha,
     taxa_analise_am: analise.taxa,
     taxa_analise_origem: analise.origem,
+    situacao: nota.situacao,
+    xml_resumo: nota.xml_resumo,
+    // Só carimba na TRANSIÇÃO. Reescrever a cada sync faria toda nota cancelada
+    // parecer cancelada hoje, e é justamente essa data que diz se alguém estava
+    // trabalhando a nota quando ela caiu.
+    ...(virouCancelada ? { cancelada_em: new Date().toISOString() } : {}),
   } as typeof linha
 
   const { error } = await supabaseAdmin
@@ -357,7 +457,7 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
     .upsert(comTaxaDaAnalise, { onConflict: 'access_key' })
   if (error) {
     logger.error({ accessKey, erro: error.message }, 'Falha no upsert da NF.')
-    return NADA
+    return { ...NADA, motivo: 'erro_upsert' }
   }
 
   let eventos = 0
@@ -370,6 +470,26 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
       resumo:
         `${nota.fornecedor_nome ?? fornecedorCnpj} → ${nota.sacado_nome ?? sacadoCnpj}: ` +
         `${formatarMoeda(nota.valor)}${dias !== null ? `, vence em ${dias} dias` : ''}.`,
+      url: `/antecipacao?nota=${accessKey}`,
+      access_key: accessKey,
+      valor: nota.valor,
+    })
+    eventos++
+  }
+
+  /*
+   * O cancelamento vira evento na timeline do FORNECEDOR, e não um número no
+   * resumo do sync: quem precisa saber é quem estava trabalhando a nota. Uma nota
+   * de R$ 78 mil que sai do funil em silêncio é um vendedor ligando na
+   * segunda-feira para oferecer antecipação de um documento que não existe mais.
+   */
+  if (virouCancelada && fornecedor.empresaId) {
+    await emitirEvento(fornecedor.empresaId, EVENTO_TIPOS.NF_CANCELADA, {
+      titulo: nota.situacao === 'denegada' ? 'Nota denegada' : 'Nota cancelada',
+      resumo:
+        `${nota.fornecedor_nome ?? fornecedorCnpj} → ${nota.sacado_nome ?? sacadoCnpj}: ` +
+        `${formatarMoeda(nota.valor)} — a nota ${nota.numero ?? ''} saiu do funil ` +
+        `(status ${nota.status_sync ?? 'desconhecido'}).`,
       url: `/antecipacao?nota=${accessKey}`,
       access_key: accessKey,
       valor: nota.valor,
@@ -394,6 +514,11 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
 
   return {
     ignorada: false,
+    motivo: null,
+    resumo: nota.xml_resumo,
+    cancelada: virouCancelada,
+    preservada: false,
+    promovida: gravada.resumo === true && !nota.xml_resumo,
     nova: !jaExistia,
     atualizada: jaExistia,
     itens,
@@ -406,13 +531,28 @@ async function processarNota(item: NfPayload, cfg: ConfigEconomia): Promise<Resu
   }
 }
 
-async function notaExiste(accessKey: string): Promise<boolean> {
+/**
+ * O que já está gravado desta nota — e não só SE está.
+ *
+ * A situação anterior é o que permite ver a TRANSIÇÃO: uma nota que estava válida
+ * aqui e chega cancelada agora é um evento (alguém pode estar negociando com ela
+ * neste minuto), enquanto uma que já estava cancelada é só o sync repetindo.
+ * Comparar contra o que está no banco é a única forma de distinguir as duas.
+ */
+async function notaGravada(
+  accessKey: string,
+): Promise<{ existe: boolean; situacao: string | null; resumo: boolean }> {
   const { data } = await supabaseAdmin
     .from('notas_fiscais')
-    .select('access_key')
+    .select('access_key, situacao, xml_resumo')
     .eq('access_key', accessKey)
     .maybeSingle()
-  return data !== null
+  const linha = data as { situacao?: string | null; xml_resumo?: boolean | null } | null
+  return {
+    existe: linha !== null,
+    situacao: linha?.situacao ?? null,
+    resumo: linha?.xml_resumo === true,
+  }
 }
 
 /** A taxa do snapshot mais recente do sacado, quando o payload não trouxe uma. */
@@ -825,4 +965,142 @@ async function atualizarTipagem(
       para: nova,
     })
   }
+}
+
+// ─── Promoção do resumo (resNFe → XML completo) ─────────────────────────────
+
+/**
+ * Quantos DIAS DE EMISSÃO relemos por corrida.
+ *
+ * O recorte é por dia e não por nota porque o endpoint filtra por emissão, não
+ * por chave: pedir uma nota específica custa a mesma requisição que pedir o dia
+ * inteiro dela, e o dia inteiro traz de brinde exatamente o que falta — as notas
+ * que entraram na plataforma DEPOIS da nossa primeira passada por aquele dia.
+ */
+const DIAS_DE_RESUMO_POR_CORRIDA = 8
+
+export interface ResultadoPromocao {
+  dias: string[]
+  pendentes_antes: number
+  pendentes_depois: number
+  promovidas: number
+  sync: ResultadoSyncNfs | null
+}
+
+/**
+ * Relê as notas que chegaram em RESUMO, para pegá-las já completas.
+ *
+ * A NFe de material entra primeiro como `resNFe`: a SEFAZ entrega ao destinatário
+ * um resumo — chave, emitente e valor — e o XML completo só aparece depois da
+ * manifestação. Enquanto isso a nota existe no funil, mas sem itens e com
+ * vencimento ESTIMADO (emissão + 30), que é um palpite ocupando o lugar da
+ * duplicata real.
+ *
+ * Por que não bastava esperar o sync de 4 em 4 horas: o incremental pergunta "o
+ * que foi SINCRONIZADO nas últimas 4h", e a promoção do XML nem sempre mexe no
+ * `syncedAt` do outro lado. A nota fica parada em resumo até alguém reler a janela
+ * de emissão dela — e é isso que este job faz, do resumo mais antigo para o mais
+ * novo.
+ *
+ * Não é insert-only, de propósito: promover é exatamente sobrescrever a linha com
+ * a versão completa dela.
+ */
+export async function promoverResumosDeNf(): Promise<ResultadoPromocao> {
+  const pendentes = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('emitida_em')
+    .eq('xml_resumo', true)
+    .not('emitida_em', 'is', null)
+    // `nulls first`: quem nunca foi relido vem antes de quem já teve uma chance.
+    .order('resumo_relido_em', { ascending: true, nullsFirst: true })
+    .order('emitida_em', { ascending: false })
+    .limit(2_000)
+
+  const dias = [
+    ...new Set(
+      (pendentes.data ?? [])
+        .map((l) => dataOuNulo((l as { emitida_em: string | null }).emitida_em))
+        .filter((d): d is string => d !== null),
+    ),
+  ].slice(0, DIAS_DE_RESUMO_POR_CORRIDA)
+
+  const antes = await contarResumosPendentes()
+  if (dias.length === 0) {
+    return { dias: [], pendentes_antes: antes, pendentes_depois: antes, promovidas: 0, sync: null }
+  }
+
+  const sync = await sincronizarNotasFiscais('incremental', {
+    requisicoes: dias.map((d) => ({ tipo: 'datas', de: d, ate: d }) as RequisicaoSync),
+    descricao: `promoção de resumos: ${dias.length} dia(s) de emissão (${dias.at(-1)} … ${dias[0]})`,
+  })
+
+  /*
+   * O carimbo vai em TODAS as notas daqueles dias que continuam em resumo, e não
+   * só nas que mudaram. Sem isso o job releria eternamente os mesmos dias: uma
+   * nota que ainda não foi manifestada não vai virar completa hoje, e precisa ir
+   * para o fim da fila para dar a vez à próxima.
+   */
+  await supabaseAdmin
+    .from('notas_fiscais')
+    .update({ resumo_relido_em: new Date().toISOString() } as never)
+    .eq('xml_resumo', true)
+    .gte('emitida_em', `${dias.at(-1)}T00:00:00Z`)
+    .lte('emitida_em', `${dias[0]}T23:59:59Z`)
+
+  const depois = await contarResumosPendentes()
+  logger.info(
+    { dias, promovidas: sync.promovidas, pendentes: depois },
+    'Promoção de resumos concluída.',
+  )
+  return {
+    dias,
+    pendentes_antes: antes,
+    pendentes_depois: depois,
+    promovidas: sync.promovidas,
+    sync,
+  }
+}
+
+async function contarResumosPendentes(): Promise<number> {
+  const { count } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('access_key', { count: 'exact', head: true })
+    .eq('xml_resumo', true)
+  return count ?? 0
+}
+
+// ─── Recuperação de uma janela de emissão ───────────────────────────────────
+
+/**
+ * Traz o que NÃO entrou numa janela de emissão, sem tocar no que já está gravado.
+ *
+ * É o conserto do buraco de 13/09/2026: entre a migração da plataforma e a
+ * correção do valor da NFS-e, 9.463 notas foram descartadas por `sem_valor` e
+ * nunca mais foram pedidas — o incremental só enxerga quatro horas para trás.
+ *
+ * INSERT-ONLY porque recuperar o que faltou e reescrever o que já existe são
+ * decisões diferentes, e só a primeira foi pedida: uma nota que já está aqui pode
+ * ter estágio movido, vendedor atribuído ou `operavel_manual` — trabalho humano
+ * que uma releitura de três meses apagaria em silêncio.
+ */
+export async function recuperarNotasPorEmissao(
+  de: string,
+  ate: string,
+): Promise<ResultadoSyncNfs> {
+  const cfg = await lerConfigSync()
+  const inicio = new Date(`${de}T00:00:00Z`)
+  const fim = new Date(`${ate}T00:00:00Z`)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || inicio > fim) {
+    throw new Error(`Janela inválida para recuperação de NFs: ${de} … ${ate}.`)
+  }
+
+  // Blocos de 10 dias: é o teto do endpoint, e estourá-lo é 400 na cara.
+  const requisicoes = fatiarJanela(inicio, fim, cfg.intervalo_max_dias)
+  logger.info({ de, ate, blocos: requisicoes.length }, 'Recuperação de NFs por emissão iniciada.')
+
+  return sincronizarNotasFiscais('incremental', {
+    requisicoes,
+    descricao: `recuperação insert-only por emissão: ${de} … ${ate}`,
+    apenasNovas: true,
+  })
 }
