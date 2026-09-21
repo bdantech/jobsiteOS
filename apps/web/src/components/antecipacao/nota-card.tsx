@@ -313,7 +313,13 @@ export function NotaCard({
                   </TiraDoCard>
                 ) : !compacto &&
                   nota.sacado_credito_status === 'APPROVED' &&
-                  !nota.sacado_limite_cobre_nota ? (
+                  /*
+                   * `=== false`, e não `!`: desde a 0229 este campo é NULO quando
+                   * não se sabe o disponível do sacado, e `!null` acenderia a tira
+                   * justamente no caso em que não temos o que afirmar. A tira é
+                   * âmbar e diz "pare" — ela só pode aparecer sobre um número lido.
+                   */
+                  nota.sacado_limite_cobre_nota === false ? (
                   <TiraDoCard tom="alerta">Aprovado, mas o limite não cobre esta nota.</TiraDoCard>
                 ) : !compacto && nota.fornecedor_suprimido ? (
                   <TiraDoCard tom="neutro">

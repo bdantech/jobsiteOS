@@ -278,7 +278,8 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
             </View>
           </View>
 
-          {nota.sacado_credito_status === 'APPROVED' && !nota.sacado_limite_cobre_nota ? (
+          {/* `=== false` e não `!`: nulo é "não sei" desde a 0229, e não "não cobre". */}
+          {nota.sacado_credito_status === 'APPROVED' && nota.sacado_limite_cobre_nota === false ? (
             <Text className="text-[11px] text-amber-700 dark:text-amber-300">
               Aprovado, mas o limite disponível não cobre esta nota.
             </Text>

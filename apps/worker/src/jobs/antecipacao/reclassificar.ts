@@ -139,6 +139,26 @@ export async function reclassificarFunil(client: pg.Client): Promise<ResultadoRe
     [cfgEconomia.taxa_mensal_padrao],
   )
 
+  /*
+   * ── 1b. O LIMITE DO SACADO, antes das regras. ────────────────────────────
+   *
+   * `sacado_limite_cobre_nota` é variável do motor de faixa, e até a 0229 ela
+   * saía de `credit_disponivel` — o retrato que o sync tirou no dia em que
+   * AQUELA nota passou pelo job. Como a varredura só alcança 30 dias de emissão,
+   * o retrato congelava e a faixa passava a ser decidida por um número velho.
+   *
+   * O refresh resolve UMA vez por sacado e escreve em todas as notas dele. Roda
+   * aqui e não no sync de NFs pelo mesmo motivo que o recálculo de prazo roda
+   * aqui: o que envelhece não é a nota, é o calendário do outro lado.
+   */
+  const limitesAtualizados = await client.query<{ total: number }>(
+    'select public.app__atualizar_limites_dos_sacados() as total',
+  )
+  logger.info(
+    { notas: limitesAtualizados.rows[0]?.total ?? 0 },
+    'Limite disponível do sacado regravado nas notas vivas.',
+  )
+
   // ── 2. Uma varredura: a faixa e o motivo de cada nota, numa temp table.
   await client.query('drop table if exists stg_faixa')
   await client.query(
@@ -323,6 +343,13 @@ async function notificarFaixaAlta(r: EntradasFaixaAlta | null): Promise<number> 
  * Emitido no máximo uma vez por dia por sacado: o job roda 7× ao dia (diário +
  * pós-sync) e um evento por execução viraria spam no sino de quem mais precisa
  * dele.
+ *
+ * SÓ COM LIMITE CONHECIDO (0229). `available_limit` é `max(sacado_limite_disponivel)`
+ * sobre as notas do sacado, e desde a 0229 essa coluna é NULA quando a plataforma
+ * não tem análise aprovada para ele — nulo ali quer dizer "não sei", não "zero".
+ * O `coalesce(…, 0)` que estava aqui transformaria cada sacado sem análise num
+ * alerta dizendo "limite disponível de R$ 0,00", e seria o sino do time de
+ * Crédito tocando por falta de dado em vez de por risco.
  */
 async function sinalizarLimiteInsuficiente(client: pg.Client): Promise<number> {
   const r = await client.query(
@@ -334,16 +361,17 @@ async function sinalizarLimiteInsuficiente(client: pg.Client): Promise<number> {
          'titulo', 'Limite do sacado insuficiente',
          'resumo', coalesce(s.sacado_nome, s.sacado_cnpj) || ': pipeline de R$ '
                    || to_char(s.demanda_pipeline, 'FM999G999G990D00') || ' contra limite disponível de R$ '
-                   || to_char(coalesce(s.available_limit, 0), 'FM999G999G990D00') || '.',
+                   || to_char(s.available_limit, 'FM999G999G990D00') || '.',
          'url', '/antecipacao/sacados',
          'cnpj', s.sacado_cnpj,
          'demanda', s.demanda_pipeline,
-         'disponivel', coalesce(s.available_limit, 0),
-         'excedente', s.demanda_pipeline - coalesce(s.available_limit, 0)
+         'disponivel', s.available_limit,
+         'excedente', s.demanda_pipeline - s.available_limit
        ),
        null
      from antecipacao_sacados s
-     where s.demanda_pipeline > coalesce(s.available_limit, 0)
+     where s.available_limit is not null
+       and s.demanda_pipeline > s.available_limit
        and not exists (
          select 1 from empresa_eventos e
          where e.tipo = 'sacado.limite_insuficiente'
