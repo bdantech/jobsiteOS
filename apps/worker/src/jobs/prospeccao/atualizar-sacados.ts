@@ -72,6 +72,19 @@ interface LinhaNota {
  * A janela é a de RECORRÊNCIA (seis meses civis), não a de emissão: a de 30 dias é um
  * recorte DENTRO desta, feito no core. Duas consultas para as duas janelas leriam as
  * mesmas notas duas vezes.
+ *
+ * AS DUAS DATAS SAEM COMO `::text`, e isto não é enfeite. O `pg` converte `date` em
+ * `Date` do JavaScript, e o core trata emissão e vencimento como `'YYYY-MM-DD'` — ele
+ * fatia com `.slice(0, 10)`. Sem o cast, a primeira nota da primeira rodada estoura
+ * `n.emitida_em?.slice is not a function`, o try/catch do sync engole o erro e o funil
+ * fica VAZIO para todo mundo, sem que nada apareça como falha.
+ *
+ * O QUE ESCONDEU O DEFEITO POR UM DIA: enquanto `fornecedores_seguidos` estava vazia, o
+ * EXISTS acima não devolvia nota nenhuma, o laço não rodava e as três primeiras rodadas
+ * terminaram `candidatos: 0` — indistinguíveis de "ninguém segue ninguém ainda". O
+ * espelho da titularidade encheu a tabela em 21/09/2026 04:40 e as quatro rodadas
+ * seguintes estouraram, todas. Um job cujo caminho quente só é exercitado quando outra
+ * tabela tem linhas precisa ser lido no ledger, não no status verde do sync.
  */
 const SQL_NOTAS = `
 select
@@ -84,8 +97,8 @@ select
   nf.fornecedor_nome,
   nf.fornecedor_empresa_id,
   nf.valor,
-  nf.emitida_em::date as emitida_em,
-  nf.vencimento,
+  nf.emitida_em::date::text as emitida_em,
+  nf.vencimento::text as vencimento,
   nf.dias_para_vencimento
 from public.notas_fiscais nf
   left join public.mercado_universo mu on mu.cnpj = nf.sacado_cnpj
