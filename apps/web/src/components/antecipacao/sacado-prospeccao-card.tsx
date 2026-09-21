@@ -566,104 +566,114 @@ export function SacadoProspeccaoCard({
         </p>
       ) : null}
 
-        {/* ── A quebra por fornecedor ──────────────────────────────────────── */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-2 h-7 w-full justify-start px-1 text-xs"
-          onClick={() => setAberto((v) => !v)}
-          aria-expanded={aberto}
-        >
-          {aberto ? (
-            <ChevronDown className="mr-1 h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <ChevronRight className="mr-1 h-3.5 w-3.5" aria-hidden />
-          )}
-          De onde vem o volume
-        </Button>
+      {/* ── A quebra por fornecedor ──────────────────────────────────────── */}
+      {/*
+        `relative z-10` NOS DOIS, e não é detalhe de estilo: o botão que abre o card
+        é um elemento absoluto esticado sobre ele, e um filho estático fica ATRÁS
+        desse botão na ordem de pintura — o clique nunca chega aqui.
 
+        No gatilho isso passava despercebido, porque o botão de trás alterna o MESMO
+        `aberto`: o card obedecia pelo motivo errado. Na quebra o engano aparecia
+        inteiro — "Ver notas" acertava a camada de baixo e FECHAVA o card em vez de
+        listar as notas.
+      */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="relative z-10 mt-2 h-7 w-full justify-start px-1 text-xs"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+      >
         {aberto ? (
-          <div className="space-y-2">
-            {quebra.isPending ? <Skeleton className="h-16 w-full" /> : null}
-            {quebra.isError ? (
-              <p className="text-xs text-destructive">
-                {quebra.error instanceof Error ? quebra.error.message : 'Erro ao carregar.'}
-              </p>
-            ) : null}
-            {(quebra.data ?? []).map((f) => (
-              <div key={f.id} className="rounded-md border p-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium">{f.fornecedor_nome ?? '—'}</p>
-                    <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {formatCnpj(f.fornecedor_cnpj)}
-                    </p>
-                  </div>
-                  {f.na_carteira_do_originador ? (
-                    <Badge
-                      variant="success"
-                      className="shrink-0 text-[10px]"
-                      title="Este cedente já é da sua carteira — é uma ligação para um cliente seu, não um favor pedido a um cliente de outra pessoa."
-                    >
-                      <Sparkles className="mr-1 h-3 w-3" aria-hidden />
-                      Sua carteira
-                    </Badge>
-                  ) : null}
-                </div>
+          <ChevronDown className="mr-1 h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <ChevronRight className="mr-1 h-3.5 w-3.5" aria-hidden />
+        )}
+        De onde vem o volume
+      </Button>
 
-                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                  <span className="font-medium tabular-nums text-foreground">
-                    {formatarMoeda(f.valor_30d)}
-                  </span>
-                  <span className="tabular-nums">
-                    {formatarInteiro(f.qtd_nfs_30d)} nota{(f.qtd_nfs_30d ?? 0) === 1 ? '' : 's'}
-                  </span>
-                  <span className="tabular-nums">
-                    {formatarMoeda(f.media_mensal_6m)}/mês ({f.meses_com_emissao_6m}/{janelaMeses})
-                  </span>
-                  <span>última {formatarData(f.ultima_nf_em)}</span>
+      {aberto ? (
+        <div className="relative z-10 space-y-2">
+          {quebra.isPending ? <Skeleton className="h-16 w-full" /> : null}
+          {quebra.isError ? (
+            <p className="text-xs text-destructive">
+              {quebra.error instanceof Error ? quebra.error.message : 'Erro ao carregar.'}
+            </p>
+          ) : null}
+          {(quebra.data ?? []).map((f) => (
+            <div key={f.id} className="rounded-md border p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium">{f.fornecedor_nome ?? '—'}</p>
+                  <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {formatCnpj(f.fornecedor_cnpj)}
+                  </p>
                 </div>
-
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                    <Link href={linkCompositor(f)}>
-                      <MessageCircle className="mr-1 h-3 w-3" aria-hidden />
-                      Falar com o cedente
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => onPedirPonte(sacado, f)}
+                {f.na_carteira_do_originador ? (
+                  <Badge
+                    variant="success"
+                    className="shrink-0 text-[10px]"
+                    title="Este cedente já é da sua carteira — é uma ligação para um cliente seu, não um favor pedido a um cliente de outra pessoa."
                   >
-                    <Handshake className="mr-1 h-3 w-3" aria-hidden />
-                    Pedir apresentação
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() =>
-                      setExpandido((v) => (v === f.fornecedor_cnpj ? null : f.fornecedor_cnpj))
-                    }
-                    aria-expanded={expandido === f.fornecedor_cnpj}
-                  >
-                    <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
-                    {expandido === f.fornecedor_cnpj ? 'Ocultar notas' : 'Ver notas'}
-                  </Button>
-                </div>
-
-                {expandido === f.fornecedor_cnpj ? (
-                  <NotasDoFornecedor
-                    cnpjSacado={sacado.cnpj_sacado as string}
-                    fornecedorCnpj={f.fornecedor_cnpj}
-                  />
+                    <Sparkles className="mr-1 h-3 w-3" aria-hidden />
+                    Sua carteira
+                  </Badge>
                 ) : null}
               </div>
-            ))}
-          </div>
-        ) : null}
+
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatarMoeda(f.valor_30d)}
+                </span>
+                <span className="tabular-nums">
+                  {formatarInteiro(f.qtd_nfs_30d)} nota{(f.qtd_nfs_30d ?? 0) === 1 ? '' : 's'}
+                </span>
+                <span className="tabular-nums">
+                  {formatarMoeda(f.media_mensal_6m)}/mês ({f.meses_com_emissao_6m}/{janelaMeses})
+                </span>
+                <span>última {formatarData(f.ultima_nf_em)}</span>
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                  <Link href={linkCompositor(f)}>
+                    <MessageCircle className="mr-1 h-3 w-3" aria-hidden />
+                    Falar com o cedente
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => onPedirPonte(sacado, f)}
+                >
+                  <Handshake className="mr-1 h-3 w-3" aria-hidden />
+                  Pedir apresentação
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    setExpandido((v) => (v === f.fornecedor_cnpj ? null : f.fornecedor_cnpj))
+                  }
+                  aria-expanded={expandido === f.fornecedor_cnpj}
+                >
+                  <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
+                  {expandido === f.fornecedor_cnpj ? 'Ocultar notas' : 'Ver notas'}
+                </Button>
+              </div>
+
+              {expandido === f.fornecedor_cnpj ? (
+                <NotasDoFornecedor
+                  cnpjSacado={sacado.cnpj_sacado as string}
+                  fornecedorCnpj={f.fornecedor_cnpj}
+                />
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </CardDoFunil>
   )
 }
