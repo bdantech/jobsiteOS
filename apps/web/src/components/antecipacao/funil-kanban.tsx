@@ -316,8 +316,15 @@ export function FunilKanban({
   const totalGeral = COLUNAS.reduce((soma, c) => soma + (totais[c] ?? 0), 0)
   const totalConhecido = COLUNAS.every((c) => totais[c] !== undefined)
 
+  /*
+   * O botão do popover acende quando QUALQUER coisa lá dentro está ligada — e a
+   * tipagem entrou nessa conta ao se mudar para lá. Sem isso ela filtraria o funil
+   * de dentro de um painel fechado, sem nada na tela dizendo por que faltam cards:
+   * exatamente o tipo de filtro esquecido que faz alguém concluir que o sync
+   * quebrou.
+   */
   const intervalosAtivos = Boolean(
-    valorMin || valorMax || emissaoDe || emissaoAte || vencDe || vencAte || incluirSuprimidos,
+    valorMin || valorMax || emissaoDe || emissaoAte || vencDe || vencAte || incluirSuprimidos || tipagem,
   )
   const filtrando = Boolean(
     termoDebounced || faixa || tipagem || intervalosAtivos || (!travadoNoVendedor && originador !== TODOS),
@@ -417,21 +424,6 @@ export function FunilKanban({
         ))}
       </div>
 
-      <div className="flex items-center gap-1">
-        {TIPAGENS.map((t) => (
-          <Button
-            key={t}
-            type="button"
-            size="sm"
-            variant={tipagem === t ? 'default' : 'outline'}
-            aria-pressed={tipagem === t}
-            onClick={() => setTipagem(tipagem === t ? undefined : t)}
-          >
-            {TIPAGEM_LABELS[t]}
-          </Button>
-        ))}
-      </div>
-
       {/* Ordenação: o critério e o sentido são dois controles porque são duas
           decisões. "Vencimento, do maior para o menor" e "vencimento, do mais
           próximo" são a mesma coluna e perguntas opostas. */}
@@ -476,6 +468,33 @@ export function FunilKanban({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80 space-y-4" align="end">
+          {/*
+            A TIPAGEM saiu da barra e veio para cá.
+            Ela responde "que tipo de RELAÇÃO eu tenho com este fornecedor" —
+            aquisição, ativação, recorrência —, que é uma pergunta de campanha, não
+            de varredura diária. Na barra ela ocupava três botões permanentes ao
+            lado da origem e da faixa, e as três fileiras juntas empurravam a busca
+            para a segunda linha em qualquer tela que não fosse um monitor largo.
+            Origem e faixa ficam lá porque são o recorte de todo dia.
+          */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Tipagem do fornecedor</p>
+            <div className="flex flex-wrap items-center gap-1">
+              {TIPAGENS.map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={tipagem === t ? 'default' : 'outline'}
+                  aria-pressed={tipagem === t}
+                  onClick={() => setTipagem(tipagem === t ? undefined : t)}
+                >
+                  {TIPAGEM_LABELS[t]}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <Intervalo
             titulo="Valor da nota"
             de={valorMin}
@@ -541,6 +560,7 @@ export function FunilKanban({
                 setVencDe('')
                 setVencAte('')
                 setIncluirSuprimidos(false)
+                setTipagem(undefined)
               }}
             >
               Limpar valor e datas

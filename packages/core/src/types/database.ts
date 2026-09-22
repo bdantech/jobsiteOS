@@ -1000,6 +1000,20 @@ export type Database = {
             foreignKeyName: "antecipacoes_access_key_casada_fkey"
             columns: ["access_key_casada"]
             isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "antecipacoes_access_key_casada_fkey"
+            columns: ["access_key_casada"]
+            isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "antecipacoes_access_key_casada_fkey"
+            columns: ["access_key_casada"]
+            isOneToOne: false
             referencedRelation: "notas_fiscais"
             referencedColumns: ["access_key"]
           },
@@ -6130,6 +6144,20 @@ export type Database = {
             foreignKeyName: "nota_itens_access_key_fkey"
             columns: ["access_key"]
             isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "nota_itens_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_itens_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
             referencedRelation: "notas_fiscais"
             referencedColumns: ["access_key"]
           },
@@ -7371,6 +7399,20 @@ export type Database = {
           vencimento?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "processo_operacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "processo_operacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "processo_operacoes_access_key_fkey"
             columns: ["access_key"]
@@ -10095,6 +10137,20 @@ export type Database = {
             foreignKeyName: "voz_ligacoes_access_key_fkey"
             columns: ["access_key"]
             isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["access_key"]
+          },
+          {
+            foreignKeyName: "voz_ligacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
+            referencedRelation: "funil_oportunidades_nf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voz_ligacoes_access_key_fkey"
+            columns: ["access_key"]
+            isOneToOne: false
             referencedRelation: "notas_fiscais"
             referencedColumns: ["access_key"]
           },
@@ -11177,6 +11233,463 @@ export type Database = {
         }
         Relationships: []
       }
+      funil_oportunidades_nf: {
+        Row: {
+          access_key: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean | null
+          conversao_taxa: number | null
+          conversao_valor: number | null
+          credor_pessoa_fisica: boolean | null
+          data_base: string | null
+          dias_para_vencimento: number | null
+          direction: string | null
+          emitida_em: string | null
+          estado_origem: string | null
+          estagio_alterado_em: string | null
+          estagio_funil: string | null
+          faixa: string | null
+          faixa_motivo: string | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_capital_social: number | null
+          fornecedor_cnpj: string | null
+          fornecedor_e_cliente_onepay: boolean | null
+          fornecedor_empresa_id: string | null
+          fornecedor_ja_antecipou: boolean | null
+          fornecedor_natureza_juridica: string | null
+          fornecedor_nome: string | null
+          fornecedor_protesto_em: string | null
+          fornecedor_protesto_valor: number | null
+          fornecedor_sem_interesse: boolean | null
+          fornecedor_situacao_cadastral: string | null
+          fornecedor_suprimido: boolean | null
+          fornecedor_tem_protesto: boolean | null
+          fornecedor_tipagem: string | null
+          fornecedor_uf: string | null
+          fornecedor_ultimo_numero_nf: number | null
+          id: string | null
+          linha_contexto: string | null
+          liquido_estimado: number | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
+          numero: string | null
+          numero_exibicao: string | null
+          operavel: boolean | null
+          perda_motivo: string | null
+          pre_autorizacao_em: string | null
+          pre_autorizacao_id: number | null
+          pre_autorizacao_status: string | null
+          receita_esperada: number | null
+          relogio: string | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string | null
+          sacado_credito_status: string | null
+          sacado_empresa_id: string | null
+          sacado_limite_cobre_nota: boolean | null
+          sacado_limite_cobre_valor: boolean | null
+          sacado_limite_disponivel: number | null
+          sacado_matriz_cnpj: string | null
+          sacado_nome: string | null
+          sacado_uf: string | null
+          seguro_estimado: number | null
+          serie: string | null
+          tac_estimada: number | null
+          taxa_usada: number | null
+          tipo: string | null
+          tipo_nf: string | null
+          valor: number | null
+          vencimento: string | null
+          vencimento_origem: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_conversao_antecipacao_id_fkey"
+            columns: ["conversao_antecipacao_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funil_oportunidades_preauth: {
+        Row: {
+          access_key: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean | null
+          conversao_taxa: number | null
+          conversao_valor: number | null
+          credor_pessoa_fisica: boolean | null
+          data_base: string | null
+          dias_para_vencimento: number | null
+          direction: string | null
+          emitida_em: string | null
+          estado_origem: string | null
+          estagio_alterado_em: string | null
+          estagio_funil: string | null
+          faixa: string | null
+          faixa_motivo: string | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_capital_social: number | null
+          fornecedor_cnpj: string | null
+          fornecedor_e_cliente_onepay: boolean | null
+          fornecedor_empresa_id: string | null
+          fornecedor_ja_antecipou: boolean | null
+          fornecedor_natureza_juridica: string | null
+          fornecedor_nome: string | null
+          fornecedor_protesto_em: string | null
+          fornecedor_protesto_valor: number | null
+          fornecedor_sem_interesse: boolean | null
+          fornecedor_situacao_cadastral: string | null
+          fornecedor_suprimido: boolean | null
+          fornecedor_tem_protesto: boolean | null
+          fornecedor_tipagem: string | null
+          fornecedor_uf: string | null
+          fornecedor_ultimo_numero_nf: number | null
+          id: string | null
+          linha_contexto: string | null
+          liquido_estimado: number | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
+          numero: string | null
+          numero_exibicao: string | null
+          operavel: boolean | null
+          perda_motivo: string | null
+          pre_autorizacao_em: string | null
+          pre_autorizacao_id: number | null
+          pre_autorizacao_status: string | null
+          receita_esperada: number | null
+          relogio: string | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string | null
+          sacado_credito_status: string | null
+          sacado_empresa_id: string | null
+          sacado_limite_cobre_nota: boolean | null
+          sacado_limite_cobre_valor: boolean | null
+          sacado_limite_disponivel: number | null
+          sacado_matriz_cnpj: string | null
+          sacado_nome: string | null
+          sacado_uf: string | null
+          seguro_estimado: number | null
+          serie: string | null
+          tac_estimada: number | null
+          taxa_usada: number | null
+          tipo: string | null
+          tipo_nf: string | null
+          valor: number | null
+          vencimento: string | null
+          vencimento_origem: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_autorizacoes_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_fornecedor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "pre_autorizacoes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funil_oportunidades_titulo: {
+        Row: {
+          access_key: string | null
+          conversao_antecipacao_id: number | null
+          conversao_em_disputa: boolean | null
+          conversao_taxa: number | null
+          conversao_valor: number | null
+          credor_pessoa_fisica: boolean | null
+          data_base: string | null
+          dias_para_vencimento: number | null
+          direction: string | null
+          emitida_em: string | null
+          estado_origem: string | null
+          estagio_alterado_em: string | null
+          estagio_funil: string | null
+          faixa: string | null
+          faixa_motivo: string | null
+          fornecedor_cadastrado: boolean | null
+          fornecedor_capital_social: number | null
+          fornecedor_cnpj: string | null
+          fornecedor_e_cliente_onepay: boolean | null
+          fornecedor_empresa_id: string | null
+          fornecedor_ja_antecipou: boolean | null
+          fornecedor_natureza_juridica: string | null
+          fornecedor_nome: string | null
+          fornecedor_protesto_em: string | null
+          fornecedor_protesto_valor: number | null
+          fornecedor_sem_interesse: boolean | null
+          fornecedor_situacao_cadastral: string | null
+          fornecedor_suprimido: boolean | null
+          fornecedor_tem_protesto: boolean | null
+          fornecedor_tipagem: string | null
+          fornecedor_uf: string | null
+          fornecedor_ultimo_numero_nf: number | null
+          id: string | null
+          linha_contexto: string | null
+          liquido_estimado: number | null
+          nao_operavel_motivo: string | null
+          natureza_operacao: string | null
+          numero: string | null
+          numero_exibicao: string | null
+          operavel: boolean | null
+          perda_motivo: string | null
+          pre_autorizacao_em: string | null
+          pre_autorizacao_id: number | null
+          pre_autorizacao_status: string | null
+          receita_esperada: number | null
+          relogio: string | null
+          sacado_cadastrado: boolean | null
+          sacado_cnpj: string | null
+          sacado_credito_status: string | null
+          sacado_empresa_id: string | null
+          sacado_limite_cobre_nota: boolean | null
+          sacado_limite_cobre_valor: boolean | null
+          sacado_limite_disponivel: number | null
+          sacado_matriz_cnpj: string | null
+          sacado_nome: string | null
+          sacado_uf: string | null
+          seguro_estimado: number | null
+          serie: string | null
+          tac_estimada: number | null
+          taxa_usada: number | null
+          tipo: string | null
+          tipo_nf: string | null
+          valor: number | null
+          vencimento: string | null
+          vencimento_origem: string | null
+          vendedor_id: string | null
+          vendedor_origem: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sienge_titulos_credor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_credor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_credor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_credor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_credor_empresa_id_fkey"
+            columns: ["fornecedor_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sienge_titulos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_conversas: {
         Row: {
           canal: string | null
@@ -11639,6 +12152,7 @@ export type Database = {
           taxa_analise_am: number | null
           taxa_analise_origem: string | null
           taxa_usada: number | null
+          tipo: string | null
           tipo_nf: string | null
           valor: number | null
           vencimento: string | null

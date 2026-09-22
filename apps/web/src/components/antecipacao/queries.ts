@@ -7,7 +7,7 @@ import type {
   Tipagem,
   Views,
 } from '@jobsiteos/core'
-import { ESTAGIOS_ABERTOS, ESTAGIOS_ENCERRADOS } from '@jobsiteos/core'
+import { ESTAGIOS_ABERTOS, ESTAGIOS_ENCERRADOS, TIPOS_OPORTUNIDADE } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 
 /**
@@ -289,16 +289,39 @@ export interface PaginaOportunidades {
 }
 
 /**
- * O funil inteiro — as três origens, numa consulta paginada só.
+ * UMA VIEW POR FONTE — e o Kanban nunca lê a união.
  *
- * Gêmea de `buscarFunil`, e de propósito: mesma paginação, mesmo desempate, mesma
- * contagem só na página 0, mesmos filtros. O que muda é a superfície
- * (`funil_oportunidades` em vez de `notas_funil`) e o filtro novo por `tipo`.
+ * ── A CICATRIZ (22/09/2026) ─────────────────────────────────────────────────
+ * O funil passou a ler `funil_oportunidades` e a primeira página de uma coluna foi
+ * de 1,85 ms para 8.382 ms. Cinco colunas em paralelo, cada uma pagando ainda um
+ * `count: 'exact'`, e a tela parou de mostrar notas.
  *
- * As duas convivem porque respondem a perguntas diferentes: a ficha do fornecedor
- * e a tela de protesto continuam falando de NOTAS, e forçá-las a passar pela
- * projeção só para reaproveitar código as faria mostrar parcelas onde a pessoa
- * pediu notas.
+ * A causa não era o custo dos joins: era o `UNION ALL`. O plano antigo caminhava
+ * `notas_fiscais_receita_idx` JÁ ORDENADO e parava na linha 41; o `Append` é
+ * barreira de otimização para ordenação, então o Postgres passou a materializar as
+ * 8.430 notas abertas por todos os joins antes de ordenar. Filtrar por tipo dentro
+ * da união melhora dez vezes e não resolve — a barreira continua lá.
+ *
+ * Lendo a view da FONTE, o planejador achata e empurra `ORDER BY ... LIMIT` até o
+ * índice: 3,1 ms.
+ */
+const VIEW_DA_FONTE = {
+  nf: 'funil_oportunidades_nf',
+  pre_autorizacao: 'funil_oportunidades_preauth',
+  titulo: 'funil_oportunidades_titulo',
+} as const satisfies Record<TipoOportunidade, string>
+
+/**
+ * O funil inteiro — as três origens, uma consulta por fonte, juntadas aqui.
+ *
+ * ── POR QUE JUNTAR NO CLIENTE É CORRETO, E NÃO UM ATALHO ────────────────────
+ * O top-N global é sempre um SUBCONJUNTO da união dos top-N de cada fonte. Pedindo
+ * `(pagina + 1) × limite` de cada uma e ordenando as três listas juntas, a página
+ * que sai é exatamente a que a união produziria — com a diferença de que cada
+ * consulta volta a custar milissegundos.
+ *
+ * O custo é trazer até 3× mais linhas do que se mostra. Com 40 por página são 120
+ * linhas; a união custava 8.430.
  */
 export async function buscarOportunidades(
   filtros: FiltrosFunil,
@@ -309,57 +332,89 @@ export async function buscarOportunidades(
   const coluna = ORDENS_OPORTUNIDADE[filtros.ordem ?? 'receita'].coluna
   const asc = filtros.ordemAsc === true
 
-  let query = supabase
-    .from('funil_oportunidades')
-    .select(COLUNAS_OPORTUNIDADE, pagina === 0 ? { count: 'exact' } : {})
-    .order(coluna, { ascending: asc, nullsFirst: false })
-    /*
-     * O DESEMPATE, e agora ele precisa dos DOIS campos.
-     *
-     * Paginação por `range` é OFFSET: sem uma última chave única, duas linhas de
-     * mesmo valor trocam de lugar entre páginas e um card aparece duas vezes
-     * enquanto outro nunca aparece. `id` sozinho deixou de ser único quando a
-     * lista virou união — nada impede que uma pré-autorização 4242 e uma parcela
-     * 4242 existam ao mesmo tempo. O par `(tipo, id)` é a identidade real.
-     */
-    .order('tipo', { ascending: true })
-    .order('id', { ascending: true })
-    .range(pagina * limite, pagina * limite + limite - 1)
+  const tipos: TipoOportunidade[] =
+    filtros.tipos?.length ? filtros.tipos : [...TIPOS_OPORTUNIDADE]
 
-  if (filtros.tipos?.length) query = query.in('tipo', filtros.tipos)
-  if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
-  if (!filtros.incluirSuprimidos) {
-    query = query.eq('fornecedor_sem_interesse', false).eq('fornecedor_suprimido', false)
+  // Cada fonte precisa das (pagina+1) páginas para que a fatia final esteja certa:
+  // a página 3 do resultado pode ser composta só de linhas de uma das fontes.
+  const porFonte = (pagina + 1) * limite
+
+  const paginas = await Promise.all(
+    tipos.map(async (tipo) => {
+      let query = supabase
+        .from(VIEW_DA_FONTE[tipo])
+        .select(COLUNAS_OPORTUNIDADE, pagina === 0 ? { count: 'exact' } : {})
+        .order(coluna, { ascending: asc, nullsFirst: false })
+        /*
+         * O DESEMPATE por `id`. Paginação por `range` é OFFSET: sem uma última
+         * chave única, duas linhas de mesmo valor trocam de lugar entre páginas e
+         * um card aparece duas vezes enquanto outro nunca aparece. Dentro de uma
+         * fonte, `id` é único — entre fontes o par `(tipo, id)` é, e é por ele que
+         * a junção final ordena.
+         */
+        .order('id', { ascending: true })
+        .range(0, porFonte - 1)
+
+      if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
+      if (!filtros.incluirSuprimidos) {
+        query = query.eq('fornecedor_sem_interesse', false).eq('fornecedor_suprimido', false)
+      }
+
+      if (filtros.estagio === 'encerradas') {
+        query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
+      } else if (filtros.estagio) {
+        query = query.eq('estagio_funil', filtros.estagio)
+      } else {
+        query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
+      }
+
+      if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+      else if (filtros.semDono) query = query.is('vendedor_id', null)
+      if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
+      if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
+      if (typeof filtros.valorMin === 'number') query = query.gte('valor', filtros.valorMin)
+      if (typeof filtros.valorMax === 'number') query = query.lte('valor', filtros.valorMax)
+
+      // `data_base` é TIMESTAMP nas três fontes, então o "até" é EXCLUSIVO no dia
+      // seguinte — senão o dia final que a pessoa digitou some do resultado.
+      if (filtros.emissaoDe) query = query.gte('data_base', filtros.emissaoDe)
+      if (filtros.emissaoAte) query = query.lt('data_base', diaSeguinte(filtros.emissaoAte))
+      if (filtros.vencimentoDe) query = query.gte('vencimento', filtros.vencimentoDe)
+      if (filtros.vencimentoAte) query = query.lte('vencimento', filtros.vencimentoAte)
+
+      if (filtros.termo?.trim()) {
+        const t = `*${filtros.termo.trim()}*`
+        query = query.or(
+          `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},numero_exibicao.ilike.${t}`,
+        )
+      }
+
+      const { data, error, count } = await query
+      if (error) throw error
+      return { linhas: (data ?? []) as Oportunidade[], total: count ?? 0 }
+    }),
+  )
+
+  const juntas = paginas.flatMap((p) => p.linhas)
+  const sinal = asc ? 1 : -1
+
+  juntas.sort((a, b) => {
+    const va = a[coluna as keyof Oportunidade]
+    const vb = b[coluna as keyof Oportunidade]
+    // Nulos por último nas duas direções, como o `nullsFirst: false` do banco.
+    if (va === null || va === undefined) return vb === null || vb === undefined ? 0 : 1
+    if (vb === null || vb === undefined) return -1
+    const na = typeof va === 'string' ? Date.parse(va) : Number(va)
+    const nb = typeof vb === 'string' ? Date.parse(vb) : Number(vb)
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return (na - nb) * sinal
+    // O desempate final é o PAR, que é a identidade real entre fontes.
+    return `${a.tipo}:${a.id}`.localeCompare(`${b.tipo}:${b.id}`)
+  })
+
+  return {
+    oportunidades: juntas.slice(pagina * limite, pagina * limite + limite),
+    total: paginas.reduce((s, p) => s + p.total, 0),
   }
-
-  if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
-  else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)
-  else query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
-
-  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
-  else if (filtros.semDono) query = query.is('vendedor_id', null)
-  if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
-  if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
-  if (typeof filtros.valorMin === 'number') query = query.gte('valor', filtros.valorMin)
-  if (typeof filtros.valorMax === 'number') query = query.lte('valor', filtros.valorMax)
-
-  // `data_base` é TIMESTAMP nas três fontes, então o "até" continua sendo
-  // exclusivo no dia seguinte — senão o dia final que a pessoa digitou some.
-  if (filtros.emissaoDe) query = query.gte('data_base', filtros.emissaoDe)
-  if (filtros.emissaoAte) query = query.lt('data_base', diaSeguinte(filtros.emissaoAte))
-  if (filtros.vencimentoDe) query = query.gte('vencimento', filtros.vencimentoDe)
-  if (filtros.vencimentoAte) query = query.lte('vencimento', filtros.vencimentoAte)
-
-  if (filtros.termo?.trim()) {
-    const t = `*${filtros.termo.trim()}*`
-    query = query.or(
-      `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},numero_exibicao.ilike.${t}`,
-    )
-  }
-
-  const { data, error, count } = await query
-  if (error) throw error
-  return { oportunidades: (data ?? []) as Oportunidade[], total: count ?? 0 }
 }
 
 /** `2026-09-01` → `2026-09-02`. Em UTC, que é como a data do input chega. */
