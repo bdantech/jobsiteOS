@@ -318,6 +318,14 @@ async function processar(
 function estagioDeSaida(motivo: string): string {
   if (motivo === 'pago_no_erp') return 'perdida'
   if (motivo === 'removido_no_erp') return 'perdida'
+  /*
+   * O resto — guardReason sem conserto, credor pessoa física — vai para
+   * `expirada`, que é o balde neutro de "não há o que fazer aqui".
+   *
+   * NÃO vai para `perdida`: perda é o que poderíamos ter ganhado e não ganhamos,
+   * e inflar a métrica com o que nunca foi ganhável apaga justamente o que ela
+   * mede. Um credor CPF nunca foi uma operação possível.
+   */
   return 'expirada'
 }
 

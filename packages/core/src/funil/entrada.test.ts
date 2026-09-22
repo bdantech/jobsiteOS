@@ -69,6 +69,31 @@ test('status desconhecido ENTRA — invisível e errado é pior que visível e e
   )
 })
 
+test('credor pessoa física NUNCA entra — só antecipamos para CNPJ', () => {
+  /*
+   * A guarda vem antes da situação porque a situação não muda nada: uma parcela
+   * `ready_to_create` de credor PF continua sem ter para quem ser ofertada. Não há
+   * como analisar crédito, emitir cessão nem cadastrar cedente para um CPF.
+   */
+  for (const situation of ['ready_to_create', 'offer_created', 'awaiting_evaluation']) {
+    assert.deepEqual(
+      tituloEntraNoFunil({ situation, guard_reason: null, credor_pessoa_fisica: true }, CFG),
+      { entra: false, motivo: 'credor_pessoa_fisica' },
+      `${situation} de credor PF não deveria entrar`,
+    )
+  }
+
+  // E o `SUPPLIER_CNPJ_MISSING` dele é o SINTOMA disso — falta o CNPJ porque não
+  // existe CNPJ. Sem a guarda, ele entraria como "destravável pelo originador".
+  assert.deepEqual(
+    tituloEntraNoFunil(
+      { situation: 'not_eligible', guard_reason: 'SUPPLIER_CNPJ_MISSING', credor_pessoa_fisica: true },
+      CFG,
+    ),
+    { entra: false, motivo: 'credor_pessoa_fisica' },
+  )
+})
+
 test('offer_created ENTRA: é a parcela mais quente, e leva o selo da oferta', () => {
   assert.deepEqual(tituloEntraNoFunil({ situation: 'offer_created', guard_reason: null }, CFG), {
     entra: true,

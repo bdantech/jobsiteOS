@@ -27,6 +27,7 @@ export type ForaDoFunil =
   | 'pago_no_erp'
   | 'removido_no_erp'
   | 'guard_reason_nao_recuperavel'
+  | 'credor_pessoa_fisica'
   | 'estado_desconhecido'
 
 export type VereditoEntrada = { entra: true } | { entra: false; motivo: ForaDoFunil }
@@ -110,9 +111,31 @@ export function preAutorizacaoEntraNoFunil(
 }
 
 export function tituloEntraNoFunil(
-  titulo: { situation: string; guard_reason: string | null },
+  titulo: {
+    situation: string
+    guard_reason: string | null
+    /** `creditor.taxId` nulo. Ver a guarda logo abaixo. */
+    credor_pessoa_fisica?: boolean
+  },
   cfg: Pick<ConfigFunilOportunidades, 'guard_reasons_recuperaveis'>,
 ): VereditoEntrada {
+  /*
+   * CREDOR PESSOA FÍSICA NÃO ENTRA, e esta guarda vem antes de tudo.
+   *
+   * Só antecipamos para CNPJ. Não é preferência comercial: a operação é cessão de
+   * recebível entre pessoas jurídicas, e não há como analisar crédito, emitir
+   * cessão ou cadastrar cedente para um CPF. O card seria trabalho impossível.
+   *
+   * A guarda vem ANTES da situação porque a situação não muda nada aqui — uma
+   * parcela `ready_to_create` de credor pessoa física continua sem ter para quem
+   * ser ofertada. E vem antes do `guardReason` porque o `SUPPLIER_CNPJ_MISSING`
+   * dele é justamente o sintoma disso: falta o CNPJ porque não existe CNPJ.
+   *
+   * Ele continua sendo GRAVADO — a parcela existe no ERP da construtora e conta
+   * para a métrica de perda. O que ele não é é trabalho.
+   */
+  if (titulo.credor_pessoa_fisica === true) return NAO('credor_pessoa_fisica')
+
   switch (titulo.situation) {
     case 'ready_to_create':
     case 'awaiting_evaluation':
