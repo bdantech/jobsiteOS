@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Ban, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
+import { ArrowRight, Ban, Building2, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   ESTAGIOS_ABERTOS,
@@ -32,7 +32,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { moverEstagioAction, moverOportunidadeAction } from '@/actions/antecipacao'
+import {
+  moverEstagioAction,
+  moverOportunidadeAction,
+  promoverFornecedorAction,
+} from '@/actions/antecipacao'
 import { SemInteresseDialog } from './acoes-nota'
 import { antecipacaoKeys, type Oportunidade } from './queries'
 
@@ -153,9 +157,39 @@ function MoverOportunidadeDialog({
 }
 
 export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
+  const qc = useQueryClient()
   const [destino, setDestino] = React.useState<EstagioFunil | null>(null)
   const [semInteresse, setSemInteresse] = React.useState(false)
+  const [criandoFicha, setCriandoFicha] = React.useState(false)
   const tipo = (item.tipo ?? 'nf') as TipoOportunidade
+
+  /*
+   * Criar a ficha do fornecedor SEM abrir o card.
+   *
+   * A maioria das ofertas de aquisição chega assim, e quem varre a coluna já sabe
+   * o que fazer com elas — obrigar a abrir cada uma para um clique que não pede
+   * decisão nenhuma é atrito sem proteção. Mesma razão pela qual mover estágio
+   * está aqui.
+   *
+   * Credor pessoa física fica de fora: `empresas` é por CNPJ e ele não tem um.
+   */
+  const podeCriarFicha =
+    !item.fornecedor_empresa_id &&
+    Boolean(item.fornecedor_cnpj) &&
+    item.credor_pessoa_fisica !== true
+
+  async function criarFicha() {
+    if (!item.fornecedor_cnpj) return
+    setCriandoFicha(true)
+    const r = await promoverFornecedorAction(item.fornecedor_cnpj)
+    setCriandoFicha(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    toast.success(`Ficha de ${r.data.razao_social ?? item.fornecedor_cnpj} criada.`)
+    invalidar(qc)
+  }
 
   const estagios: readonly EstagioFunil[] = [...ESTAGIOS_ABERTOS, ...ESTAGIOS_ENCERRADOS].filter(
     (e) =>
@@ -189,6 +223,18 @@ export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
           ))}
 
           <DropdownMenuSeparator />
+
+          {/*
+            Primeiro item depois de "mover" porque, num card de aquisição, é a ação
+            mais provável: o fornecedor não tem ficha, e sem ficha não há timeline,
+            contato nem para onde a mensagem ir.
+          */}
+          {podeCriarFicha && (
+            <DropdownMenuItem disabled={criandoFicha} onSelect={() => void criarFicha()}>
+              <Building2 className="mr-2 h-4 w-4" />
+              {criandoFicha ? 'Criando ficha…' : 'Criar ficha do fornecedor'}
+            </DropdownMenuItem>
+          )}
 
           {podeSuprimir && (
             <DropdownMenuItem asChild>
