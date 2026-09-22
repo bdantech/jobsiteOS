@@ -169,8 +169,29 @@ export const configFunilOportunidadesSchema = z.object({
   aviso_expiracao_dias: z.number().int().min(1).max(10).default(2),
   /** Janela curta do ciclo de 4h, sobre a data de ENTRADA. */
   janela_novidade_dias: z.number().int().min(1).max(30).default(7),
-  /** Varredura diária de ESTADO. Teto do endpoint: 92 dias. */
+  /**
+   * Varredura diária de ESTADO dos TÍTULOS. Teto do endpoint: 92 dias, e aqui o
+   * teto é o número certo — uma parcela vive até o vencimento dela, que pode estar
+   * noventa dias à frente, e ela pode sair de `ready_to_create` para
+   * `offer_created` no dia sessenta. Encurtar isto é deixar de ver a parcela
+   * virar oferta.
+   */
   janela_estado_dias: z.number().int().min(1).max(92).default(92),
+  /**
+   * Varredura diária de ESTADO das PRÉ-AUTORIZAÇÕES — e ela é MUITO mais curta,
+   * de propósito.
+   *
+   * Uma oferta tem relógio de poucos dias: ou o fornecedor aceita, ou ela expira,
+   * ou a construtora revoga. Medido no primeiro carregamento real (22/09/2026): a
+   * `WAITING_CONTRACTED` mais antiga tinha CINCO DIAS, e tudo anterior a isso já
+   * estava em estado terminal.
+   *
+   * Com 92 dias, o primeiro sync gravou 1.075 ofertas já convertidas — seis semanas
+   * de arquivo para trazer 77 cards vivos. Trinta dias cobrem o ciclo inteiro de
+   * uma oferta com folga larga, e ainda dão um mês de denominador para a taxa de
+   * conversão e para o bloco de perdas.
+   */
+  janela_estado_preauth_dias: z.number().int().min(1).max(92).default(30),
   page_size: z.number().int().min(1).max(200).default(200),
 })
 

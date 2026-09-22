@@ -104,7 +104,15 @@ export async function sincronizarPreAutorizacoes(
   }
 
   const [cfg, cfgEconomia] = await Promise.all([lerConfigFunilOportunidades(), lerConfigEconomia()])
-  const janela = montarJanelaFunil(modo, new Date(), cfg)
+  /*
+   * A janela de ESTADO desta fonte é a curta. `montarJanelaFunil` não sabe de qual
+   * fonte se trata — e não deve saber: quem conhece o ciclo de vida de uma oferta é
+   * quem a sincroniza. Aqui a decisão fica explícita, ao lado do motivo.
+   */
+  const janela = montarJanelaFunil(modo, new Date(), {
+    janela_novidade_dias: cfg.janela_novidade_dias,
+    janela_estado_dias: cfg.janela_estado_preauth_dias,
+  })
   const base = urlBase()
 
   const acc: ResultadoSyncPreAuth = {
