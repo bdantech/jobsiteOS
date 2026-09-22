@@ -1644,6 +1644,73 @@ O que não entra **continua sendo gravado**: `paid_in_erp` e `ANTICIPATION_REQUE
 matéria-prima da métrica de perda e da taxa de conversão. Jogá-los fora na ingestão
 deixaria o relatório sem denominador.
 
+### O que o primeiro contato real ensinou (22/09/2026)
+
+Cinco coisas que só apareceram quando o endpoint respondeu de verdade. Todas
+custaram tela quebrada ou dado errado, e todas têm correção no código.
+
+**O `UNION ALL` tira o funil do ar.** A projeção unificada nasceu como uma view só,
+e o Kanban passou a lê-la: a primeira página de uma coluna foi de **1,85 ms para
+8.382 ms**. O `Append` é barreira de otimização para ordenação — com ele o Postgres
+materializa as 8.430 notas abertas por todos os joins antes de ordenar, em vez de
+caminhar `notas_fiscais_receita_idx` e parar na linha 41. Filtrar por tipo dentro da
+união melhora dez vezes e não resolve.
+
+A correção é **uma view por fonte** (`funil_oportunidades_nf`, `_preauth`,
+`_titulo`), lidas separadamente e juntadas no cliente: o top-N global é sempre
+subconjunto da união dos top-N de cada fonte. `funil_oportunidades` continua
+existindo para quem lê a lista inteira sem paginar. **Quem pagina não deve usá-la.**
+
+**Perfil de funil se mede como o usuário do funil.** Três medições minhas disseram
+"está tudo bem" e estavam feitas como superusuário, onde não há RLS. Com a RLS
+ligada, a mesma contagem ia de 72 ms para 3.741 ms: `app__matriz_do_cnpj` nasceu
+`SECURITY INVOKER` e lia `mercado_universo`, então **cada linha** reavaliava a
+política daquela tabela por dentro. Hoje é `SECURITY DEFINER`, como
+`app_holding_do_sacado` e `app__limite_da_analise` já eram pelo mesmo motivo: uma
+resolução de identidade chamada por linha não carrega a RLS de uma tabela inteira.
+
+**As duas fontes têm janelas de varredura DIFERENTES**, e a diferença é do ciclo de
+vida. Uma oferta vive dias (a `WAITING_CONTRACTED` mais antiga tinha cinco); uma
+parcela vive até o vencimento, que pode estar noventa dias à frente, e pode sair de
+`ready_to_create` para `offer_created` no dia sessenta.
+
+```
+janela_estado_preauth_dias .... 30   (oferta tem relógio de dias)
+janela_estado_dias ............ 92   (parcela vive até o vencimento)
+```
+
+Com 92 dias para as duas, o primeiro carregamento gravou 1.075 ofertas já
+convertidas para render 77 cards vivos.
+
+**Revogada não entra no funil.** Expirar é o relógio: ninguém agiu, o fornecedor
+quase sempre nem viu, e a construtora costuma reofertar — um telefonema ainda vale.
+Revogar é a construtora **voltando atrás**, e o crédito que existia deixou de
+existir por decisão de quem o ofereceu. Vai para `perdida` com o motivo, não para
+`expirada`: o bloco de perdas precisa distinguir "o relógio zerou" de "a construtora
+desistiu".
+
+**O nome do fornecedor tem uma cascata de quatro degraus**, porque `registered:
+false` vem com `name: null` — e esse é justamente o card de aquisição mais
+qualificado que existe.
+
+```
+payload  →  empresas.razao_social  →  mercado_universo  →  "Sem cadastro"
+```
+
+Curado vence bruto; o payload vence os dois, porque é como a construtora chama
+aquele fornecedor. Duas armadilhas aqui: a política de `mercado_universo` precisou
+passar a cobrir as tabelas novas (senão só o admin via o nome — o time do funil não
+tem o módulo `mercado`), e `empresas` precisou entrar na cascata, porque um CNPJ com
+ficha e sem universo é considerado CONHECIDO, não entra na fila de enriquecimento, e
+ficaria "Sem cadastro" **para sempre**.
+
+**O que tem relógio não fica atrás do que é volume.** O bloco do 04s nasceu depois
+de `promoverResumosDeNf()`, que relê oito dias de emissão e leva de trinta a sessenta
+minutos. Três deploys num dia significaram três corridas mortas antes de as fontes
+novas serem tocadas uma única vez — e a ingestão delas nem chegava a ser aberta,
+então nem o "falhou" aparecia. Hoje o 04s vem logo após o sync de NFs no ciclo de 4h,
+e é a PRIMEIRA coisa do diário.
+
 ### O card é UM só
 
 Mesmo componente, mesmo layout, mesmas ações. Só o **selo de tipo** diz de onde veio, e
