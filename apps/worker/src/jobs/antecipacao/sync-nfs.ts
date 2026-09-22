@@ -387,7 +387,14 @@ async function processarNota(
   const jaExistia = gravada.existe
   // Passou a cancelada/denegada AGORA. Só conta como transição quem estava válida
   // aqui: a nota que já chegou cancelada é cadastro, não notícia.
-  const virouCancelada = jaExistia && gravada.situacao === 'valida' && nota.situacao !== 'valida'
+  /*
+   * Candidata a transição: estava válida aqui e chegou cancelada/denegada agora.
+   * Quem decide de fato é a reivindicação atômica lá embaixo — este teste só evita
+   * ir ao banco à toa, e mantém fora as 3.505 notas que a 0230 já encontrou
+   * canceladas (elas entram com `gravada.situacao = 'cancelada'` e nunca chegam lá).
+   */
+  const talvezCancelada =
+    jaExistia && gravada.situacao === 'valida' && nota.situacao !== 'valida'
 
   /*
    * A MESMA NOTA PELOS DOIS LADOS (2.7 do contrato pós-cutover).
@@ -465,10 +472,6 @@ async function processarNota(
     // Só sobe para true; uma nota que já foi vista dos dois lados não deixa de ter
     // sido, e a passagem seguinte enxerga apenas uma das cópias.
     ...(bilateral ? { bilateral: true } : {}),
-    // Só carimba na TRANSIÇÃO. Reescrever a cada sync faria toda nota cancelada
-    // parecer cancelada hoje, e é justamente essa data que diz se alguém estava
-    // trabalhando a nota quando ela caiu.
-    ...(virouCancelada ? { cancelada_em: new Date().toISOString() } : {}),
   } as typeof linha
 
   const { error } = await supabaseAdmin
@@ -477,6 +480,36 @@ async function processarNota(
   if (error) {
     logger.error({ accessKey, erro: error.message }, 'Falha no upsert da NF.')
     return { ...NADA, motivo: 'erro_upsert' }
+  }
+
+  /*
+   * A TRANSIÇÃO É REIVINDICADA, NÃO DEDUZIDA — e isto é uma correção de 22/09.
+   *
+   * O teste anterior era ler `situacao` antes e comparar depois. Ele erra quando
+   * duas corridas se sobrepõem, e elas se sobrepõem todo dia: o diário dispara a
+   * varredura às 5h e o ciclo de 4 em 4 horas entra às 5h30, ambos passando pelas
+   * mesmas notas. As duas leem `valida`, as duas concluem "virou cancelada agora",
+   * e o fornecedor recebe o mesmo aviso duas vezes. Aconteceu com 2 das 3
+   * primeiras notas canceladas de verdade.
+   *
+   * `update ... where cancelada_em is null` deixa o Postgres decidir: a linha volta
+   * para UMA das corridas e vazia para a outra. Quem recebeu a linha ganhou a
+   * transição e emite o evento; a outra segue em frente sem repetir nada.
+   *
+   * O carimbo continua sendo só da transição — reescrevê-lo a cada sync faria toda
+   * nota cancelada parecer cancelada hoje, e é essa data que diz se alguém estava
+   * trabalhando a nota quando ela caiu.
+   */
+  let virouCancelada = false
+  if (talvezCancelada) {
+    const { data: reivindicada } = await supabaseAdmin
+      .from('notas_fiscais')
+      .update({ cancelada_em: new Date().toISOString() } as never)
+      .eq('access_key', accessKey)
+      .is('cancelada_em', null)
+      .select('access_key')
+      .maybeSingle()
+    virouCancelada = reivindicada !== null
   }
 
   let eventos = 0
