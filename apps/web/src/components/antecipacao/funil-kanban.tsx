@@ -327,10 +327,32 @@ export function FunilKanban({
     valorMin || valorMax || emissaoDe || emissaoAte || vencDe || vencAte || incluirSuprimidos || tipagem,
   )
   const filtrando = Boolean(
-    termoDebounced || faixa || tipagem || intervalosAtivos || (!travadoNoVendedor && originador !== TODOS),
+    termoDebounced ||
+      faixa ||
+      tipagem ||
+      tipos.length > 0 ||
+      intervalosAtivos ||
+      (!travadoNoVendedor && originador !== TODOS),
   )
 
+  /*
+   * Zerar a ORIGEM é caso à parte porque ela é a única que PERSISTE entre sessões.
+   * Um filtro que esconde tudo e sobrevive ao reload é a pior espécie de filtro:
+   * a pessoa fecha o navegador, volta amanhã, vê o funil vazio e conclui que o
+   * sync quebrou. Aconteceu em 22/09/2026, no dia em que os três botões de origem
+   * apareceram e as duas fontes novas ainda não tinham uma linha sequer.
+   */
+  const limparTipos = React.useCallback(() => {
+    setTipos([])
+    try {
+      window.localStorage.removeItem(CHAVE_TIPOS)
+    } catch {
+      // Storage bloqueado: a preferência já foi zerada em memória, que é o que importa.
+    }
+  }, [])
+
   function limpar() {
+    limparTipos()
     setTermo('')
     setFaixa(undefined)
     setTipagem(undefined)
@@ -617,6 +639,8 @@ export function FunilKanban({
           base={base}
           padraoComercial={padraoComercial}
           filtrando={filtrando}
+          tiposAtivos={tipos}
+          onLimparTipos={limparTipos}
           minimoOperavel={minimoOperavel}
           onTotal={anotarTotal}
           mostrarDono={!vendedorEfetivo}
@@ -673,6 +697,8 @@ function ColunaFunil({
   base,
   padraoComercial,
   filtrando,
+  tiposAtivos,
+  onLimparTipos,
   minimoOperavel,
   onTotal,
   mostrarDono,
@@ -685,6 +711,9 @@ function ColunaFunil({
   base: FiltrosFunil
   padraoComercial: boolean
   filtrando: boolean
+  /** As origens ligadas agora. O vazio precisa nomeá-las. */
+  tiposAtivos: TipoOportunidade[]
+  onLimparTipos: () => void
   minimoOperavel: number
   onTotal: (estagio: string, total: number | null) => void
   mostrarDono: boolean
@@ -854,7 +883,28 @@ function ColunaFunil({
             </Button>
           </div>
         ) : notas.length === 0 ? (
-          <ColunaVazia>{filtrando ? 'Nada com estes filtros.' : 'Nada aqui.'}</ColunaVazia>
+          <ColunaVazia>
+            {tiposAtivos.length > 0 ? (
+              /*
+               * O vazio precisa DIZER por que está vazio. A origem é o único filtro
+               * que sobrevive ao reload, e as duas fontes novas podem legitimamente
+               * não ter nenhuma linha — sem esta frase, o card ausente vira "o sync
+               * quebrou" em vez de "há um filtro ligado".
+               */
+              <span className="block space-y-1">
+                <span className="block">
+                  Nada em {tiposAtivos.map((t) => TIPO_OPORTUNIDADE_LABELS[t]).join(' · ')}.
+                </span>
+                <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onLimparTipos}>
+                  Ver as três origens
+                </Button>
+              </span>
+            ) : filtrando ? (
+              'Nada com estes filtros.'
+            ) : (
+              'Nada aqui.'
+            )}
+          </ColunaVazia>
         ) : (
           <>
             {notas.map((nota) => (

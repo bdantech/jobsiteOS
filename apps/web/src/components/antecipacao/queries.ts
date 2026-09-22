@@ -7,7 +7,13 @@ import type {
   Tipagem,
   Views,
 } from '@jobsiteos/core'
-import { ESTAGIOS_ABERTOS, ESTAGIOS_ENCERRADOS, TIPOS_OPORTUNIDADE } from '@jobsiteos/core'
+import {
+  ESTAGIOS_ABERTOS,
+  ESTAGIOS_ENCERRADOS,
+  TIPOS_OPORTUNIDADE,
+  VIEW_DA_FONTE,
+  juntarPaginas,
+} from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
 
 /**
@@ -292,25 +298,15 @@ export interface PaginaOportunidades {
  * UMA VIEW POR FONTE — e o Kanban nunca lê a união.
  *
  * ── A CICATRIZ (22/09/2026) ─────────────────────────────────────────────────
- * O funil passou a ler `funil_oportunidades` e a primeira página de uma coluna foi
- * de 1,85 ms para 8.382 ms. Cinco colunas em paralelo, cada uma pagando ainda um
- * `count: 'exact'`, e a tela parou de mostrar notas.
- *
- * A causa não era o custo dos joins: era o `UNION ALL`. O plano antigo caminhava
+ * O funil passou a ler `funil_oportunidades` e a tela parou de mostrar notas. A
+ * causa não era o custo dos joins: era o `UNION ALL`. O plano antigo caminhava
  * `notas_fiscais_receita_idx` JÁ ORDENADO e parava na linha 41; o `Append` é
- * barreira de otimização para ordenação, então o Postgres passou a materializar as
- * 8.430 notas abertas por todos os joins antes de ordenar. Filtrar por tipo dentro
- * da união melhora dez vezes e não resolve — a barreira continua lá.
+ * barreira de otimização para ordenação, então o Postgres passou a materializar
+ * as 8.430 notas abertas por todos os joins antes de ordenar. 1,85 ms → 8.382 ms.
  *
  * Lendo a view da FONTE, o planejador achata e empurra `ORDER BY ... LIMIT` até o
- * índice: 3,1 ms.
+ * índice: 3,1 ms. `VIEW_DA_FONTE` e a junção moram no core, com teste.
  */
-const VIEW_DA_FONTE = {
-  nf: 'funil_oportunidades_nf',
-  pre_autorizacao: 'funil_oportunidades_preauth',
-  titulo: 'funil_oportunidades_titulo',
-} as const satisfies Record<TipoOportunidade, string>
-
 /**
  * O funil inteiro — as três origens, uma consulta por fonte, juntadas aqui.
  *
@@ -395,24 +391,14 @@ export async function buscarOportunidades(
     }),
   )
 
-  const juntas = paginas.flatMap((p) => p.linhas)
-  const sinal = asc ? 1 : -1
-
-  juntas.sort((a, b) => {
-    const va = a[coluna as keyof Oportunidade]
-    const vb = b[coluna as keyof Oportunidade]
-    // Nulos por último nas duas direções, como o `nullsFirst: false` do banco.
-    if (va === null || va === undefined) return vb === null || vb === undefined ? 0 : 1
-    if (vb === null || vb === undefined) return -1
-    const na = typeof va === 'string' ? Date.parse(va) : Number(va)
-    const nb = typeof vb === 'string' ? Date.parse(vb) : Number(vb)
-    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return (na - nb) * sinal
-    // O desempate final é o PAR, que é a identidade real entre fontes.
-    return `${a.tipo}:${a.id}`.localeCompare(`${b.tipo}:${b.id}`)
-  })
-
   return {
-    oportunidades: juntas.slice(pagina * limite, pagina * limite + limite),
+    // A junção mora no core e tem teste: a primeira versão dela ordenava errado
+    // porque `numeric` chega do PostgREST como STRING, e `Date.parse("16500.00")`
+    // é NaN. O funil continuava cheio, só que na ordem errada — nada quebrava.
+    oportunidades: juntarPaginas(
+      paginas.map((p) => p.linhas),
+      { coluna, ascendente: asc, pagina, limite },
+    ),
     total: paginas.reduce((s, p) => s + p.total, 0),
   }
 }
