@@ -119,16 +119,29 @@ export async function buscarConversas(
 const COLUNAS_THREAD =
   'id, conversa_id, empresa_id, contato_id, canal, direcao, por_ia, assunto, corpo, preview, anexos, provedor, conta_remetente, status_envio, erro, origem, funil, funil_card_id, triagem, criado_em, enviado_em, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, usuario_nome, vendedor_nome, vendedor_is_ia'
 
+/**
+ * O teto corta as MAIS ANTIGAS, nunca as mais recentes.
+ *
+ * Estava `ascending: true` com `limit(300)`, que guarda as trezentas primeiras e
+ * joga fora o resto — ou seja, numa conversa longa a tela pararia de mostrar
+ * justamente o que acabou de ser dito, sem aviso nenhum. Ninguém tinha visto
+ * porque a maior thread tinha 284 mensagens; passou a ter 493 no dia em que as
+ * mensagens do celular voltaram para dentro da empresa.
+ *
+ * Desce do banco em ordem decrescente e sobe para a tela na ordem de leitura.
+ */
+const ULTIMAS = 300
+
 export async function buscarThread(conversaId: string): Promise<MensagemThread[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('comunicacoes_thread')
     .select(COLUNAS_THREAD)
     .eq('conversa_id', conversaId)
-    .order('criado_em', { ascending: true })
-    .limit(300)
+    .order('criado_em', { ascending: false })
+    .limit(ULTIMAS)
   if (error) throw new Error(error.message)
-  return (data ?? []) as MensagemThread[]
+  return ((data ?? []) as MensagemThread[]).reverse()
 }
 
 /**
@@ -144,10 +157,10 @@ export async function buscarThreadDaEmpresa(empresaId: string): Promise<Mensagem
     .from('comunicacoes_thread')
     .select(COLUNAS_THREAD)
     .eq('empresa_id', empresaId)
-    .order('criado_em', { ascending: true })
-    .limit(300)
+    .order('criado_em', { ascending: false })
+    .limit(ULTIMAS)
   if (error) throw new Error(error.message)
-  return (data ?? []) as MensagemThread[]
+  return ((data ?? []) as MensagemThread[]).reverse()
 }
 
 export interface ConversaOculta {

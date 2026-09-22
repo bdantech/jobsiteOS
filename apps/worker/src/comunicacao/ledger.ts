@@ -60,11 +60,58 @@ export interface EscreverNoLedger {
  * política. Sem o upsert, cada reentrega vira uma bolha duplicada na conversa e
  * uma linha a mais no painel de atividade.
  */
+/**
+ * Quem a conversa diz que é o outro lado.
+ *
+ * ── POR QUE ISTO EXISTE ─────────────────────────────────────────────────────
+ * `resolverRemetente` reconhece a pessoa pelo IDENTIFICADOR da mensagem, e numa
+ * saída pelo celular esse identificador costuma ser o LID e não o telefone — o
+ * provedor manda só ele quando não tem o número limpo à mão. O LID acha a thread
+ * (`conversaPorLid` + `absorverLid` existem para isso), mas não acha contato
+ * nenhum: procurar em `contatos.whatsapp` por um LID nunca casa.
+ *
+ * O resultado era uma mensagem gravada na conversa CERTA e com empresa nula. A
+ * thread do inbox, que lê por `conversa_id`, mostrava tudo; a aba "Comunicação"
+ * do card, que lê por `empresa_id`, mostrava metade — e a metade que sumia era
+ * justamente a resposta dada pelo aparelho. Na mesma conversa, no mesmo minuto,
+ * a entrada aparecia e a saída não.
+ *
+ * ── NÃO É CHUTE ─────────────────────────────────────────────────────────────
+ * Herdar da conversa não é adivinhar de quem é a mensagem: é usar a identidade
+ * da PRÓPRIA thread em que ela está sendo escrita, que é a mesma que o inbox
+ * usa. O que continua valendo é o contrário — conversa sem empresa não ganha
+ * uma, e o que o resolver descobriu tem precedência sobre o que a thread supõe.
+ */
+async function identidadeDaConversa(
+  conversaId: string,
+): Promise<{ empresa_id: string | null; contato_id: string | null } | null> {
+  const { data, error } = await supabaseAdmin
+    .from('conversas')
+    .select('empresa_id, contato_id')
+    .eq('id', conversaId)
+    .maybeSingle()
+  if (error) {
+    logger.warn({ erro: error.message, conversa_id: conversaId }, 'Não li a identidade da conversa.')
+    return null
+  }
+  return data ?? null
+}
+
 export async function escreverNoLedger(m: EscreverNoLedger): Promise<string | null> {
+  // Só quando falta: uma consulta a mais por mensagem órfã, nenhuma para as que
+  // já vêm resolvidas — que são a maioria.
+  let empresaId = m.empresaId
+  let contatoId = m.contatoId
+  if (m.conversaId && (!empresaId || !contatoId)) {
+    const dona = await identidadeDaConversa(m.conversaId)
+    empresaId = empresaId ?? dona?.empresa_id ?? null
+    contatoId = contatoId ?? dona?.contato_id ?? null
+  }
+
   const linha: TablesInsert<'comunicacoes'> = {
     conversa_id: m.conversaId,
-    empresa_id: m.empresaId,
-    contato_id: m.contatoId,
+    empresa_id: empresaId,
+    contato_id: contatoId,
     canal: m.canal,
     direcao: m.direcao,
     usuario_id: m.usuarioId ?? null,
