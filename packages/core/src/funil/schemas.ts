@@ -133,11 +133,34 @@ export const SITUACAO_TITULO_LABELS: Record<string, string> = {
 export const GUARD_REASONS_RECUPERAVEIS_PADRAO = [
   'SUPPLIER_CNPJ_MISSING',
   'SUPPLIER_NOT_REGISTERED',
+  /*
+   * O motivo REAL, descoberto no primeiro sync de títulos (22/09/2026).
+   *
+   * O Prompt citava `SUPPLIER_CNPJ_MISSING` como exemplo, e ele existe — em UM
+   * caso, que é um credor pessoa física e portanto NÃO tem conserto (pessoa física
+   * não tem CNPJ para cadastrar). O que aparece de verdade é
+   * `SUPPLIER_CONTACT_MISSING`: 26 parcelas, R$ 277 mil, 21 credores distintos,
+   * todos com CNPJ. Falta o CONTATO do fornecedor — que é exatamente o trabalho do
+   * originador, e exatamente o que a aba Fornecedor do card existe para resolver.
+   */
+  'SUPPLIER_CONTACT_MISSING',
 ] as const
 
+/**
+ * Os motivos REAIS, lidos do primeiro sync (22/09/2026). Os três primeiros são
+ * trabalho de originador; o resto não tem conserto do nosso lado — é o dado da
+ * construtora, o calendário ou o tamanho da parcela.
+ */
 export const GUARD_REASON_LABELS: Record<string, string> = {
+  SUPPLIER_CONTACT_MISSING: 'Fornecedor sem contato cadastrado',
   SUPPLIER_CNPJ_MISSING: 'Fornecedor sem CNPJ no ERP',
   SUPPLIER_NOT_REGISTERED: 'Fornecedor sem cadastro na plataforma',
+  BILL_NOT_CONSISTENT: 'Título inconsistente no ERP da construtora',
+  BASE_BELOW_MIN: 'Valor abaixo do mínimo operável',
+  DUE_DATE_TOO_SOON: 'Vencimento perto demais',
+  DUE_DATE_TOO_FAR: 'Vencimento longe demais',
+  INSTALLMENT_PAID: 'Parcela já paga no ERP',
+  INSTALLMENT_REMOVED: 'Parcela removida no ERP',
   CREDIT_LIMIT_EXCEEDED: 'Limite de crédito da construtora estourado',
   CLIENT_FILTER: 'Filtro da construtora',
 }

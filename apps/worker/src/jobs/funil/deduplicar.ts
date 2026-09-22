@@ -179,34 +179,54 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
     /*
      * `origem_exibida` nas tabelas espelha `funil_ocultacoes`, e isso é redundância
      * DE PROPÓSITO. A view filtra pelos dois; a coluna existe para que uma consulta
-     * direta à tabela — um relatório, uma conferência no SQL, o próximo job — veja
-     * a mesma verdade sem precisar conhecer a tabela lateral.
+     * direta à tabela — um relatório, uma conferência no SQL, o próximo job — veja a
+     * mesma verdade sem precisar conhecer a tabela lateral.
+     *
+     * ── DUAS INSTRUÇÕES POR TABELA, E NÃO UMA ───────────────────────────────
+     * A versão anterior fazia `update ... from (select 1) _ left join
+     * funil_ocultacoes o on o.referencia_id = pa.id_externo::text`, e isso é SQL
+     * inválido: o PostgreSQL recusa referenciar a tabela ALVO do update dentro do
+     * `ON` de um join no `FROM` ("invalid reference to FROM-clause entry").
+     *
+     * Ele estourava aqui, depois de já ter calculado tudo e inserido as ocultações —
+     * o `rollback` desfazia a transação inteira e a dedup terminava com zero. Nada
+     * ficava pela metade (a transação existe para isso), mas 92 pares vivos ficaram
+     * sem deduplicar e o erro só apareceria no `meta` de uma corrente que leva uma
+     * hora para fechar.
+     *
+     * Separar em "quem está escondido" e "quem deixou de estar" é mais longo e diz
+     * em voz alta o que cada metade faz — inclusive a segunda, que é a que devolve
+     * um card à tela quando a regra muda de ideia.
      */
-    await cliente.query(`
-      update public.pre_autorizacoes pa
-         set origem_exibida = (o.tipo is null),
-             original_tipo = o.original_tipo,
-             original_id = o.original_id
-        from (select 1) _
-        left join public.funil_ocultacoes o
-               on o.tipo = 'pre_autorizacao' and o.referencia_id = pa.id_externo::text
-       where pa.origem_exibida is distinct from (o.tipo is null)
-          or pa.original_tipo is distinct from o.original_tipo
-          or pa.original_id is distinct from o.original_id
-    `)
+    const marcar = async (tabela: string, tipo: string, chave: string) => {
+      await cliente.query(
+        `update public.${tabela} t
+            set origem_exibida = false,
+                original_tipo = o.original_tipo,
+                original_id = o.original_id
+           from public.funil_ocultacoes o
+          where o.tipo = $1
+            and o.referencia_id = t.${chave}::text
+            and (t.origem_exibida
+                 or t.original_tipo is distinct from o.original_tipo
+                 or t.original_id is distinct from o.original_id)`,
+        [tipo],
+      )
 
-    await cliente.query(`
-      update public.sienge_titulos st
-         set origem_exibida = (o.tipo is null),
-             original_tipo = o.original_tipo,
-             original_id = o.original_id
-        from (select 1) _
-        left join public.funil_ocultacoes o
-               on o.tipo = 'titulo' and o.referencia_id = st.id_externo::text
-       where st.origem_exibida is distinct from (o.tipo is null)
-          or st.original_tipo is distinct from o.original_tipo
-          or st.original_id is distinct from o.original_id
-    `)
+      // E quem saiu da lista volta a aparecer. Sem esta metade, um item escondido
+      // ontem por uma regra que mudou ficaria invisível para sempre.
+      await cliente.query(
+        `update public.${tabela} t
+            set origem_exibida = true, original_tipo = null, original_id = null
+          where not t.origem_exibida
+            and not exists (select 1 from public.funil_ocultacoes o
+                             where o.tipo = $1 and o.referencia_id = t.${chave}::text)`,
+        [tipo],
+      )
+    }
+
+    await marcar('pre_autorizacoes', 'pre_autorizacao', 'id_externo')
+    await marcar('sienge_titulos', 'titulo', 'id_externo')
 
     await cliente.query('commit')
 

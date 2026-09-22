@@ -682,12 +682,24 @@ async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<un
     resultado.titulos = { erro: String(erro) }
   }
 
+  /*
+   * A DEDUPLICAÇÃO, e o resultado dela vai para a ingestão dos TÍTULOS — que acabou
+   * de fechar — e não só para o `meta` da corrente de NFs.
+   *
+   * A razão é uma falha real de 22/09/2026: a dedup estourou num SQL inválido,
+   * o catch guardou o erro em `resultado.dedup`, e esse objeto só é gravado quando
+   * a corrente inteira termina — uma hora depois, atrás da promoção de resumos.
+   * Nesse meio-tempo a tela mostrava 92 pares duplicados e a única pista estava num
+   * log que ninguém lê. Um passo que pode falhar sozinho precisa poder ser visto
+   * sozinho.
+   */
   try {
     resultado.dedup = await deduplicarOportunidades()
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Deduplicação do funil falhou; a corrente segue.')
     resultado.dedup = { erro: String(erro) }
   }
+  await anotarMeta(idTit, { dedup: resultado.dedup })
 
   return resultado
 }
