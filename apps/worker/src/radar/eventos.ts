@@ -1,5 +1,9 @@
 import type { EventoTipo } from '../../../../packages/core/src/constants.js'
-import { notify, type NotifyPayload } from '../../../../packages/core/src/server/notify.js'
+import {
+  notificarNomeados,
+  notify,
+  type NotifyPayload,
+} from '../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../db.js'
 import { logger } from '../logger.js'
 
@@ -41,5 +45,30 @@ export async function notificarPerfis(perfis: string[], payload: NotifyPayload):
     if (ids.length) await notify(supabaseAdmin, ids, payload)
   } catch (e) {
     logger.error({ perfis, erro: String(e) }, 'Falha ao notificar perfis (push).')
+  }
+}
+
+/**
+ * Notifica UMA PESSOA nomeada pelo dado — quem pediu a análise, o dono do card — em vez
+ * de um papel.
+ *
+ * `tipo` é o evento que o chamador acabou de emitir, e existe para não tocar o sino duas
+ * vezes: se essa pessoa já é alcançada pelo fan-out daquele evento (porque o perfil dela
+ * tem regra), só o push sai daqui. Duas linhas idênticas no sino para o mesmo fato é como
+ * se ensina alguém a parar de olhar o sino.
+ *
+ * Best-effort de ponta a ponta: um push morto ou um id nulo nunca derruba o job que
+ * acabou de gravar a decisão.
+ */
+export async function notificarPessoa(
+  usuarioId: string | null | undefined,
+  tipo: EventoTipo | null,
+  payload: NotifyPayload,
+): Promise<void> {
+  if (!usuarioId) return
+  try {
+    await notificarNomeados(supabaseAdmin, [usuarioId], tipo, payload)
+  } catch (e) {
+    logger.error({ usuarioId, tipo, erro: String(e) }, 'Falha ao notificar a pessoa nomeada.')
   }
 }

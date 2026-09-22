@@ -25,6 +25,7 @@ import {
 } from '@jobsiteos/core'
 import { gerarChave } from '@/app/api/v1/_lib/api-key'
 import { getSessionContext } from '@/lib/auth'
+import { avisarDecisaoAQuemPediu, avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
 import { createClient } from '@/lib/supabase/server'
 import {
   dispararAdotarPedidos,
@@ -63,9 +64,13 @@ const SEM_MODULO: Falha = { ok: false, message: 'Você não tem acesso ao módul
 
 async function autorizar() {
   const context = await getSessionContext()
-  if (!context) return { erro: SEM_SESSAO as Falha, supabase: null }
-  if (!canAccessRoute('/credito', context.grantedModuleIds)) return { erro: SEM_MODULO as Falha, supabase: null }
-  return { erro: null, supabase: await createClient() }
+  if (!context) return { erro: SEM_SESSAO as Falha, supabase: null, usuarioId: null }
+  if (!canAccessRoute('/credito', context.grantedModuleIds)) {
+    return { erro: SEM_MODULO as Falha, supabase: null, usuarioId: null }
+  }
+  // O id de quem está agindo: quem clica não é notificado do próprio clique, que é a
+  // mesma regra que o gatilho de fan-out aplica com `ator_usuario_id`.
+  return { erro: null, supabase: await createClient(), usuarioId: context.usuario.id }
 }
 
 /**
@@ -75,12 +80,12 @@ async function autorizar() {
  */
 async function autorizarSolicitacao() {
   const context = await getSessionContext()
-  if (!context) return { erro: SEM_SESSAO as Falha, supabase: null }
+  if (!context) return { erro: SEM_SESSAO as Falha, supabase: null, usuarioId: null }
   const pode =
     canAccessRoute('/credito', context.grantedModuleIds) ||
     canAccessRoute('/empresas', context.grantedModuleIds)
-  if (!pode) return { erro: SEM_MODULO as Falha, supabase: null }
-  return { erro: null, supabase: await createClient() }
+  if (!pode) return { erro: SEM_MODULO as Falha, supabase: null, usuarioId: null }
+  return { erro: null, supabase: await createClient(), usuarioId: context.usuario.id }
 }
 
 const ROTA_INTEGRACOES = '/credito/integracoes'
@@ -93,10 +98,24 @@ function falhaDe(e: unknown): Falha {
 export async function solicitarAnaliseAction(
   input: unknown,
 ): Promise<ActionResult<Tables<'analises_credito'>>> {
-  const { erro, supabase } = await autorizarSolicitacao()
+  const { erro, supabase, usuarioId } = await autorizarSolicitacao()
   if (erro) return erro
   try {
     const a = await solicitarAnalise(supabase, input)
+    /*
+     * O SINO já foi tocado pelo gatilho de fan-out, que `analise.solicitada` passou a ter
+     * na 0248 — e é ele que alcança também o mobile e a barra de IA, que chamam o RPC sem
+     * passar por aqui. O que falta é o push, que não sai de dentro do Postgres.
+     */
+    const { data: empresa } = await supabase
+      .from('empresas')
+      .select('razao_social')
+      .eq('id', a.empresa_id ?? '')
+      .maybeSingle()
+    await avisarPedidoDeAnalise(
+      { id: a.id, nome: empresa?.razao_social ?? a.cnpj },
+      { tipoEvento: 'analise.solicitada', quemPediu: usuarioId },
+    )
     revalidatePath('/credito')
     revalidatePath(`/empresas/${a.empresa_id}`)
     return { ok: true, data: a }
@@ -267,11 +286,24 @@ export async function reenviarDocumentosEmailAction(
 export async function concluirAnaliseAction(
   input: unknown,
 ): Promise<ActionResult<{ analise: Tables<'analises_credito'>; aviso?: string }>> {
-  const { erro, supabase } = await autorizar()
+  const { erro, supabase, usuarioId } = await autorizar()
   if (erro) return erro
   try {
     const a = await concluirAnalise(supabase, input)
     const r = await dispararDecisaoEmVendas(a.id, a.estagio)
+    /*
+     * A decisão volta para QUEM PEDIU (0248). Aqui é a decisão tomada por nós; a que vem
+     * da seguradora é avisada pelo worker, que é onde ela chega.
+     *
+     * O fan-out já avisa o perfil Crédito. O vendedor que abriu o pedido não está em
+     * regra nenhuma — e é ele quem decide o que fazer a seguir com o cliente.
+     */
+    const { data: empresa } = await supabase
+      .from('empresas')
+      .select('razao_social')
+      .eq('id', a.empresa_id ?? '')
+      .maybeSingle()
+    await avisarDecisaoAQuemPediu(a, empresa?.razao_social ?? a.cnpj, usuarioId)
     revalidatePath('/credito')
     revalidatePath(`/credito/analises/${a.id}`)
     if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)

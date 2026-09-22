@@ -30,6 +30,7 @@ import {
   salvarVendedor,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
+import { avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
 import { createClient } from '@/lib/supabase/server'
 import {
   aplicarDeriva,
@@ -54,12 +55,13 @@ import type { ActionResult } from './empresas'
 async function autorizar() {
   const context = await getSessionContext()
   if (!context) {
-    return { erro: { ok: false as const, message: 'Sessão expirada.', code: 'auth' }, supabase: null }
+    return { erro: { ok: false as const, message: 'Sessão expirada.', code: 'auth' }, supabase: null, usuarioId: null }
   }
   if (!context.grantedModuleIds.includes('comercial')) {
-    return { erro: { ok: false as const, message: 'Sem acesso ao módulo Comercial.', code: 'forbidden' }, supabase: null }
+    return { erro: { ok: false as const, message: 'Sem acesso ao módulo Comercial.', code: 'forbidden' }, supabase: null, usuarioId: null }
   }
-  return { erro: null, supabase: await createClient() }
+  // Quem age não é notificado do próprio ato — mesma regra do `ator_usuario_id` no fan-out.
+  return { erro: null, supabase: await createClient(), usuarioId: context.usuario.id }
 }
 
 function falha(error: unknown): ActionResult<never> {
@@ -313,15 +315,36 @@ export async function moverVendaAction(input: unknown): Promise<ActionResult<{ i
 export async function pedirAnaliseDaVendaAction(
   input: { venda_id: string; limite_solicitado?: number },
 ): Promise<ActionResult<{ id: string | null }>> {
-  const { erro, supabase } = await autorizar()
+  const { erro, supabase, usuarioId } = await autorizar()
   if (erro || !supabase) return erro as ActionResult<never>
   try {
     const { data, error } = await supabase.rpc('app_solicitar_analise_da_venda', {
       p: input as never,
     })
     if (error) throw new Error(error.message)
+    const analise = data as { id?: string; cnpj?: string; criada_em?: string } | null
+    /*
+     * O push só sai quando o pedido é NOVO.
+     *
+     * O RPC reaproveita uma análise aberta do mesmo CNPJ quando existe, e nesse caso ele
+     * também não emite evento — ligar o negócio a uma análise que o Crédito já está
+     * tocando não é um pedido novo, e avisar como se fosse treinaria o time a ignorar o
+     * aviso (é o que a 0129 diz, e o push tem de seguir a mesma régua).
+     *
+     * Como o retorno é a linha, e não "criei ou reaproveitei", a distinção sai do
+     * `criada_em`: nascida nesta requisição, ou não.
+     */
+    const nova = analise?.criada_em
+      ? Date.now() - new Date(analise.criada_em).getTime() < 10_000
+      : false
+    if (analise?.id && nova) {
+      await avisarPedidoDeAnalise(
+        { id: analise.id, nome: analise.cnpj ?? 'Nova empresa' },
+        { tipoEvento: 'credito.analise_solicitada', quemPediu: usuarioId },
+      )
+    }
     revalidatePath('/comercial')
-    return { ok: true, data: { id: (data as { id?: string } | null)?.id ?? null } }
+    return { ok: true, data: { id: analise?.id ?? null } }
   } catch (error) {
     return falha(error)
   }

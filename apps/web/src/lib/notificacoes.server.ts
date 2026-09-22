@@ -13,6 +13,7 @@ import 'server-only'
 // See the report — the real fix is one line in packages/core/package.json:
 //   "./server/notify": "./src/server/notify.ts"
 import {
+  notificarNomeados,
   notify,
   type NotifyPayload,
   type NotifyResult,
@@ -49,4 +50,20 @@ export async function notificar(
   }
 
   return notify(createAdminClient(), destinatarios, payload)
+}
+
+/**
+ * Notifica quem o DADO nomeia — o solicitante da análise, o dono do card — sem tocar o
+ * sino duas vezes em quem o fan-out daquele evento já alcançou.
+ *
+ * `tipoEvento` é o evento que o chamador acabou de provocar. `null` significa que não
+ * houve evento nenhum (uma escrita direta, como a da API de produção), e aí todo mundo
+ * recebe sino + push.
+ */
+export async function notificarNomeadosPeloDado(
+  userIds: readonly string[],
+  tipoEvento: string | null,
+  payload: NotifyPayload,
+): Promise<NotifyResult> {
+  return notificarNomeados(createAdminClient(), [...new Set(userIds)], tipoEvento, payload)
 }

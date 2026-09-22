@@ -11,7 +11,7 @@ import type { Json } from '../../../../../packages/core/src/types/database.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { lerConfigCredito, lerIntegracaoSeguradora } from '../../credito/config.js'
-import { emitirEvento } from '../../radar/eventos.js'
+import { emitirEvento, notificarPessoa } from '../../radar/eventos.js'
 import { aplicarDecisaoCreditoEmVendas } from '../comercial/comissoes.js'
 import { atradius } from './atradius.js'
 import { enviarDocumentosPorEmail } from './documentos-email.js'
@@ -356,6 +356,14 @@ async function aplicarDecisao(
           : null
 
   if (tipo) {
+    // O nome da empresa, para a notificação de quem pediu: um push que diz "aprovada" sem
+    // dizer de quem obriga a abrir o app para descobrir do que se trata. Só é lido quando
+    // há desfecho — em "em análise" não há o que avisar.
+    const { data: empresaDaAnalise } = empresaId
+      ? await supabaseAdmin.from('empresas').select('razao_social').eq('id', empresaId).maybeSingle()
+      : { data: null }
+    const nomeOuCnpj = empresaDaAnalise?.razao_social ?? cnpj
+
     await emitirEvento(empresaId, tipo, {
       titulo: `Análise de crédito: ${d.estagio.replace('_', ' ')}`,
       resumo:
@@ -365,6 +373,40 @@ async function aplicarDecisao(
       url: `/credito/analises/${analiseId}`,
       cnpj,
       analise_id: analiseId,
+    })
+
+    /*
+     * E a resposta volta para QUEM PEDIU (0248).
+     *
+     * O fan-out do evento avisa o perfil Crédito, que é quem trabalha a esteira. O
+     * vendedor que abriu o pedido não estava em regra nenhuma — e ele é justamente a
+     * pessoa cuja próxima ação depende da resposta: ligar para o cliente, montar a
+     * proposta, ou parar de gastar tempo com um negócio que morreu.
+     *
+     * O destinatário sai do DADO, não de configuração: `solicitada_por` muda a cada
+     * linha, e é por isso que isto não vira uma `notificacao_regras`. É lido aqui, na
+     * hora, porque `aplicarDecisao` recebe o id da análise e não a linha inteira — e
+     * `solicitada_por` é nulo na maioria delas (backfill da apólice, API de produção),
+     * caso em que `notificarPessoa` não faz nada.
+     */
+    const { data: pedido } = await supabaseAdmin
+      .from('analises_credito')
+      .select('solicitada_por')
+      .eq('id', analiseId)
+      .maybeSingle()
+
+    await notificarPessoa(pedido?.solicitada_por, tipo, {
+      titulo:
+        d.estagio === 'negada'
+          ? 'A análise que você pediu foi negada'
+          : d.estagio === 'aprovada_parcial'
+            ? 'A análise que você pediu saiu aprovada em parte'
+            : 'A análise que você pediu foi aprovada',
+      corpo:
+        d.limite_aprovado !== null && d.limite_aprovado > 0
+          ? `${nomeOuCnpj}: R$ ${Math.round(d.limite_aprovado).toLocaleString('pt-BR')} aprovados pela seguradora.`
+          : `${nomeOuCnpj}: ${d.motivo ?? 'sem limite aprovado.'}`,
+      url: `/credito/analises/${analiseId}`,
     })
   }
 

@@ -467,6 +467,61 @@ maioria, e isso não é dado faltando: das 90 análises da base, 5 foram pedidas
 distinguir os três — "ninguém pediu" e "não sabemos quem pediu" não são a mesma frase, e
 um "—" serviria para as duas.
 
+### Quem é avisado, e por onde (0248)
+
+Duas pontas da esteira não avisavam ninguém, e uma delas não avisava por um detalhe que é
+fácil de não ver: **existia regra para `credito.analise_solicitada`** — o evento do pedido
+nascido no funil comercial (0129) — **e nenhuma para `analise.solicitada`**, que é o que a
+Company 360, a esteira, o celular e a barra de IA emitem. Pedido vindo da venda tocava o
+sino; pedido vindo de qualquer outro lugar, não. Dois nomes parecidos escondendo um buraco.
+
+| quando | quem recebe | sino | push |
+|---|---|---|---|
+| alguém pede uma análise | perfil **Crédito** | gatilho de fan-out, em todo caminho | `enviarPush()`, nos caminhos que rodam no servidor |
+| a esteira decide (aprovada / parcial / negada) | perfil **Crédito** | fan-out, como já era | — |
+| a esteira decide | **quem pediu** (`solicitada_por`) | `notificarNomeados()` | idem |
+
+**O sino e o push vêm de lugares diferentes, e é de propósito.** O gatilho
+`fanout_evento_para_notificacoes` escreve a linha do sino em **todos** os caminhos,
+inclusive os que nunca passam por Node — o app chamando o RPC, a ferramenta de IA. Essa
+metade é durável e completa. O push o Postgres não tem como fazer: não há chave VAPID nem
+cliente Expo dentro do banco. Então os caminhos que rodam no servidor mandam o push
+depois, e **só** o push, porque o sino já saiu do gatilho. Tocar o sino duas vezes para o
+mesmo fato é como se ensina alguém a parar de olhar o sino.
+
+`notificarNomeados()` (core) é quem sabe disso: recebe os ids e o tipo do evento, pergunta
+quem daquela lista já é alcançado por uma `notificacao_regras` ativa, e manda push para
+esses e sino + push para os outros.
+
+**O solicitante não é uma regra, é um dado.** `notificacao_regras` responde "quais PAPÉIS
+assinam este tipo de evento" — uma assinatura fixa, igual para toda linha. Quem pediu a
+análise muda a cada linha e sai de `analises_credito.solicitada_por`; nenhuma tabela de
+regras sabe expressá-lo. Por isso ele é notificado em código: no worker, dentro de
+`aplicarDecisao` (a decisão da seguradora), e na web, em `concluirAnaliseAction` (a nossa
+decisão). É a pessoa cuja próxima ação depende da resposta — ligar para o cliente, montar
+a proposta, ou parar de gastar tempo com um negócio que morreu.
+
+**Quem age não é avisado do próprio ato.** O fan-out já exclui `ator_usuario_id`, e as
+chamadas de push repetem a regra: o analista que conclui a análise não recebe push
+contando o que ele mesmo acabou de fazer, e quem pede a análise não recebe o aviso do
+próprio pedido. Sem isso, um push chegaria sem linha correspondente no sino — um aviso que
+some ao ser tocado e não deixa rastro.
+
+**O pedido do funil comercial só avisa quando é NOVO.** `app_solicitar_analise_da_venda`
+reaproveita uma análise aberta do mesmo CNPJ quando existe, e nesse caso não emite evento:
+ligar o negócio a uma análise que o Crédito já está tocando não é pedido novo. O push
+segue a mesma régua.
+
+**O celular passou a pedir pela API.** `POST /api/credito/analises` chama o mesmo RPC com
+o token de quem pediu — a autorização continua sendo do banco — e manda o push depois.
+Antes o app falava direto com o Postgres, o que tocava o sino e não mandava push; e o
+pedido aberto na mesa do cliente é justamente o que o analista precisa receber no bolso.
+Exige um update do app para valer no aparelho instalado.
+
+**O que ainda não tem push:** a análise pedida pela **barra de IA**. `ToolContext` só
+carrega o cliente do usuário, e dar a ele um cliente de service role mudaria o contrato do
+registro inteiro para um caminho raro. O sino continua tocando por lá.
+
 **A resposta da seguradora volta duas vezes por dia: 6h e 14h de São Paulo.** O cron
 `/api/cron/credito-sync` (`0 9,17 * * *` em UTC) dispara `POST /jobs/credito/sync`, que
 roda três coisas em sequência:

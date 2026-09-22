@@ -54,13 +54,7 @@ export async function notify(
   userIds: readonly string[],
   payload: NotifyPayload,
 ): Promise<NotifyResult> {
-  const result: NotifyResult = {
-    notificacoes: 0,
-    webPushEnviados: 0,
-    expoPushEnviados: 0,
-    inscricoesRemovidas: 0,
-  }
-  if (userIds.length === 0) return result
+  if (userIds.length === 0) return vazio()
 
   // 1. The durable part. The bell must show it even if every push channel fails.
   const { error: insertError } = await supabaseAdmin.from('notificacoes').insert(
@@ -72,9 +66,40 @@ export async function notify(
     })),
   )
   if (insertError) throw new Error(`Falha ao gravar notificações: ${insertError.message}`)
-  result.notificacoes = userIds.length
 
   // 2. Best-effort push. A dead endpoint must never fail the caller's mutation.
+  const push = await enviarPush(supabaseAdmin, userIds, payload)
+  return { ...push, notificacoes: userIds.length }
+}
+
+function vazio(): NotifyResult {
+  return { notificacoes: 0, webPushEnviados: 0, expoPushEnviados: 0, inscricoesRemovidas: 0 }
+}
+
+/**
+ * The push half of `notify()`, on its own — no `notificacoes` row is written.
+ *
+ * It exists for one case, and only one: the bell already came from somewhere else. The
+ * `fanout_evento_para_notificacoes` trigger writes bell rows for every recipient a
+ * `notificacao_regras` row names, on every path that emits the event — including the
+ * ones that never touch Node (a mobile client calling the RPC directly, the AI bar).
+ * That is the durable half, and it is already complete.
+ *
+ * What the trigger cannot do is push: Postgres has no VAPID keys and no Expo client. So
+ * the server paths call this afterwards to add the push for the same people, and calling
+ * `notify()` there would ring the bell a second time for the same fact.
+ *
+ * Same contract as the push half of `notify()`: never throws, honours each user's
+ * `prefs_notificacoes`, and garbage-collects revoked browser subscriptions.
+ */
+export async function enviarPush(
+  supabaseAdmin: Supabase,
+  userIds: readonly string[],
+  payload: NotifyPayload,
+): Promise<NotifyResult> {
+  const result = vazio()
+  if (userIds.length === 0) return result
+
   const { data: usuarios } = await supabaseAdmin
     .from('usuarios')
     .select('id, web_push_subscriptions, expo_push_tokens, prefs_notificacoes')
@@ -154,4 +179,75 @@ export async function notify(
   }
 
   return result
+}
+
+/**
+ * Notifies people named by a BUSINESS RULE — the person who asked for the analysis, the
+ * owner of the card — without ringing the bell twice for anyone the event's fan-out
+ * already reached.
+ *
+ * The two mechanisms answer different questions and both are right:
+ *
+ * - `notificacao_regras` + the fan-out trigger answer "which ROLES watch this kind of
+ *   event" — a standing subscription, configured, the same for every row.
+ * - This answers "which PERSON is this particular row about" — it comes from the data
+ *   (`analises_credito.solicitada_por`), not from configuration, and no table of rules
+ *   could express it.
+ *
+ * They overlap whenever the named person happens to hold a subscribed role: a Crédito
+ * analyst who asks for an analysis of their own. There the bell already exists, so this
+ * sends only the push. Two identical bell rows for one fact is how a bell teaches people
+ * to stop reading it.
+ *
+ * `tipoEvento` is the event the caller just emitted — pass null when the caller wrote no
+ * event at all, and every recipient gets the full treatment.
+ */
+export async function notificarNomeados(
+  supabaseAdmin: Supabase,
+  userIds: readonly string[],
+  tipoEvento: string | null,
+  payload: NotifyPayload,
+): Promise<NotifyResult> {
+  const destinatarios = [...new Set(userIds)].filter((id) => id.length > 0)
+  if (destinatarios.length === 0) return vazio()
+  if (!tipoEvento) return notify(supabaseAdmin, destinatarios, payload)
+
+  const { data: regras } = await supabaseAdmin
+    .from('notificacao_regras')
+    .select('perfil_id, usuario_id')
+    .eq('tipo_evento', tipoEvento)
+    .eq('ativo', true)
+
+  const perfisComRegra = new Set(
+    (regras ?? []).map((r) => r.perfil_id).filter((id): id is string => !!id),
+  )
+  const usuariosComRegra = new Set(
+    (regras ?? []).map((r) => r.usuario_id).filter((id): id is string => !!id),
+  )
+
+  const { data: usuarios } = await supabaseAdmin
+    .from('usuarios')
+    .select('id, perfil_id')
+    .in('id', destinatarios)
+
+  const jaTemSino = new Set(
+    (usuarios ?? [])
+      .filter((u) => usuariosComRegra.has(u.id) || (u.perfil_id && perfisComRegra.has(u.perfil_id)))
+      .map((u) => u.id),
+  )
+
+  const soPush = destinatarios.filter((id) => jaTemSino.has(id))
+  const completos = destinatarios.filter((id) => !jaTemSino.has(id))
+
+  const [a, b] = await Promise.all([
+    completos.length ? notify(supabaseAdmin, completos, payload) : Promise.resolve(vazio()),
+    soPush.length ? enviarPush(supabaseAdmin, soPush, payload) : Promise.resolve(vazio()),
+  ])
+
+  return {
+    notificacoes: a.notificacoes + b.notificacoes,
+    webPushEnviados: a.webPushEnviados + b.webPushEnviados,
+    expoPushEnviados: a.expoPushEnviados + b.expoPushEnviados,
+    inscricoesRemovidas: a.inscricoesRemovidas + b.inscricoesRemovidas,
+  }
 }

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Text } from '@/components/ui/text'
+import { api } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import type { Empresa } from '@/features/empresas/types'
 
@@ -87,11 +88,19 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
   })
 
   const solicitar = useMutation({
+    /*
+     * PELA API, e não pelo RPC direto.
+     *
+     * O RPC funcionava e continua sendo quem autoriza e grava — a rota o chama com o
+     * token de quem pediu. O que ela acrescenta é o PUSH para o time de Crédito, que não
+     * sai de dentro do Postgres. Um pedido aberto no celular, na mesa do cliente, é
+     * justamente o que o analista precisa receber no bolso.
+     */
     mutationFn: async () => {
-      const { error } = await supabase.rpc('app_solicitar_analise', {
-        p: { empresa_id: empresa.id, limite_solicitado: empresa.limite_potencial } as never,
+      await api('/api/credito/analises', {
+        method: 'POST',
+        body: { empresa_id: empresa.id, limite_solicitado: empresa.limite_potencial },
       })
-      if (error) throw new Error(error.message)
     },
     onSuccess: () => {
       Alert.alert(

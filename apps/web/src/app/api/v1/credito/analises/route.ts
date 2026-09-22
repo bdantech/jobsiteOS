@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { criarAnaliseExternaSchema, estagioInicial, documentosFaltantes } from '@jobsiteos/core'
 import { montarPayloadCredito } from '@jobsiteos/core/server/credito-api'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
 import { dispararDominioEmpresa } from '@/lib/mercado/worker'
 import {
   autenticar,
@@ -190,6 +191,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Enriquecimento gratuito (§2.4): o domínio destrava o resto da cascata. É
   // best-effort — a análise já existe e não pode falhar por causa disto.
   void dispararDominioEmpresa(empresaId).catch(() => undefined)
+
+  /*
+   * O time de Crédito precisa saber que entrou pedido (0248), e aqui não há evento a que
+   * o fan-out possa reagir: esta rota INSERE a linha direto, com service role, sem passar
+   * por `app_solicitar_analise`. Por isso o `tipoEvento` é null — sino e push saem os
+   * dois daqui, e não há risco de dobrar o sino.
+   *
+   * Não há ator a excluir: quem pediu é um sistema, não uma pessoa desta casa.
+   */
+  await avisarPedidoDeAnalise(
+    { id: analise.id, nome: dados.razao_social ?? dados.cnpj },
+    { tipoEvento: null },
+  )
 
   const corpo = {
     analise_id: analise.id,
