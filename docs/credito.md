@@ -447,6 +447,17 @@ este sistema recebe de fora, e vai para Admin além de Crédito.
 do painel exclui essas linhas: incluí-las inflaria a taxa de aprovação com decisões que
 este fluxo não tomou.
 
+**Os três campos do `anterior` são obrigatórios**, e a lição custou caro. `codigo_decisao`
+era opcional na assinatura, e três dos quatro chamadores não o mandavam — embora todos o
+lessem do banco. A comparação virava `null !== 'DC01'`, sempre verdadeira: em 22/09/2026 o
+sync reescrevia **as mesmas 16 decisões a cada rodada**, duas vezes por dia, emitindo de
+novo `analise.aprovada`/`analise.negada`, inserindo um snapshot duplicado por linha (247 em
+sete dias) e reprocessando o card do funil. Nada mudava, e tudo era anunciado como se
+tivesse mudado.
+
+Obrigatório na assinatura, quem cobra passa a ser o compilador — e não a atenção de quem
+escrever o quinto chamador.
+
 ### Quem pediu, e quando a resposta volta
 
 A ficha da análise diz **quem a solicitou** (`analises_credito.solicitada_por`, servido

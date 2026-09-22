@@ -279,7 +279,19 @@ async function aplicarDecisao(
   analiseId: string,
   cnpj: string,
   empresaId: string | null,
-  anterior: { estagio: string; limite_aprovado: number | null; codigo_decisao?: string | null },
+  /**
+   * O estado ANTES, e os três campos são obrigatórios de propósito.
+   *
+   * `codigo_decisao` era opcional, e três dos quatro chamadores simplesmente não o
+   * mandavam — embora todos o lessem do banco. A comparação virava `null !== 'DC01'`,
+   * sempre verdadeira, e toda decisão velha era reescrita como se fosse nova: 16 eventos
+   * de aprovada/negada repetidos a cada rodada do sync (duas por dia), um snapshot
+   * duplicado por linha por rodada, e o card do funil reprocessado toda vez.
+   *
+   * Tornar o campo obrigatório é o que impede a repetição: agora é o compilador quem
+   * cobra, e não a leitura atenta de quem escrever o próximo chamador.
+   */
+  anterior: { estagio: string; limite_aprovado: number | null; codigo_decisao: string | null },
   d: DecisaoSeguradora,
 ): Promise<{ mudou: boolean; reduziu: boolean }> {
   // A VALIDADE NÃO É INVENTADA AQUI. Uma cobertura Atradius viva não tem prazo — ela vale
@@ -293,6 +305,10 @@ async function aplicarDecisao(
   // `codigo_decisao` entra na comparação: sem isso, uma linha cujo código nunca foi
   // gravado (as da primeira carga) jamais receberia o valor, porque estágio e limite já
   // estariam iguais — e o campo que existe para diagnosticar ficaria eternamente nulo.
+  //
+  // O contrário também vale, e custou caro: um chamador que NÃO informe o código lido do
+  // banco faz esta linha comparar null com o código que a seguradora mandou, e daí toda
+  // decisão parada parece decisão nova. Por isso o campo é obrigatório na assinatura.
   const mudou =
     anterior.estagio !== d.estagio ||
     Number(anterior.limite_aprovado ?? 0) !== Number(d.limite_aprovado ?? 0) ||
@@ -458,7 +474,7 @@ export async function pollDecisoes(): Promise<{
       a.id,
       a.cnpj,
       a.empresa_id,
-      { estagio: a.estagio, limite_aprovado: a.limite_aprovado },
+      { estagio: a.estagio, limite_aprovado: a.limite_aprovado, codigo_decisao: a.codigo_decisao },
       r.dados,
     )
     if (mudou) {
@@ -878,7 +894,7 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
             existente.id,
             cnpj,
             empresa?.id ?? null,
-            { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
+            { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado, codigo_decisao: existente.codigo_decisao },
             d,
           )
           if (mudou) {
@@ -999,7 +1015,7 @@ export async function syncAtradius(): Promise<{
         existente.id,
         existente.cnpj,
         existente.empresa_id,
-        { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado },
+        { estagio: existente.estagio, limite_aprovado: existente.limite_aprovado, codigo_decisao: existente.codigo_decisao },
         d,
       )
       if (mudou) {
