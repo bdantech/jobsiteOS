@@ -217,8 +217,25 @@ export function OportunidadeCard({
                     {TIPO_OPORTUNIDADE_LABELS[tipo]}
                   </ChipDoCard>
 
-                  {/* A ÚNICA linha que varia por tipo, no mesmo lugar do card. */}
-                  <ChipDoCard className="tabular-nums">{item.linha_contexto ?? '—'}</ChipDoCard>
+                  {/*
+                   * A ÚNICA linha que varia por tipo, no mesmo lugar do card — e
+                   * a única com LARGURA FIXA.
+                   *
+                   * Ela é curta na nota (22 caracteres no pior caso) e na oferta
+                   * (30), mas no título ela carrega quatro campos —
+                   * "186715 · parcela 1/3 · not_eligible · SUPPLIER_CONTACT_MISSING",
+                   * 62 caracteres. O chip tem altura fixa e não quebra, então a
+                   * linha inteira era dele: os chips seguintes desciam um a um e
+                   * o card do título ficava duas vezes mais alto que o da nota.
+                   *
+                   * Cortar aqui não esconde nada: o texto inteiro está no tooltip
+                   * deste card (linha "Identificação") e no card aberto. O que
+                   * sobra na largura fixa é justamente o começo, que é o que
+                   * identifica — número e parcela.
+                   */}
+                  <ChipDoCard className="max-w-[170px] tabular-nums">
+                    <span className="min-w-0 truncate">{item.linha_contexto ?? '—'}</span>
+                  </ChipDoCard>
 
                   {/* O relógio só existe na pré-autorização, e grita quando é curto. */}
                   {expiraEm !== null ? (
