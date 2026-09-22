@@ -28,6 +28,20 @@ test('ANTICIPATION_REQUESTED não entra: já converteu', () => {
   )
 })
 
+test('revogada NUNCA entra — a construtora tirou a oferta da mesa', () => {
+  /*
+   * Expirar é o relógio; revogar é decisão de quem ofereceu. A segunda não tem o
+   * que recuperar, e o card seria trabalho impossível na fila de alguém.
+   */
+  for (const status of ['REVOKED', 'AUTOMATICALLY_REVOKED']) {
+    assert.deepEqual(
+      preAutorizacaoEntraNoFunil({ status, expira_em: '2026-09-25', criada_em: '2026-09-21' }, CFG, HOJE),
+      { entra: false, motivo: 'revogada' },
+      `${status} não deveria entrar`,
+    )
+  }
+})
+
 test('expirada ontem entra (é telefonema); expirada há dois meses, não', () => {
   const ontem = preAutorizacaoEntraNoFunil(
     { status: 'EXPIRED', expira_em: '2026-09-21', criada_em: '2026-09-15' },

@@ -22,6 +22,7 @@ import type { ConfigFunilOportunidades } from './schemas.js'
 
 export type ForaDoFunil =
   | 'ja_converteu'
+  | 'revogada'
   | 'fora_da_janela_de_recuperacao'
   | 'pago_no_erp'
   | 'removido_no_erp'
@@ -68,14 +69,30 @@ export function preAutorizacaoEntraNoFunil(
       return NAO('ja_converteu')
 
     /*
-     * A janela de RECUPERAÇÃO. Uma oferta que expirou ontem ainda é um telefonema
-     * — o fornecedor quase sempre não viu, e a construtora costuma reofertar. Uma
-     * que expirou há dois meses é arqueologia, e mantê-la no funil rouba a atenção
-     * do que ainda está vivo.
+     * REVOGADA NÃO ENTRA, e a diferença para "expirada" é tudo.
+     *
+     * Expirar é o relógio: ninguém agiu, e o fornecedor quase sempre nem viu a
+     * oferta. A construtora costuma reofertar, então um telefonema ainda vale.
+     *
+     * Revogar é a CONSTRUTORA VOLTANDO ATRÁS — ela tirou a oferta da mesa de
+     * propósito. Não há o que recuperar do nosso lado: o crédito que existia
+     * deixou de existir por decisão de quem o ofereceu. Pôr isso no funil é
+     * entregar ao originador um card cujo desfecho já está decidido, e o custo
+     * não é só o tempo dele — é o funil inteiro perder credibilidade quando uma
+     * parte dele é trabalho impossível.
+     *
+     * Vira métrica de perda (§9), que é onde a informação serve.
      */
-    case 'EXPIRED':
     case 'REVOKED':
-    case 'AUTOMATICALLY_REVOKED': {
+    case 'AUTOMATICALLY_REVOKED':
+      return NAO('revogada')
+
+    /*
+     * A janela de RECUPERAÇÃO, que agora é só da EXPIRADA. Uma oferta que expirou
+     * ontem ainda é um telefonema; uma que expirou há dois meses é arqueologia, e
+     * mantê-la no funil rouba a atenção do que ainda está vivo.
+     */
+    case 'EXPIRED': {
       const dias = diasDesde(pre.expira_em ?? pre.criada_em, hoje)
       if (dias === null) return ENTRA
       return dias <= cfg.recuperacao_dias ? ENTRA : NAO('fora_da_janela_de_recuperacao')

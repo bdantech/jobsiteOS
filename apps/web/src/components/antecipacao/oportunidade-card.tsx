@@ -27,6 +27,7 @@ import {
 } from '@/components/comercial/card-funil'
 import { MenuAcoesOportunidade } from './acoes-oportunidade'
 import { NotaModal } from './documento/nota-modal'
+import { OportunidadeModal } from './oportunidade-modal'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { AbaMensagens } from '@/components/comercial/modal-card'
 import { creditoBadge, formatarData, formatarMoedaExata, labelCredito, textoPrazo } from './format'
@@ -127,12 +128,20 @@ export function OportunidadeCard({
   const relogioCurto = expiraEm !== null && expiraEm <= 2
 
   /*
-   * O modal do documento só abre quando HÁ documento. A pré-autorização não tem
-   * chave de acesso — ela é uma oferta, não uma nota —, e a parcela só tem a
-   * chave quando o ERP a informou. Nesses casos o card não vira botão: clicar
-   * abriria um modal vazio, que é pior que não clicar.
+   * QUAL modal abre — e todo card abre algum.
+   *
+   * A primeira versão deixava a pré-autorização SEM clique, porque `NotaModal` é
+   * um leitor de XML (o corpo dele é `!documento ? null : …`) e abriria uma caixa
+   * vazia. A conclusão estava certa e a decisão errada: um card que não abre é um
+   * card de que não se consegue cuidar — não dá para ver o contato do fornecedor
+   * nem mandar mensagem, que é o trabalho inteiro numa oferta esperando aceite.
+   *
+   * A NF continua no leitor de documento: é o que ela é. As duas fontes novas
+   * abrem o `OportunidadeModal`, que mostra o negócio em vez do papel — e leva as
+   * MESMAS abas de fornecedor e comunicação, para que quem trabalha os três tipos
+   * no mesmo dia não reaprenda a tela a cada troca.
    */
-  const temDocumento = Boolean(item.access_key)
+  const ehNota = tipo === 'nf' && Boolean(item.access_key)
 
   /*
    * O credor pessoa física não tem para onde linkar: ele não casa com `empresas`,
@@ -154,19 +163,11 @@ export function OportunidadeCard({
         <TooltipTrigger asChild>
           <div>
             <CardDoFunil
-              rotuloAbrir={
-                temDocumento
-                  ? `Abrir ${item.numero_exibicao ?? item.id} de ${nomeFornecedor}`
-                  : `${TIPO_OPORTUNIDADE_LABELS[tipo]} de ${nomeFornecedor}`
-              }
-              onAbrir={
-                temDocumento
-                  ? () => {
-                      setAba('documento')
-                      setAberta(true)
-                    }
-                  : undefined
-              }
+              rotuloAbrir={`Abrir ${TIPO_OPORTUNIDADE_LABELS[tipo].toLowerCase()} ${item.numero_exibicao ?? item.id} de ${nomeFornecedor}`}
+              onAbrir={() => {
+                setAba('documento')
+                setAberta(true)
+              }}
               esmaecido={Boolean(item.fornecedor_suprimido)}
               titulo={
                 linkavel ? (
@@ -438,13 +439,24 @@ export function OportunidadeCard({
               </p>
             ) : null}
             <p className="pt-0.5 text-[11px] opacity-70">
-              {temDocumento ? 'Clique para abrir o documento.' : 'Sem documento fiscal vinculado.'}
+              {ehNota ? 'Clique para abrir o documento.' : 'Clique para abrir a oportunidade.'}
             </p>
           </dl>
         </TooltipContent>
       </Tooltip>
 
-      {aberta && item.access_key ? (
+      {aberta && !ehNota ? (
+        <OportunidadeModal
+          item={item}
+          titulo={`${item.numero_exibicao ?? item.id}`}
+          subtitulo={`${nomeFornecedor} → ${nomePrincipal}${spe ? ` (via ${spe})` : ''}`}
+          aberto={aberta}
+          onOpenChange={setAberta}
+          minimoOperavel={minimoOperavel}
+        />
+      ) : null}
+
+      {aberta && ehNota && item.access_key ? (
         <NotaModal
           accessKey={item.access_key}
           titulo={`${TIPO_OPORTUNIDADE_LABELS[tipo]} ${item.numero_exibicao ?? item.id}`}

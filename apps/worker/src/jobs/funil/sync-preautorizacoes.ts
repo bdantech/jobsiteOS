@@ -260,11 +260,25 @@ async function processar(
      * moveu para "em negociação" não pode voltar para "a prospectar" porque o sync
      * passou de novo — é trabalho humano, e o sync não desfaz trabalho humano.
      */
-    ...(gravada
-      ? veredito.entra
+    /*
+     * O estágio é tocado SÓ no nascimento e na SAÍDA. Uma oferta que alguém já
+     * moveu para "em negociação" não volta para "a prospectar" porque o sync
+     * passou de novo — é trabalho humano, e o sync não desfaz trabalho humano.
+     *
+     * `perda_motivo` acompanha a revogação: sem ele o relatório vê uma perda sem
+     * causa, e "por que perdemos R$ 371 mil?" fica sem resposta.
+     */
+    ...(veredito.entra
+      ? gravada
         ? {}
-        : { estagio_funil: estagioDeSaida(veredito.motivo), estagio_alterado_em: new Date().toISOString() }
-      : { estagio_funil: veredito.entra ? 'a_prospectar' : estagioDeSaida(veredito.motivo) }),
+        : { estagio_funil: 'a_prospectar' }
+      : {
+          estagio_funil: estagioDeSaida(veredito.motivo),
+          estagio_alterado_em: new Date().toISOString(),
+          ...(veredito.motivo === 'revogada'
+            ? { perda_motivo: pre.revoked_reason ?? 'Revogada pela construtora.' }
+            : {}),
+        }),
     raw: item as never,
     sincronizada_em: new Date().toISOString(),
   }
@@ -291,12 +305,19 @@ async function processar(
 /**
  * Para onde a oferta vai quando sai do funil — e o motivo é o que distingue.
  *
- * `ANTICIPATION_REQUESTED` com `anticipationId` É a conversão (§9): casamento direto
- * por id, sem matching fuzzy. Expirada e revogada são perda por relógio, e o bloco de
- * perdas soma as duas separadamente do que converteu.
+ * As três saídas contam histórias opostas, e o bloco de perdas (§9) precisa
+ * conseguir separá-las:
+ *
+ *   convertida  o trabalho deu certo — `ANTICIPATION_REQUESTED` com `anticipationId`
+ *               é a conversão por casamento direto de id, sem matching fuzzy;
+ *   perdida     a CONSTRUTORA voltou atrás e revogou. Não é o calendário, é uma
+ *               decisão de quem ofereceu, e por isso não é "expirada";
+ *   expirada    o relógio zerou e ninguém agiu.
  */
 function estagioDeSaida(motivo: string): string {
-  return motivo === 'ja_converteu' ? 'convertida' : 'expirada'
+  if (motivo === 'ja_converteu') return 'convertida'
+  if (motivo === 'revogada') return 'perdida'
+  return 'expirada'
 }
 
 async function linhaGravada(
