@@ -313,7 +313,7 @@ export function PrecificacaoEditor() {
               onChange={(n) => set((d) => { d.faixas.fixos.bill_fine_percent = n })}
             />
             <Numero
-              label="Prorrogação"
+              label="Juros de atraso"
               sufixo="%"
               valor={m.faixas.fixos.extension_rate_percent}
               onChange={(n) => set((d) => { d.faixas.fixos.extension_rate_percent = n })}

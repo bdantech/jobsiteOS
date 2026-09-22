@@ -875,7 +875,18 @@ export async function dispararBackfillAtradius(simular = false): Promise<Dispara
   return postar('/jobs/credito/backfill', { simular }, 'credito-backfill')
 }
 
-/** Diário: sync do que já está na apólice + poll + expiração. */
+/**
+ * Procura, pelo CNPJ, um dono para as coberturas da apólice que ninguém reclamou — o
+ * card que foi enviado à mão e ficou sem número de cover (0247).
+ *
+ * Roda dentro do sync duas vezes por dia; o disparo avulso existe para quando alguém
+ * acabou de saber que a seguradora respondeu e não vai esperar a próxima janela.
+ */
+export async function dispararAdotarPedidos(): Promise<DispararJobResultado> {
+  return postar('/jobs/credito/adotar', {}, 'credito-adotar')
+}
+
+/** Diário: sync do que já está na apólice + adoção + poll + expiração. */
 export async function dispararSyncAtradius(): Promise<DispararJobResultado> {
   return postar('/jobs/credito/sync', {}, 'credito-sync')
 }

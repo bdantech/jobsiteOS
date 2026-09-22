@@ -967,7 +967,13 @@ export const CAMPO_CONDICAO_LABELS: Record<keyof CondicoesFormulario, string> = 
   fee_d1: 'TAC D1',
   fee_min_d1: 'TAC mínima D1',
   commission_percent: 'Cashback',
-  extension_rate_percent: 'Prorrogação',
+  /*
+   * A CHAVE NÃO MUDA. `extension_rate_percent` é o nome no contrato com a plataforma de
+   * produção (04n) e nas condições já publicadas; renomeá-la quebraria a integração. O
+   * que estava errado nunca foi a chave, era o rótulo — "prorrogação" descrevia o prazo,
+   * e o que o campo cobra é o atraso. Mesma decisão do Cashback, na 0217.
+   */
+  extension_rate_percent: 'Juros de atraso',
   bill_fine_percent: 'Multa',
   invest_back_limit: 'Limite invest back',
   invest_back_commission_percent: 'Comissão invest back',

@@ -1,5 +1,8 @@
 import { EVENTO_TIPOS, type EventoTipo } from '../../../../../packages/core/src/constants.js'
-import { houveReducaoDeLimite } from '../../../../../packages/core/src/credito/seguradora.js'
+import {
+  casarPedidosComCoberturas,
+  houveReducaoDeLimite,
+} from '../../../../../packages/core/src/credito/seguradora.js'
 import type {
   DecisaoSeguradora,
   Seguradora,
@@ -403,6 +406,17 @@ export async function pollDecisoes(): Promise<{
   consultadas?: number
   decididas?: number
   falhas?: number
+  /**
+   * Casos que a apólice NÃO conhece pelo número que temos.
+   *
+   * Não é falha — a consulta funcionou e a resposta foi "não tenho esse cover" — e não
+   * muda o estágio de nada. Mas era invisível: a análise ficava parada com cara de "a
+   * seguradora ainda não decidiu", e a explicação verdadeira (número errado, cobertura
+   * substituída, pedido reaberto no portal com outro número) não aparecia em lugar
+   * nenhum. Contado aqui, vira uma linha de log que alguém consegue seguir — e o
+   * conserto é informar o número certo pela tela (0247).
+   */
+  desconhecidas?: number
   erro?: string
 }> {
   if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
@@ -414,8 +428,9 @@ export async function pollDecisoes(): Promise<{
     .in('estagio', ['enviada_seguradora', 'em_analise'])
     .not('atradius_case_id', 'is', null)
 
-  const acc = { consultadas: 0, decididas: 0, falhas: 0 }
+  const acc = { consultadas: 0, decididas: 0, falhas: 0, desconhecidas: 0 }
   const decididos: string[] = []
+  const semCobertura: string[] = []
   let ultimoErro: string | null = null
 
   for (const a of abertas ?? []) {
@@ -430,8 +445,14 @@ export async function pollDecisoes(): Promise<{
       continue
     }
     // Sem dados NÃO é falha: significa que a apólice não conhece este caso, e a análise
-    // fica onde está até alguém explicar por quê.
-    if (!r.dados) continue
+    // fica onde está até alguém explicar por quê. O que mudou é que ela não fica CALADA:
+    // o número aparece no log, porque "a apólice não conhece o cover 143912539" é uma
+    // frase que se investiga, e um card parado sem motivo não é.
+    if (!r.dados) {
+      acc.desconhecidas++
+      semCobertura.push(a.atradius_case_id as string)
+      continue
+    }
 
     const { mudou } = await aplicarDecisao(
       a.id,
@@ -456,8 +477,222 @@ export async function pollDecisoes(): Promise<{
     logger.error({ ...acc, erro: ultimoErro }, 'Poll de decisões FALHOU.')
     return { status: 'erro', erro: ultimoErro ?? undefined, ...acc }
   }
+  if (acc.desconhecidas > 0) {
+    logger.warn(
+      { casos: semCobertura },
+      'A apólice não conhece estes covers. O número pode estar errado ou a cobertura ter sido reaberta com outro — vincule o certo na análise.',
+    )
+  }
   if (acc.falhas > 0) logger.warn(acc, 'Poll de decisões concluído com falhas.')
   else logger.info(acc, 'Poll de decisões concluído.')
+  return { status: 'ok', ...acc }
+}
+
+// ─── O pedido aberto por fora encontra o card parado (0247) ─────────────────
+
+/**
+ * Adota, para o card que está parado, a cobertura que a apólice passou a ter.
+ *
+ * ── O CASO ──────────────────────────────────────────────────────────────────
+ * O CNPJ não estava cadastrado como buyer, não há cadastro por API, e o analista abriu o
+ * pedido direto no portal da Atradius. O card foi marcado como "enviada à mão" (0216) e
+ * ficou sem `atradius_case_id` — que é exatamente por onde o poll pergunta e por onde o
+ * sync casa. Resultado: a seguradora decidia, a decisão existia no portal, e o card ficava
+ * parado para sempre. Em 22/09/2026 havia três assim, dois deles (HITACHI ENERGY e
+ * NEOBETEL) já concluídos do lado de lá.
+ *
+ * Este job é a ponte que faltava, e ela é por CNPJ: quando uma cobertura daquele CNPJ
+ * aparece na apólice sem dono aqui dentro, ela vira o `atradius_case_id` do card parado —
+ * e a partir daí o poll cuida dele sozinho, como cuida de qualquer análise enviada pela
+ * API.
+ *
+ * ── O QUE ELE NÃO FAZ ───────────────────────────────────────────────────────
+ * **Não inventa buyer.** `resolverBuyer` (que pode ser cobrado) não é chamado aqui: as duas
+ * leituras são as mesmas do backfill, e leem o que a apólice JÁ tem.
+ *
+ * **Não escolhe entre duas.** Ambiguidade — dois cards abertos do mesmo CNPJ, ou duas
+ * coberturas livres — não vira escrita: vira evento para uma pessoa resolver pela tela,
+ * vinculando o número do cover à mão. `casarPedidosComCoberturas` (core, testado) é quem
+ * decide isso, e é lá que a regra está escrita.
+ *
+ * **Não roda fora de produção.** Aqui está a diferença para o sync e o poll, que são
+ * inofensivos em homologação porque casam por `atradius_case_id` — um número que a própria
+ * sandbox gerou. CNPJ é o mesmo nos dois ambientes: um buyer de mentira com CNPJ de
+ * verdade daria a um card real o limite aprovado de um teste.
+ */
+export async function adotarPedidosAbertos(): Promise<{
+  status: 'ok' | 'nao_configurada' | 'fora_de_producao' | 'erro'
+  /** Cards parados sem número de cover — o universo que este job tenta resolver. */
+  candidatas?: number
+  vinculadas?: number
+  /** Dos vinculados, quantos já vieram com desfecho e andaram na esteira. */
+  decididas?: number
+  ambiguas?: number
+  erro?: string
+}> {
+  if (!(await seguradora.configurada())) return { status: 'nao_configurada' }
+
+  /*
+   * Os candidatos vêm ANTES de qualquer chamada. Sem card parado não há nada a casar, e
+   * duas listagens por rodada de sync para não fazer nada é tráfego que só aparece na
+   * conta de alguém.
+   *
+   * O filtro é `atradius_case_id is null` porque é isso que torna o casamento possível —
+   * não é inferência sobre como a análise chegou aqui. `envio_manual_em` vai junto para o
+   * log: ele diz se o pedido tinha nome e hora (0216) ou se chegou a "enviada" por algum
+   * caminho que ninguém previu, o que é novidade digna de investigação.
+   */
+  const { data: abertas } = await supabaseAdmin
+    .from('analises_credito')
+    .select('id, cnpj, empresa_id, estagio, limite_aprovado, codigo_decisao, envio_manual_em')
+    .in('estagio', ['enviada_seguradora', 'em_analise'])
+    .is('atradius_case_id', null)
+
+  const candidatas = abertas?.length ?? 0
+  if (!candidatas) return { status: 'ok', candidatas: 0, vinculadas: 0, decididas: 0, ambiguas: 0 }
+
+  const { ambiente } = await lerIntegracaoSeguradora()
+  if (ambiente !== 'producao') {
+    logger.warn(
+      { ambiente, candidatas },
+      'Adoção de pedidos abertos não roda fora de produção: ela casa por CNPJ, que é o mesmo nos dois ambientes.',
+    )
+    return { status: 'fora_de_producao', candidatas }
+  }
+
+  /*
+   * Sem janela de data, e é de propósito. O sync recorta 30 dias porque ele varre a
+   * apólice inteira todo dia; aqui a pergunta é outra — "existe cobertura para ESTE CNPJ,
+   * que ninguém reclamou?" — e um card pode estar parado há dois meses justamente porque
+   * nunca ninguém o viu. Recortar por data deixaria de fora o caso que motivou o job.
+   *
+   * Portfólio primeiro e decisões por cima: mesma ordem de `mapaDeCoberturas`, porque a
+   * decisão é a informação mais nova e a leitura inversa adotaria um "em análise" para
+   * uma cobertura que já tem desfecho.
+   */
+  const coberturas: DecisaoSeguradora[] = []
+  const portfolio = await seguradora.listarPortfolio()
+  if (!portfolio.ok) {
+    logger.error({ erro: portfolio.erro, candidatas }, 'Adoção de pedidos abertos FALHOU.')
+    return { status: 'erro', erro: portfolio.erro, candidatas }
+  }
+  coberturas.push(...portfolio.dados.itens)
+  const decisoes = await seguradora.listarDecisoes()
+  if (!decisoes.ok) {
+    logger.error({ erro: decisoes.erro, candidatas }, 'Adoção de pedidos abertos FALHOU.')
+    return { status: 'erro', erro: decisoes.erro, candidatas }
+  }
+  coberturas.push(...decisoes.dados.itens)
+
+  // Quem já tem dono não é adotado de novo — é o que impede o histórico que o backfill
+  // importou de ser recolhido por um pedido novo do mesmo CNPJ.
+  const { data: comCase } = await supabaseAdmin
+    .from('analises_credito')
+    .select('atradius_case_id')
+    .not('atradius_case_id', 'is', null)
+
+  const { vinculos, ambiguos } = casarPedidosComCoberturas(
+    (abertas ?? []).map((a) => ({ analise_id: a.id, cnpj: a.cnpj })),
+    coberturas,
+    (comCase ?? []).map((c) => c.atradius_case_id as string),
+  )
+
+  const porId = new Map((abertas ?? []).map((a) => [a.id, a]))
+  const acc = { candidatas, vinculadas: 0, decididas: 0, ambiguas: 0 }
+  const decididos: string[] = []
+
+  for (const v of vinculos) {
+    const a = porId.get(v.analise_id)
+    if (!a) continue
+
+    await supabaseAdmin
+      .from('analises_credito')
+      .update({
+        atradius_case_id: v.cobertura.case_id,
+        atradius_buyer_id: v.cobertura.buyer_id,
+        rating_seguradora: v.cobertura.rating,
+        atualizada_em: new Date().toISOString(),
+      })
+      .eq('id', a.id)
+
+    /*
+     * O vínculo é evento próprio, ANTES do desfecho, e não um detalhe dentro de
+     * "aprovada". Quem marcou "enviei à mão" é a única pessoa que sabe qual pedido abriu
+     * no portal — e é ela que precisa poder conferir que o sistema casou com o certo. Sem
+     * esta linha, um limite aprovado apareceria no card sem nada explicando de onde veio.
+     */
+    await emitirEventoAnalise(
+      a.id,
+      EVENTO_TIPOS.ANALISE_PEDIDO_VINCULADO,
+      'Pedido da seguradora vinculado ao card',
+      `Cobertura ${v.cobertura.case_id} da ${seguradora.nome}, casada pelo CNPJ. ` +
+        'A partir de agora o acompanhamento automático cuida desta análise.',
+    )
+    acc.vinculadas++
+
+    const { mudou } = await aplicarDecisao(
+      a.id,
+      a.cnpj,
+      a.empresa_id,
+      { estagio: a.estagio, limite_aprovado: a.limite_aprovado, codigo_decisao: a.codigo_decisao },
+      v.cobertura,
+    )
+    if (mudou) {
+      acc.decididas++
+      decididos.push(a.cnpj)
+    }
+  }
+
+  /*
+   * O aviso de ambiguidade sai UMA VEZ por análise, nunca a cada rodada.
+   *
+   * Ele descreve um estado que dura até alguém agir, e o sync roda duas vezes por dia:
+   * reemitir transformaria o sino no lugar que ninguém olha — a mesma razão pela qual a
+   * sugestão de reanálise também só sai uma vez.
+   */
+  if (ambiguos.length) {
+    const { data: avisados } = await supabaseAdmin
+      .from('empresa_eventos')
+      .select('payload')
+      .eq('tipo', EVENTO_TIPOS.ANALISE_VINCULO_AMBIGUO)
+    const jaAvisados = new Set(
+      (avisados ?? [])
+        .map((e) => (e.payload as { analise_id?: string } | null)?.analise_id)
+        .filter((id): id is string => !!id),
+    )
+
+    for (const amb of ambiguos) {
+      for (const analiseId of amb.analise_ids) {
+        if (jaAvisados.has(analiseId)) continue
+        const a = porId.get(analiseId)
+        if (!a) continue
+        acc.ambiguas++
+        await emitirEvento(a.empresa_id, EVENTO_TIPOS.ANALISE_VINCULO_AMBIGUO, {
+          titulo: 'Cobertura na seguradora sem vínculo certo',
+          resumo:
+            amb.motivo === 'mais_de_um_pedido'
+              ? `Há mais de uma análise aberta deste CNPJ sem número de cover, e ${amb.case_ids.length} cobertura(s) livre(s) na apólice (${amb.case_ids.join(', ')}). Vincule o número do cover na análise certa.`
+              : `A apólice tem ${amb.case_ids.length} coberturas livres para este CNPJ (${amb.case_ids.join(', ')}). Vincule à mão a que corresponde a este pedido.`,
+          url: `/credito/analises/${analiseId}`,
+          cnpj: a.cnpj,
+          analise_id: analiseId,
+          motivo: amb.motivo,
+          case_ids: amb.case_ids,
+        })
+      }
+    }
+  }
+
+  // Mesma razão do poll: a decisão mexe no histórico e no knockout de negada, e sem
+  // repontuar a empresa ficaria com a faixa antiga até a virada do mês.
+  await recalcularScoresDeCnpjs(decididos)
+
+  // `sem_envio_manual` é para ser sempre zero: hoje o único caminho que leva uma análise
+  // a "enviada" sem case id é a porta da 0216, que grava quem afirmou. Um número aqui
+  // significa que apareceu outro caminho — e é melhor descobrir isso pelo log do que
+  // pela ausência de um registro que alguém foi procurar.
+  const semEnvioManual = (abertas ?? []).filter((a) => !a.envio_manual_em).length
+  logger.info({ ...acc, sem_envio_manual: semEnvioManual }, 'Adoção de pedidos abertos concluída.')
   return { status: 'ok', ...acc }
 }
 
@@ -513,6 +748,23 @@ export async function backfillAtradius(opcoes: { simular?: boolean } = {}): Prom
         'O backfill só roda com a seguradora em produção: ele insere no nosso banco o que ' +
         'ler da apólice, e o ambiente de homologação não tem um banco separado para receber isso.',
     }
+  }
+
+  /*
+   * A ADOÇÃO VEM ANTES DA INSERÇÃO, e é o que impede o backfill de criar um card
+   * duplicado para um pedido que já tem card aqui.
+   *
+   * Sem isto, uma cobertura aberta no portal para um CNPJ que está parado na esteira não
+   * encontra dono por `atradius_case_id` e vira linha nova com origem `atradius_backfill`
+   * — uma segunda análise do mesmo CNPJ, com o desfecho, enquanto a original continua
+   * parada na coluna "enviada à seguradora". Duas linhas para um pedido só, e a que anda
+   * é a que ninguém pediu.
+   *
+   * Fora da simulação, que não escreve nada por definição — e adotar é escrever.
+   */
+  if (!simular) {
+    const adocao = await adotarPedidosAbertos()
+    logger.info({ adocao }, 'Adoção de pedidos abertos, antes do backfill.')
   }
 
   const cfg = await lerConfigCredito()

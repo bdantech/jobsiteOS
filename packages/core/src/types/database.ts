@@ -16545,6 +16545,52 @@ export type Database = {
       app_vendedores_visiveis: { Args: never; Returns: string[] }
       app_vendedores_visiveis_comissao: { Args: never; Returns: string[] }
       app_vincular_cnpj_conta: { Args: { p: Json }; Returns: Json }
+      app_vincular_pedido_seguradora: {
+        Args: { p: Json }
+        Returns: {
+          analise_propria_id: string | null
+          atradius_buyer_id: string | null
+          atradius_case_id: string | null
+          atualizada_em: string
+          cnpj: string
+          codigo_decisao: string | null
+          codigo_historico: string | null
+          contato_externo: Json | null
+          criada_em: string
+          decidida_em: string | null
+          decisao_interna: string | null
+          decisao_interna_em: string | null
+          empresa_id: string | null
+          envio_manual_em: string | null
+          envio_manual_por: string | null
+          estagio: string
+          expira_em: string | null
+          expirada_em: string | null
+          external_id: string | null
+          id: string
+          limite_aprovado: number | null
+          limite_operacional: number | null
+          limite_solicitado: number | null
+          moeda: string
+          motivo: string | null
+          observacoes: string | null
+          origem: string
+          origem_externa: string | null
+          origem_motivo: string | null
+          rating_classe_seguradora: string | null
+          rating_seguradora: string | null
+          seguradora: string
+          solicitada_por: string | null
+          substituida_em: string | null
+          substituida_por: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analises_credito"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_vincular_sacado: {
         Args: { p: Json }
         Returns: {

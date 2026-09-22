@@ -317,16 +317,104 @@ continua lá depois de qualquer clique.
   mentira em silêncio no dia em que outro caminho criar uma análise enviada sem case id.
   E esta é a única forma de uma análise chegar a "enviada" sem nenhuma chamada ter saído:
   "mandaram mesmo?" precisa de resposta com nome e hora.
-- **A decisão também virá à mão.** `pollDecisoes` filtra `atradius_case_id is not null` —
-  sem número de cover não há o que consultar. O diálogo avisa antes de confirmar, e uma
-  tarja no card repete enquanto durar. Descobrir isso três semanas depois, esperando um
-  aviso automático que nunca vem, é o modo caro de aprender.
+- **O poll não alcança esta linha.** `pollDecisoes` filtra `atradius_case_id is not null` —
+  sem número de cover não há o que consultar. Quem traz a resposta é a adoção por CNPJ,
+  logo abaixo.
 - **O número do cover é opcional e muda o regime.** Preenchido (na hora ou depois), o poll
   assume a linha sozinho e a tarja some. Exigi-lo travaria o caso comum, que é mandar hoje
   e receber o número depois.
 
 A papelada continua indo pelo botão **Enviar documentos** (04d §4.2, por e-mail): ele
 aparece justamente quando a análise já saiu do estágio de envio.
+
+### A cobertura que voltou encontra o card que ficou parado (0247)
+
+A 0216 resolveu o *registro* do envio à mão e deixou o *depois* na mão de alguém. Em
+22/09/2026 o preço disso estava à vista: **três cards em `enviada_seguradora` sem número
+de cover**, dois deles (HITACHI ENERGY e NEOBETEL) já com análise concluída no portal da
+Atradius. Do lado de fora havia decisão; do lado de cá, uma coluna que não andava — e a
+espera era indistinguível de "a seguradora ainda não respondeu".
+
+Nenhum dos três jobs existentes alcançava esses cards, e cada um por um motivo diferente:
+o poll pergunta por `atradius_case_id`, o sync casa por `atradius_case_id`, e o backfill
+**inseriria uma linha nova** com `origem = 'atradius_backfill'` — duas análises do mesmo
+CNPJ, e a que anda sendo a que ninguém pediu.
+
+```
+enviada à mão (sem cover)  ─┐
+                            ├─ adotarPedidosAbertos ─→ case_id + buyer_id no card ─→ poll
+cobertura sem dono (apólice)┘        casa por CNPJ
+```
+
+`adotarPedidosAbertos()` roda **entre o sync e o poll**, duas vezes por dia, e sob demanda
+pelo botão *Procurar pedidos abertos* em `/credito/painel`. A ordem é dependência: depois
+do sync, que acabou de acertar quem já tem cover; antes do poll, para o card recém-ligado
+ser consultado na mesma rodada em vez de esperar mais doze horas. O backfill também chama
+a adoção antes de inserir — é o que impede a linha duplicada.
+
+**O casamento é por CNPJ e só por CNPJ.** Nome de buyer casa dois homônimos numa empresa
+só, e o erro aparece quando alguém já aprovou o limite errado — a mesma regra do backfill.
+A regra vive em `casarPedidosComCoberturas` (core, 11 testes) e cabe em três linhas:
+
+| situação | o que acontece |
+|---|---|
+| 1 card aberto, 1 cobertura livre para o CNPJ | **vincula** e aplica a decisão |
+| 2 cards abertos, ou 2 coberturas livres | **não escreve nada** — evento `analise.vinculo_ambiguo` |
+| nenhuma cobertura para o CNPJ | silêncio: é o estado normal de quem ainda não foi decidido |
+
+"Cobertura livre" é a que não tem dono aqui dentro: quem já está em alguma
+`analises_credito` sai da conta. É isso que impede o histórico importado pelo backfill de
+ser recolhido de novo por um pedido novo do mesmo CNPJ.
+
+**Ambiguidade não vira palpite.** Escolher a cobertura mais recente entre duas seria
+gravar como aprovado um limite que talvez ninguém tenha aprovado *para este pedido* — e um
+limite errado só aparece quando já se operou em cima dele. O aviso sai **uma vez por
+análise**, nunca a cada rodada: ele descreve um estado que dura até alguém agir, e o sync
+roda duas vezes por dia (mesma razão da sugestão de reanálise).
+
+**Não roda fora de produção.** Aqui está a assimetria com o sync e o poll, que são
+inofensivos em homologação porque casam por um `atradius_case_id` que a própria sandbox
+gerou. CNPJ é o mesmo nos dois ambientes: um buyer de mentira com CNPJ de verdade daria a
+um card real o limite aprovado de um teste.
+
+**O índice único é a outra metade.** `analises_credito_atradius_case_id_unico` (parcial,
+`where atradius_case_id is not null`) diz no banco o que o código já mantinha: um cover
+pertence a uma análise. Com dois caminhos novos escrevendo esse campo, duas linhas no
+mesmo cover fariam o poll gravar o mesmo limite em dois cards, e a conciliação contaria a
+cobertura duas vezes.
+
+#### E quando o CNPJ não basta
+
+`app_vincular_pedido_seguradora` (0247) liga a análise ao número do cover **depois** do
+envio — até então isso só era possível no próprio diálogo de envio à mão, e o caso comum é
+receber o número dias depois. É a porta para os três casos que o automático recusa:
+duas coberturas livres, dois cards abertos, e o buyer que a Atradius cadastrou sob outra
+inscrição (a matriz, uma filial), em que CNPJ nenhum casa.
+
+Só de `enviada_seguradora` ou `em_analise`: vincular um cover diz **qual** é o pedido, não
+que existe um — essa afirmação continua sendo da 0216, com `envio_manual_por` gravado.
+Trocar um número já preenchido é permitido e vai escrito no evento: um cover errado faz o
+poll gravar o limite de outro pedido, e o conserto não pode depender de um UPDATE no banco.
+
+Os dois caminhos emitem o **mesmo** evento `analise.pedido_vinculado`, com `manual`
+distinguindo a origem: o que importa na timeline é que este card passou a apontar para
+aquele cover, e quem lê precisa saber se foi o sistema que casou pelo CNPJ ou se foi
+alguém que digitou.
+
+#### O cover que a apólice não conhece
+
+Há um terceiro jeito de um card parar, e ele não tem nada a ver com envio à mão: a análise
+**tem** número de cover, o poll pergunta por ele, e a apólice responde que não conhece
+esse cover. Acontece quando o pedido é reaberto no portal com outro número, ou quando o
+número foi anotado errado. `consultarDecisao` devolvendo `null` nunca foi falha — e
+também nunca foi dito em lugar nenhum: a análise ficava parada com a mesma cara de quem
+está esperando a seguradora decidir.
+
+O poll agora conta essas linhas (`desconhecidas`) e escreve os números no log. O conserto
+é o botão **Trocar o cover**, que aparece na análise em `enviada_seguradora` ou
+`em_analise` e leva ao mesmo `app_vincular_pedido_seguradora` — o diálogo mostra o número
+atual ao lado do campo, porque trocar às cegas um número que governa limite e desfecho é
+como não ter conserto nenhum.
 
 ### A regra de custo
 
@@ -375,6 +463,7 @@ roda três coisas em sequência:
 | passo | o que faz |
 |---|---|
 | `syncAtradius` | lê as decisões da apólice dos últimos 30 dias |
+| `adotarPedidosAbertos` | acha dono, **pelo CNPJ**, para a cobertura que ninguém reclamou — o card enviado à mão, sem `atradius_case_id` (0247) |
 | `pollDecisoes` | consulta **caso a caso** o que está em `enviada_seguradora` ou `em_analise` e tem `atradius_case_id` |
 | `expirarAnalises` | derruba aprovação vencida — a data de validade é nossa, e roda mesmo sem seguradora configurada |
 
@@ -650,9 +739,12 @@ sairia caro em vez de sair claro.
 
 ```
 mensal (dia 7, 08h UTC):  calibrar → scores → potencial
-diário (09h UTC):         sync da apólice → poll → expirar
+diário (09h UTC):         sync da apólice → adoção por CNPJ → poll → expirar
 ```
 
+- **adoção entre sync e poll**: depois do sync, que acabou de acertar quais coberturas já
+  têm dono aqui (é o que a adoção precisa saber para não recolher o histórico da apólice);
+  antes do poll, para o card recém-vinculado ser consultado na mesma rodada.
 - **calibrar antes de scores e potencial**: o ratio e o giro saem da carteira.
 - **scores antes de potencial**: a chance é o multiplicador do valor esperado. Invertido,
   produziria uma rodada inteira de valores esperados multiplicados pela chance do mês

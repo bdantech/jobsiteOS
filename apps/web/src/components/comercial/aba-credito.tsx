@@ -219,7 +219,7 @@ function CondicoesPublicadas({ analiseId }: { analiseId: string }) {
           <Linha rotulo="TAC" valor={brl(c.fee_d1)} nota="D1" />
           <Linha rotulo="TAC mínima" valor={brl(c.fee_min_d1)} nota="D1" />
           <Linha rotulo="Multa por atraso" valor={pct(c.bill_fine_percent)} />
-          <Linha rotulo="Prorrogação" valor={pct(c.extension_rate_percent)} />
+          <Linha rotulo="Juros de atraso" valor={pct(c.extension_rate_percent)} />
         </dl>
       </div>
 

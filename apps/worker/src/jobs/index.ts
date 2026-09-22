@@ -77,6 +77,7 @@ import {
   recalcularScoresJob,
 } from './credito/potencial.js'
 import {
+  adotarPedidosAbertos,
   backfillAtradius,
   enviarAnalises,
   expirarAnalises,
@@ -200,6 +201,7 @@ export type TipoJob =
   | 'credito-decisao-vendas'
   | 'credito-poll'
   | 'credito-backfill'
+  | 'credito-adotar'
   | 'credito-sync'
   | 'credito-expirar'
   | 'credito-analise-propria'
@@ -1327,13 +1329,32 @@ export function dispararBackfillAtradius(simular = false): string {
   return dispararAvulso('credito-backfill', async () => backfillAtradius({ simular }))
 }
 
+/**
+ * Adoção dos pedidos abertos por fora (0247): a cobertura que apareceu na apólice
+ * encontra o card que estava parado sem número de cover. Roda no sync e sob demanda —
+ * um card parado há semanas não espera a próxima janela do cron.
+ */
+export function dispararAdotarPedidos(): string {
+  return dispararAvulso('credito-adotar', async () => adotarPedidosAbertos())
+}
+
 /** Sync incremental diário do que já está na apólice + expiração das aprovações vencidas. */
 export function dispararSyncAtradius(): string {
   return dispararAvulso('credito-sync', async () => {
     const sync = await syncAtradius()
+    /*
+     * A adoção entra ENTRE o sync e o poll, e a ordem é dependência:
+     *
+     * - depois do sync, porque é ele quem acabou de acertar quem já tem cover — e a
+     *   adoção precisa saber quais coberturas já têm dono para não recolher o histórico
+     *   da apólice;
+     * - antes do poll, porque o card que acabou de ganhar `atradius_case_id` passa a ser
+     *   consultável na mesma rodada, em vez de esperar mais doze horas.
+     */
+    const adocao = await adotarPedidosAbertos()
     const poll = await pollDecisoes()
     const expiradas = await expirarAnalises()
-    return { sync, poll, expiradas }
+    return { sync, adocao, poll, expiradas }
   })
 }
 

@@ -57,6 +57,7 @@ import {
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
   dispararEstimativaFaturamento,
+  dispararAdotarPedidos,
   dispararBackfillAtradius,
   dispararCreditoMensal,
   dispararDominioEmpresa,
@@ -1194,7 +1195,22 @@ app.post('/jobs/credito/backfill', (req: Request, res: Response, next: NextFunct
   }
 })
 
-/** Diário: sync do que já está na apólice + poll + expiração. */
+/**
+ * Adoção dos pedidos abertos por fora (0247): a cobertura nova da apólice encontra, pelo
+ * CNPJ, o card que ficou parado sem número de cover.
+ *
+ * Roda no sync duas vezes por dia; esta rota existe para não esperar a próxima janela
+ * quando alguém acabou de saber que a seguradora respondeu.
+ */
+app.post('/jobs/credito/adotar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAdotarPedidos(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Diário: sync do que já está na apólice + adoção + poll + expiração. */
 app.post('/jobs/credito/sync', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararSyncAtradius(), status: 'executando' })

@@ -15,6 +15,7 @@ import {
   Hash,
   Hand,
   History,
+  Link2,
   Mail,
   SendHorizonal,
   MapPin,
@@ -52,10 +53,12 @@ import {
   enviarAnaliseManualmenteAction,
   moverAnaliseAction,
   reenviarDocumentosEmailAction,
+  vincularPedidoSeguradoraAction,
 } from '@/actions/credito'
 import { rodarAnalisePropriaAction } from '@/actions/credito-analise'
 import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
 import { DialogoEnvioManual } from './analise-propria/dialogo-envio-manual'
+import { DialogoVincularPedido } from './analise-propria/dialogo-vincular-pedido'
 import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
@@ -208,11 +211,77 @@ function FalhaDeEnvio({
   )
 }
 
+/**
+ * A tarja do envio à mão (0216), e a porta para o número do cover (0247).
+ *
+ * O card afirma que existe pedido na Atradius e não tem `atradius_case_id` — que é por
+ * onde o poll pergunta. Quem abre precisa saber duas coisas, e as duas mudam o que ela
+ * faz a seguir:
+ *
+ * 1. O sistema PROCURA sozinho, pelo CNPJ, a cada rodada do sync. A espera deixou de ser
+ *    "alguém vai ter que lembrar" e virou "está sendo procurado".
+ * 2. E ele RECUSA escolher entre duas coberturas do mesmo CNPJ. É por isso que o botão
+ *    existe: com o número na mão, o vínculo é certo, e o automático nunca precisa
+ *    adivinhar.
+ */
+function EnviadaAMao({
+  analiseId,
+  em,
+  onMudou,
+}: {
+  analiseId: string
+  em: string
+  onMudou: () => void
+}) {
+  const [aberto, setAberto] = React.useState(false)
+  const [salvando, setSalvando] = React.useState(false)
+
+  async function vincular(caseId: string) {
+    setSalvando(true)
+    const r = await vincularPedidoSeguradoraAction({ id: analiseId, atradius_case_id: caseId })
+    setSalvando(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    setAberto(false)
+    toast.success('Pedido vinculado. A consulta ao desfecho já foi disparada.')
+    onMudou()
+  }
+
+  return (
+    <div className="flex flex-wrap items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-sm">
+      <Hand className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+      <p className="min-w-[16rem] flex-1">
+        <strong>Enviada à seguradora à mão</strong>, por fora da API, em{' '}
+        {new Date(em).toLocaleDateString('pt-BR')}.{' '}
+        <span className="text-muted-foreground">
+          Sem o número do cover, o acompanhamento automático procura o pedido pelo CNPJ a cada
+          rodada e vincula sozinho quando encontra um só. Havendo mais de uma cobertura para
+          este CNPJ, ele não escolhe — aí o número resolve.
+        </span>
+      </p>
+      <Button size="sm" variant="outline" className="shrink-0" onClick={() => setAberto(true)}>
+        <Link2 className="mr-1.5 size-3.5" aria-hidden />
+        Vincular o cover
+      </Button>
+
+      <DialogoVincularPedido
+        aberto={aberto}
+        onOpenChange={setAberto}
+        salvando={salvando}
+        onConfirmar={(caseId) => void vincular(caseId)}
+      />
+    </div>
+  )
+}
+
 function Acoes({
   analiseId,
   nome,
   cnpj,
   estagio,
+  caseId,
   limitePotencial,
   statusPropria,
   jaTemPropria,
@@ -229,6 +298,8 @@ function Acoes({
   nome: string
   cnpj: string
   estagio: EstagioAnalise
+  /** O cover da Atradius, quando a análise já tem um. Null é o caso do envio à mão. */
+  caseId: string | null
   limitePotencial: number | null
   statusPropria: StatusAnalisePropria | null
   jaTemPropria: boolean
@@ -248,6 +319,8 @@ function Acoes({
   const [enviando, setEnviando] = React.useState(false)
   const [reenviandoDocs, setReenviandoDocs] = React.useState(false)
   const [confirmandoManual, setConfirmandoManual] = React.useState(false)
+  const [trocandoCover, setTrocandoCover] = React.useState(false)
+  const [vinculando, setVinculando] = React.useState(false)
   const [pedindoNova, setPedindoNova] = React.useState(false)
   const router = useRouter()
   const [marcandoManual, setMarcandoManual] = React.useState(false)
@@ -309,8 +382,32 @@ function Acoes({
     toast.success(
       r.data.analise.atradius_case_id
         ? 'Marcada como enviada. Com o número do cover, o acompanhamento automático assume daqui.'
-        : 'Marcada como enviada. A decisão terá de ser registrada aqui quando a Atradius responder.',
+        : 'Marcada como enviada. A resposta da Atradius será procurada pelo CNPJ a cada rodada.',
     )
+    onMudou()
+  }
+
+  /*
+   * TROCAR O NÚMERO DO COVER (0247).
+   *
+   * O caso: o poll pergunta pelo número que está aqui e a apólice responde que não conhece
+   * esse cover — pedido reaberto no portal com outro número, ou número anotado errado. A
+   * análise fica parada com cara de "a seguradora ainda não decidiu", que é o pior tipo de
+   * espera porque é indistinguível da espera legítima.
+   *
+   * Aparece só com a análise já na seguradora: vincular um cover diz QUAL é o pedido, não
+   * que existe um — essa afirmação continua sendo a do envio à mão, com nome e hora.
+   */
+  async function vincularCover(novo: string) {
+    setVinculando(true)
+    const r = await vincularPedidoSeguradoraAction({ id: analiseId, atradius_case_id: novo })
+    setVinculando(false)
+    if (!r.ok) {
+      toast.error(r.message)
+      return
+    }
+    setTrocandoCover(false)
+    toast.success('Pedido vinculado. A consulta ao desfecho já foi disparada.')
     onMudou()
   }
 
@@ -386,6 +483,12 @@ function Acoes({
         <Button size="sm" variant="outline" onClick={() => setConfirmandoManual(true)}>
           <Hand className="mr-1.5 size-3.5" aria-hidden />
           Enviada à mão
+        </Button>
+      )}
+      {caseId && (estagio === 'enviada_seguradora' || estagio === 'em_analise') && (
+        <Button size="sm" variant="outline" onClick={() => setTrocandoCover(true)}>
+          <Link2 className="mr-1.5 size-3.5" aria-hidden />
+          Trocar o cover
         </Button>
       )}
       {podeReenviarDocs && (
@@ -478,6 +581,14 @@ function Acoes({
           onSalvo={(novaId) => router.push(`/credito/analises/${novaId}`)}
         />
       )}
+
+      <DialogoVincularPedido
+        aberto={trocandoCover}
+        onOpenChange={setTrocandoCover}
+        atual={caseId}
+        salvando={vinculando}
+        onConfirmar={(novo) => void vincularCover(novo)}
+      />
 
       <DialogoEnvioManual
         aberto={confirmandoManual}
@@ -634,24 +745,17 @@ export function AnaliseDetalhe({ id }: { id: string }) {
        *
        * O estágio diz "Enviada à seguradora" exatamente como diria se a API tivesse
        * aberto o pedido — e é a mesma verdade, o pedido existe. O que muda é o DEPOIS:
-       * sem número de cover não há o que o acompanhamento automático consulte, e a
-       * decisão vai ficar esperando alguém registrá-la. Sem esta tarja, a espera parece
-       * "a Atradius ainda não respondeu", que é indistinguível de "ninguém foi olhar".
+       * sem número de cover, o poll não tem o que consultar nesta linha.
+       *
+       * Desde a 0247 ela não fica parada por isso: o sync procura, pelo CNPJ, uma
+       * cobertura sem dono na apólice e a adota. A tarja continua existindo porque essa
+       * busca tem um limite honesto — ela não escolhe entre duas —, e é aqui que se
+       * informa o número do cover quando o representante o devolve.
        *
        * Com o cover preenchido a tarja some: aí o poll assumiu, e não há o que avisar.
        */}
       {esteira.envio_manual_em && !esteira.atradius_case_id && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-sm">
-          <Hand className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
-          <p>
-            <strong>Enviada à seguradora à mão</strong>, por fora da API, em{' '}
-            {new Date(esteira.envio_manual_em).toLocaleDateString('pt-BR')}.{' '}
-            <span className="text-muted-foreground">
-              Sem o número do cover, o acompanhamento automático não consulta esta análise —
-              quando a Atradius responder, a decisão precisa ser registrada aqui.
-            </span>
-          </p>
-        </div>
+        <EnviadaAMao analiseId={id} em={esteira.envio_manual_em} onMudou={invalidar} />
       )}
 
       {/*
@@ -686,6 +790,7 @@ export function AnaliseDetalhe({ id }: { id: string }) {
             nome={nome}
             cnpj={esteira.cnpj}
             estagio={estagio}
+            caseId={esteira.atradius_case_id}
             limitePotencial={empresa?.limite_potencial ?? null}
             statusPropria={status}
             jaTemPropria={propria !== null}

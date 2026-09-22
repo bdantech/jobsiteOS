@@ -291,3 +291,144 @@ export function houveReducaoDeLimite(
   const n = Number(novo ?? 0)
   return a > 0 && n < a
 }
+
+// ─── O pedido que foi aberto por fora, e a cobertura que voltou ──────────────
+
+/**
+ * Uma análise que AFIRMA ter pedido aberto na seguradora e não tem número de cover.
+ *
+ * É o resultado do caminho da 0216: o CNPJ não estava cadastrado como buyer, não há
+ * cadastro por API, o analista abriu o pedido no portal da Atradius e marcou o card como
+ * "enviada à mão". A partir daí o card não tinha como andar sozinho — o poll consulta por
+ * `atradius_case_id`, e não havia nenhum.
+ */
+export interface PedidoSemVinculo {
+  analise_id: string
+  cnpj: string
+}
+
+/** Uma cobertura da apólice que casou com um pedido aberto por fora. */
+export interface VinculoDePedido {
+  analise_id: string
+  cobertura: DecisaoSeguradora
+}
+
+/**
+ * Um CNPJ em que o casamento NÃO é único — e por isso não vira escrita.
+ *
+ * `mais_de_um_pedido`: dois cards abertos do mesmo CNPJ sem cover. Qual deles recebeu a
+ * resposta é informação que só quem abriu tem.
+ * `mais_de_uma_cobertura`: a apólice tem mais de uma cobertura livre para o CNPJ. Escolher
+ * "a mais recente" gravaria um limite aprovado que talvez ninguém tenha aprovado para
+ * este pedido, e um limite errado só aparece quando alguém opera em cima dele.
+ */
+export interface VinculoAmbiguo {
+  cnpj: string
+  motivo: 'mais_de_um_pedido' | 'mais_de_uma_cobertura'
+  analise_ids: string[]
+  case_ids: string[]
+}
+
+/** 14 dígitos É a definição de CNPJ. Qualquer coisa diferente disso não casa nada. */
+function cnpjNormalizado(v: string | null | undefined): string | null {
+  const so = (v ?? '').replace(/\D/g, '')
+  return so.length === 14 ? so : null
+}
+
+/**
+ * Casa os pedidos abertos por fora (0216) com as coberturas que a apólice já tem.
+ *
+ * ── POR QUE ISTO EXISTE ──────────────────────────────────────────────────────
+ * Sem número de cover, `pollDecisoes` pula a linha e `syncAtradius` não encontra nada para
+ * casar — ele casa por `atradius_case_id`. O card ficava parado em "enviada à seguradora"
+ * para sempre, mesmo com a análise JÁ CONCLUÍDA do outro lado, e a espera era
+ * indistinguível de "a Atradius ainda não respondeu".
+ *
+ * ── POR QUE É PURA, E POR QUE É CNPJ ─────────────────────────────────────────
+ * O que decide se um limite aprovado vai parar no card certo cabe em uma função sem rede e
+ * com teste. E o casamento é por CNPJ e só por CNPJ: nome de buyer casa dois homônimos
+ * numa empresa só, e o erro só aparece quando alguém aprova o limite errado — a mesma
+ * regra que o backfill já segue.
+ *
+ * ── A REGRA QUE GOVERNA O RESTO: AMBIGUIDADE NÃO VIRA PALPITE ────────────────
+ * Só vira vínculo o CNPJ com **exatamente um** pedido aberto e **exatamente uma** cobertura
+ * livre. Dois de qualquer lado devolve `ambiguos`, que é um aviso para uma pessoa
+ * resolver — e não uma escolha automática entre dois limites.
+ *
+ * Cobertura já presa a outra análise não é candidata: quem manda `caseIdsJaVinculados` é o
+ * banco, e é ele que impede o histórico da apólice (o que o backfill importou) de ser
+ * adotado de novo por um pedido novo.
+ *
+ * Nenhuma cobertura para o CNPJ **não é ambiguidade**: é o estado normal de todo dia em que
+ * a seguradora ainda não respondeu. Silêncio.
+ */
+export function casarPedidosComCoberturas(
+  pedidos: PedidoSemVinculo[],
+  /**
+   * As coberturas da apólice, na ordem em que o chamador as leu. Repetido o mesmo
+   * `case_id`, **a última vence** — é a ordem que `mapaDeCoberturas` já usa, com as
+   * decisões entrando por cima das aplicações porque decisão é a informação mais nova.
+   */
+  coberturas: DecisaoSeguradora[],
+  caseIdsJaVinculados: Iterable<string>,
+): { vinculos: VinculoDePedido[]; ambiguos: VinculoAmbiguo[] } {
+  const presos = new Set<string>()
+  for (const c of caseIdsJaVinculados) presos.add(String(c))
+
+  const porCaseId = new Map<string, DecisaoSeguradora>()
+  for (const c of coberturas) {
+    if (presos.has(c.case_id)) continue
+    const cnpj = cnpjNormalizado(c.identificador_nacional)
+    if (!cnpj) continue
+    porCaseId.set(c.case_id, c)
+  }
+
+  const coberturasPorCnpj = new Map<string, DecisaoSeguradora[]>()
+  for (const c of porCaseId.values()) {
+    const cnpj = cnpjNormalizado(c.identificador_nacional) as string
+    const lista = coberturasPorCnpj.get(cnpj)
+    if (lista) lista.push(c)
+    else coberturasPorCnpj.set(cnpj, [c])
+  }
+
+  const pedidosPorCnpj = new Map<string, PedidoSemVinculo[]>()
+  for (const p of pedidos) {
+    const cnpj = cnpjNormalizado(p.cnpj)
+    if (!cnpj) continue
+    const lista = pedidosPorCnpj.get(cnpj)
+    if (lista) lista.push(p)
+    else pedidosPorCnpj.set(cnpj, [p])
+  }
+
+  const vinculos: VinculoDePedido[] = []
+  const ambiguos: VinculoAmbiguo[] = []
+
+  for (const [cnpj, doCnpj] of pedidosPorCnpj) {
+    const disponiveis = coberturasPorCnpj.get(cnpj) ?? []
+    if (disponiveis.length === 0) continue
+
+    const [pedido] = doCnpj
+    const [cobertura] = disponiveis
+    if (doCnpj.length > 1 || !pedido) {
+      ambiguos.push({
+        cnpj,
+        motivo: 'mais_de_um_pedido',
+        analise_ids: doCnpj.map((p) => p.analise_id),
+        case_ids: disponiveis.map((c) => c.case_id),
+      })
+      continue
+    }
+    if (disponiveis.length > 1 || !cobertura) {
+      ambiguos.push({
+        cnpj,
+        motivo: 'mais_de_uma_cobertura',
+        analise_ids: [pedido.analise_id],
+        case_ids: disponiveis.map((c) => c.case_id),
+      })
+      continue
+    }
+    vinculos.push({ analise_id: pedido.analise_id, cobertura })
+  }
+
+  return { vinculos, ambiguos }
+}

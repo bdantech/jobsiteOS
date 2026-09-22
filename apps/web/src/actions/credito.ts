@@ -16,6 +16,7 @@ import {
   moverAnalise,
   registrarDocAnalise,
   enviarAnaliseManualmente,
+  vincularPedidoSeguradora,
   salvarCreditoConfig,
   salvarScorecardVersao,
   solicitarAnalise,
@@ -26,6 +27,7 @@ import { gerarChave } from '@/app/api/v1/_lib/api-key'
 import { getSessionContext } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
+  dispararAdotarPedidos,
   dispararBackfillAtradius,
   dispararCreditoMensal,
   dispararDecisaoEmVendas,
@@ -182,9 +184,9 @@ export async function enviarAnalisesAction(
  * cadastro de buyer não tem API — o handbook manda falar com o representante. Resolvido
  * por fora, isto é o que faz a esteira andar.
  *
- * Não acorda o worker, e é o ponto: nada sai daqui. A afirmação é de quem clicou, fica
- * gravada com nome e hora, e a decisão virá pela tela de confronto — o poll não consulta
- * uma cobertura sem número de caso.
+ * Não acorda o worker, e é o ponto: nada sai daqui. A afirmação é de quem clicou e fica
+ * gravada com nome e hora. Sem número de caso o poll não consulta esta linha — quem a
+ * procura é a adoção por CNPJ (0247), na rodada do sync.
  */
 export async function enviarAnaliseManualmenteAction(
   input: unknown,
@@ -193,6 +195,35 @@ export async function enviarAnaliseManualmenteAction(
   if (erro || !supabase) return erro as ActionResult<never>
   try {
     const a = await enviarAnaliseManualmente(supabase, input)
+    revalidatePath('/credito')
+    revalidatePath(`/credito/analises/${a.id}`)
+    if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)
+    return { ok: true, data: { analise: a } }
+  } catch (error) {
+    return falhaDe(error)
+  }
+}
+
+/**
+ * Liga a análise ao número do cover da Atradius (0247).
+ *
+ * O envio à mão (0216) deixa o card afirmando que existe pedido lá fora e sem número de
+ * cover — que é por onde o poll pergunta. O casamento por CNPJ resolve a maioria sozinho,
+ * no sync; esta porta é para o que ele recusa resolver, e para quem recebeu o número do
+ * representante depois.
+ *
+ * Dispara o poll na sequência: quem digitou o número quer ver o desfecho agora, e a
+ * alternativa é a pessoa recarregar a tela até as 14h. Best-effort, como nas outras — o
+ * vínculo já está gravado, e a rodada do cron traria o mesmo resultado.
+ */
+export async function vincularPedidoSeguradoraAction(
+  input: unknown,
+): Promise<ActionResult<{ analise: Tables<'analises_credito'> }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const a = await vincularPedidoSeguradora(supabase, input)
+    await dispararPollDecisoes()
     revalidatePath('/credito')
     revalidatePath(`/credito/analises/${a.id}`)
     if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)
@@ -321,6 +352,8 @@ export const reestimarPotencialAction = async (): Promise<Disparo> => disparar(d
 export const recalcularScoresAction = async (): Promise<Disparo> => disparar(dispararRecalcularScores)
 export const pollDecisoesAction = async (): Promise<Disparo> => disparar(dispararPollDecisoes)
 export const syncAtradiusAction = async (): Promise<Disparo> => disparar(dispararSyncAtradius)
+/** Procura dono, pelo CNPJ, para as coberturas da apólice que ninguém reclamou (0247). */
+export const adotarPedidosAction = async (): Promise<Disparo> => disparar(dispararAdotarPedidos)
 /** Backfill do histórico da apólice. Roda uma vez; não descobre buyer novo. */
 export const backfillAtradiusAction = async (): Promise<Disparo> =>
   disparar(() => dispararBackfillAtradius(false))

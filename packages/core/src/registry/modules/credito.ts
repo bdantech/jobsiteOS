@@ -494,7 +494,11 @@ async function condicoesDoCnpj(input: CondicoesDoCnpjInput, ctx: ToolContext) {
     prazo_maximo_dias: c.max_due_date_days,
     tem_cobertura: c.has_insurance,
     multa: `${n(c.bill_fine_percent)}%`,
-    prorrogacao: `${n(c.extension_rate_percent)}%`,
+    // A chave acompanha o rótulo da tela porque ela é o que a IA repete em voz alta: a
+    // resposta que diz "prorrogação de 12%" descreve um prazo, e o que o campo cobra é
+    // atraso. A COLUNA segue `extension_rate_percent` — essa é contrato com a plataforma
+    // de produção e não se renomeia.
+    juros_de_atraso: `${n(c.extension_rate_percent)}%`,
     matriz_versao: c.matriz_versao,
     publicada_em: c.publicada_em,
     ressalva:

@@ -418,7 +418,7 @@ snapshot, e por isso existe o CSV — uma planilha é onde a pessoa confere de f
 
 A aba **Crédito e documentos** mostrava a esteira e a pasta, e parava no limite aprovado.
 O preço — juros D0/D1, TAC e TAC mínima dos dois produtos, cashback, teto por nota, prazo,
-multa, prorrogação, validade — ficava no módulo Crédito, que o comercial não abre.
+multa, juros de atraso, validade — ficava no módulo Crédito, que o comercial não abre.
 
 O efeito não era só "ir perguntar": **enquanto a resposta não vinha, a conversa com o
 cliente acontecia sobre a taxa padrão**, a única que se sabe de cabeça. A precificação por

@@ -141,6 +141,24 @@ export const EVENTO_TIPOS = {
    * tela dizer por quê — e a única forma de descobrir era ler o log do container.
    */
   ANALISE_ENVIO_FALHOU: 'analise.envio_falhou',
+  /**
+   * A cobertura que voltou da seguradora encontrou o card que estava parado (0247).
+   *
+   * O caso: o CNPJ não era buyer, o pedido foi aberto no portal da Atradius e o card
+   * ficou em "enviada à mão", sem número de cover — que é justamente por onde o poll
+   * pergunta. Quando a apólice passa a ter uma cobertura daquele CNPJ, ela é adotada
+   * pelo card. O evento existe porque o vínculo é uma AFIRMAÇÃO do sistema sobre um
+   * pedido que uma pessoa abriu por fora: quem marcou "enviei à mão" precisa poder
+   * conferir que o sistema casou com o pedido certo.
+   */
+  ANALISE_PEDIDO_VINCULADO: 'analise.pedido_vinculado',
+  /**
+   * Havia cobertura para o CNPJ, e o casamento NÃO era único (0247) — dois cards
+   * abertos, ou duas coberturas livres. Nada foi escrito: escolher entre dois limites
+   * aprovados é decisão de gente, e um limite errado só aparece quando alguém opera em
+   * cima dele. Emitido UMA vez por análise, não a cada rodada do sync.
+   */
+  ANALISE_VINCULO_AMBIGUO: 'analise.vinculo_ambiguo',
   ANALISE_APROVADA: 'analise.aprovada',
   ANALISE_APROVADA_PARCIAL: 'analise.aprovada_parcial',
   ANALISE_NEGADA: 'analise.negada',
@@ -379,6 +397,8 @@ export const EVENTO_LABELS: Record<string, string> = {
   'analise.movida': 'Análise de crédito movida',
   'analise.enviada': 'Análise enviada à seguradora',
   'analise.envio_falhou': 'Falha ao enviar à seguradora',
+  'analise.pedido_vinculado': 'Pedido da seguradora vinculado ao card',
+  'analise.vinculo_ambiguo': 'Cobertura da seguradora sem vínculo certo',
   'analise.aprovada': 'Análise de crédito aprovada',
   'analise.aprovada_parcial': 'Análise aprovada parcialmente',
   'analise.negada': 'Análise de crédito negada',

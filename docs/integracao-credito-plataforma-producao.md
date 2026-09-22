@@ -652,7 +652,7 @@ como está.
 | `expiresAt` | string | sim | `AAAA-MM-DD`, data futura | Até quando a condição vale |
 | `creditLimit` | número | sim | > 0 | Limite de crédito, em reais |
 | `commissionPercent` | número | sim | ≥ 0 e < 100 | Comissão, em % |
-| `extensionRatePercent` | número | sim | ≥ 0 e < 100 | Taxa de prorrogação, em % |
+| `extensionRatePercent` | número | sim | ≥ 0 e < 100 | Juros de atraso, em % (a chave mantém o nome antigo) |
 | `billFinePercent` | número | sim | ≥ 0 e < 100 | Multa, em % |
 | `monthlyRateD0` | número | sim | ≥ 0 e < 100 · **> `monthlyRateD1`** | Juros mensal do D0 (dinheiro hoje), em % |
 | `monthlyRateD1` | número | sim | ≥ 0 e < 100 | Juros mensal do D1 (dinheiro amanhã), em % |

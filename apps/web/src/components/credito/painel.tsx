@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
+  adotarPedidosAction,
   backfillAtradiusAction,
   simularBackfillAtradiusAction,
   pollDecisoesAction,
@@ -231,7 +232,7 @@ export function CreditoPainel() {
               </CardDescription>
             </div>
             {/*
-             * OS QUATRO BOTÕES, EM PORTUGUÊS E EM ORDEM DE ALCANCE.
+             * OS CINCO BOTÕES, EM PORTUGUÊS E EM ORDEM DE ALCANCE.
              *
              * "Sync" e "Backfill" diziam ao leitor o nome do JOB, não o que ele faz — e
              * os dois nomes em inglês, um ao lado do outro, não davam nenhuma pista de
@@ -239,7 +240,12 @@ export function CreditoPainel() {
              *
              *   Consultar decisões  pergunta pelas que ENVIAMOS e ainda não voltaram
              *   Reler a apólice     atualiza as que JÁ EXISTEM aqui — não cria nenhuma
+             *   Procurar pedidos    acha DONO para cobertura que a apólice tem e ninguém reclamou
              *   Importar da apólice CRIA aqui as coberturas que só existem lá
+             *
+             * "Procurar pedidos abertos" (0247) é o degrau que faltava entre reler e
+             * importar: sem número de caso não há o que consultar, e o card enviado à
+             * mão não estava em lugar nenhum dos outros três.
              *
              * "Simular importação" fica colado em "Importar" de propósito: é o mesmo
              * trabalho sem gravar, e a proximidade é o que faz alguém rodar o ensaio
@@ -263,6 +269,15 @@ export function CreditoPainel() {
                 title="Relê a apólice inteira e atualiza limite, rating e desfecho das análises que JÁ existem aqui. Não cria linha nova — o que só existe na apólice continua invisível até a importação."
               >
                 Reler a apólice
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={rodando !== null}
+                onClick={() => void rodar('Busca de pedidos abertos', adotarPedidosAction)}
+                title="Procura, pelo CNPJ, um dono para as coberturas da apólice que ninguém reclamou — o card enviado à mão, que ficou sem número de cover. Não escolhe entre duas: ambiguidade vira aviso. Só roda com a seguradora em produção."
+              >
+                Procurar pedidos abertos
               </Button>
               <Button
                 variant="outline"

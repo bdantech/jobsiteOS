@@ -159,6 +159,24 @@ export const enviarAnaliseManualmenteSchema = z.object({
 export type EnviarAnaliseManualmenteInput = z.infer<typeof enviarAnaliseManualmenteSchema>
 
 /**
+ * O número do cover, informado DEPOIS (0247).
+ *
+ * O caso comum do envio à mão é mandar hoje e receber o número dias depois — e até aqui o
+ * campo da 0216 só existia na hora de marcar o envio. Sem ele, o card fica invisível para
+ * o poll, que pergunta por `atradius_case_id`.
+ *
+ * O casamento automático por CNPJ (`adotarPedidosAbertos`) resolve a maioria sozinho.
+ * Esta porta é para o que ele recusa resolver: duas coberturas livres para o mesmo CNPJ,
+ * dois cards abertos, ou o buyer cadastrado na Atradius sob outra inscrição — casos em
+ * que só quem tem o número na mão sabe qual é o pedido.
+ */
+export const vincularPedidoSeguradoraSchema = z.object({
+  id: z.string().uuid(),
+  atradius_case_id: z.string().trim().min(1, 'Informe o número do cover.').max(60),
+})
+export type VincularPedidoSeguradoraInput = z.infer<typeof vincularPedidoSeguradoraSchema>
+
+/**
  * O limite pedido, ajustado na HORA DO ENVIO.
  *
  * Quem digitou o número original foi o comercial, ao abrir o pedido. Quem manda à

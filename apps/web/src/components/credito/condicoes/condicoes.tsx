@@ -40,7 +40,7 @@ import {
  * ─── O QUE ESTA TELA DECIDE, E O QUE ELA SÓ MOSTRA ──────────────────────────
  * Ela decide preço: juros, TAC, comissão e limites. Ela NÃO decide `has_insurance`
  * (que é derivado da cobertura vigente da seguradora) nem os acessórios fixos (multa,
- * prorrogação, invest back, indicação, FIDC) — esses vêm da matriz e se editam lá,
+ * juros de atraso, invest back, indicação, FIDC) — esses vêm da matriz e se editam lá,
  * porque são política da casa e não negociação por cliente. Um campo editável aqui
  * para cada um deles convidaria vinte tabelas diferentes a existirem.
  *
@@ -521,7 +521,7 @@ export function CondicoesComerciais({ analiseId }: { analiseId: string }) {
           <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <Fixo rotulo="Tem cobertura" valor={form.has_insurance ? 'sim' : 'não'} />
             <Fixo rotulo="Multa" valor={`${numeroPtBr(form.bill_fine_percent)}%`} />
-            <Fixo rotulo="Prorrogação" valor={`${numeroPtBr(form.extension_rate_percent)}%`} />
+            <Fixo rotulo="Juros de atraso" valor={`${numeroPtBr(form.extension_rate_percent)}%`} />
             <Fixo rotulo="Limite invest back" valor={brl(form.invest_back_limit)} />
             <Fixo
               rotulo="Comissão invest back"

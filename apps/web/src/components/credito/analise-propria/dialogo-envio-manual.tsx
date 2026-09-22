@@ -30,10 +30,14 @@ import { Textarea } from '@/components/ui/textarea'
  * nome e hora.
  *
  * ── O QUE A PESSOA PRECISA SABER ANTES ──────────────────────────────────────
- * Que ninguém vai avisá-la do desfecho. Sem número de cover, o poll não tem o que
- * consultar — ele filtra por `atradius_case_id` — e a decisão terá de ser registrada à
- * mão. Descobrir isso três semanas depois, esperando um e-mail automático que nunca vem,
- * é o modo mais caro de aprender.
+ * Como a resposta vai chegar. Sem número de cover, o poll não tem o que consultar nesta
+ * linha — ele filtra por `atradius_case_id`. O que a 0247 acrescentou é a busca pelo
+ * CNPJ: a cada rodada do sync, uma cobertura sem dono na apólice é adotada pelo card.
+ *
+ * O aviso, então, não é mais "ninguém vai te avisar" — seria mentira. É o limite dela:
+ * a busca não escolhe entre duas coberturas do mesmo CNPJ, e não casa um buyer que a
+ * Atradius cadastrou sob outra inscrição. Nesses casos o número do cover resolve, e ele
+ * pode ser informado aqui ou depois, pela tarja da análise.
  */
 export function DialogoEnvioManual({
   aberto,
@@ -82,9 +86,10 @@ export function DialogoEnvioManual({
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-[0.8rem]">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
           <span>
-            <strong>Ninguém vai avisar do desfecho.</strong> Sem o número do cover, o
-            acompanhamento automático não tem o que consultar — quando a Atradius responder, a
-            decisão precisa ser registrada aqui à mão, pela tela de confronto.
+            <strong>Sem o número do cover, a resposta é procurada pelo CNPJ.</strong> A cada
+            rodada, uma cobertura desta empresa que ainda não tenha dono aqui é vinculada a
+            esta análise. O que a busca não faz é escolher: havendo mais de uma cobertura
+            para o mesmo CNPJ, o card espera alguém informar o número.
           </span>
         </div>
 
@@ -114,8 +119,9 @@ export function DialogoEnvioManual({
           />
           <p className="text-xs text-muted-foreground">
             Se o representante já devolveu o número, preencha:{' '}
-            <strong>o acompanhamento automático passa a cuidar desta análise sozinho</strong> e a
-            decisão volta a chegar por ele. Em branco, a esteira fica no manual.
+            <strong>o acompanhamento passa a seguir o pedido certo</strong>, sem depender da
+            busca por CNPJ. Em branco não trava nada — o número pode ser informado depois, na
+            própria análise.
           </p>
         </div>
 

@@ -18,6 +18,7 @@ import {
   salvarParametrosAnaliseSchema,
   salvarScorecardSchema,
   solicitarAnaliseSchema,
+  vincularPedidoSeguradoraSchema,
   type AtivarMatrizPrecificacaoInput,
   type AtivarScorecardInput,
   type ConcluirAnaliseInput,
@@ -36,6 +37,7 @@ import {
   type SalvarParametrosAnaliseInput,
   type SalvarScorecardInput,
   type SolicitarAnaliseInput,
+  type VincularPedidoSeguradoraInput,
 } from './schemas.js'
 import { parseOuFalhar, traduzirErro } from '../db/shared.js'
 
@@ -77,6 +79,20 @@ export async function enviarAnaliseManualmente(
 ): Promise<Tables<'analises_credito'>> {
   const dados = parseOuFalhar(enviarAnaliseManualmenteSchema, input)
   const { data, error } = await supabase.rpc('app_enviar_analise_manualmente', { p: dados as Json })
+  if (error) throw traduzirErro(error)
+  return data as Tables<'analises_credito'>
+}
+
+/**
+ * Liga a análise ao número do cover da Atradius (0247). Com ele preenchido, o poll assume
+ * a linha na rodada seguinte — é o que tira o card do limbo em que o envio à mão o deixa.
+ */
+export async function vincularPedidoSeguradora(
+  supabase: Supabase,
+  input: VincularPedidoSeguradoraInput | unknown,
+): Promise<Tables<'analises_credito'>> {
+  const dados = parseOuFalhar(vincularPedidoSeguradoraSchema, input)
+  const { data, error } = await supabase.rpc('app_vincular_pedido_seguradora', { p: dados as Json })
   if (error) throw traduzirErro(error)
   return data as Tables<'analises_credito'>
 }
