@@ -278,3 +278,115 @@ export async function detectarPrimeiraOperacaoJob(): Promise<{ marcadas: number 
   logger.info({ marcadas: rows.length }, 'Primeiras operações detectadas.')
   return { marcadas: rows.length }
 }
+
+// ─── As fontes novas do funil (04s §6.1) ────────────────────────────────────
+
+/**
+ * O MESMO roteamento, sobre pré-autorizações e parcelas do Sienge.
+ *
+ * A RLS das duas tabelas novas é cópia literal da de `notas_fiscais`, e ela
+ * recorta por `vendedor_id`. Sem esta passada, `vendedor_id` ficaria nulo em toda
+ * linha nova e o originador simplesmente NÃO VERIA os cards — não por engano de
+ * regra, mas porque a política não teria por onde deixá-lo entrar. Item sem dono
+ * cai na fila do gestor, exatamente como acontece com NF.
+ *
+ * A decisão continua sendo `rotearNota` do core, com os mesmos testes: carteira
+ * explícita, SPE subindo pelo grupo econômico, conta passiva fora, atribuição
+ * manual intocada.
+ *
+ * ── UMA DIFERENÇA, E ELA É DO DADO, NÃO DA REGRA ────────────────────────────
+ * No título, a ponta "fornecedor" é o CREDOR — e credor pessoa física não tem
+ * CNPJ, não casa com `empresas` e fica fora do roteamento. Ele continua visível
+ * para o gestor; só não entra na carteira de ninguém, porque não há entidade a
+ * quem atribuir.
+ */
+export async function rotearOportunidadesJob(): Promise<ResultadoRoteamento> {
+  const lista = await originadores()
+  const acc: ResultadoRoteamento = { avaliadas: 0, atribuidas: 0, sem_dono: 0, por_origem: {} }
+
+  const fontes = [
+    { tabela: 'pre_autorizacoes', fornecedor: 'fornecedor_empresa_id', fornecedorCnpj: 'fornecedor_cnpj' },
+    { tabela: 'sienge_titulos', fornecedor: 'credor_empresa_id', fornecedorCnpj: 'credor_cnpj' },
+  ] as const
+
+  /** Uma linha roteável das fontes novas. `access_key` não existe aqui: o
+   *  documento é a parcela ou a oferta, e a identidade delas é o id da API. */
+  interface LinhaOportunidade {
+    id: string
+    sacado_empresa_id: string | null
+    fornecedor_empresa_id: string | null
+    sacado_grupo_spe: string | null
+    fornecedor_grupo_spe: string | null
+    sacado_gestao: string | null
+    vendedor_id: string | null
+    vendedor_origem: string | null
+  }
+
+  for (const fonte of fontes) {
+    /*
+     * `sacado_gestao` sai da HOLDING, como na NF: para uma SPE, ler a gestão da
+     * própria SPE devolve nulo, e a operação de uma conta PASSIVA passaria pela
+     * guarda como se a conta fosse ativa.
+     *
+     * `app_holding_do_sacado` é a MESMA função que a comissão usa. Uma régua só
+     * para "de quem é esta operação" — duas divergiriam, e a divergência sairia
+     * em dinheiro.
+     */
+    const { rows } = await pool.query<LinhaOportunidade>(`
+      select t.id_externo::text as id,
+             t.sacado_empresa_id,
+             t.${fonte.fornecedor} as fornecedor_empresa_id,
+             case when su.is_spe then su.grupo_id end as sacado_grupo_spe,
+             case when fu.is_spe then fu.grupo_id end as fornecedor_grupo_spe,
+             hold.gestao_operacao as sacado_gestao,
+             t.vendedor_id, t.vendedor_origem
+      from ${fonte.tabela} t
+      left join mercado_universo su on su.cnpj = t.sacado_cnpj
+      left join mercado_universo fu on fu.cnpj = t.${fonte.fornecedorCnpj}
+      left join lateral (select public.app_holding_do_sacado(t.sacado_cnpj) as id) h on true
+      left join empresas hold on hold.id = h.id
+      where t.estagio_funil not in ('convertida', 'perdida')
+        and t.origem_exibida
+        and coalesce(t.vendedor_origem, '') <> 'manual'
+    `)
+
+    for (const item of rows) {
+      acc.avaliadas++
+      const r = rotearNota(
+        {
+          sacado_empresa_id: item.sacado_empresa_id,
+          fornecedor_empresa_id: item.fornecedor_empresa_id,
+          sacado_grupo_spe: item.sacado_grupo_spe,
+          fornecedor_grupo_spe: item.fornecedor_grupo_spe,
+          sacado_gestao: item.sacado_gestao,
+          vendedor_id_atual: item.vendedor_id,
+          vendedor_origem_atual: item.vendedor_origem,
+        },
+        lista,
+      )
+
+      // Só grava o que MUDA: sem isto o job reescreve a tabela inteira por dia.
+      if (r.vendedor_id === item.vendedor_id) {
+        if (r.vendedor_id === null) acc.sem_dono++
+        continue
+      }
+
+      await pool.query(
+        `update ${fonte.tabela}
+            set vendedor_id = $1, vendedor_origem = $2, vendedor_definido_em = now()
+          where id_externo = $3::int`,
+        [r.vendedor_id, r.origem, item.id],
+      )
+
+      if (r.vendedor_id) {
+        acc.atribuidas++
+        acc.por_origem[r.origem ?? '—'] = (acc.por_origem[r.origem ?? '—'] ?? 0) + 1
+      } else {
+        acc.sem_dono++
+      }
+    }
+  }
+
+  logger.info(acc, 'Roteamento das fontes novas do funil concluído.')
+  return acc
+}

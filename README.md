@@ -388,6 +388,34 @@ fonte `onepay_nf`, so the Ingestões screen and its re-run button work with no n
 `raw_xml` is **always** stored — it is the seed of the future Pricing module. A parse failure logs and
 carries on (`xml_parse_erro`); value and due date also come from the endpoint.
 
+### Três origens, um funil só (04s)
+
+O funil não é mais uma lista de notas. Ele tem **três origens**, e a regra é uma:
+**as listas não se misturam no banco — só na tela.** `notas_fiscais` não mudou; as duas novas são
+`pre_autorizacoes` (ofertas que a construtora já fez ao fornecedor) e `sienge_titulos` (parcelas do
+contas-a-pagar do ERP dela). A união é a view `funil_oportunidades`, read-only e `security_invoker`.
+
+**`WAITING_CONTRACTED` é o sinal mais quente do sistema.** A construtora já ofereceu, o crédito já
+existe, o fornecedor só não clicou — e tem **relógio**. É o único card do funil que pode deixar de
+existir amanhã, e o único que gera push por um prazo de dias contados nos dedos.
+
+**Deduplicação: o original vence o derivado.** Uma NF que já virou pré-autorização é listada com o
+selo "já tem pré-autorização"; a oferta não vira card próprio. Quando o mesmo recebível chega pelos
+dois canais (NF pelo certificado, parcela pela conexão Sienge), quem aparece é config —
+`prioridade_nf_vs_titulo`, default **`titulo`**, porque a parcela é a unidade que vira oferta: a nota
+de R$ 55 mil com três parcelas esconderia que só uma está disponível agora. **Ambíguo não esconde
+nada**: os dois ficam visíveis e o caso vai para a revisão.
+
+**Duas armadilhas do payload, ambas no código.** `firstSeenAt` é a data de entrada e `hydratedAt`
+**não é** — ele muda a cada releitura, e usá-lo como filtro de novidade faria a janela curta trazer
+eternamente as mesmas parcelas. E a **retenção é tri-estado**: `0` é "sem retenção", um valor é a
+retenção lida e **`null` é "o ERP não informou"** — a coluna é anulável e sem default de propósito,
+porque um default transformaria "não sei" em "não tem" para sempre.
+
+**Duas passadas, e a segunda não é opcional.** Os endpoints filtram por data de ENTRADA, nunca de
+atualização: sem a varredura diária de 92 dias, uma oferta criada há vinte dias que expirou hoje
+jamais apareceria, e o funil seguiria oferecendo o que já morreu.
+
 ### Sacados por NF: o fluxo que já vemos, do outro lado da nota (04r)
 
 Temos certificado digital de boa parte dos nossos **cedentes**, então enxergamos todas as notas que

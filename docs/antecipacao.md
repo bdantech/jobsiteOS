@@ -1500,6 +1500,182 @@ histórico do fornecedor, não interrupção.
   Outbox, disparos e contas de WhatsApp também são web-only, e desde o 05A vivem no menu
   da Comunicação.
 
+## Três fontes, um funil só (04s)
+
+Desde 04s o funil não é mais uma lista de notas fiscais. Ele tem **três origens**, e a
+regra que governa tudo é uma só:
+
+> **As listas não se misturam no banco — só na tela.**
+
+Três tabelas independentes, cada uma espelhando fielmente a sua fonte. `notas_fiscais`
+**não mudou** — nenhuma coluna, nenhum comportamento. As duas novas são
+`pre_autorizacoes` e `sienge_titulos`. A união acontece só na leitura, pela view
+`funil_oportunidades`, que não guarda nada e ninguém escreve.
+
+| | De onde vem | O que é | Identidade |
+|---|---|---|---|
+| **NF** | certificado digital do fornecedor | a nota fiscal | `access_key` |
+| **Pré-aut.** | `/api/v1/pre-authorizations` | uma oferta que a construtora **já fez** | `id` da API |
+| **Título** | `/api/v1/sienge-installments` | uma **parcela** do contas-a-pagar do ERP | `id` da API |
+
+### Por que a projeção precisa existir no banco
+
+O funil pagina, ordena e filtra a lista inteira. Sem um `union all` no nível da query
+seria preciso puxar tudo das três fontes e ordenar em memória a cada abertura: a
+paginação por OFFSET deixa de ser possível e a tela baixa milhares de linhas para pintar
+quarenta. A projeção é **somente leitura**; o armazenamento continua separado.
+
+### `WAITING_CONTRACTED` é o sinal mais quente do sistema inteiro
+
+A construtora já ofereceu, o crédito já existe, o dinheiro já está reservado — e o
+fornecedor só não clicou. Não há nada a convencer: há alguém a **lembrar**. E tem
+**relógio** (`expiresAt`, tipicamente poucos dias), o que separa este card de todos os
+outros: uma NF que ninguém tocou hoje continua lá amanhã; uma oferta, não.
+
+É o único item do sistema que gera **push** por um prazo medido em dias que se contam nos
+dedos (`preauth.expirando`, D-2), e a tool `funil.preauths_expirando` existe para
+responder "o que eu perco se não ligar hoje?".
+
+### A deduplicação: o original vence o derivado
+
+Quando uma NF ou uma parcela já virou pré-autorização, **lista-se o original** e o card
+ganha o selo "já tem pré-autorização". A oferta não vira card próprio — ela é uma coisa
+que *aconteceu* com o documento, não um segundo documento.
+
+- **Pré-aut. ↔ título**: direto por id (`sienge.billId`/`installmentId` de um lado,
+  `anticipation.preAuthorizationId` do outro).
+- **Pré-aut. ↔ NF**: sacado (pela **matriz**) + fornecedor + **número normalizado**, com o
+  mesmo normalizador do 04e, desempatando por valor (±1%) e vencimento (±5 dias).
+- **Título ↔ NF**: só por `accessKey`, nunca por número — **parcela não é nota**. Uma NF de
+  R$ 55 mil em três parcelas casaria por número com as três.
+
+**Ambíguo não esconde nada.** Os dois lados ficam visíveis e o caso vai para a revisão. O
+card duplicado custa dez segundos de quem varre a coluna; o card escondido por engano
+custa a oportunidade inteira — ninguém procura o que não sabe que existe.
+
+A regra vive em `packages/core/src/funil/dedup.ts`, é pura e tem teste para cada caso
+difícil: pré-auth órfã, título de matriz casando com pré-auth de SPE, `billId` repetido
+entre conexões, e a cadeia (o selo tem de pousar em quem está **visível**).
+
+### `funil_config.prioridade_nf_vs_titulo` — default `titulo`
+
+O mesmo recebível chega por dois caminhos: a NF pelo certificado do fornecedor, a parcela
+pela conexão Sienge da construtora. Quem aparece é config
+(`antecipacao_config`, chave `funil_oportunidades`):
+
+- **`titulo`** (default) — exibe a **parcela**, esconde a NF. A parcela é a unidade que
+  vira oferta e é antecipada; a nota inteira esconderia que só uma das três está
+  disponível agora, e o originador ligaria oferecendo um valor que não existe.
+- **`nf`** — exibe a nota e esconde as parcelas.
+
+Trocar a config muda quem aparece **na próxima deduplicação**. Existe
+`POST /jobs/funil/deduplicar` para não esperar o ciclo de 4 horas: uma decisão que se
+acabou de tomar e só rende efeito em quatro horas é uma decisão que ninguém toma.
+
+### Duas armadilhas do payload do Sienge, e elas estão no código
+
+**`firstSeenAt` é a data de entrada. `hydratedAt` NÃO.** O segundo muda a cada releitura
+do ERP. Usá-lo como filtro de novidade faria a janela curta trazer eternamente as mesmas
+parcelas, cada leitura reempurrando a data para frente — um moto-perpétuo silencioso.
+
+**A retenção é TRI-ESTADO.** `0` é "sem retenção", um valor é a retenção lida e **`null`
+é "o ERP não informou"**. As colunas `retencao` e `bill_retencao_total` são anuláveis e
+**não têm default**, de propósito: um default aqui transformaria "não sei" em "não tem"
+para sempre. Tratar null como zero soma errado no relatório e, pior, exibe "sem retenção"
+com a mesma cara de um número conferido — o originador promete um líquido que a
+construtora não vai pagar.
+
+Mais duas, menores e igualmente caras: **`bill.billId` só é único dentro de uma conexão**
+(a PK é o `id` da API, que é global), e **`creditor.taxId` vem nulo para credor pessoa
+física** — ele não casa com `empresas`, fica fora do roteamento e fora do agrupamento por
+fornecedor, porque juntar todos os credores PF sob "sem CNPJ" criaria um fornecedor
+fictício com o volume somado de centenas de pessoas.
+
+### A matriz carrega tudo (§4.1)
+
+Crédito, limite, carteira, roteamento, grupo econômico e certificados são **sempre**
+amarrados na MATRIZ. A SPE ou filial é detalhe da operação.
+
+As três fontes se comportam diferente, e o código sabe disso:
+
+- **Pré-autorização** traz as duas pontas (`contractor.taxId` pode ser filial ou SPE,
+  `headquartersTaxId` é a matriz). Guardamos as duas e usamos a matriz.
+- **Título** traz só a matriz: o `contractor` é a construtora **dona da conexão com o
+  ERP**. O payload não informa a SPE da parcela, mesmo quando o empreendimento é de uma.
+- **NF** resolve a matriz pela raiz do CNPJ, via `app__matriz_do_cnpj` — campo derivado
+  na projeção, sem tocar a tabela.
+
+Quando a parcela vira oferta, o sacado "fica mais específico" (o título aponta para a
+matriz, a pré-auth para a SPE). Isso **não é divergência**: os dois são normalizados pela
+matriz para casar.
+
+### As duas passadas, e a segunda não é opcional
+
+Os dois endpoints filtram por data de **entrada** (`createdAt` / `firstSeenAt`), nunca de
+atualização. Daí:
+
+1. **Novidade, a cada 4h** — 7 dias, encadeada ao sync de NFs.
+2. **Estado, diária** — varredura completa de 92 dias.
+
+Sem a segunda, uma pré-autorização criada há vinte dias que **expirou hoje**, ou um
+título que saiu de `ready_to_create` para `offer_created`, jamais apareceriam. O funil
+congelaria no estado do dia em que cada item entrou e seguiria oferecendo o que já
+morreu.
+
+Idempotente por `id` da API, com ingestão própria (`onepay_pre_autorizacoes`,
+`onepay_sienge_titulos`) e a mesma política de retry e alerta dos outros syncs.
+
+### O que entra no funil (§7)
+
+**Pré-autorizações**: `WAITING_CONTRACTED` sempre · `EXPIRED`/`REVOKED`/
+`AUTOMATICALLY_REVOKED` dentro da janela de recuperação (15 dias) · `ANTICIPATION_REQUESTED`
+não entra, já converteu.
+
+**Títulos**: `ready_to_create`, `awaiting_evaluation`, `held_by_client_filter` ·
+`offer_created` entra **como original com o selo** · `not_eligible` só com `guardReason`
+recuperável (`SUPPLIER_CNPJ_MISSING` é trabalho de originador: basta cadastrar o
+fornecedor) · `paid_in_erp` e `removed_in_erp` **não entram**, viram métrica de perda.
+
+Status desconhecido **entra**, de propósito. Um estado novo escondido é uma classe inteira
+de oportunidade sumindo em silêncio — que foi exatamente o defeito de 13/09/2026. Visível
+e estranho é melhor que invisível e errado.
+
+O que não entra **continua sendo gravado**: `paid_in_erp` e `ANTICIPATION_REQUESTED` são a
+matéria-prima da métrica de perda e da taxa de conversão. Jogá-los fora na ingestão
+deixaria o relatório sem denominador.
+
+### O card é UM só
+
+Mesmo componente, mesmo layout, mesmas ações. Só o **selo de tipo** diz de onde veio, e
+**uma linha de contexto** varia — sempre no mesmo lugar, e vinda pronta do banco
+(`linha_contexto`), porque a frase depende de dados que só a fonte tem.
+
+Três gramáticas visuais numa coluna de quarenta cards significam parar quarenta vezes.
+
+O filtro por origem é multi-seleção, **persistido por usuário** (ele descreve *como* a
+pessoa trabalha, não o que ela procura agora), e existe como variável `tipo` do filter
+engine — que é por isso que `notas_funil` ganhou uma coluna `tipo` constante `'nf'`: uma
+regra salva com essa variável tem de valer nas duas superfícies, ou a reclassificação
+noturna estoura com "column does not exist" sobre o funil inteiro.
+
+### Um toque só, contando os três
+
+O agrupamento da outbox sempre foi por **fornecedor**, nunca por documento — ninguém é
+abordado por nota. Agora "as notas dele" virou "as oportunidades dele": 2 NFs, 1
+pré-autorização e 1 parcela viram **um** toque, com o valor somado. `mensagens_outbox`
+ganhou `oportunidades` (`nf:<chave>`, `pre_autorizacao:<id>`, `titulo:<id>`);
+`access_keys` continua sendo só as chaves de acesso, que as fontes novas nem sempre têm.
+
+Fornecedores que existem **apenas** nas fontes novas entram na outbox: o cara cuja única
+oportunidade é uma oferta em `WAITING_CONTRACTED` é o caso mais quente que há.
+
+### A comissão não dobra
+
+O fato gerador continua sendo **a antecipação**, nunca o card. Como NF, pré-auth e título
+podem apontar para a mesma antecipação, a unicidade por
+`(papel, origem_tipo, origem_id, vendedor_id)` garante um lançamento só. Os cards são
+caminhos de descoberta, não fatos geradores.
+
 ## Limitações conhecidas
 
 - **O endpoint de antecipações não foi provado contra a API real.** O envelope descrito
@@ -1526,6 +1702,23 @@ histórico do fornecedor, não interrupção.
   A normalização (`packages/core/src/antecipacao/nf-payload.ts`) é tolerante de
   propósito: o XML é a segunda fonte de tudo, então uma nota chega mesmo que o JSON não
   traga `accessKey`, `amount`, `number` ou as datas.
+- **A projeção `funil_oportunidades` é `security_invoker = true`, e isso não é
+  detalhe.** Uma view executa com os privilégios de quem a criou e, por padrão, **ignora
+  o RLS das tabelas de base**: sem a opção, o originador A enxergaria as oportunidades do
+  B através da projeção, com as políticas das tabelas perfeitamente corretas. O
+  `rls:probe` autentica como **dois originadores diferentes** e confirma o isolamento
+  lendo *pela view*, não só pelas tabelas.
+- **As duas fontes novas ainda não rodaram contra os endpoints reais.** O contrato está
+  travado por teste (`preauth-payload.test.ts`, `titulo-payload.test.ts`,
+  `sync-plano.test.ts`) e nada precisa ser provisionado: é a mesma API e o mesmo token do
+  sync de NFs (`ONEPAY_BI_URL` / `ONEPAY_BI_TOKEN`). Se um recurso mudar de caminho, o
+  sintoma será zero linhas com HTTP 200, e o conserto é o caminho em
+  `sync-preautorizacoes.ts` / `sync-titulos.ts`.
+- **A dedup recompõe tudo a cada corrida**, em vez de aplicar diferenças. É de propósito:
+  um item deixa de estar escondido por razões que não passam por ele (a NF que o escondia
+  foi cancelada, a parcela foi removida no ERP, a config trocou de `titulo` para `nf`).
+  Aplicar só o que mudou deixaria ocultações órfãs — cards escondidos atrás de originais
+  que não existem mais, invisíveis para sempre e sem ninguém para notar.
 - **`notas_funil` é `security_invoker`.** Um usuário com `antecipacao` mas sem `radar`
   ou `mercado` vê `fornecedor_tem_protesto` e `fornecedor_uf` como null — as tabelas de
   base são de outros módulos. A **classificação** não é afetada: o worker usa service

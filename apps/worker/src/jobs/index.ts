@@ -55,6 +55,7 @@ import { sugerirPassivosJob } from './comercial/passivos.js'
 import {
   detectarPrimeiraOperacaoJob,
   rotearNotasJob,
+  rotearOportunidadesJob,
   vendedoresSemAtividadeJob,
 } from './comercial/roteamento.js'
 import {
@@ -95,6 +96,10 @@ import {
   sincronizarNotasFiscais,
 } from './antecipacao/sync-nfs.js'
 import { lerConfigConversao } from '../antecipacao/config.js'
+import { sincronizarPreAutorizacoes } from './funil/sync-preautorizacoes.js'
+import { sincronizarTitulosSienge } from './funil/sync-titulos.js'
+import { deduplicarOportunidades } from './funil/deduplicar.js'
+import { reclassificarOportunidades } from './funil/reclassificar.js'
 import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
@@ -136,6 +141,8 @@ import { plantaoDeEventos } from '../comunicacao/plantao.js'
 export type TipoJob =
   | 'antecipacao-recuperar-nfs'
   | 'antecipacao-promover-resumos'
+  | 'funil-sync-fontes'
+  | 'funil-deduplicar'
   | 'webhooks-entregar'
   | 'credito-baixar-documento'
   | 'receita'
@@ -618,6 +625,83 @@ export function dispararBaixarDocumento(docId: string): string {
   })
 }
 
+// ─── As duas fontes novas do funil (Prompt 04s) ─────────────────────────────
+
+/**
+ * Os dois syncs do 04s + a deduplicação, com ingestão própria para cada um.
+ *
+ * ── BEST-EFFORT POR DENTRO, E ISSO É DELIBERADO ─────────────────────────────
+ * Encadeado ao sync de NFs, este bloco não pode derrubar uma ingestão de notas
+ * que JÁ TERMINOU COM SUCESSO quando chegamos aqui. Uma indisponibilidade do
+ * endpoint de pré-autorizações não pode apagar 800 notas do relatório do dia.
+ * A falha fica registrada na ingestão própria, com a política de alerta padrão, e
+ * a corrida seguinte tenta de novo.
+ *
+ * ── A DEDUPLICAÇÃO VEM DEPOIS DOS DOIS, SEMPRE ──────────────────────────────
+ * Ela decide quem esconde quem, e decidir com metade das listas carregadas é
+ * pior que não decidir: uma NF seria escondida atrás de uma parcela que ainda não
+ * chegou, ou uma pré-autorização ficaria visível ao lado do título dela. Por isso
+ * ela roda fora dos dois `try`, sobre o que existir no banco — inclusive quando um
+ * dos syncs falhou, porque aí a recomposição é justamente o que devolve à tela o
+ * que a corrida anterior havia escondido.
+ */
+async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<unknown> {
+  const resultado: Record<string, unknown> = { modo }
+
+  const idPre = await abrirIngestao('onepay_pre_autorizacoes', { origem: modo })
+  try {
+    const pre = await sincronizarPreAutorizacoes(modo)
+    await concluirIngestao(
+      idPre,
+      'onepay_pre_autorizacoes',
+      { linhas_processadas: pre.lidas, linhas_novas: pre.novas, linhas_atualizadas: pre.atualizadas },
+      { sync: pre },
+    )
+    resultado.pre_autorizacoes = pre
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Sync de pré-autorizações falhou; a corrente segue.')
+    await falharIngestao(idPre, 'onepay_pre_autorizacoes', erro)
+    resultado.pre_autorizacoes = { erro: String(erro) }
+  }
+
+  const idTit = await abrirIngestao('onepay_sienge_titulos', { origem: modo })
+  try {
+    const tit = await sincronizarTitulosSienge(modo)
+    await concluirIngestao(
+      idTit,
+      'onepay_sienge_titulos',
+      { linhas_processadas: tit.lidas, linhas_novas: tit.novas, linhas_atualizadas: tit.atualizadas },
+      { sync: tit },
+    )
+    resultado.titulos = tit
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Sync de títulos Sienge falhou; a corrente segue.')
+    await falharIngestao(idTit, 'onepay_sienge_titulos', erro)
+    resultado.titulos = { erro: String(erro) }
+  }
+
+  try {
+    resultado.dedup = await deduplicarOportunidades()
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Deduplicação do funil falhou; a corrente segue.')
+    resultado.dedup = { erro: String(erro) }
+  }
+
+  return resultado
+}
+
+/** As duas fontes novas sob demanda — o botão "sincronizar agora" da tela. */
+export function dispararSyncFontesDoFunil(modo: 'novidade' | 'estado' = 'novidade'): string {
+  return dispararAvulso('funil-sync-fontes', async () => sincronizarFontesDoFunil(modo))
+}
+
+/** A deduplicação sozinha. Existe para depois de trocar `prioridade_nf_vs_titulo`:
+ *  a config muda quem aparece, e esperar quatro horas para ver o efeito de uma
+ *  decisão que se acabou de tomar é o tipo de espera que faz ninguém tomar. */
+export function dispararDedupFunil(): string {
+  return dispararAvulso('funil-deduplicar', async () => deduplicarOportunidades())
+}
+
 // ─── Antecipação (Prompt 04) ─────────────────────────────────────────────────
 
 /**
@@ -665,6 +749,17 @@ export async function dispararSyncNfs(): Promise<string> {
         promocao = { erro: String(erro) }
       }
 
+      /*
+       * AS DUAS FONTES NOVAS (04s), na mesma corrida e ANTES da reclassificação.
+       *
+       * O motivo é o mesmo que põe a promoção de resumos aqui: a faixa é o que
+       * ordena o Kanban, e um card que chega sem faixa fica no fim da fila até o
+       * job diário. Para uma pré-autorização isso é pior que para uma NF — ela tem
+       * RELÓGIO, e uma oferta que expira em dois dias não pode passar o primeiro
+       * deles invisível no rodapé da coluna.
+       */
+      const fontesDoFunil = await sincronizarFontesDoFunil('novidade')
+
       // O lookup ENTRE o sync e a reclassificação, não depois: o fornecedor chega na
       // nota só com nome e CNPJ, e é o cadastro dele (capital, situação, Simples) que
       // as variáveis de faixa leem. Rodando só no diário, toda nota sincronizada
@@ -676,6 +771,10 @@ export async function dispararSyncNfs(): Promise<string> {
       // há um sync a cada 4h esperando, e o que sobrar entra na próxima.
       const lookup = await lookupCadastral({ orcamentoMs: 4 * 60_000 })
       const reclass = await reclassificarFunil(client)
+      // As fontes novas pelo MESMO motor, logo depois — e não dentro do de cima:
+      // o funil de NFs não muda (04s §1), e o que se compartilha é a expressão da
+      // regra, não o job.
+      const reclassOportunidades = await reclassificarOportunidades(client)
       // As antecipações DEPOIS da reclassificação, e não antes (04e §3): a
       // reclassificação expira notas cujo vencimento chegou perto demais, e uma
       // nota que acabou de ser ANTECIPADA não é uma nota expirada. Rodando nesta
@@ -727,6 +826,8 @@ export async function dispararSyncNfs(): Promise<string> {
 
       await anotarMeta(id, {
         sync, promocao, lookup, reclassificacao: reclass, antecipacoes, outbox,
+        fontes_do_funil: fontesDoFunil,
+        reclassificacao_oportunidades: reclassOportunidades,
         funil_fornecedores: funilFornecedores,
         funil_sacados: funilSacados,
       })
@@ -800,6 +901,26 @@ export function dispararAntecipacaoDiario(): string {
       varredura = { erro: String(erro) }
     }
 
+    /*
+     * A varredura de ESTADO das duas fontes novas (04s §3), e ela não é opcional.
+     *
+     * Os dois endpoints filtram por data de ENTRADA, nunca por atualização. Uma
+     * pré-autorização criada há vinte dias que expirou hoje, ou um título que saiu
+     * de `ready_to_create` para `offer_created`, JAMAIS apareceriam na janela curta
+     * de 7 dias do ciclo de 4h. Sem esta passada o funil congela no estado do dia
+     * em que cada item entrou — e segue oferecendo o que já morreu.
+     *
+     * Best-effort como a varredura de NFs, e pelo mesmo motivo: endpoint fora do ar
+     * não pode impedir o resto do diário de rodar sobre o que já está aqui.
+     */
+    let fontesDoFunil: unknown
+    try {
+      fontesDoFunil = await sincronizarFontesDoFunil('estado')
+    } catch (erro) {
+      logger.error({ erro: String(erro) }, 'Varredura das fontes do funil falhou; o diário segue.')
+      fontesDoFunil = { erro: String(erro) }
+    }
+
     const supressoes = await limparSupressoesExpiradas()
     const lookup = await lookupCadastral()
     // Depois do lookup, de propósito: promover um fornecedor cria a empresa, e
@@ -807,6 +928,7 @@ export function dispararAntecipacaoDiario(): string {
     // recém-promovido esperaria até amanhã.
     const contatos = await backfillContatosNf()
     const reclassificacao = await reclassificarFunil(client)
+    const reclassificacaoOportunidades = await reclassificarOportunidades(client)
     /*
      * A rede de segurança das antecipações — e ela deixou de ser só sobre buracos.
      *
@@ -831,7 +953,18 @@ export function dispararAntecipacaoDiario(): string {
     // Roteamento DEPOIS da reclassificação: a faixa muda com o calendário, e uma nota
     // que entrou em faixa hoje precisa de dono hoje — não na segunda que vem.
     const roteamento = await rotearNotasJob()
-    return { varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox, roteamento }
+    /*
+     * E o roteamento das fontes novas logo atrás. Não é cosmético: a RLS das duas
+     * tabelas recorta por `vendedor_id`, então um item sem dono não é um item na
+     * fila do gestor — é um item que o originador LITERALMENTE não consegue ver.
+     */
+    const roteamentoOportunidades = await rotearOportunidadesJob()
+    return {
+      varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox, roteamento,
+      fontes_do_funil: fontesDoFunil,
+      reclassificacao_oportunidades: reclassificacaoOportunidades,
+      roteamento_oportunidades: roteamentoOportunidades,
+    }
   })
 }
 

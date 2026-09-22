@@ -110,6 +110,8 @@ import {
   JobEmExecucaoError,
   dispararRecuperacaoNfs,
   dispararPromocaoResumos,
+  dispararSyncFontesDoFunil,
+  dispararDedupFunil,
 } from './jobs/index.js'
 import {
   processarWebhookResend,
@@ -911,6 +913,37 @@ app.post('/jobs/antecipacao/recuperar-nfs', (req: Request, res: Response, next: 
 app.post('/jobs/antecipacao/promover-resumos', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararPromocaoResumos(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * As duas fontes novas do funil (04s), sob demanda.
+ *
+ * `modo=estado` varre os 92 dias e é o que se pede quando alguém desconfia de que
+ * um item mudou de estado sem que a tela soubesse — que é o caso normal, já que os
+ * dois endpoints filtram por data de ENTRADA e não de atualização.
+ */
+app.post('/jobs/funil/sync-fontes', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const modo = req.body?.modo === 'estado' ? 'estado' : 'novidade'
+    res.status(202).json({ job_id: dispararSyncFontesDoFunil(modo), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/**
+ * A deduplicação sozinha — a rota de depois de trocar `prioridade_nf_vs_titulo`.
+ *
+ * A config decide quem aparece (a parcela ou a nota), e esperar o próximo ciclo
+ * de quatro horas para ver o efeito de uma decisão que se acabou de tomar é o tipo
+ * de espera que faz ninguém tomar a decisão.
+ */
+app.post('/jobs/funil/deduplicar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararDedupFunil(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

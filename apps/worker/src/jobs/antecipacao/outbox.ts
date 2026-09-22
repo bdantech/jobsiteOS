@@ -100,7 +100,7 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
         continue
       }
 
-      const notas = await notasDoFornecedor(f.fornecedor_cnpj, faixa, passivos)
+      const notas = await oportunidadesDoFornecedor(f.fornecedor_cnpj, faixa, passivos)
       // Zero notas aqui inclui o caso em que TODAS eram de sacado passivo: o
       // fornecedor simplesmente não tem o que ser abordado nesta faixa.
       if (notas.length === 0) continue
@@ -115,10 +115,26 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
         ),
       }
       const valorTotal = notas.reduce((s, n) => s + Number(n.valor ?? 0), 0)
-      const accessKeys = notas.map((n) => n.access_key)
+      /*
+       * Duas listas, e cada uma responde uma pergunta diferente.
+       *
+       * `accessKeys` são as chaves de DOCUMENTO FISCAL envolvidas — o que já era, e
+       * o que o resto do sistema lê. A pré-autorização não tem nenhuma, então ela
+       * simplesmente não entra ali.
+       *
+       * `oportunidades` é a identidade do funil unificado, e é ela que responde
+       * "sobre o que exatamente foi esta mensagem?" quando alguém abre o histórico
+       * seis meses depois.
+       */
+      const accessKeys = notas.map((n) => n.access_key).filter((k): k is string => Boolean(k))
+      const oportunidades = notas.map((n) => `${n.tipo}:${n.id}`)
 
       for (const canal of canaisHabilitados(disparo)) {
-        const contato = await escolherContato(f.fornecedor_empresa_id, canal, contatoDoPayload(notas))
+        const contato = await escolherContato(
+          f.fornecedor_empresa_id,
+          canal,
+          await contatoDaNotaDoFornecedor(f.fornecedor_cnpj),
+        )
 
         if (!contato) {
           await registrar({
@@ -126,6 +142,7 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
             faixa,
             fornecedor: f,
             accessKeys,
+            oportunidades,
             valorTotal,
             destinatario: null,
             contatoId: null,
@@ -152,6 +169,7 @@ export async function gerarOutbox(): Promise<ResultadoOutbox> {
           faixa,
           fornecedor: f,
           accessKeys,
+          oportunidades,
           valorTotal,
           destinatario: contato.valor,
           contatoId: contato.id,
@@ -196,9 +214,44 @@ async function fornecedoresElegiveis(faixa: Faixa): Promise<FornecedorElegivel[]
     logger.error({ faixa, erro: error.message }, 'Falha ao listar fornecedores elegíveis.')
     return []
   }
-  return (data ?? []).filter(
+  const daNf = (data ?? []).filter(
     (f): f is FornecedorElegivel => typeof f.fornecedor_cnpj === 'string',
   )
+
+  /*
+   * E os fornecedores que só existem nas FONTES NOVAS (04s §9).
+   *
+   * `antecipacao_fornecedores` é uma visão das NFs, por construção. Um fornecedor
+   * cuja única oportunidade é uma pré-autorização em WAITING_CONTRACTED não
+   * aparece lá — e ele é justamente o caso mais quente que existe: a construtora
+   * já ofereceu, o crédito já existe, e ele ainda nem é nosso cliente. Deixá-lo
+   * fora da outbox seria ter o sinal e não usá-lo.
+   *
+   * O merge é por CNPJ e a lista da NF tem precedência: ela traz o agregado
+   * completo do fornecedor, que é melhor que o recorte de uma fonte só.
+   */
+  const { data: novas } = await supabaseAdmin
+    .from('funil_oportunidades')
+    .select('fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_suprimido')
+    .eq('faixa', faixa)
+    .neq('tipo', 'nf')
+    .in('estagio_funil', [...ESTAGIOS_ABERTOS])
+    .limit(4000)
+
+  const porCnpj = new Map(daNf.map((f) => [f.fornecedor_cnpj, f]))
+  for (const f of novas ?? []) {
+    // Credor pessoa física chega aqui com CNPJ nulo. Ele não casa com `empresas`,
+    // não tem carteira e não tem contato — abordá-lo não é possível nem desejado.
+    if (typeof f.fornecedor_cnpj !== 'string' || porCnpj.has(f.fornecedor_cnpj)) continue
+    porCnpj.set(f.fornecedor_cnpj, {
+      fornecedor_cnpj: f.fornecedor_cnpj,
+      fornecedor_nome: f.fornecedor_nome,
+      fornecedor_empresa_id: f.fornecedor_empresa_id,
+      fornecedor_suprimido: f.fornecedor_suprimido,
+    })
+  }
+
+  return [...porCnpj.values()]
 }
 
 /**
@@ -219,17 +272,54 @@ async function sacadosPassivos(): Promise<Set<string>> {
   return new Set((data ?? []).map((e) => e.cnpj))
 }
 
-async function notasDoFornecedor(cnpj: string, faixa: Faixa, passivos: ReadonlySet<string>) {
+/**
+ * As OPORTUNIDADES vivas do fornecedor nesta faixa — os três tipos, somados.
+ *
+ * Lê a projeção e não `notas_funil`, e é isso que cumpre a promessa do §9: um
+ * fornecedor com 2 NFs, 1 pré-autorização e 1 parcela recebe UM toque, com o valor
+ * somado. Antes ele receberia um toque falando de duas notas e ficaria sem saber
+ * das outras duas oportunidades — ou, pior, receberia três mensagens.
+ *
+ * `access_key` vem nula para pré-autorização e para a parcela cujo ERP não
+ * informou a chave. É o certo: a coluna é a chave do DOCUMENTO FISCAL, e nem toda
+ * oportunidade tem um. A identidade que vale para as três é `tipo:id`.
+ */
+async function oportunidadesDoFornecedor(
+  cnpj: string,
+  faixa: Faixa,
+  passivos: ReadonlySet<string>,
+) {
   const { data } = await supabaseAdmin
-    .from('notas_funil')
-    .select('access_key, valor, receita_esperada, sacado_nome, sacado_cnpj, contato_fornecedor')
+    .from('funil_oportunidades')
+    .select('tipo, id, access_key, valor, receita_esperada, sacado_nome, sacado_cnpj')
     .eq('fornecedor_cnpj', cnpj)
     .eq('faixa', faixa)
     .in('estagio_funil', [...ESTAGIOS_ABERTOS])
     .limit(200)
+
   return (data ?? [])
-    .filter((n): n is typeof n & { access_key: string } => Boolean(n.access_key))
+    .filter((n): n is typeof n & { tipo: string; id: string } => Boolean(n.tipo && n.id))
     .filter((n) => !n.sacado_cnpj || !passivos.has(n.sacado_cnpj))
+}
+
+/**
+ * O `supplier.contact` que veio no payload da NF.
+ *
+ * Continua vindo de `notas_funil`: é uma informação que só a nota traz (a
+ * pré-autorização e a parcela não carregam contato do fornecedor), e buscá-la aqui
+ * é mais honesto que carregar uma coluna vazia na projeção inteira para os outros
+ * dois tipos.
+ */
+async function contatoDaNotaDoFornecedor(
+  cnpj: string,
+): Promise<{ email?: string | null; phone?: string | null } | null> {
+  const { data } = await supabaseAdmin
+    .from('notas_funil')
+    .select('contato_fornecedor')
+    .eq('fornecedor_cnpj', cnpj)
+    .not('contato_fornecedor', 'is', null)
+    .limit(5)
+  return contatoDoPayload(data ?? [])
 }
 
 /**
@@ -373,6 +463,8 @@ async function registrar(args: {
   faixa: Faixa
   fornecedor: FornecedorElegivel
   accessKeys: string[]
+  /** `nf:<chave>` | `pre_autorizacao:<id>` | `titulo:<id>` — a identidade das três. */
+  oportunidades: string[]
   valorTotal: number
   destinatario: string | null
   contatoId: string | null
@@ -394,6 +486,7 @@ async function registrar(args: {
     destinatario_ponto_focal: args.pontoFocal,
     whatsapp_conta_id: args.whatsappContaId,
     access_keys: args.accessKeys,
+    oportunidades: args.oportunidades,
     valor_total: args.valorTotal,
     assunto: args.assunto,
     corpo: args.corpo,
@@ -412,10 +505,11 @@ async function registrar(args: {
       resumo:
         `Mensagem de ${args.canal} gerada (aguardando aprovação) para ` +
         `${args.fornecedor.fornecedor_nome ?? args.fornecedor.fornecedor_cnpj}: ` +
-        `${args.accessKeys.length} nota(s), ${formatarMoeda(args.valorTotal)}.`,
+        `${args.oportunidades.length} oportunidade(s), ${formatarMoeda(args.valorTotal)}.`,
       canal: args.canal,
       faixa: args.faixa,
       access_keys: args.accessKeys,
+      oportunidades: args.oportunidades,
     })
   }
 }

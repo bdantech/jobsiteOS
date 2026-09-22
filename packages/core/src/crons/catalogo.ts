@@ -89,6 +89,8 @@ export const CRONS: readonly CronCatalogado[] = [
       'De 4 em 4 horas: puxa as NFs novas da Onepay, resolve cadastro dos CNPJs desconhecidos e reclassifica o funil.',
     destino: 'POST /jobs/antecipacao/sync-nfs',
     encadeia: [
+      'Pré-autorizações e títulos Sienge (04s), janela curta de 7 dias — as duas fontes novas do MESMO funil. Encadeadas e não em cron próprio porque a faixa é o que ordena o Kanban, e um card que chega sem faixa fica no fim da fila até o diário; para uma pré-autorização isso é pior que para uma NF, porque ela tem RELÓGIO e passaria invisível o primeiro dos poucos dias que tem',
+      'Deduplicação do funil (04s §5) — quem esconde quem, recomposto do zero depois de cada sync',
       'Sync de antecipações (conversão de nota em operação)',
       'Funil de cadastro de fornecedores (04l) — a munição dele vem exatamente das notas que acabaram de chegar; num relógio próprio, o card mostraria o volume de até quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban como lead',
       'Funil de Sacados por NF (04r) — mesma razão pelo outro lado da nota, e aqui a defasagem seria pior: `valor_operavel` mede quanto de vida a nota AINDA tem, e num relógio próprio o card mostraria por horas um número que já encolheu',
@@ -112,6 +114,10 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Limpa supressões vencidas, consome a fila de lookup cadastral, reclassifica com expiração e regenera a outbox. É o job que impede o funil de apodrecer — as notas não mudam, o calendário muda. Roda antes do primeiro sync do dia.',
     destino: 'POST /jobs/antecipacao/diario',
+    encadeia: [
+      'Varredura de ESTADO das pré-autorizações e títulos Sienge (04s §3), 92 dias — e ela NÃO é opcional. Os dois endpoints filtram por data de ENTRADA, nunca de atualização: uma oferta criada há vinte dias que expirou hoje, ou um título que saiu de `ready_to_create` para `offer_created`, jamais apareceriam na janela curta de 7 dias do ciclo de 4h. Sem esta passada o funil congela no estado do dia em que cada item entrou e segue oferecendo o que já morreu',
+      'Roteamento das fontes novas — e não é cosmético: a RLS das duas tabelas recorta por `vendedor_id`, então um item sem dono não é um item na fila do gestor, é um item que o originador LITERALMENTE não consegue ver',
+    ],
   },
   {
     path: '/api/cron/antecipacao-calibrar',

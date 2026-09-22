@@ -633,8 +633,154 @@ const { data: empresaFlag } = await admin
 check('o trigger marcou tem_processo_nosso_ativo na empresa devedora',
   empresaFlag?.tem_processo_nosso_ativo === true, `-> ${empresaFlag?.tem_processo_nosso_ativo}`)
 
+// ── 04s: o isolamento entre DOIS originadores, lido PELA PROJEÇÃO ───────────
+//
+// Este bloco existe por uma armadilha de Postgres que a spec manda cobrir: uma
+// view executa com os privilégios de quem a CRIOU e, por padrão, IGNORA o RLS das
+// tabelas de base. As políticas de `pre_autorizacoes` e `sienge_titulos` podem
+// estar perfeitas e, ainda assim, o originador A enxergar a carteira do B através
+// de `funil_oportunidades`.
+//
+// Por isso o teste não pergunta pelas tabelas. Ele autentica como DOIS
+// originadores diferentes e lê a PROJEÇÃO, que é onde o vazamento aconteceria.
+console.log('\n── 04s: dois originadores, isolamento na projeção ──')
+
+const EMAIL_B = 'rls-probe-b@oneos.com.br'
+const SENHA_B = 'Probe-RLS-2026-b-xyz!'
+
+for (const u of (await admin.auth.admin.listUsers()).data.users) {
+  if (u.email === EMAIL_B) await admin.auth.admin.deleteUser(u.id)
+}
+const { data: criadoB } = await admin.auth.admin.createUser({
+  email: EMAIL_B, password: SENHA_B, email_confirm: true,
+})
+const uidB = criadoB.user.id
+await admin.from('usuarios').insert({
+  id: uidB, nome: 'Sonda RLS B', email: EMAIL_B, perfil_id: perfilVendas.id, ativo: true,
+})
+
+// Dois ORIGINADORES, sem hierarquia e sem `vendedor_acessos` entre eles: é o
+// recorte mais estreito que existe, e o único em que o vazamento aparece.
+const { data: vendA } = await admin.from('vendedores')
+  .insert({ nome: 'Sonda Originador A', tipo: 'originador', ativo: true, usuario_id: uid })
+  .select('id').single()
+const { data: vendB } = await admin.from('vendedores')
+  .insert({ nome: 'Sonda Originador B', tipo: 'originador', ativo: true, usuario_id: uidB })
+  .select('id').single()
+
+const PRE_A = 990000001
+const PRE_B = 990000002
+const TIT_A = 990000003
+
+await admin.from('pre_autorizacoes').insert([
+  {
+    id_externo: PRE_A, status: 'WAITING_CONTRACTED', origin: 'sienge', valor: 16500,
+    criada_em: new Date().toISOString(),
+    expira_em: new Date(Date.now() + 2 * 86400000).toISOString(),
+    vencimento: '2026-12-01',
+    sacado_cnpj: '11222333000181', sacado_matriz_cnpj: '11222333000181', sacado_nome: 'SACADO PROBE',
+    fornecedor_cnpj: '11444777000161', fornecedor_nome: 'FORNECEDOR DO PROBE LTDA',
+    fornecedor_cadastrado: true, vendedor_id: vendA.id, vendedor_origem: 'carteira',
+  },
+  {
+    id_externo: PRE_B, status: 'WAITING_CONTRACTED', origin: 'nfe', valor: 42000,
+    criada_em: new Date().toISOString(), vencimento: '2026-12-15',
+    sacado_cnpj: '11222333000181', sacado_matriz_cnpj: '11222333000181', sacado_nome: 'SACADO PROBE',
+    fornecedor_cnpj: '11444777000242', fornecedor_nome: 'OUTRO FORNECEDOR',
+    fornecedor_cadastrado: true, vendedor_id: vendB.id, vendedor_origem: 'carteira',
+  },
+])
+
+await admin.from('sienge_titulos').insert({
+  id_externo: TIT_A, situation: 'ready_to_create', valor: 17348.71, bill_id: 4242,
+  installment_id: 1, installment_number: 2, connection_id: 7,
+  primeira_vez_visto: new Date().toISOString(), vencimento: '2026-11-04',
+  // `retencao` fica AUSENTE de propósito: null é "o ERP não informou", e o probe
+  // confirma que a coluna não tem default que o transforme em zero.
+  sacado_cnpj: '11222333000181', sacado_matriz_cnpj: '11222333000181',
+  credor_cnpj: '11444777000161', credor_nome: 'FORNECEDOR DO PROBE LTDA',
+  credor_pessoa_fisica: false, vendedor_id: vendA.id, vendedor_origem: 'carteira',
+})
+
+const { data: retencaoGravada } = await admin
+  .from('sienge_titulos').select('retencao').eq('id_externo', TIT_A).single()
+check('a retenção ausente permanece NULL (tri-estado), nunca zero',
+  retencaoGravada?.retencao === null, `-> ${retencaoGravada?.retencao}`)
+
+const userB = createClient(SB_URL, ANON, { auth: { persistSession: false } })
+await userB.auth.signInWithPassword({ email: EMAIL_B, password: SENHA_B })
+
+const rs1 = await user.from('funil_oportunidades')
+  .select('tipo, id, vendedor_id').in('id', [String(PRE_A), String(PRE_B), String(TIT_A)])
+const idsA = new Set((rs1.data ?? []).map((o) => `${o.tipo}:${o.id}`))
+check('A vê, PELA VIEW, a pré-autorização e o título da carteira dele',
+  idsA.has(`pre_autorizacao:${PRE_A}`) && idsA.has(`titulo:${TIT_A}`),
+  `-> ${[...idsA].join(', ') || 'nada'} err=${rs1.error?.code ?? 'nenhum'}`)
+check('A NÃO vê a pré-autorização do B pela view (security_invoker)',
+  !idsA.has(`pre_autorizacao:${PRE_B}`),
+  '-> A VIEW ESTÁ IGNORANDO O RLS DAS TABELAS DE BASE!')
+
+const rs2 = await userB.from('funil_oportunidades')
+  .select('tipo, id').in('id', [String(PRE_A), String(PRE_B), String(TIT_A)])
+const idsB = new Set((rs2.data ?? []).map((o) => `${o.tipo}:${o.id}`))
+check('B vê, pela view, só o que é dele',
+  idsB.has(`pre_autorizacao:${PRE_B}`) && !idsB.has(`pre_autorizacao:${PRE_A}`) && !idsB.has(`titulo:${TIT_A}`),
+  `-> ${[...idsB].join(', ') || 'nada'}`)
+
+// E nas TABELAS, para que a falha diga em qual das duas camadas ela está.
+const rs3 = await user.from('pre_autorizacoes').select('id_externo').eq('id_externo', PRE_B)
+check('A também não alcança a pré-autorização do B na tabela',
+  (rs3.data?.length ?? 0) === 0, `-> ${rs3.data?.length ?? 0} linhas`)
+
+const rs4 = await userB.from('sienge_titulos').select('id_externo').eq('id_externo', TIT_A)
+check('B não alcança o título do A na tabela',
+  (rs4.data?.length ?? 0) === 0, `-> ${rs4.data?.length ?? 0} linhas`)
+
+// A projeção é SÓ LEITURA. Ninguém escreve nela — nem quem enxerga a linha.
+const rs5 = await user.from('funil_oportunidades').update({ faixa: 'alta' }).eq('id', String(PRE_A))
+check('a projeção não aceita escrita', !!rs5.error, `-> err=${rs5.error?.code ?? 'NENHUM — ESCREVEU NA VIEW!'}`)
+
+// Mover a oportunidade passa pelo RPC, e o RPC exige o módulo — que A tem aqui.
+const rs6 = await user.rpc('app_mover_oportunidade', {
+  p: { tipo: 'pre_autorizacao', id: String(PRE_A), estagio_funil: 'em_negociacao' },
+})
+check('A move a própria oportunidade pelo RPC', !rs6.error,
+  `-> err=${rs6.error?.message ?? 'nenhum'}`)
+
+// "Em prospecção" é FATO (uma mensagem saiu), nunca escolha de quem olha o card.
+const rs7 = await user.rpc('app_mover_oportunidade', {
+  p: { tipo: 'titulo', id: String(TIT_A), estagio_funil: 'em_prospeccao' },
+})
+check('o RPC recusa mover para "em prospecção" à mão',
+  rs7.error?.code === '42501', `-> err=${rs7.error?.code ?? 'NENHUM — MOVEU!'}`)
+
+// Perder sem motivo é o que apaga a razão de a faixa existir.
+const rs8 = await user.rpc('app_mover_oportunidade', {
+  p: { tipo: 'titulo', id: String(TIT_A), estagio_funil: 'perdida' },
+})
+check('o RPC exige motivo para perder', rs8.error?.code === '23514',
+  `-> err=${rs8.error?.code ?? 'NENHUM — PERDEU SEM MOTIVO!'}`)
+
+// A NF continua sendo movida pela função DELA. Dois caminhos para a mesma coisa
+// divergiriam, e o banco recusa o atalho.
+const rs9 = await user.rpc('app_mover_oportunidade', {
+  p: { tipo: 'nf', id: CHAVE_PROBE, estagio_funil: 'em_negociacao' },
+})
+check('o RPC das fontes novas recusa tipo "nf"', rs9.error?.code === '22023',
+  `-> err=${rs9.error?.code ?? 'NENHUM — MOVEU UMA NF POR FORA!'}`)
+
 // ── teardown ─────────────────────────────────────────────────────────────────
 if (rm7.data?.id) await admin.from('segmentos').delete().eq('id', rm7.data.id)
+// 04s antes das empresas: as duas tabelas referenciam `empresas` e `vendedores`.
+await admin.from('funil_ocultacoes').delete().in('referencia_id', [String(PRE_A), String(PRE_B), String(TIT_A)])
+await admin.from('funil_selos_preauth').delete().in('referencia_id', [String(PRE_A), String(PRE_B), String(TIT_A)])
+await admin.from('sienge_titulos').delete().eq('id_externo', TIT_A)
+await admin.from('pre_autorizacoes').delete().in('id_externo', [PRE_A, PRE_B])
+// `vendedores.usuario_id` aponta para `usuarios`: os vendedores saem primeiro,
+// senão a linha do usuário A (que o teardown geral apaga) fica presa pela FK.
+await admin.from('vendedores').delete().in('id', [vendA.id, vendB.id])
+await admin.from('usuarios').delete().eq('id', uidB)
+await admin.auth.admin.deleteUser(uidB)
 await admin.from('notas_fiscais').delete().eq('access_key', CHAVE_PROBE)
 await admin.from('supressao').delete().eq('valor', '11444777000161')
 await admin.from('mercado_universo').delete().in('cnpj', ['11222333000181', '11444777000161', '11444777000242', '33000167000101'])

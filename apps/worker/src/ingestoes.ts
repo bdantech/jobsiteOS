@@ -215,4 +215,14 @@ const COMO_REEXECUTAR: Record<FonteIngestao, string> = {
     'cessão, não vira comissão e não aparece no relatório de ninguém. ' +
     REEXECUTAR_PELA_TELA,
   onepay_credit_analyses: REEXECUTAR_PELA_TELA,
+  onepay_pre_autorizacoes:
+    'Enquanto isto não voltar, as OFERTAS que a construtora já fez não chegam aqui — e elas ' +
+    'têm relógio. Uma pré-autorização em WAITING_CONTRACTED expira em poucos dias, e o ' +
+    'trabalho para salvá-la é um telefonema que ninguém vai dar se o card não existir. ' +
+    REEXECUTAR_PELA_TELA,
+  onepay_sienge_titulos:
+    'Enquanto isto não voltar, o funil enxerga só o lado do fornecedor: as parcelas do ' +
+    'contas-a-pagar da construtora param de chegar, e com elas a visão de quantas parcelas ' +
+    'um título tem e de quais já foram pagas por fora. ' +
+    REEXECUTAR_PELA_TELA,
 }

@@ -19,9 +19,13 @@ import {
   FAIXA_LABELS,
   TIPAGENS,
   TIPAGEM_LABELS,
+  TIPOS_OPORTUNIDADE,
+  TIPO_OPORTUNIDADE_DESCRICOES,
+  TIPO_OPORTUNIDADE_LABELS,
   type EstagioFunil,
   type Faixa,
   type Tipagem,
+  type TipoOportunidade,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,17 +52,17 @@ import { useDebounce } from '@/components/empresas/use-debounce'
 import { cn } from '@/lib/utils'
 import { formatarInteiro, formatarMoeda } from './format'
 import { CabecalhoDaColuna, ColunaVazia } from '@/components/comercial/card-funil'
-import { NotaCard } from './nota-card'
+import { OportunidadeCard } from './oportunidade-card'
 import { DonoDoCard } from '@/components/comercial/dono-do-card'
 import {
-  ORDENS_FUNIL,
+  ORDENS_OPORTUNIDADE,
   PAGINA_FUNIL,
   buscarContasDosSacados,
   mapaDeContas,
   antecipacaoKeys,
   buscarConfig,
   buscarFornecedores,
-  buscarFunil,
+  buscarOportunidades,
   type FiltrosFunil,
   type FornecedorFunil,
   type OrdemFunil,
@@ -99,6 +103,9 @@ const TITULO_COLUNA: Record<string, string> = {
 /** Sentinelas do filtro por originador, para caberem num `<Select>` de strings. */
 const TODOS = '__todos__'
 const SEM_DONO = '__sem_dono__'
+
+/** A preferência de ORIGEM do funil, por navegador. Ver o estado `tipos`. */
+const CHAVE_TIPOS = 'jobsiteos:funil:tipos'
 
 /** Quantas páginas a coluna busca sozinha antes de exigir um clique. Ver `ColunaFunil`. */
 const AUTO_PAGINAS = 4
@@ -142,6 +149,45 @@ export function FunilKanban({
    * sumiu?"), não para trabalhar.
    */
   const [incluirSuprimidos, setIncluirSuprimidos] = React.useState(false)
+
+  /*
+   * O filtro por ORIGEM (04s §8), persistido por usuário.
+   *
+   * Persistido porque ele descreve COMO a pessoa trabalha, não o que ela está
+   * procurando agora: quem cuida da carteira Sienge abre a tela nas parcelas todo
+   * dia, e reescolher isso a cada visita é a diferença entre uma preferência e uma
+   * tarefa. Os outros filtros (faixa, valor, datas) são perguntas do momento e
+   * nascem limpos de propósito.
+   *
+   * Vazio = os TRÊS. É o default e é o certo: o funil é a lista inteira, e a
+   * unificação existe justamente para que ninguém precise escolher um canal.
+   */
+  const [tipos, setTipos] = React.useState<TipoOportunidade[]>([])
+  React.useEffect(() => {
+    try {
+      const guardado = window.localStorage.getItem(CHAVE_TIPOS)
+      if (!guardado) return
+      const lidos = JSON.parse(guardado) as unknown
+      if (Array.isArray(lidos)) {
+        setTipos(lidos.filter((t): t is TipoOportunidade => TIPOS_OPORTUNIDADE.includes(t)))
+      }
+    } catch {
+      // Storage bloqueado ou JSON estragado: o funil abre com os três tipos, que é
+      // o default. Uma preferência perdida não pode impedir a tela de carregar.
+    }
+  }, [])
+
+  const alternarTipo = React.useCallback((t: TipoOportunidade) => {
+    setTipos((atual) => {
+      const proximo = atual.includes(t) ? atual.filter((x) => x !== t) : [...atual, t]
+      try {
+        window.localStorage.setItem(CHAVE_TIPOS, JSON.stringify(proximo))
+      } catch {
+        // Idem: a preferência não persiste, mas o filtro vale para esta sessão.
+      }
+      return proximo
+    })
+  }, [])
 
   const termoDebounced = useDebounce(termo, 350)
   const valorMinD = useDebounce(valorMin, 400)
@@ -217,6 +263,7 @@ export function FunilKanban({
   const base: FiltrosFunil = React.useMemo(
     () => ({
       termo: termoDebounced || undefined,
+      tipos: tipos.length > 0 ? tipos : undefined,
       faixa,
       tipagem,
       vendedorId: vendedorEfetivo,
@@ -234,6 +281,7 @@ export function FunilKanban({
     [
       incluirSuprimidos,
       termoDebounced,
+      tipos,
       faixa,
       tipagem,
       vendedorEfetivo,
@@ -333,6 +381,27 @@ export function FunilKanban({
         </Select>
       )}
 
+      {/*
+        A ORIGEM primeiro, antes da faixa: ela responde "de qual lista estou
+        falando", e faixa/tipagem são recortes DENTRO da lista. Inverter faria a
+        pessoa filtrar por faixa e só então descobrir que estava vendo três fontes.
+      */}
+      <div className="flex items-center gap-1">
+        {TIPOS_OPORTUNIDADE.map((t) => (
+          <Button
+            key={t}
+            type="button"
+            size="sm"
+            variant={tipos.includes(t) ? 'default' : 'outline'}
+            aria-pressed={tipos.includes(t)}
+            title={TIPO_OPORTUNIDADE_DESCRICOES[t]}
+            onClick={() => alternarTipo(t)}
+          >
+            {TIPO_OPORTUNIDADE_LABELS[t]}
+          </Button>
+        ))}
+      </div>
+
       <div className="flex items-center gap-1">
         {FAIXAS.map((f) => (
           <Button
@@ -372,9 +441,9 @@ export function FunilKanban({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(Object.keys(ORDENS_FUNIL) as OrdemFunil[]).map((k) => (
+            {(Object.keys(ORDENS_OPORTUNIDADE) as OrdemFunil[]).map((k) => (
               <SelectItem key={k} value={k}>
-                {ORDENS_FUNIL[k].label}
+                {ORDENS_OPORTUNIDADE[k].label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -509,7 +578,8 @@ export function FunilKanban({
    * respondem à mesma pergunta com layouts diferentes obrigam a pessoa a reaprender a
    * ler a cada troca de menu.
    *
-   * O NotaCard NÃO muda: o que se lê sobre uma nota é o mesmo nos dois lugares.
+   * O card NÃO muda entre as duas telas — nem entre os três tipos (04s §8): o
+   * que se lê sobre uma oportunidade é o mesmo em qualquer lugar.
    */
   const grade = (
     <div
@@ -606,8 +676,8 @@ function ColunaFunil({
   const filtro = React.useMemo(() => ({ ...base, estagio }), [base, estagio])
 
   const q = useInfiniteQuery({
-    queryKey: antecipacaoKeys.funil(filtro),
-    queryFn: ({ pageParam }) => buscarFunil(filtro, pageParam),
+    queryKey: antecipacaoKeys.oportunidades(filtro),
+    queryFn: ({ pageParam }) => buscarOportunidades(filtro, pageParam),
     initialPageParam: 0,
     /*
      * O total vem da PÁGINA 0 e só dela — é a única que paga o `count`. Somar o
@@ -616,12 +686,15 @@ function ColunaFunil({
      */
     getNextPageParam: (_ultima, todas) => {
       const total = todas[0]?.total ?? 0
-      const carregadas = todas.reduce((s, p) => s + p.notas.length, 0)
+      const carregadas = todas.reduce((s, p) => s + p.oportunidades.length, 0)
       return carregadas < total ? todas.length : undefined
     },
   })
 
-  const notas = React.useMemo(() => q.data?.pages.flatMap((p) => p.notas) ?? [], [q.data])
+  const notas = React.useMemo(
+    () => q.data?.pages.flatMap((p) => p.oportunidades) ?? [],
+    [q.data],
+  )
   const total = q.data?.pages[0]?.total ?? 0
   const valorCarregado = notas.reduce((s, n) => s + Number(n.valor ?? 0), 0)
 
@@ -761,14 +834,17 @@ function ColunaFunil({
             </Button>
           </div>
         ) : notas.length === 0 ? (
-          <ColunaVazia>{filtrando ? 'Nada com estes filtros.' : 'Nenhuma nota aqui.'}</ColunaVazia>
+          <ColunaVazia>{filtrando ? 'Nada com estes filtros.' : 'Nada aqui.'}</ColunaVazia>
         ) : (
           <>
             {notas.map((nota) => (
-              <NotaCard
+              <OportunidadeCard
                 conta={nota.sacado_cnpj ? contaPorCnpj.get(nota.sacado_cnpj) : null}
-                key={nota.access_key}
-                nota={nota}
+                /* A chave é o PAR: `id` sozinho deixou de ser único quando a lista
+                   virou união — nada impede uma pré-autorização 4242 e uma parcela
+                   4242 coexistirem, e o React colapsaria as duas num card só. */
+                key={`${nota.tipo}:${nota.id}`}
+                item={nota}
                 fornecedor={nota.fornecedor_cnpj ? porCnpj.get(nota.fornecedor_cnpj) : undefined}
                 minimoOperavel={minimoOperavel}
                 dono={
@@ -779,7 +855,7 @@ function ColunaFunil({
                       nome={nota.vendedor_id ? (nomePorId.get(nota.vendedor_id) ?? null) : null}
                       tipos={['originador']}
                       podeTrocar={ehGestor}
-                      ocupado={atribuindo === nota.access_key}
+                      ocupado={atribuindo === nota.id}
                       onTrocar={(id) => onAtribuir(nota.access_key ?? '', id)}
                     />
                   ) : undefined

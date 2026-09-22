@@ -34,6 +34,7 @@ import {
 } from '../../antecipacao/schemas.js'
 import type { Json } from '../../types/database.js'
 import { prospeccaoTools } from './prospeccao-tools.js'
+import { funilTools } from './funil-tools.js'
 import type { AppModule, ToolContext } from '../types.js'
 
 /**
@@ -294,6 +295,13 @@ export const antecipacaoModule: AppModule = {
      * com o funil de notas por vizinhança, não por parentesco.
      */
     ...prospeccaoTools,
+    /*
+     * As tools do funil unificado (04s). Entram aqui pela mesma porta das de
+     * Sacados por NF: a aba é da Antecipação e a régua de acesso é a mesma. Ficam
+     * em arquivo próprio porque falam de TRÊS fontes, e não só de notas — juntá-las
+     * ao arquivo do funil de NFs faria parecer que a nota é o assunto.
+     */
+    ...funilTools,
     {
       id: 'antecipacao.resumo_funil',
       name: 'Resumo do funil',

@@ -188,6 +188,19 @@ export const CATALOGO_FAIXAS: readonly VariavelCatalogo[] = [
   },
   { id: 'tipo_nf', label: 'Tipo da nota', tipo: 'enum', coluna: 'tipo_nf', opcoes: ['NFe', 'NFSe'] },
   {
+    id: 'tipo',
+    label: 'Origem da oportunidade',
+    tipo: 'enum',
+    coluna: 'tipo',
+    opcoes: ['nf', 'pre_autorizacao', 'titulo'],
+    rotulos: { nf: 'Nota fiscal', pre_autorizacao: 'Pré-autorização', titulo: 'Título Sienge' },
+    descricao:
+      'De onde a oportunidade veio: nota fiscal (certificado do fornecedor), pré-autorização ' +
+      '(oferta que a construtora já fez) ou parcela de título do ERP Sienge. Existe nas DUAS ' +
+      'superfícies — em `notas_funil` ela é a constante "nf" —, e é por isso que uma regra ' +
+      'escrita com ela vale nos três tipos em vez de quebrar a reclassificação das notas.',
+  },
+  {
     id: 'vencimento_origem',
     label: 'Origem do vencimento',
     tipo: 'enum',

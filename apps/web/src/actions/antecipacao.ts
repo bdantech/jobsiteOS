@@ -11,6 +11,7 @@ import {
   marcarFornecedorSemInteresse,
   marcarSemInteresse,
   moverEstagio,
+  moverOportunidade,
   promoverFornecedor,
   registrarToqueManual,
   reverterFornecedorSemInteresse,
@@ -79,6 +80,28 @@ export async function moverEstagioAction(input: unknown): Promise<ActionResult<T
     const nf = await moverEstagio(supabase, input)
     revalidatePath('/antecipacao')
     return { ok: true, data: nf }
+  } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+/**
+ * Mover uma pré-autorização ou uma parcela do Sienge no funil (04s).
+ *
+ * Irmã de `moverEstagioAction`, e separada dela porque a RPC é outra: a da NF
+ * devolve `notas_fiscais`, um tipo que as fontes novas não têm. A REGRA é a mesma
+ * e mora no banco — os mesmos sete estágios, motivo obrigatório na perda, e "em
+ * prospecção" recusado porque é fato e não escolha.
+ */
+export async function moverOportunidadeAction(
+  input: unknown,
+): Promise<ActionResult<{ tipo: string; id: string; de: string; para: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro) return erro
+  try {
+    const r = await moverOportunidade(supabase, input)
+    revalidatePath('/antecipacao')
+    return { ok: true, data: r }
   } catch (e) {
     return falhaDe(e)
   }

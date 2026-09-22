@@ -75,6 +75,28 @@ export const EVENTO_TIPOS = {
   NF_ESTAGIO_ALTERADO: 'nf.estagio_alterado',
   NF_CONVERTIDA: 'nf.convertida',
   NF_PERDIDA: 'nf.perdida',
+  /*
+   * Pré-autorizações e títulos Sienge (04s). Eventos PRÓPRIOS, e não variações dos
+   * de NF, porque a coisa que aconteceu é outra: uma pré-autorização não "expira"
+   * como uma nota expira (o calendário passando) — ela expira porque a construtora
+   * pôs um relógio nela, e quando esse relógio zera a oferta deixa de existir. Quem
+   * lê a timeline precisa dessa diferença para saber se ainda há o que fazer.
+   */
+  PREAUTH_SINCRONIZADA: 'preauth.sincronizada',
+  PREAUTH_STATUS_ALTERADO: 'preauth.status_alterado',
+  /** D-2: o único evento do sistema que é sobre um prazo de HORAS, não de dias. */
+  PREAUTH_EXPIRANDO: 'preauth.expirando',
+  PREAUTH_EXPIRADA: 'preauth.expirada',
+  TITULO_SINCRONIZADO: 'titulo.sincronizado',
+  TITULO_SITUACAO_ALTERADA: 'titulo.situacao_alterada',
+  /**
+   * `not_eligible` com um `guardReason` que um originador RESOLVE — cadastrar o
+   * fornecedor, quase sempre. É a única forma de "não elegível" que vira trabalho.
+   */
+  TITULO_NAO_ELEGIVEL_RECUPERAVEL: 'titulo.nao_elegivel_recuperavel',
+  /** Pago no ERP sem antecipar: o dinheiro estava lá e passou. Métrica de perda. */
+  TITULO_PAGO_NO_ERP: 'titulo.pago_no_erp',
+  FUNIL_ITEM_OCULTADO: 'funil.item_ocultado',
   FORNECEDOR_SEM_INTERESSE: 'fornecedor.sem_interesse',
   FORNECEDOR_TIPAGEM_ALTERADA: 'fornecedor.tipagem_alterada',
   SACADO_LIMITE_INSUFICIENTE: 'sacado.limite_insuficiente',
@@ -327,6 +349,15 @@ export const EVENTO_LABELS: Record<string, string> = {
   'nf.estagio_alterado': 'Estágio da nota alterado',
   'nf.convertida': 'Nota convertida',
   'nf.perdida': 'Nota perdida',
+  'preauth.sincronizada': 'Pré-autorização sincronizada',
+  'preauth.status_alterado': 'Status da pré-autorização alterado',
+  'preauth.expirando': 'Pré-autorização expirando',
+  'preauth.expirada': 'Pré-autorização expirada',
+  'titulo.sincronizado': 'Título Sienge sincronizado',
+  'titulo.situacao_alterada': 'Situação do título alterada',
+  'titulo.nao_elegivel_recuperavel': 'Título não elegível, mas recuperável',
+  'titulo.pago_no_erp': 'Título pago no ERP sem antecipar',
+  'funil.item_ocultado': 'Item ocultado do funil por duplicidade',
   'fornecedor.sem_interesse': 'Fornecedor sem interesse',
   'fornecedor.tipagem_alterada': 'Tipagem do fornecedor alterada',
   'sacado.limite_insuficiente': 'Limite do sacado insuficiente',

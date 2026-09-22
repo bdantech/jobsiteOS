@@ -65,6 +65,11 @@ export const FONTES_INGESTAO = [
   'onepay_certificados',
   'onepay_antecipacoes',
   'onepay_credit_analyses',
+  // As duas fontes novas do funil (04s). Ingestões próprias, com a mesma política
+  // de retry e alerta — é a tela de Ingestões que responde "por que o funil está
+  // sem pré-autorização desde terça?".
+  'onepay_pre_autorizacoes',
+  'onepay_sienge_titulos',
 ] as const
 export const fonteIngestaoSchema = z.enum(FONTES_INGESTAO)
 export type FonteIngestao = z.infer<typeof fonteIngestaoSchema>
@@ -77,6 +82,8 @@ export const FONTE_INGESTAO_LABELS: Record<FonteIngestao, string> = {
   onepay_certificados: 'Certificados digitais (Onepay)',
   onepay_antecipacoes: 'Antecipações (Onepay)',
   onepay_credit_analyses: 'Análises de crédito (Onepay)',
+  onepay_pre_autorizacoes: 'Pré-autorizações (Onepay)',
+  onepay_sienge_titulos: 'Títulos Sienge (Onepay)',
 }
 
 export const STATUS_INGESTAO = ['executando', 'concluida', 'falhou'] as const

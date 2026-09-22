@@ -20,6 +20,11 @@ export * from './fornecedores/index.js'
 // Sacados por NF (04r). Depois de fornecedores porque é o irmão direto dele: os dois
 // leem a mesma nota, cada um por uma ponta.
 export * from './prospeccao/index.js'
+// Pré-autorizações e títulos Sienge (04s). Logo depois da Antecipação seria o lugar
+// "temático", mas fica aqui de propósito: estas duas fontes só existem na TELA do
+// funil, e o barril acompanha a ordem em que as camadas se empilham — primeiro o
+// documento, depois quem o trabalha, e só então as outras portas de entrada dele.
+export * from './funil/index.js'
 export * from './perfil/index.js'
 export * from './juridico/index.js'
 export * from './reports/index.js'

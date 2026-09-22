@@ -1,5 +1,6 @@
 import type {
   ContaDoSacadoResolvida,
+  TipoOportunidade,
   EstagioFunil,
   Faixa,
   Tables,
@@ -20,6 +21,15 @@ import { createClient } from '@/lib/supabase/client'
  */
 
 export type NotaFunil = Views<'notas_funil'>
+/**
+ * A OPORTUNIDADE — uma linha do funil unificado (04s), venha ela de qual fonte vier.
+ *
+ * É o contrato do card, e ele é UM SÓ para os três tipos. `funil_oportunidades` é
+ * superconjunto estrito do que `notas_funil` entregava ao card, então nada do que
+ * a tela mostrava hoje se perde; o que se ganha é `tipo`, o relógio da
+ * pré-autorização e a linha de contexto pronta.
+ */
+export type Oportunidade = Views<'funil_oportunidades'>
 export type FornecedorFunil = Views<'antecipacao_fornecedores'>
 export type SacadoFunil = Views<'antecipacao_sacados'>
 export type SacadoProspectar = Views<'antecipacao_sacados_a_prospectar'>
@@ -29,6 +39,8 @@ export type FornecedorSemInteresse = Views<'antecipacao_fornecedores_sem_interes
 export const antecipacaoKeys = {
   all: ['antecipacao'] as const,
   funil: (filtros: FiltrosFunil) => [...antecipacaoKeys.all, 'funil', filtros] as const,
+  oportunidades: (filtros: FiltrosFunil) =>
+    [...antecipacaoKeys.all, 'oportunidades', filtros] as const,
   resumo: () => [...antecipacaoKeys.all, 'resumo'] as const,
   metricas: () => [...antecipacaoKeys.all, 'metricas'] as const,
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
@@ -71,9 +83,32 @@ export const ORDENS_FUNIL = {
   vencimento: { label: 'Vencimento', coluna: 'vencimento' },
 } as const
 
+/**
+ * As mesmas quatro ordens, sobre a projeção.
+ *
+ * `emissao` vira `data_base`, e isso não é um rename: é a admissão de que as três
+ * fontes têm datas de nascimento DIFERENTES — emissão da nota, criação da oferta,
+ * primeira vez que a parcela foi vista. Ordenar por "emissão" numa lista que tem
+ * parcelas seria ordenar por uma coluna que dois terços das linhas não têm.
+ */
+export const ORDENS_OPORTUNIDADE = {
+  receita: { label: 'Receita esperada', coluna: 'receita_esperada' },
+  valor: { label: 'Valor', coluna: 'valor' },
+  emissao: { label: 'Entrada', coluna: 'data_base' },
+  vencimento: { label: 'Vencimento', coluna: 'vencimento' },
+} as const
+
 export type OrdemFunil = keyof typeof ORDENS_FUNIL
 
 export interface FiltrosFunil {
+  /**
+   * Multi-seleção por ORIGEM (04s §8). Vazio ou ausente = os três tipos.
+   *
+   * Um array e não um único valor porque as perguntas reais são combinadas:
+   * "só o que a construtora já ofereceu" é um tipo, mas "tudo que vem do ERP dela"
+   * é pré-autorização + parcela, e forçar a escolha de um só esconderia metade.
+   */
+  tipos?: TipoOportunidade[]
   faixa?: Faixa
   tipagem?: Tipagem
   termo?: string
@@ -131,6 +166,15 @@ export interface PaginaFunil {
   total: number
 }
 
+/**
+ * O funil de NOTAS, e só delas.
+ *
+ * Desde o 04s o Kanban lê `buscarOportunidades`, que traz as três origens. Esta
+ * continua existindo porque há telas que falam de NOTA FISCAL, não de
+ * oportunidade: a ficha do fornecedor lista as notas dele, e a tela de protesto lê
+ * pelo mesmo select. Apontá-las para a projeção faria a pessoa pedir notas e
+ * receber parcelas de ERP.
+ */
 export async function buscarFunil(
   filtros: FiltrosFunil,
   pagina = 0,
@@ -229,6 +273,93 @@ export async function buscarFunil(
   const { data, error, count } = await query
   if (error) throw error
   return { notas: (data ?? []) as NotaFunil[], total: count ?? 0 }
+}
+
+/**
+ * As colunas do card UNIFICADO. Em UMA string literal, pelo mesmo motivo de sempre:
+ * supabase-js parseia o select no nível de TIPO, e concatenar literais estoura o
+ * parser — o resultado degrada em silêncio para `GenericStringError`.
+ */
+const COLUNAS_OPORTUNIDADE =
+  'tipo, id, access_key, numero, serie, numero_exibicao, linha_contexto, valor, data_base, emitida_em, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, relogio, estado_origem, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, liquido_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem'
+
+export interface PaginaOportunidades {
+  oportunidades: Oportunidade[]
+  total: number
+}
+
+/**
+ * O funil inteiro — as três origens, numa consulta paginada só.
+ *
+ * Gêmea de `buscarFunil`, e de propósito: mesma paginação, mesmo desempate, mesma
+ * contagem só na página 0, mesmos filtros. O que muda é a superfície
+ * (`funil_oportunidades` em vez de `notas_funil`) e o filtro novo por `tipo`.
+ *
+ * As duas convivem porque respondem a perguntas diferentes: a ficha do fornecedor
+ * e a tela de protesto continuam falando de NOTAS, e forçá-las a passar pela
+ * projeção só para reaproveitar código as faria mostrar parcelas onde a pessoa
+ * pediu notas.
+ */
+export async function buscarOportunidades(
+  filtros: FiltrosFunil,
+  pagina = 0,
+  limite = PAGINA_FUNIL,
+): Promise<PaginaOportunidades> {
+  const supabase = createClient()
+  const coluna = ORDENS_OPORTUNIDADE[filtros.ordem ?? 'receita'].coluna
+  const asc = filtros.ordemAsc === true
+
+  let query = supabase
+    .from('funil_oportunidades')
+    .select(COLUNAS_OPORTUNIDADE, pagina === 0 ? { count: 'exact' } : {})
+    .order(coluna, { ascending: asc, nullsFirst: false })
+    /*
+     * O DESEMPATE, e agora ele precisa dos DOIS campos.
+     *
+     * Paginação por `range` é OFFSET: sem uma última chave única, duas linhas de
+     * mesmo valor trocam de lugar entre páginas e um card aparece duas vezes
+     * enquanto outro nunca aparece. `id` sozinho deixou de ser único quando a
+     * lista virou união — nada impede que uma pré-autorização 4242 e uma parcela
+     * 4242 existam ao mesmo tempo. O par `(tipo, id)` é a identidade real.
+     */
+    .order('tipo', { ascending: true })
+    .order('id', { ascending: true })
+    .range(pagina * limite, pagina * limite + limite - 1)
+
+  if (filtros.tipos?.length) query = query.in('tipo', filtros.tipos)
+  if (!filtros.incluirNaoOperaveis) query = query.eq('operavel', true)
+  if (!filtros.incluirSuprimidos) {
+    query = query.eq('fornecedor_sem_interesse', false).eq('fornecedor_suprimido', false)
+  }
+
+  if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
+  else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)
+  else query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
+
+  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+  else if (filtros.semDono) query = query.is('vendedor_id', null)
+  if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
+  if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
+  if (typeof filtros.valorMin === 'number') query = query.gte('valor', filtros.valorMin)
+  if (typeof filtros.valorMax === 'number') query = query.lte('valor', filtros.valorMax)
+
+  // `data_base` é TIMESTAMP nas três fontes, então o "até" continua sendo
+  // exclusivo no dia seguinte — senão o dia final que a pessoa digitou some.
+  if (filtros.emissaoDe) query = query.gte('data_base', filtros.emissaoDe)
+  if (filtros.emissaoAte) query = query.lt('data_base', diaSeguinte(filtros.emissaoAte))
+  if (filtros.vencimentoDe) query = query.gte('vencimento', filtros.vencimentoDe)
+  if (filtros.vencimentoAte) query = query.lte('vencimento', filtros.vencimentoAte)
+
+  if (filtros.termo?.trim()) {
+    const t = `*${filtros.termo.trim()}*`
+    query = query.or(
+      `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},numero_exibicao.ilike.${t}`,
+    )
+  }
+
+  const { data, error, count } = await query
+  if (error) throw error
+  return { oportunidades: (data ?? []) as Oportunidade[], total: count ?? 0 }
 }
 
 /** `2026-09-01` → `2026-09-02`. Em UTC, que é como a data do input chega. */
