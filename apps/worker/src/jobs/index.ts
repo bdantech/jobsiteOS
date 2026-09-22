@@ -728,8 +728,28 @@ export async function dispararSyncNfs(): Promise<string> {
       const sync = await sincronizarNotasFiscais()
 
       /*
-       * A promoção dos resumos vem LOGO DEPOIS do sync e ANTES da reclassificação,
-       * e a ordem é o ponto.
+       * AS DUAS FONTES NOVAS (04s) vêm LOGO DEPOIS do sync e ANTES da promoção.
+       *
+       * ── POR QUE ANTES, E NÃO DEPOIS ────────────────────────────────────────
+       * Este bloco já esteve atrás da promoção, e a ordem custou caro em 22/09/2026:
+       * a promoção relê oito dias de emissão e leva de trinta a sessenta minutos, e
+       * qualquer deploy nessa janela reinicia o worker e mata a corrida ANTES de as
+       * fontes novas serem tocadas uma única vez. Três pushes seguidos naquele dia
+       * significaram três corridas em que as pré-autorizações nunca foram buscadas —
+       * e a ingestão delas nem chegou a ser aberta, então nem o "falhou" aparecia.
+       *
+       * Mas o motivo principal não é esse, é de negócio: a promoção MELHORA um dado
+       * que já temos (a NFe de material que chegou em resumo e vai ganhar a duplicata
+       * real). Ela pode esperar. A pré-autorização DESCOBRE algo que expira —
+       * `WAITING_CONTRACTED` tem relógio de poucos dias. Pôr o que tem prazo atrás do
+       * que é arquivo é inverter a urgência.
+       *
+       * Best-effort por dentro, com ingestão própria para cada fonte.
+       */
+      const fontesDoFunil = await sincronizarFontesDoFunil('novidade')
+
+      /*
+       * A promoção dos resumos, ANTES da reclassificação — e é isso que importa nela.
        *
        * A NFe de material entra como `resNFe` — resumo da SEFAZ, sem itens e sem
        * duplicata —, e enquanto está assim o vencimento dela é o palpite de
@@ -738,8 +758,8 @@ export async function dispararSyncNfs(): Promise<string> {
        * a promoção depois da reclassificação deixaria a nota um ciclo inteiro
        * classificada pelo palpite, com o dado certo já gravado ao lado.
        *
-       * Best-effort, como a varredura do diário: o endpoint fora do ar não pode
-       * impedir o resto da corrente de rodar sobre o que já chegou.
+       * Best-effort: o endpoint fora do ar não pode impedir o resto da corrente de
+       * rodar sobre o que já chegou.
        */
       let promocao: unknown
       try {
@@ -748,17 +768,6 @@ export async function dispararSyncNfs(): Promise<string> {
         logger.error({ erro: String(erro) }, 'Promoção de resumos falhou; o sync de NF segue.')
         promocao = { erro: String(erro) }
       }
-
-      /*
-       * AS DUAS FONTES NOVAS (04s), na mesma corrida e ANTES da reclassificação.
-       *
-       * O motivo é o mesmo que põe a promoção de resumos aqui: a faixa é o que
-       * ordena o Kanban, e um card que chega sem faixa fica no fim da fila até o
-       * job diário. Para uma pré-autorização isso é pior que para uma NF — ela tem
-       * RELÓGIO, e uma oferta que expira em dois dias não pode passar o primeiro
-       * deles invisível no rodapé da coluna.
-       */
-      const fontesDoFunil = await sincronizarFontesDoFunil('novidade')
 
       // O lookup ENTRE o sync e a reclassificação, não depois: o fornecedor chega na
       // nota só com nome e CNPJ, e é o cadastro dele (capital, situação, Simples) que
@@ -893,16 +902,9 @@ export function dispararPromocaoResumos(): string {
  */
 export function dispararAntecipacaoDiario(): string {
   return dispararAvulso('antecipacao-diario', async (client) => {
-    let varredura: unknown
-    try {
-      varredura = await sincronizarNotasFiscais('varredura')
-    } catch (erro) {
-      logger.error({ erro: String(erro) }, 'Varredura de NFs falhou; o diário segue.')
-      varredura = { erro: String(erro) }
-    }
-
     /*
-     * A varredura de ESTADO das duas fontes novas (04s §3), e ela não é opcional.
+     * A varredura de ESTADO das duas fontes novas (04s §3) vem PRIMEIRO, antes da
+     * varredura de NFs — e ela não é opcional.
      *
      * Os dois endpoints filtram por data de ENTRADA, nunca por atualização. Uma
      * pré-autorização criada há vinte dias que expirou hoje, ou um título que saiu
@@ -910,8 +912,12 @@ export function dispararAntecipacaoDiario(): string {
      * de 7 dias do ciclo de 4h. Sem esta passada o funil congela no estado do dia
      * em que cada item entrou — e segue oferecendo o que já morreu.
      *
-     * Best-effort como a varredura de NFs, e pelo mesmo motivo: endpoint fora do ar
-     * não pode impedir o resto do diário de rodar sobre o que já está aqui.
+     * Primeiro porque a varredura de NFs é o passo LONGO do diário (dezenas de
+     * minutos por emissão), e um deploy ou uma queda no meio dela mata a corrida
+     * antes de as fontes novas serem tocadas. O que tem relógio não fica atrás do
+     * que é volume.
+     *
+     * Best-effort, como tudo que depende de endpoint de terceiro aqui.
      */
     let fontesDoFunil: unknown
     try {
@@ -919,6 +925,14 @@ export function dispararAntecipacaoDiario(): string {
     } catch (erro) {
       logger.error({ erro: String(erro) }, 'Varredura das fontes do funil falhou; o diário segue.')
       fontesDoFunil = { erro: String(erro) }
+    }
+
+    let varredura: unknown
+    try {
+      varredura = await sincronizarNotasFiscais('varredura')
+    } catch (erro) {
+      logger.error({ erro: String(erro) }, 'Varredura de NFs falhou; o diário segue.')
+      varredura = { erro: String(erro) }
     }
 
     const supressoes = await limparSupressoesExpiradas()
