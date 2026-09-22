@@ -339,9 +339,9 @@ export async function regenerarOutboxAction() {
  * Promove o fornecedor a partir do funil.
  *
  * Autorizada por **Antecipação**, ao contrário de `promoverEmpresaAction`, que exige
- * Mercado. Não é frouxidão: o RPC por trás (0068) só aceita CNPJ que seja fornecedor
- * de alguma nota, e fixa `tipo = 'fornecedor'` — este caminho não consegue criar uma
- * construtora nem tocar a pirâmide comercial.
+ * Mercado. Não é frouxidão: o RPC por trás só aceita CNPJ que já apareça numa das três
+ * fontes do funil — nota, pré-autorização ou título (0249) — e fixa `tipo = 'fornecedor'`.
+ * Este caminho não consegue criar uma construtora nem tocar a pirâmide comercial.
  */
 export async function promoverFornecedorAction(
   cnpj: string,
@@ -351,9 +351,28 @@ export async function promoverFornecedorAction(
   try {
     const empresa = await promoverFornecedor(supabase, { cnpj })
     revalidatePath('/empresas')
+    revalidatePath('/antecipacao')
     return { ok: true, data: empresa }
   } catch (e) {
-    return falhaDe(e)
+    const falha = falhaDe(e)
+    /*
+     * "Registro não encontrado." era a frase que a pessoa via, e ela não descrevia nada
+     * que desse para resolver.
+     *
+     * `traduzirErro` colapsa todo `no_data_found` nesse texto, e o motivo real ficava na
+     * mensagem do RPC, que não chega até aqui. Depois da 0249 só resta UMA recusa possível
+     * neste caminho — o CNPJ não está em nenhuma das três fontes do funil —, então dizê-la
+     * por extenso é honesto, e é o que alguém consegue conferir.
+     */
+    if (falha.code === 'not_found') {
+      return {
+        ok: false,
+        code: 'not_found',
+        message:
+          'Este CNPJ não aparece em nenhuma nota, pré-autorização ou título — não há de onde criar a ficha.',
+      }
+    }
+    return falha
   }
 }
 

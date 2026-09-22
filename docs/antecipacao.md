@@ -605,6 +605,53 @@ que **é fornecedor de alguma nota**, `tipo` sempre `'fornecedor'` e `origem` se
 `'antecipacao'`, fixados no corpo da função e nunca vindos do cliente. Este caminho não
 consegue criar construtora nem tocar a pirâmide. É idempotente, como o de Mercado.
 
+### O recorte envelheceu com o funil (0249)
+
+"Criar ficha" num fornecedor de **pré-autorização** respondia *"Registro não encontrado."*
+Duas recusas produziam essa mesma frase, porque as duas usavam `errcode = 'no_data_found'`
+e o tradutor de erros do core colapsa esse código numa mensagem genérica.
+
+**A primeira era um recorte parado no tempo.** A função nasceu quando o funil tinha UMA
+fonte; desde a 0233 tem três — nota, pré-autorização e título Sienge. O card aparecia
+pelas três e o botão funcionava para uma. Medido: dos **435** fornecedores com
+pré-autorização, **261 não aparecem em nota nenhuma**. O recorte passou a ser as três
+fontes — continua sendo recorte de verdade, porque a função é DEFINER e não pode virar
+"crie empresa com qualquer CNPJ".
+
+**A segunda confundia lacuna com impedimento.** `mercado_universo` **não é a base de todos
+os CNPJs do Brasil**: são 908 mil linhas do recorte de construção. Um fornecedor de
+plástico, de fôrmas ou de importação não está lá — e não *deve* estar, porque a pirâmide
+comercial lê essa tabela. Dos mesmos 435, só **181** existem no universo.
+
+E o dado existe: `lookupCadastral` (§3.1) busca cadastro em três APIs públicas gratuitas
+exatamente para esses, gravando com `origem_ingestao = 'lookup'` e
+`fora_recorte_cnae = true`. Recusar a ficha porque o lookup ainda não rodou é fechar a
+porta na frente da fila que existe para abri-la. Agora a ficha nasce com o que a fonte do
+funil sabe (CNPJ e nome) e o CNPJ entra em `cnpj_lookup_fila` com motivo
+`fornecedor_funil`; quando o cadastro chega, a ficha ganha o resto sozinha.
+
+`camada`, `grupo_id` e as derivadas ficam **nulas** enquanto o universo não responde, e é o
+certo: elas são leitura do universo, e inventá-las poria a empresa numa pirâmide onde ela
+não foi medida.
+
+**O elo que se perdia depois.** `gravarNoUniverso` faz upsert em `mercado_universo` sem
+preencher `empresa_id` — e promover ANTES do lookup passou a ser o caso comum. Sem o elo, a
+ficha fica de um lado, o universo do outro, e o Explorador (que só chega à ficha por
+`empresa_id`) continua oferecendo "promover" a quem já foi promovido. A 0072 reparou isso
+uma vez à mão; em 22/09/2026 eram **199 linhas** de novo. O worker passou a ligar as duas
+na hora da gravação — a reparação avulsa tratava o sintoma, não o lugar onde o dado nasce.
+
+**Idempotência pelo CNPJ, não pelo elo.** A saída antecipada dependia de
+`mercado_universo.empresa_id`, que é justamente o que não existe no caso novo: o segundo
+clique encontrava a ficha, não inseria nada e emitia um segundo `empresa.promovida`. Uma
+timeline que conta duas vezes um fato que aconteceu uma vez deixa de ser evidência.
+
+**E um CHECK que recusava em silêncio.** `cnpj_lookup_fila.motivo` só conhecia
+`fornecedor_nf`, `sacado_nf` e `manual` — mas a rota de criação de análise da plataforma de
+produção enfileirava com `api_credito`. O upsert não confere o erro, então a linha era
+recusada sem ruído: **empresa criada por aquela rota nunca entrava na fila de
+enriquecimento**. O motivo entrou na lista, junto de `fornecedor_funil`.
+
 ## Protesto do fornecedor, direto do funil (0066)
 
 A hipótese comercial é que fornecedor com protesto antecipa mais — é dinheiro parado e um

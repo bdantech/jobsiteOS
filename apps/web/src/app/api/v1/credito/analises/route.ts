@@ -136,6 +136,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       return fim(500, { erro: { codigo: 'falha_empresa', mensagem: 'Não foi possível criar a ficha da empresa.', detalhes: null } }, error?.message)
     }
     empresaId = nova.id
+    /*
+     * `api_credito` só passou a ser um motivo VÁLIDO na 0249. Antes o CHECK da tabela
+     * conhecia três valores e este não estava entre eles — e como o upsert não confere o
+     * erro, a linha era recusada em silêncio: a empresa criada por esta rota nunca entrava
+     * na fila de enriquecimento, e ninguém tinha como perceber.
+     */
     await admin.from('cnpj_lookup_fila').upsert(
       { cnpj: dados.cnpj, motivo: 'api_credito' },
       { onConflict: 'cnpj', ignoreDuplicates: true },

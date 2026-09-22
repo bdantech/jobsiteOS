@@ -470,5 +470,33 @@ async function gravarNoUniverso(c: CadastroNormalizado): Promise<boolean> {
     logger.error({ cnpj: c.cnpj, erro: error.message }, 'Falha ao gravar cadastro no universo.')
     return false
   }
+
+  /*
+   * O ELO COM A FICHA, quando ela já existe.
+   *
+   * O upsert acima não preenche `empresa_id`, e desde a 0249 promover ANTES do lookup é o
+   * caso comum: o fornecedor de pré-autorização ganha ficha na hora e o cadastro chega
+   * aqui depois. Sem esta linha, a ficha fica de um lado, o universo do outro, e o
+   * Explorador — que só chega à ficha por `empresa_id` — continua oferecendo "promover" a
+   * quem já foi promovido. A 0072 reparou isso uma vez à mão; em 22/09/2026 eram 199
+   * linhas de novo, que é o que acontece quando a reparação é um UPDATE avulso e não o
+   * lugar onde o dado nasce.
+   *
+   * Best-effort: o cadastro já está gravado, que é o que a fila veio buscar.
+   */
+  const { data: empresa } = await supabaseAdmin
+    .from('empresas')
+    .select('id')
+    .eq('cnpj', c.cnpj)
+    .maybeSingle()
+
+  if (empresa) {
+    await supabaseAdmin
+      .from('mercado_universo')
+      .update({ empresa_id: empresa.id })
+      .eq('cnpj', c.cnpj)
+      .is('empresa_id', null)
+  }
+
   return true
 }
