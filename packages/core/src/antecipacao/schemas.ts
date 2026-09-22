@@ -639,6 +639,8 @@ export interface ConfigConversao {
   status_nao_conversores: string[]
   /** Janela do `period` por data de CRIAÇÃO, em dias. */
   janela_sync_dias: number
+  /** Janela do job diário, por criação. Maior porque status mudam com o tempo. */
+  janela_diaria_dias: number
   /**
    * Por quantos dias uma antecipação sem NF continua sendo re-tentada a cada
    * ciclo. Depois disso o `sem_nf` vira definitivo e emite evento — deixar
@@ -654,26 +656,41 @@ export interface ConfigConversao {
 }
 
 export const CONFIG_CONVERSAO_PADRAO: ConfigConversao = {
+  /*
+   * Os NOVE status vivos depois do cutover de 12/09/2026 — sete convertem, dois
+   * não. Saíram cinco que a plataforma deixou de produzir (`DRAFT`,
+   * `DENY_BY_CONTRACTED`, `REVISION`, `PAYMENT_REPROVED`, `PROGRAMED_PAYMENT`):
+   * o filtro do endpoint ainda os aceita, mas nenhum registro volta com eles, e
+   * nenhuma linha de `antecipacoes` os carrega.
+   *
+   * Sobrar ali era inofensivo na execução (a lista é uma ALLOWLIST, consultada com
+   * `? upper(status)`) e enganoso na leitura: quem abre a configuração via tela
+   * decidiria sobre um estado que não existe mais.
+   */
   status_conversores: [
     'APPROVED',
-    'REVISION',
     'PAY_OUT',
     'BILLET_SWAPPED',
-    'PROGRAMED_PAYMENT',
     'CONCLUDED',
     'EXPIRED_BILL_SWAPPED',
     'EXTENDED_BILL_SWAPPED',
     'IN_EXTENSION_BILL_SWAPPED',
   ],
-  status_nao_conversores: [
-    'DRAFT',
-    'REQUESTED',
-    'REPROVED',
-    'DENY_BY_CONTRACTED',
-    'PAYMENT_REPROVED',
-  ],
+  status_nao_conversores: ['REQUESTED', 'REPROVED'],
   janela_sync_dias: 3,
   janela_rematch_dias: 7,
+  /*
+   * A janela do job DIÁRIO, por criação. Era 15 dias, e 15 dias deixaram de bastar
+   * depois do cutover: o `status` de uma operação passou a ser sempre o ATUAL, e
+   * alguns mudam SOZINHOS pela data — `EXPIRED_BILL_SWAPPED` nasce de um boleto
+   * vencer, sem evento nenhum do outro lado. `approvalWithAutomation` também vira
+   * `false` quando o backoffice tira a operação do trilho automático.
+   *
+   * Quem sincroniza só "o que é novo" congela o status do dia em que leu. 92 dias
+   * é o horizonte em que uma operação ainda pode mudar de estado, e é de graça —
+   * o upsert é idempotente por `id_externo`.
+   */
+  janela_diaria_dias: 92,
   tolerancia_valor_pct: 1,
   tolerancia_vencimento_dias: 5,
   calibracao_dias: 90,

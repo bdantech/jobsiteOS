@@ -389,6 +389,21 @@ async function processarNota(
   // aqui: a nota que já chegou cancelada é cadastro, não notícia.
   const virouCancelada = jaExistia && gravada.situacao === 'valida' && nota.situacao !== 'valida'
 
+  /*
+   * A MESMA NOTA PELOS DOIS LADOS (2.7 do contrato pós-cutover).
+   *
+   * Quando emitente e destinatário são ambos empresas da plataforma, ela volta
+   * duas vezes — `issued` e `received`, ids diferentes, mesma chave. Como a nossa
+   * chave é a `accessKey` (e é o certo: um documento é um card), o `direction`
+   * ficava trocando conforme qual cópia chegasse por último.
+   *
+   * A primeira observação fica, e `bilateral` registra o fato. Privilegiar um dos
+   * dois valores seria inventar uma informação que não temos; o que sabemos é que
+   * a nota é das duas pontas.
+   */
+  const bilateral = jaExistia && gravada.direction !== null && gravada.direction !== nota.direction
+  const direcaoEstavel = (bilateral ? gravada.direction : nota.direction) as 'issued' | 'received'
+
   if (nota.avisos.length > 0) {
     logger.warn({ accessKey, avisos: nota.avisos }, 'Valor de enum desconhecido no payload de NF.')
   }
@@ -444,8 +459,12 @@ async function processarNota(
     ...linha,
     taxa_analise_am: analise.taxa,
     taxa_analise_origem: analise.origem,
+    direction: direcaoEstavel,
     situacao: nota.situacao,
     xml_resumo: nota.xml_resumo,
+    // Só sobe para true; uma nota que já foi vista dos dois lados não deixa de ter
+    // sido, e a passagem seguinte enxerga apenas uma das cópias.
+    ...(bilateral ? { bilateral: true } : {}),
     // Só carimba na TRANSIÇÃO. Reescrever a cada sync faria toda nota cancelada
     // parecer cancelada hoje, e é justamente essa data que diz se alguém estava
     // trabalhando a nota quando ela caiu.
@@ -539,19 +558,27 @@ async function processarNota(
  * neste minuto), enquanto uma que já estava cancelada é só o sync repetindo.
  * Comparar contra o que está no banco é a única forma de distinguir as duas.
  */
-async function notaGravada(
-  accessKey: string,
-): Promise<{ existe: boolean; situacao: string | null; resumo: boolean }> {
+async function notaGravada(accessKey: string): Promise<{
+  existe: boolean
+  situacao: string | null
+  resumo: boolean
+  direction: string | null
+}> {
   const { data } = await supabaseAdmin
     .from('notas_fiscais')
-    .select('access_key, situacao, xml_resumo')
+    .select('access_key, situacao, xml_resumo, direction')
     .eq('access_key', accessKey)
     .maybeSingle()
-  const linha = data as { situacao?: string | null; xml_resumo?: boolean | null } | null
+  const linha = data as {
+    situacao?: string | null
+    xml_resumo?: boolean | null
+    direction?: string | null
+  } | null
   return {
     existe: linha !== null,
     situacao: linha?.situacao ?? null,
     resumo: linha?.xml_resumo === true,
+    direction: linha?.direction ?? null,
   }
 }
 

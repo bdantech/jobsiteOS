@@ -364,6 +364,59 @@ Sem cron, de propósito. Uma reimportação larga faz milhares de cards nascerem
 uma vez no funil de muita gente ao mesmo tempo — é decisão de quem está olhando a
 tela, não de um relógio.
 
+## A nota que chega pelos dois lados, e as chaves que se cruzam (0231)
+
+Mais três consequências do mesmo cutover, todas da família "id que a plataforma
+nova reaproveitou".
+
+### `bilateral`: um documento, um card
+
+Quando emitente e destinatário são **ambos** empresas da plataforma, a mesma nota
+volta duas vezes — uma como `issued`, outra como `received`, com ids diferentes e a
+**mesma `accessKey`**. São 2.385 notas na base (3%).
+
+A `accessKey` continua sendo a nossa chave, e isso é o certo para um funil: um
+documento é um card, não dois. O contrato diz a mesma coisa ("deduplique por
+`accessKey` se precisar da nota uma única vez"). O que estava errado era o
+`direction` **trocar a cada sync**, conforme qual cópia chegasse por último.
+
+A regra passou a ser: **a primeira direção observada fica**, e `bilateral` registra
+o fato. Não é "`received` sempre" porque privilegiar um dos dois valores inventaria
+uma informação que não temos — o que sabemos é que a nota é das duas pontas.
+
+Não trocamos a PK para `(access_key, direction)`, que seria a sugestão literal do
+contrato: quatro tabelas têm FK para `notas_fiscais(access_key)` — `nota_itens`,
+`antecipacoes`, `processo_operacoes` e `voz_ligacoes` —, e todas precisariam de
+coluna nova, backfill e reescrita de join, além das views, RPCs e das URLs
+`?nota=`. Custo de PK composta para consertar um rótulo instável em 3% das linhas,
+e ainda partindo cada nota bilateral em dois cards.
+
+### Cinco status de antecipação deixaram de existir
+
+`DRAFT`, `DENY_BY_CONTRACTED`, `REVISION`, `PAYMENT_REPROVED` e `PROGRAMED_PAYMENT`
+não voltam mais da API. Nenhuma linha de `antecipacoes` os carrega. Saíram da
+config.
+
+O filtro do endpoint ainda os aceita, e a lista é uma **allowlist** consultada com
+`status_conversores ? upper(status)` — então sobrar ali não quebrava nada e
+enganava quem abrisse a tela de configuração para decidir sobre um estado que a
+plataforma não produz mais.
+
+### A janela do diário foi de 15 para 92 dias
+
+Antes, a varredura das antecipações existia por um motivo só: fechar o buraco que
+uma corrida falha deixa, já que o ciclo de 4h olha 3 dias por criação.
+
+Agora há um segundo, e ele é permanente. O `status` que a API devolve é sempre o
+**atual**, inclusive nas operações migradas, e alguns mudam **sozinhos pela data** —
+um boleto que vence vira `EXPIRED_BILL_SWAPPED` sem evento nenhum do outro lado.
+`approvalWithAutomation` também regride para `false` quando o backoffice tira a
+operação do trilho automático.
+
+Sincronizar só "o que é novo" congela o status do dia em que se leu. 92 dias é o
+horizonte em que uma operação ainda pode mudar de estado, e custa páginas, não
+linhas erradas — o upsert é idempotente por `id_externo`.
+
 ## A régua gera; quem aprova é gente
 
 Ligar um canal em `/comunicacao/disparos` **não liga envio**. Liga a *geração* da fila:

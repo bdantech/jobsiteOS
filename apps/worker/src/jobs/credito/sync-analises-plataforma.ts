@@ -328,10 +328,29 @@ async function gravarAnalise(
   const status = (analysis?.status ?? '').trim()
   if (status === '') return null
 
+  /*
+   * O papel entra na CHAVE, e não só na linha.
+   *
+   * `analysis.id` deixou de identificar uma análise depois do cutover de
+   * 12/09/2026: as migradas mantiveram o id antigo e as nativas usam a numeração
+   * nova, e as duas faixas se cruzam. Chavear pelo número sozinho fazia duas
+   * análises de EMPRESAS DIFERENTES virarem uma linha só, a segunda apagando a
+   * primeira sem erro nenhum.
+   *
+   * A identidade estável é `taxId` + `role`. O `id_externo` continua na chave
+   * junto com eles porque esta tabela guarda HISTÓRICO de propósito — o sync faz
+   * duas passadas, a foto de hoje e a de quando a porta fechou para o ex-cliente,
+   * e elas são análises diferentes do mesmo par. O trio impede a colisão sem
+   * colapsar o histórico.
+   */
+  const papel = (analysis?.role ?? 'drawee').trim().toLowerCase() || 'drawee'
+
   const { data: anterior } = await supabaseAdmin
     .from('analises_plataforma')
     .select('status, credit_limit, available_limit, monthly_rate_d0, cnpj')
     .eq('id_externo', idExterno)
+    .eq('cnpj', cnpj)
+    .eq('role', papel)
     .maybeSingle()
 
   const linha: TablesInsert<'analises_plataforma'> = {
@@ -341,7 +360,7 @@ async function gravarAnalise(
     onepay_company_id: typeof item.company?.id === 'number' ? item.company.id : null,
     company_name: item.company?.name?.trim() || null,
     company_type: item.company?.companyType?.trim() || null,
-    role: (analysis?.role ?? 'drawee').trim().toLowerCase() || 'drawee',
+    role: papel,
     ever_approved: analysis?.everApproved ?? null,
     status,
     expiration_date: dataOuNulo(analysis?.expirationDate),
@@ -368,7 +387,7 @@ async function gravarAnalise(
 
   const { error } = await supabaseAdmin
     .from('analises_plataforma')
-    .upsert(linha, { onConflict: 'id_externo' })
+    .upsert(linha, { onConflict: 'id_externo,cnpj,role' })
   if (error) {
     logger.error({ id_externo: idExterno, erro: error.message }, 'Falha no upsert da análise.')
     return null

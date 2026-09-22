@@ -94,6 +94,7 @@ import {
   recuperarNotasPorEmissao,
   sincronizarNotasFiscais,
 } from './antecipacao/sync-nfs.js'
+import { lerConfigConversao } from '../antecipacao/config.js'
 import { rematchPendentes, sincronizarAntecipacoes } from './antecipacao/sync-antecipacoes.js'
 import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
@@ -806,11 +807,26 @@ export function dispararAntecipacaoDiario(): string {
     // recém-promovido esperaria até amanhã.
     const contatos = await backfillContatosNf()
     const reclassificacao = await reclassificarFunil(client)
-    // A rede de segurança das antecipações, pelo mesmo motivo da varredura de
-    // NFs: a janela do ciclo de 4h é de 3 dias por criação, e uma sequência de
-    // falhas abre um buraco que nenhum incremental posterior alcança. 15 dias
-    // por criação o fecham, e é de graça — o upsert é idempotente por id_externo.
-    const antecipacoes = await sincronizarAntecipacoesComIngestao(15)
+    /*
+     * A rede de segurança das antecipações — e ela deixou de ser só sobre buracos.
+     *
+     * A janela do ciclo de 4h é de 3 dias por criação, e uma sequência de falhas
+     * abre um vão que nenhum incremental posterior alcança. Era o único motivo, e
+     * 15 dias bastavam.
+     *
+     * Depois do cutover de 12/09/2026 há um segundo: o `status` que a API devolve
+     * é sempre o ATUAL, inclusive nas operações migradas, e alguns mudam SOZINHOS
+     * pela data (um boleto que vence vira `EXPIRED_BILL_SWAPPED` sem evento
+     * nenhum). `approvalWithAutomation` também regride quando o backoffice tira a
+     * operação do automático. Sincronizar só "o que é novo" congela o status do dia
+     * em que se leu, e o nosso relatório passa a descrever um mês que já mudou.
+     *
+     * Daí a janela da config (92 dias): é o horizonte em que uma operação ainda
+     * pode mudar de estado. De graça, porque o upsert é idempotente por
+     * `id_externo` — custa páginas, não linhas erradas.
+     */
+    const cfgConversao = await lerConfigConversao()
+    const antecipacoes = await sincronizarAntecipacoesComIngestao(cfgConversao.janela_diaria_dias)
     const outbox = await gerarOutbox()
     // Roteamento DEPOIS da reclassificação: a faixa muda com o calendário, e uma nota
     // que entrou em faixa hoje precisa de dono hoje — não na segunda que vem.

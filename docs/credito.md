@@ -995,6 +995,39 @@ distribuição dedicada para ele quando a campanha existir.
 `ex_cliente_meses` é em **meses e não em data** porque a pergunta de campanha é "saiu há
 menos de seis meses" — escrevê-la com data obriga a pessoa a fazer a conta de cabeça.
 
+## `analysis.id` deixou de identificar uma análise (0231)
+
+`analises_plataforma` era chaveada por `id_externo` — o `analysis.id` da
+plataforma. Depois do cutover de 12/09/2026 isso deixou de ser uma identidade: as
+análises migradas mantiveram o id antigo, as nativas usam a numeração nova, e as
+duas faixas **se cruzam**. Duas análises de empresas diferentes com o mesmo número
+viravam uma linha só, a segunda apagando a primeira sem erro nenhum.
+
+A identidade estável é `taxId` + `role`. Mas a chave virou o **trio**
+`(id_externo, cnpj, role)`, e não o par, porque esta tabela guarda histórico de
+propósito: o sync faz duas passadas — a foto de hoje e a foto de **quando a porta
+fechou** para o ex-cliente — e elas gravam análises diferentes do mesmo par. O par
+como chave colapsaria as duas numa linha e levaria junto o `ex_cliente_desde`.
+
+Mesma família, no Radar: `clientes_onepay` já era chaveada por `cnpj` (certo), mas
+tinha uma UNIQUE sobrando em `onepay_company_id` — exatamente o id numérico que
+passou a colidir. Com ela, a primeira empresa nativa cujo id repetisse o de uma
+migrada faria o upsert da **outra** empresa falhar, perdendo a linha inteira por
+causa de um campo que é só informativo. A UNIQUE saiu; a coluna ficou, com um
+comentário dizendo que ela não identifica ninguém.
+
+### O endpoint está respondendo 500 desde 17/09
+
+Não é nosso. A plataforma tem o incidente aberto e a correção aguardando deploy do
+lado deles. O nosso comportamento já estava certo e continua: `requisitarJson`
+retenta 5xx com backoff e, esgotadas as tentativas, **lança** — a ingestão fica
+`falhou` com o erro, em vez de concluir com lista vazia. Cinco dias de falha diária
+estão registrados em `mercado_ingestoes`.
+
+A consequência a ter em mente enquanto durar: `analises_plataforma` está parada
+desde 17/09, e é dela que saem a TAC e a taxa por sacado (`fee_d0`/`min_fee_d0`).
+As notas que chegam agora são precificadas com a última foto boa.
+
 ## Onde está o quê
 
 - **Banco**: migração `0073` (tabelas, RLS, RPCs, bucket `analise-docs`, view
