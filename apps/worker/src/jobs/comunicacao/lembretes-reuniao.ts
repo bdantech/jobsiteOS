@@ -3,6 +3,10 @@ import {
   primeiroNome,
   renderizarMensagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
+import { proximaAbertura } from '../../../../../packages/core/src/comunicacao/janela.js'
+import { tipoDeLembrete } from '../../../../../packages/core/src/comunicacao/lembretes.js'
+import { lerConfigComunicacao } from '../../comunicacao/config.js'
+import { contaDoUsuario } from '../../comunicacao/transportes.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 
@@ -26,15 +30,18 @@ export interface ResultadoLembretes {
   reunioes: number
   confirmacoes: number
   d1: number
+  /** Entrega cai no MESMO dia da reunião — o D-1 que atrasou vira "é hoje". */
+  d0: number
   h1: number
   reagendamentos: number
 }
 
-type Tipo = 'confirmacao' | 'd1' | 'h1' | 'reagendamento'
+type Tipo = 'confirmacao' | 'd1' | 'd0' | 'h1' | 'reagendamento'
 
 const TEMPLATE_POR_TIPO: Record<Tipo, string> = {
   confirmacao: 'Confirmação de reunião',
   d1: 'Lembrete D-1',
+  d0: 'Lembrete D-0',
   h1: 'Lembrete H-1',
   reagendamento: 'Reagendamento pós no-show',
 }
@@ -49,15 +56,39 @@ interface Evento {
   sdr_lead_id: string | null
 }
 
+/**
+ * Quem ASSINA o lembrete: o SDR que marcou a reunião.
+ *
+ * `vendedor_eventos.vendedor_id` é o dono da AGENDA — o closer que vai à chamada.
+ * Está certo para o calendário e errado para a mensagem: quem falou com o contato,
+ * combinou o horário e cujo número ele conhece é o SDR. Mandar o lembrete em nome
+ * de alguém que o cliente nunca viu é um número desconhecido pedindo confirmação
+ * de uma reunião — que é como se ganha um bloqueio.
+ *
+ * O caminho de reagendamento neste mesmo arquivo já usava `lead.sdr_id`; esta
+ * função é essa regra aplicada também aos lembretes que nascem da agenda.
+ */
+async function assinanteDoLembrete(ev: Evento): Promise<string> {
+  if (!ev.sdr_lead_id) return ev.vendedor_id
+  const { data } = await supabaseAdmin
+    .from('sdr_leads')
+    .select('sdr_id')
+    .eq('id', ev.sdr_lead_id)
+    .maybeSingle()
+  return (data as { sdr_id?: string | null } | null)?.sdr_id ?? ev.vendedor_id
+}
+
 export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoLembretes> {
   const acc: ResultadoLembretes = {
     reunioes: 0,
     confirmacoes: 0,
     d1: 0,
+    d0: 0,
     h1: 0,
     reagendamentos: 0,
   }
 
+  const cfg = await lerConfigComunicacao()
   const daqui48h = new Date(agora.getTime() + 48 * 3_600_000)
   const { data, error } = await supabaseAdmin
     .from('vendedor_eventos')
@@ -75,24 +106,50 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
   const eventos = (data ?? []) as Evento[]
   acc.reunioes = eventos.length
 
+  /*
+   * O TEXTO É ESCRITO PARA A HORA DA ENTREGA, NÃO PARA A HORA DA GERAÇÃO.
+   *
+   * A janela de envio é seg–sex, 9h–18h: o fim de semana já nunca recebeu nada.
+   * O que faltava era o corpo saber disso. Um D-1 gerado no domingo de manhã dizia
+   * "nossa conversa AMANHÃ, 21/09" e só saía da fila na segunda às 9h — quando
+   * "amanhã" já era hoje e a reunião estava a uma hora, não a vinte e oito.
+   *
+   * `proximaAbertura` responde "se eu enfileirar agora, quando isso chega?", e é
+   * essa distância — e não a distância até agora — que escolhe o template. Domingo
+   * de manhã, para uma reunião segunda ao meio-dia, a resposta passa a ser o D-0
+   * ("é hoje, às 13:00"), enfileirado no domingo e entregue na segunda.
+   */
+  const entrega = proximaAbertura(agora, cfg.janela)
+
   for (const ev of eventos) {
     const inicio = new Date(ev.inicio_em)
-    const faltamMs = inicio.getTime() - agora.getTime()
+    const faltamNaEntrega = inicio.getTime() - entrega.getTime()
+
+    /*
+     * Nada que só chegue DEPOIS da conversa — nem lembrete, nem confirmação.
+     *
+     * Antes esta guarda não precisava existir: a conta era feita contra `agora` e
+     * o passado nunca entrava. Agora que ela é contra a ENTREGA, uma reunião de
+     * sexta às 17h cujo primeiro horário de envio é segunda de manhã cai aqui.
+     */
+    if (faltamNaEntrega <= 0) continue
 
     // Confirmação: só para reuniões marcadas na última hora. Mandar confirmação
     // de uma reunião marcada semana passada confunde quem já a tem na agenda.
     if (agora.getTime() - new Date(ev.criado_em).getTime() < 3_600_000) {
-      if (await enfileirarLembrete(ev, 'confirmacao', inicio)) acc.confirmacoes += 1
+      if (await enfileirarLembrete(ev, 'confirmacao', inicio, entrega)) {
+        acc.confirmacoes += 1
+      }
     }
-    if (faltamMs > 20 * 3_600_000 && faltamMs <= 28 * 3_600_000) {
-      if (await enfileirarLembrete(ev, 'd1', inicio)) acc.d1 += 1
-    }
-    if (faltamMs > 0 && faltamMs <= 90 * 60_000) {
-      if (await enfileirarLembrete(ev, 'h1', inicio)) acc.h1 += 1
+
+    const tipo = tipoDeLembrete(faltamNaEntrega, inicio, entrega, cfg.janela.timezone)
+    if (!tipo) continue
+    if (await enfileirarLembrete(ev, tipo, inicio, entrega)) {
+      acc[tipo] += 1
     }
   }
 
-  acc.reagendamentos = await reagendarNoShows(agora)
+  acc.reagendamentos = await reagendarNoShows(agora, entrega)
 
   logger.info(acc, 'Lembretes de reunião processados.')
   return acc
@@ -105,7 +162,7 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
  * ligar — e o lead esfria exatamente aí. A mensagem sai sem cobrança: quem não
  * apareceu já sabe que não apareceu.
  */
-async function reagendarNoShows(agora: Date): Promise<number> {
+async function reagendarNoShows(agora: Date, entrega: Date): Promise<number> {
   const ontem = new Date(agora.getTime() - 26 * 3_600_000)
   const { data } = await supabaseAdmin
     .from('sdr_leads')
@@ -126,13 +183,26 @@ async function reagendarNoShows(agora: Date): Promise<number> {
       criado_em: lead.atualizado_em,
       sdr_lead_id: lead.id,
     }
-    if (await enfileirarLembrete(ev, 'reagendamento', new Date(ev.inicio_em))) n += 1
+    if (await enfileirarLembrete(ev, 'reagendamento', new Date(ev.inicio_em), entrega)) n += 1
   }
   return n
 }
 
-async function enfileirarLembrete(ev: Evento, tipo: Tipo, inicio: Date): Promise<boolean> {
+async function enfileirarLembrete(
+  ev: Evento,
+  tipo: Tipo,
+  inicio: Date,
+  entrega: Date,
+): Promise<boolean> {
   if (!ev.empresa_id) return false
+
+  const assinante = await assinanteDoLembrete(ev)
+  const { data: vendedor } = await supabaseAdmin
+    .from('vendedores')
+    .select('usuario_id')
+    .eq('id', assinante)
+    .maybeSingle()
+  const assinanteUsuarioId = (vendedor as { usuario_id?: string | null } | null)?.usuario_id ?? null
 
   const { data: template } = await supabaseAdmin
     .from('templates_mensagem')
@@ -179,6 +249,31 @@ async function enfileirarLembrete(ev: Evento, tipo: Tipo, inicio: Date): Promise
     { canal, baseLegal: contato.base_legal as never },
   )
 
+  /*
+   * O NÚMERO É FIXADO AQUI, e não sorteado no envio.
+   *
+   * `enviar-fila` resolve a conta assim: `whatsapp_conta_id` → conta de
+   * `criada_por` → `escolherConta()` (round-robin pela menos usada do dia). Uma
+   * automação não tem `criada_por` — não há humano que a escreveu —, então os
+   * lembretes caíam SEMPRE no round-robin e saíam pelo celular de quem tivesse
+   * mandado menos mensagens naquele dia.
+   *
+   * O resultado foi um lembrete do card do Viktor saindo pelo número do Rodrigo,
+   * que não sabia de nada. O número de quem assina é a única resposta certa: é no
+   * aparelho dele que a resposta do cliente vai cair.
+   *
+   * Sem conta ligada, segue nulo e o round-robin decide — um lembrete por um
+   * número estranho ainda é melhor que reunião sem lembrete —, mas o aviso fica
+   * registrado, porque a correção é ligar o número daquela pessoa.
+   */
+  const conta = await contaDoUsuario(assinanteUsuarioId, 'relacionamento')
+  if (!conta) {
+    logger.warn(
+      { vendedor_id: assinante, tipo },
+      'Quem assina o lembrete não tem conta de WhatsApp: o número sairá por rodízio.',
+    )
+  }
+
   const { error } = await supabaseAdmin.from('mensagens_outbox').insert({
     canal,
     destinatario: destino,
@@ -188,7 +283,8 @@ async function enfileirarLembrete(ev: Evento, tipo: Tipo, inicio: Date): Promise
     status: 'aprovada',
     origem: 'outbox',
     empresa_id: ev.empresa_id,
-    vendedor_id: ev.vendedor_id,
+    vendedor_id: assinante,
+    whatsapp_conta_id: conta?.id ?? null,
     template_id: template.id,
     funil: 'sdr',
     funil_card_id: ev.sdr_lead_id,
@@ -198,7 +294,18 @@ async function enfileirarLembrete(ev: Evento, tipo: Tipo, inicio: Date): Promise
      * lembrete de uma reunião que começa em uma hora não pode esperar até as 9h
      * do dia seguinte — nessa altura ele não é um lembrete, é um obituário.
      */
-    agendada_para: tipo === 'h1' ? new Date().toISOString() : null,
+    /*
+     * O instante da ENTREGA, explícito — o mesmo que escolheu o texto.
+     *
+     * Era `null` (= "assim que der"), e quem descobria a hora real era a fila,
+     * horas depois. Gravar aqui faz o corpo e o horário saírem da mesma conta: se
+     * a mensagem diz "é hoje", é porque ela foi agendada para hoje.
+     *
+     * O H-1 continua sendo agora: um lembrete de uma reunião que começa em uma
+     * hora não espera pela próxima abertura — nessa altura ele não é um lembrete,
+     * é um obituário.
+     */
+    agendada_para: tipo === 'h1' ? new Date().toISOString() : entrega.toISOString(),
   })
   if (error) {
     logger.error({ erro: error.message, tipo }, 'Falha ao enfileirar lembrete.')

@@ -438,6 +438,60 @@ o filtro é `origem <> 'celular'` — escrito como `or(origem.is.null,...)`, por
 O que a rampa de warmup limita é o **disparo frio**, que é o que faz um número ser
 marcado. Conversa humana respondida do outro lado é o que aquece o número.
 
+### A automação não tem "quem escreveu" — e caía no rodízio (0232)
+
+A ordem acima (`conta da linha` → `conta de quem escreveu` → round-robin) resolve o
+caso humano e **não alcançava a automação**, porque o degrau do meio é
+`contaDoUsuario(linha.criada_por)`: um job não tem `criada_por`. Nenhuma mensagem
+gerada por régua tinha número fixo, então **todas** caíam no rodízio.
+
+O caso que expôs isso: um lembrete de reunião do card do Viktor (SDR) foi gravado
+como sendo do Fabio (o closer) e saiu pelo celular do **Rodrigo**, que abriu o
+WhatsApp e viu uma mensagem que não escreveu, sobre uma reunião que não era dele.
+Três pessoas diferentes num toque só.
+
+Os lembretes passaram a gravar `whatsapp_conta_id` na própria linha da outbox — o
+número de quem assina, resolvido na geração. Sem conta ligada, segue nulo e o
+rodízio decide (lembrete por número estranho ainda é melhor que reunião sem
+lembrete), mas o aviso fica no log, porque a correção é ligar o número da pessoa.
+
+### O lembrete de reunião é do SDR, não do dono da agenda
+
+`vendedor_eventos.vendedor_id` é quem tem a reunião no calendário — o closer.
+Está certo para a agenda e errado para a mensagem: quem falou com o contato,
+combinou o horário e cujo número ele conhece é o **SDR**.
+
+O caminho de reagendamento pós-no-show já usava `sdr_leads.sdr_id`; os lembretes
+que nascem da agenda passaram a usar o mesmo dono.
+
+### O texto é escrito para a hora da ENTREGA
+
+A janela é seg–sex, 9h–18h, então fim de semana nunca recebeu nada — isso sempre
+esteve certo. O que faltava era o **corpo** saber disso.
+
+Um D-1 gerado no domingo de manhã dizia *"nossa conversa amanhã, 21/09"* e só saía
+na segunda às 9h, quando "amanhã" já era hoje e a reunião estava a uma hora. A
+mensagem saiu com sucesso, dizendo a coisa errada — e nada disso aparece em
+typecheck, lint ou teste de envio.
+
+`proximaAbertura` responde *"se eu enfileirar agora, quando isso chega?"*, e é essa
+distância que escolhe o template (`tipoDeLembrete`, no core, com sete testes):
+
+| entrega × reunião | template |
+| --- | --- |
+| ≤ 1h30 | Lembrete H-1 |
+| mesmo **dia local** | **Lembrete D-0** (novo) — "é hoje, às {hora}" |
+| ≤ 28h, outro dia | Lembrete D-1 — "amanhã, {data}" |
+| mais longe | nenhum, e terá amanhã |
+| já passou | nenhum — lembrete atrasado é pior que nenhum |
+
+O corte é o **dia local**, e não "menos de 24h": uma reunião às 9h de terça está a
+20 horas de uma entrega às 13h de segunda, e dizer "hoje" ali seria mentira.
+
+E `agendada_para` passou a ser gravado explicitamente com esse instante, em vez de
+`null` ("assim que der"): o corpo e o horário saem da mesma conta, então se a
+mensagem diz "é hoje" é porque ela foi agendada para hoje.
+
 ## De quem é cada mensagem
 
 `comunicacoes.vendedor_id` estava preenchido em 12 das 426 linhas, e o painel de

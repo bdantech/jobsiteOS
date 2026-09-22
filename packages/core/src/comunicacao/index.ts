@@ -1,6 +1,7 @@
 export * from './agente.js'
 export * from './identificador.js'
 export * from './janela.js'
+export * from './lembretes.js'
 export * from './mutations.js'
 export * from './portao.js'
 export * from './schemas.js'
