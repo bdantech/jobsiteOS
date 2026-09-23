@@ -53,6 +53,8 @@ export interface ResultadoDedup {
   reexibidos: number
   selos: number
   ambiguidades: number
+  /** Parcelas que a oferta encerrou nesta corrida. */
+  encerradas: number
   eventos: number
   prioridade: string
 }
@@ -111,33 +113,45 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
 }
 
 /**
- * As pré-autorizações candidatas — e aqui `expirada` FICA, de propósito.
+ * As pré-autorizações — TODAS, e o estágio vai junto em vez de virar `where`.
  *
- * Esta lista é o lado ESCONDIDO, não o lado original: `ESTAGIOS_ENCERRADOS` acima
- * responde "quem pode esconder", e esta responde "quem pode ser escondido". Uma
- * oferta expirada atrás de uma NF aberta é o caso CERTO — o card que fica é a nota,
- * e é nela que o selo "já teve pré-autorização" precisa pousar. Trocar esta lista
- * pela constante devolveria a oferta morta às Encerradas e tiraria o selo da nota
- * viva, que é a informação mais quente do funil.
+ * Duas razões para não filtrar aqui, e as duas são de papel:
+ *
+ *   como CARD (contra a parcela) .... a oferta ganha sempre, inclusive encerrada —
+ *       é ela que encerra a parcela. Filtrar as encerradas tiraria da lista
+ *       exatamente as ofertas que precisam manter a parcela escondida, e a parcela
+ *       reapareceria como prospecção nova na recomposição seguinte.
+ *   como ESCONDIDA (contra a NF) .... uma oferta expirada atrás de uma nota aberta é
+ *       o caso CERTO: o card que fica é a nota, e é nela que o selo pousa.
+ *
+ * Quem decide por papel é `deduplicarFunil`, onde os dois casos têm teste.
  */
-async function preAutorizacoesVivas(): Promise<PreAuthParaDedup[]> {
+async function carregarPreAutorizacoes(): Promise<PreAuthParaDedup[]> {
   const { rows } = await pool.query<Omit<PreAuthParaDedup, 'valor'> & { valor: string }>(`
     select id_externo, origin, status, criada_em::text as criada_em,
            sacado_matriz_cnpj, fornecedor_cnpj, numero_normalizado,
            valor::text as valor, vencimento::text as vencimento,
-           sienge_bill_id, sienge_installment_id
+           sienge_bill_id, sienge_installment_id,
+           estagio_funil, perda_motivo
       from public.pre_autorizacoes
-     where estagio_funil not in ('convertida', 'perdida')
   `)
   return rows.map((r) => ({ ...r, valor: Number(r.valor) }))
 }
 
-async function titulosVivos(): Promise<TituloParaDedup[]> {
+/**
+ * As parcelas — TODAS, pelo mesmo motivo de papel, e o `where` que estava aqui virou
+ * a guarda de `ENCERRADOS` dentro de `deduplicarFunil`.
+ *
+ * A parcela encerrada continua tendo de aparecer na lista para seguir escondida
+ * atrás da oferta que a encerrou; o que ela NÃO pode é esconder uma NF aberta, e
+ * essa é a regra da 0254, agora com teste no core em vez de um `where` sem teste.
+ */
+async function carregarTitulos(): Promise<TituloParaDedup[]> {
   const { rows } = await pool.query<TituloParaDedup>(`
     select id_externo, connection_id, bill_id, installment_id,
-           bill_access_key, nfe_candidate_access_key, pre_autorizacao_id_externo
+           bill_access_key, nfe_candidate_access_key, pre_autorizacao_id_externo,
+           estagio_funil
       from public.sienge_titulos
-     where estagio_funil not in (${SQL_ENCERRADOS})
   `)
   return rows
 }
@@ -146,8 +160,8 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
   const cfg = await lerConfigFunilOportunidades()
   const [notas, preAutorizacoes, titulos] = await Promise.all([
     notasVivas(),
-    preAutorizacoesVivas(),
-    titulosVivos(),
+    carregarPreAutorizacoes(),
+    carregarTitulos(),
   ])
 
   const r = deduplicarFunil({ notas, preAutorizacoes, titulos }, cfg.prioridade_nf_vs_titulo)
@@ -160,6 +174,7 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
     reexibidos: 0,
     selos: r.selos.length,
     ambiguidades: r.ambiguidades.length,
+    encerradas: 0,
     eventos: 0,
     prioridade: cfg.prioridade_nf_vs_titulo,
   }
@@ -258,6 +273,37 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
 
     await marcar('pre_autorizacoes', 'pre_autorizacao', 'id_externo')
     await marcar('sienge_titulos', 'titulo', 'id_externo')
+
+    /*
+     * A PARCELA HERDA O ENCERRAMENTO DA OFERTA — e este é o único lugar onde a dedup
+     * escreve `estagio_funil`.
+     *
+     * Ocultar sozinho não bastaria: a parcela ficaria escondida com `a_prospectar`
+     * gravado, e todo relatório que lê `sienge_titulos` direto continuaria contando
+     * uma parcela aberta que não está. Pior, `reclassificar` e o sync a tratariam
+     * como trabalho a fazer.
+     *
+     * `is distinct from` na guarda porque isto roda a cada corrida: sem ela, o
+     * `estagio_alterado_em` de toda parcela encerrada seria reescrito de hora em
+     * hora, e "quando isto encerrou?" perderia a resposta.
+     */
+    if (r.encerramentos.length > 0) {
+      const { rowCount } = await cliente.query(
+        `update public.sienge_titulos t
+            set estagio_funil = e.estagio,
+                estagio_alterado_em = now(),
+                perda_motivo = coalesce(e.perda_motivo, t.perda_motivo)
+           from unnest($1::int[], $2::text[], $3::text[]) as e(id, estagio, perda_motivo)
+          where t.id_externo = e.id
+            and t.estagio_funil is distinct from e.estagio`,
+        [
+          r.encerramentos.map((e) => Number(e.referencia_id)),
+          r.encerramentos.map((e) => e.estagio),
+          r.encerramentos.map((e) => e.perda_motivo),
+        ],
+      )
+      acc.encerradas = rowCount ?? 0
+    }
 
     await cliente.query('commit')
 

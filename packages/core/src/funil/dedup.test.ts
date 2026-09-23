@@ -32,6 +32,8 @@ const pre = (over: Partial<EntradaDedup['preAutorizacoes'][number]> = {}) => ({
   vencimento: '2026-10-10',
   sienge_bill_id: null,
   sienge_installment_id: null,
+  estagio_funil: 'a_prospectar',
+  perda_motivo: null,
   ...over,
 })
 
@@ -43,6 +45,7 @@ const titulo = (over: Partial<EntradaDedup['titulos'][number]> = {}) => ({
   bill_access_key: null,
   nfe_candidate_access_key: null,
   pre_autorizacao_id_externo: null,
+  estagio_funil: 'a_prospectar',
   ...over,
 })
 
@@ -63,16 +66,139 @@ test('pré-auth com original NF: some da lista e deixa o selo na nota', () => {
   assert.equal(r.selos[0]?.status, 'WAITING_CONTRACTED')
 })
 
-test('pré-auth com original título: o id do título manda, sem interpretar nada', () => {
+test('pré-auth ↔ título: a OFERTA fica e a parcela sai — o par é 1:1', () => {
   const r = deduplicarFunil({
     ...VAZIO,
     preAutorizacoes: [pre({ numero_normalizado: null })],
     titulos: [titulo({ pre_autorizacao_id_externo: 501 })],
   })
 
+  assert.deepEqual(r.ocultacoes, [
+    {
+      tipo: 'titulo',
+      referencia_id: '900',
+      motivo: 'oferta_criada',
+      original_tipo: 'pre_autorizacao',
+      original_id: '501',
+    },
+  ])
+  // A oferta É o card: não há selo "já tem pré-autorização" para pousar em ninguém.
+  assert.deepEqual(r.selos, [])
+  assert.deepEqual(r.encerramentos, [])
+})
+
+test('casa pela PARCELA (billId + installmentId) quando o título não aponta', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    preAutorizacoes: [
+      pre({ numero_normalizado: null, sienge_bill_id: 4242, sienge_installment_id: 1 }),
+    ],
+    titulos: [titulo()],
+  })
+
   assert.equal(r.ocultacoes.length, 1)
-  assert.equal(r.ocultacoes[0]?.original_tipo, 'titulo')
-  assert.equal(r.ocultacoes[0]?.original_id, '900')
+  assert.equal(r.ocultacoes[0]?.tipo, 'titulo')
+  assert.equal(r.ocultacoes[0]?.original_id, '501')
+})
+
+/**
+ * A decisão de 23/09/2026, e ela é de negócio: oferta recusada não é parcela a
+ * retrabalhar. Sem o encerramento a parcela voltaria como prospecção nova no dia
+ * seguinte e o funil pediria de novo o trabalho que a construtora já respondeu.
+ */
+for (const estagio of ['perdida', 'expirada', 'convertida'] as const) {
+  test(`oferta ${estagio} ENCERRA a parcela, não devolve ela à coluna aberta`, () => {
+    const r = deduplicarFunil({
+      ...VAZIO,
+      preAutorizacoes: [pre({ numero_normalizado: null, estagio_funil: estagio })],
+      titulos: [titulo({ pre_autorizacao_id_externo: 501, estagio_funil: 'a_prospectar' })],
+    })
+
+    assert.equal(r.ocultacoes.length, 1, 'a parcela continua escondida atrás da oferta')
+    assert.equal(r.encerramentos.length, 1)
+    assert.equal(r.encerramentos[0]?.referencia_id, '900')
+    assert.equal(r.encerramentos[0]?.estagio, estagio)
+    // `convertida` não é perda: não inventa motivo de perda.
+    assert.equal(r.encerramentos[0]?.perda_motivo === null, estagio === 'convertida')
+  })
+}
+
+test('o motivo de perda da oferta descesse para a parcela quando existe', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    preAutorizacoes: [
+      pre({
+        numero_normalizado: null,
+        estagio_funil: 'perdida',
+        perda_motivo: 'Revogada pela construtora.',
+      }),
+    ],
+    titulos: [titulo({ pre_autorizacao_id_externo: 501 })],
+  })
+
+  assert.equal(r.encerramentos[0]?.perda_motivo, 'Revogada pela construtora.')
+})
+
+/**
+ * O ciclo que o `continue` do §2a existe para impedir: parcela → oferta → NF →
+ * parcela. Se a oferta pudesse ser escondida pela NF depois de já ter escondido a
+ * parcela, `raiz()` daria a volta até o teto de saltos e devolveria um original
+ * arbitrário — e o card visível seria decidido por acidente.
+ */
+test('oferta com parcela é a RAIZ: a NF não a esconde, e não há ciclo', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil(
+    {
+      notas: [nf({ access_key: chave })],
+      // A mesma oferta casa com a parcela (por id) E com a NF (por número).
+      preAutorizacoes: [pre({ sienge_bill_id: 4242, sienge_installment_id: 1 })],
+      titulos: [titulo({ bill_access_key: chave })],
+    },
+    'titulo',
+  )
+
+  assert.equal(
+    r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao'),
+    undefined,
+    'a oferta não é escondida por ninguém',
+  )
+  const daParcela = r.ocultacoes.find((o) => o.tipo === 'titulo')
+  assert.equal(daParcela?.original_id, '501')
+  // A NF é escondida, e a cadeia a reaponta para a OFERTA, que é quem está na tela.
+  const daNota = r.ocultacoes.find((o) => o.tipo === 'nf')
+  assert.equal(daNota?.original_tipo, 'pre_autorizacao')
+  assert.equal(daNota?.original_id, '501')
+})
+
+/**
+ * A 0254 no core: documento encerrado não leva card aberto com ele. Aqui a parcela
+ * é encerrada NESTA MESMA passada pela oferta, então o estágio do banco ainda diz
+ * `a_prospectar` — e é por isso que o teste existe.
+ */
+test('parcela encerrada pela oferta não esconde NF aberta', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil(
+    {
+      notas: [nf({ access_key: chave })],
+      preAutorizacoes: [
+        pre({
+          numero_normalizado: null,
+          estagio_funil: 'perdida',
+          sienge_bill_id: 4242,
+          sienge_installment_id: 1,
+        }),
+      ],
+      titulos: [titulo({ bill_access_key: chave, estagio_funil: 'a_prospectar' })],
+    },
+    'titulo',
+  )
+
+  assert.equal(r.encerramentos.length, 1)
+  assert.equal(
+    r.ocultacoes.find((o) => o.tipo === 'nf'),
+    undefined,
+    'a NF aberta fica na tela; quem saiu foi a parcela, atrás da oferta perdida',
+  )
 })
 
 test('pré-auth órfã é o próprio original — vira card, não some', () => {

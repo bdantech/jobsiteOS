@@ -225,12 +225,19 @@ export const CONFIG_FUNIL_OPORTUNIDADES_PADRAO: ConfigFunilOportunidades =
 
 // ─── Motivos de ocultação ───────────────────────────────────────────────────
 
-export const MOTIVOS_OCULTACAO = ['tem_original', 'duplicado_canal'] as const
+export const MOTIVOS_OCULTACAO = ['tem_original', 'duplicado_canal', 'oferta_criada'] as const
 export type MotivoOcultacao = (typeof MOTIVOS_OCULTACAO)[number]
 
 export const MOTIVO_OCULTACAO_LABELS: Record<MotivoOcultacao, string> = {
   tem_original: 'Escondido porque o documento original já está no funil',
   duplicado_canal: 'O mesmo recebível chegou pelo outro canal',
+  /*
+   * `oferta_criada` é a parcela que já virou oferta, e não se confunde com
+   * `tem_original`: ali o card escondido é o DERIVADO, aqui é a parcela — que é
+   * anterior à oferta e some justamente porque a oferta descreve melhor o estado
+   * do mesmo recebível.
+   */
+  oferta_criada: 'A parcela já virou pré-autorização, e a oferta é o card',
 }
 
 // ─── Tools (§10) ────────────────────────────────────────────────────────────

@@ -4,11 +4,37 @@ import type { MotivoOcultacao, PrioridadeNfVsTitulo, TipoOportunidade } from './
  * A DEDUPLICAÇÃO (§5) — quem aparece quando o mesmo recebível chega por dois
  * caminhos.
  *
- * ── A HIERARQUIA ────────────────────────────────────────────────────────────
- * O ORIGINAL TEM PRECEDÊNCIA SOBRE O DERIVADO. Quando uma NF ou uma parcela já
- * virou pré-autorização, lista-se o original e ele ganha um selo "já tem
- * pré-autorização". A pré-autorização não vira card próprio: ela é uma coisa que
- * ACONTECEU com o documento, não um segundo documento.
+ * ── A HIERARQUIA, E ELA NÃO É A MESMA NOS DOIS PARES ────────────────────────
+ * Contra a NF, o original tem precedência: a nota fica e ganha um selo "já tem
+ * pré-autorização". Contra o TÍTULO, quem fica é a OFERTA.
+ *
+ * A diferença é de CARDINALIDADE, e é o que uma versão anterior deste arquivo
+ * errou ao aplicar a mesma razão aos dois pares:
+ *
+ *   pré-auth ↔ título ... 1:1. A oferta aponta `billId` + `installmentId`, então é
+ *                         a MESMA unidade que a parcela. Medido em 23/09/2026: 123
+ *                         parcelas com oferta, nenhuma com duas.
+ *   pré-auth ↔ NF ....... 1:N. Uma nota de R$ 55 mil em três parcelas gera até três
+ *                         ofertas, e esconder a nota atrás de uma delas diria que só
+ *                         aquela existe.
+ *
+ * E contra o título a oferta descreve melhor o mesmo recebível: ela tem relógio
+ * (`expiresAt`), status e valor autorizado, e o card da parcela não tem onde
+ * mostrar isso — a view do título fixa `relogio = NULL`. Medido: dos 87 títulos que
+ * escondiam uma oferta aberta, TODOS tinham `situation = 'offer_created'` e nenhum
+ * tinha `guard_reason`; o card na tela dizia "uma oferta foi criada" e escondia
+ * exatamente essa oferta, com 9 prazos já vencidos sem ninguém ver.
+ *
+ * ── OFERTA ENCERRADA ENCERRA A PARCELA ──────────────────────────────────────
+ * Quando a oferta acaba — convertida, perdida ou expirada — a parcela NÃO volta
+ * para a coluna aberta: ela é marcada com o mesmo estágio da oferta. É decisão de
+ * negócio, e a razão é que oferta recusada não é parcela a retrabalhar. Sem isso a
+ * parcela reapareceria como prospecção nova no dia seguinte, e o funil pediria de
+ * novo o trabalho que a construtora já respondeu.
+ *
+ * É por isso que `encerramentos` existe: a ocultação sozinha esconderia a parcela
+ * sem consertar o estágio dela, e qualquer relatório que leia `sienge_titulos`
+ * direto continuaria contando uma parcela aberta que não está.
  *
  * ── A REGRA QUE VALE MAIS QUE TODAS ─────────────────────────────────────────
  * AMBÍGUO NÃO ESCONDE NADA. Quando dois candidatos casam igualmente bem, os dois
@@ -46,6 +72,13 @@ export interface PreAuthParaDedup {
   vencimento: string | null
   sienge_bill_id: number | null
   sienge_installment_id: number | null
+  /**
+   * O estágio da OFERTA, e ele entra no core porque a decisão depende dele: uma
+   * oferta encerrada encerra a parcela em vez de devolvê-la à coluna aberta.
+   */
+  estagio_funil: string
+  /** Acompanha o encerramento da parcela: perda sem causa não tem resposta. */
+  perda_motivo?: string | null
 }
 
 export interface TituloParaDedup {
@@ -56,6 +89,18 @@ export interface TituloParaDedup {
   bill_access_key: string | null
   nfe_candidate_access_key: string | null
   pre_autorizacao_id_externo: number | null
+  /**
+   * O estágio da PARCELA, e ele é filtrado AQUI e não no SQL do job — porque o
+   * filtro depende do PAPEL, e o mesmo título tem os dois:
+   *
+   *   escondido atrás da oferta ... qualquer estágio serve. Filtrar encerrados no
+   *       SQL tirava da lista justamente a parcela que acabou de ser encerrada pela
+   *       oferta, a ocultação dela se perdia na recomposição, e ela reaparecia em
+   *       Encerradas ao lado da própria oferta — dois cards do mesmo recebível.
+   *   original de uma NF (§3) .... encerrado NÃO esconde. É a regra da 0254:
+   *       documento que já saiu do funil não leva card aberto com ele.
+   */
+  estagio_funil: string
 }
 
 export interface Ocultacao {
@@ -91,10 +136,26 @@ export interface EntradaDedup {
   titulos: readonly TituloParaDedup[]
 }
 
+/**
+ * A parcela que a oferta encerrou, com o estágio que ela herda.
+ *
+ * Só existe para `titulo`: é o único par em que o derivado (a oferta) ganha do
+ * documento, e portanto o único em que o estado do card visível tem de descer para
+ * quem ficou escondido.
+ */
+export interface EncerramentoDerivado {
+  tipo: 'titulo'
+  referencia_id: string
+  /** Sempre um de `ESTAGIOS_ENCERRADOS`, espelhado da oferta. */
+  estagio: string
+  perda_motivo: string | null
+}
+
 export interface ResultadoDedup {
   ocultacoes: Ocultacao[]
   selos: SeloPreAutorizacao[]
   ambiguidades: AmbiguidadeDedup[]
+  encerramentos: EncerramentoDerivado[]
 }
 
 /** `nf:3512…` — a identidade de uma oportunidade nas três fontes. */
@@ -103,6 +164,23 @@ export function chaveDedup(tipo: TipoOportunidade, id: string | number): string 
 }
 
 /** Tolerância do DESEMPATE por valor: 1%. */
+/**
+ * Os estágios que significam "saiu do funil".
+ *
+ * Repetido aqui, e não importado de `antecipacao/schemas`, porque `dedup.ts` é puro
+ * e não deve depender do módulo de Antecipação para uma lista de três palavras. O
+ * `satisfies` amarra os dois: se a lista de lá mudar, o typecheck deste arquivo cai.
+ */
+const ENCERRADOS: ReadonlySet<string> = new Set<string>(['convertida', 'perdida', 'expirada'])
+
+/** A frase quando a oferta não trouxe a própria: o relatório não fica sem causa. */
+function motivoPadraoDeEncerramento(estagio: string): string | null {
+  if (estagio === 'convertida') return null
+  return estagio === 'expirada'
+    ? 'A oferta desta parcela expirou na plataforma.'
+    : 'A oferta desta parcela foi encerrada na plataforma.'
+}
+
 const TOLERANCIA_VALOR = 0.01
 /** Tolerância do DESEMPATE por vencimento: 5 dias para cada lado. */
 const TOLERANCIA_DIAS = 5
@@ -146,6 +224,7 @@ export function deduplicarFunil(
   const ocultacoes = new Map<string, Ocultacao>()
   const selos: SeloPreAutorizacao[] = []
   const ambiguidades: AmbiguidadeDedup[] = []
+  const encerramentos: EncerramentoDerivado[] = []
 
   // ── 1. Pré-auth ↔ título, por id. Sem ambiguidade quando o título aponta. ──
 
@@ -187,17 +266,17 @@ export function deduplicarFunil(
   for (const pre of entrada.preAutorizacoes) {
     const chavePre = chaveDedup('pre_autorizacao', pre.id_externo)
 
-    // 2a. O título que aponta para ela. É id contra id: não há o que interpretar.
-    let original: { tipo: TipoOportunidade; id: string } | null = null
+    // 2a. A PARCELA desta oferta, por id. É id contra id: não há o que interpretar.
+    let parcelaDaOferta: TituloParaDedup | null = null
 
     const apontado = tituloPorPreAuth.get(pre.id_externo)
     if (apontado) {
-      original = { tipo: 'titulo', id: String(apontado.id_externo) }
+      parcelaDaOferta = apontado
     } else if (pre.sienge_bill_id !== null && pre.sienge_installment_id !== null) {
       const candidatos =
         titulosPorParcela.get(`${pre.sienge_bill_id}/${pre.sienge_installment_id}`) ?? []
       if (candidatos.length === 1) {
-        original = { tipo: 'titulo', id: String((candidatos[0] as TituloParaDedup).id_externo) }
+        parcelaDaOferta = candidatos[0] as TituloParaDedup
       } else if (candidatos.length > 1) {
         /*
          * O `billId` repetido entre conexões, acontecendo de verdade. Não há como
@@ -212,8 +291,40 @@ export function deduplicarFunil(
       }
     }
 
-    // 2b. Sem título: a NF. Só quando há número para casar.
-    if (!original && pre.numero_normalizado) {
+    /*
+     * A OFERTA É O CARD, E A PARCELA SAI — e aqui a oferta é a RAIZ da cadeia.
+     *
+     * O `continue` não é atalho: ele garante que uma oferta com parcela nunca seja
+     * escondida por mais nada. Sem ele, o ramo da NF abaixo poderia esconder esta
+     * mesma oferta, e com a NF já escondida atrás da parcela (§3) o grafo fecharia
+     * um CICLO — parcela → oferta → NF → parcela — que `raiz()` só conteria pelo
+     * teto de saltos, devolvendo um original arbitrário.
+     */
+    if (parcelaDaOferta) {
+      ocultacoes.set(chaveDedup('titulo', parcelaDaOferta.id_externo), {
+        tipo: 'titulo',
+        referencia_id: String(parcelaDaOferta.id_externo),
+        motivo: 'oferta_criada',
+        original_tipo: 'pre_autorizacao',
+        original_id: String(pre.id_externo),
+      })
+
+      // Oferta encerrada encerra a parcela: ela não volta para a coluna aberta.
+      if (ENCERRADOS.has(pre.estagio_funil)) {
+        encerramentos.push({
+          tipo: 'titulo',
+          referencia_id: String(parcelaDaOferta.id_externo),
+          estagio: pre.estagio_funil,
+          perda_motivo: pre.perda_motivo ?? motivoPadraoDeEncerramento(pre.estagio_funil),
+        })
+      }
+      continue
+    }
+
+    // 2b. Sem parcela: a NF, e aí quem fica é a NOTA — é o par 1:N. Só quando há
+    // número para casar.
+    let original: { tipo: TipoOportunidade; id: string } | null = null
+    if (pre.numero_normalizado) {
       const k = `${pre.sacado_matriz_cnpj}/${pre.fornecedor_cnpj}/${pre.numero_normalizado}`
       const candidatos = notasPorChave.get(k) ?? []
       if (candidatos.length === 1) {
@@ -273,6 +384,17 @@ export function deduplicarFunil(
   const notasPorChaveAcesso = new Map<string, NotaParaDedup>()
   for (const n of entrada.notas) notasPorChaveAcesso.set(n.access_key, n)
 
+  /*
+   * O estágio EFETIVO da parcela: o dela, ou o que a oferta acabou de lhe dar.
+   *
+   * Sem isto uma parcela que a oferta encerrou agora — e cujo estágio no banco
+   * ainda diz `a_prospectar` — continuaria habilitada a esconder uma NF ABERTA.
+   * Seria a 0254 de novo: documento encerrado levando card aberto com ele, só que
+   * por um encerramento decidido nesta mesma passada.
+   */
+  const estagioEfetivo = new Map<string, string>()
+  for (const e of encerramentos) estagioEfetivo.set(e.referencia_id, e.estagio)
+
   for (const t of entrada.titulos) {
     const chave = t.bill_access_key ?? t.nfe_candidate_access_key
     if (!chave) continue
@@ -280,6 +402,11 @@ export function deduplicarFunil(
     if (!nota) continue
 
     if (prioridade === 'titulo') {
+      // Parcela encerrada não esconde nota: a regra da 0254, agora no core, onde ela
+      // pode ser testada em vez de morar num `where` do job.
+      const estagio = estagioEfetivo.get(String(t.id_externo)) ?? t.estagio_funil
+      if (ENCERRADOS.has(estagio)) continue
+
       // A PARCELA é a unidade que vira oferta. A nota inteira esconderia que só
       // uma das três está disponível agora.
       ocultacoes.set(chaveDedup('nf', nota.access_key), {
@@ -332,5 +459,5 @@ export function deduplicarFunil(
     s.referencia_id = r.id
   }
 
-  return { ocultacoes: [...ocultacoes.values()], selos, ambiguidades }
+  return { ocultacoes: [...ocultacoes.values()], selos, ambiguidades, encerramentos }
 }
