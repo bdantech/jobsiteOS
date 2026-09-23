@@ -17,7 +17,7 @@ import {
   useFunilQuery,
   useMinimoOperavelQuery,
   type FornecedorFunil,
-  type NotaFunil,
+  type Oportunidade,
 } from '@/features/antecipacao'
 import { useDebouncedValue } from '@/features/empresas'
 import { useSession } from '@/lib/auth'
@@ -64,13 +64,13 @@ export default function FunilScreen() {
   } = useFunilQuery(filtros)
 
   // O `select` do hook já achata as páginas e faz o merge dos mapas de fornecedor.
-  const notas = data?.notas ?? []
+  const oportunidades = data?.oportunidades ?? []
   const fornecedores: Map<string, FornecedorFunil> = data?.fornecedores ?? new Map()
   const total = data?.total ?? 0
-  const valorPagina = notas.reduce((s, n) => s + Number(n.valor ?? 0), 0)
+  const valorPagina = oportunidades.reduce((s: number, o) => s + Number(o.valor ?? 0), 0)
 
   const renderItem = useCallback(
-    ({ item }: { item: NotaFunil }) => (
+    ({ item }: { item: Oportunidade }) => (
       <NotaCard
         nota={item}
         fornecedor={item.fornecedor_cnpj ? fornecedores.get(item.fornecedor_cnpj) : undefined}
@@ -123,8 +123,8 @@ export default function FunilScreen() {
 
       <View className="gap-1.5">
         <Text variant="muted" className="px-4 text-xs tabular-nums">
-          {isPending ? '…' : `${total.toLocaleString('pt-BR')} notas`}
-          {notas.length > 0 ? ` · ${formatarMoeda(valorPagina)} carregados` : ''}
+          {isPending ? '…' : `${total.toLocaleString('pt-BR')} oportunidades`}
+          {oportunidades.length > 0 ? ` · ${formatarMoeda(valorPagina)} carregados` : ''}
         </Text>
 
         {/*
@@ -195,7 +195,7 @@ export default function FunilScreen() {
         />
       ) : (
         <FlatList
-          data={notas}
+          data={oportunidades}
           keyExtractor={(item) => item.access_key as string}
           renderItem={renderItem}
           contentContainerClassName="gap-3 px-4 pb-10"
@@ -218,7 +218,7 @@ export default function FunilScreen() {
               description={
                 filtrando
                   ? 'Nada com estes filtros. Tente limpar a faixa ou a tipagem.'
-                  : `Nada em ${ESTAGIO_FUNIL_LABELS[estagio as EstagioFunil] ?? estagio}. As notas chegam pelo sync, de 4 em 4 horas.`
+                  : `Nada em ${ESTAGIO_FUNIL_LABELS[estagio as EstagioFunil] ?? estagio}. As oportunidades chegam pelo sync, de 4 em 4 horas.`
               }
               actionLabel={filtrando ? 'Limpar filtros' : undefined}
               onAction={

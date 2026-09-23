@@ -67,7 +67,7 @@ export const antecipacaoKeys = {
  * tela teria que refazer o merge a cada render.
  */
 export interface FunilAchatado {
-  notas: PaginaFunil['notas']
+  oportunidades: PaginaFunil['oportunidades']
   fornecedores: PaginaFunil['fornecedores']
   total: number
 }
@@ -78,11 +78,11 @@ export function useFunilQuery(filtros: FiltrosFunil): UseInfiniteQueryResult<Fun
     queryFn: ({ pageParam }) => fetchFunil(filtros, pageParam),
     initialPageParam: 0,
     getNextPageParam: (ultima, todas) =>
-      todas.reduce((s, p) => s + p.notas.length, 0) < ultima.total ? todas.length : undefined,
+      todas.reduce((s, p) => s + p.oportunidades.length, 0) < ultima.total ? todas.length : undefined,
     select: (data) => {
       const fornecedores = new Map(data.pages.flatMap((p) => [...p.fornecedores]))
       return {
-        notas: data.pages.flatMap((p) => p.notas),
+        oportunidades: data.pages.flatMap((p) => p.oportunidades),
         fornecedores,
         total: data.pages[0]?.total ?? 0,
       }

@@ -3,6 +3,7 @@ import type { Json } from '@jobsiteos/core'
 import { supabase } from '@/lib/supabase'
 import type {
   ConfigProspeccao,
+  PedidoApresentacao,
   NotasDoCard,
   PainelProspeccao,
   QuebraFornecedor,
@@ -24,7 +25,7 @@ import type {
 
 /** Em UMA string literal: o supabase-js parseia o select no nível de tipo. */
 const COLUNAS_CARD =
-  'id, cnpj_sacado, sacado_nome, municipio, uf, cnae_principal, porte_rfb, empresa_id, originador_id, originador_nome, estagio, volume_30d, valor_operavel, qtd_nfs_30d, qtd_fornecedores, meses_com_emissao_6m, media_mensal_6m, ultima_nf_em, prazo_minimo_operavel_dias, prazo_minimo_origem, score_credito, score_completude, chance_concessao, limite_potencial, valor_esperado_mensal, analise_estagio'
+  'id, cnpj_sacado, sacado_nome, municipio, uf, cnae_principal, porte_rfb, empresa_id, originador_id, originador_nome, estagio, volume_30d, valor_operavel, qtd_nfs_30d, qtd_fornecedores, meses_com_emissao_6m, media_mensal_6m, ultima_nf_em, prazo_minimo_operavel_dias, prazo_minimo_origem, score_credito, score_completude, chance_concessao, limite_potencial, valor_esperado_mensal, analise_estagio, condicao_taxa_am, condicao_tac, condicao_publicada_em, condicao_expira_em'
 
 /**
  * No celular a lista é PLANA e ordenada por valor esperado, não um kanban.
@@ -113,4 +114,26 @@ export async function fetchConfigProspeccao(): Promise<ConfigProspeccao> {
       (porChave.get('templates') as ConfigProspeccao['templates'] | undefined) ??
       CONFIG_PROSPECCAO_PADRAO.templates,
   }
+}
+
+/**
+ * OS PEDIDOS DE APRESENTAÇÃO deste sacado, e o que voltou deles.
+ *
+ * O app já sabia PEDIR (`pedirApresentacaoSacado`), mas não sabia mostrar o
+ * pedido nem a resposta — então quem pedia pelo celular não tinha como saber se
+ * o analista respondeu, e pedia de novo. `status`, `direcao` e `respondido_em`
+ * são o que fecham o ciclo: a 0222d deu direção ao pedido e a 0248 fez a
+ * resposta voltar para quem pediu.
+ */
+export async function fetchPedidosApresentacao(
+  cnpjSacado: string,
+): Promise<PedidoApresentacao[]> {
+  const { data, error } = await supabase
+    .from('pedidos_apresentacao')
+    .select('id, fornecedor_cnpj, sacado_cnpj, mensagem, status, direcao, criado_em, respondido_em')
+    .eq('sacado_cnpj', cnpjSacado)
+    .order('criado_em', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return (data ?? []) as PedidoApresentacao[]
 }

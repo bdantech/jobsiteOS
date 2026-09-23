@@ -37,6 +37,9 @@ const COLUNAS_INBOX =
 
 export type AbaMobile = 'nao_lidas' | 'todas'
 
+/** Quantas mensagens a thread carrega. São as ÚLTIMAS, não as primeiras. */
+const ULTIMAS = 300
+
 export async function buscarConversas(aba: AbaMobile): Promise<ConversaInbox[]> {
   let q = supabase
     .from('inbox_conversas')
@@ -55,10 +58,21 @@ export async function buscarThread(conversaId: string): Promise<MensagemThread[]
     .from('comunicacoes_thread')
     .select('id, conversa_id, empresa_id, contato_id, canal, direcao, por_ia, assunto, corpo, preview, status_envio, erro, origem, triagem, criado_em, contato_nome, vendedor_nome, usuario_nome')
     .eq('conversa_id', conversaId)
-    .order('criado_em', { ascending: true })
-    .limit(200)
+    /*
+     * O TETO CORTA AS MAIS ANTIGAS, NUNCA AS MAIS RECENTES.
+     *
+     * Estava `ascending: true` com `limit`, que guarda as primeiras 200 e joga
+     * fora o resto — numa conversa longa o celular parava de mostrar justamente
+     * o que acabou de ser dito, sem aviso. Hoje há 11 conversas acima de 200
+     * mensagens, a maior com 633: eram 1.812 mensagens invisíveis, todas
+     * recentes. A web tem a mesma correção.
+     *
+     * Desce em ordem decrescente e sobe para a tela na ordem de leitura.
+     */
+    .order('criado_em', { ascending: false })
+    .limit(ULTIMAS)
   if (error) throw new Error(error.message)
-  return (data ?? []) as MensagemThread[]
+  return ((data ?? []) as MensagemThread[]).reverse()
 }
 
 /**

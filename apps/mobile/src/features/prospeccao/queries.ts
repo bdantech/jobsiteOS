@@ -21,12 +21,14 @@ import {
   fetchConfigProspeccao,
   fetchNotasDoCard,
   fetchPainelProspeccao,
+  fetchPedidosApresentacao,
   fetchQuebraFornecedores,
   fetchSacadosProspeccao,
 } from './api'
 import type {
   ConfigProspeccao,
   NotasDoCard,
+  PedidoApresentacao,
   PainelProspeccao,
   QuebraFornecedor,
   SacadoProspeccao,
@@ -48,7 +50,10 @@ export const prospeccaoKeys = {
   notas: (cnpj: string, fornecedor: string | null) =>
     [...prospeccaoKeys.all, 'notas', cnpj, fornecedor] as const,
   config: () => [...prospeccaoKeys.all, 'config'] as const,
+  pedidos: (cnpj: string) => [...prospeccaoKeys.all, 'pedidos', cnpj] as const,
 }
+
+
 
 // ─── Leituras ───────────────────────────────────────────────────────────────
 
@@ -189,4 +194,20 @@ export function usePedirPonte(): UseMutationResult<
 export function mensagemDeErro(error: unknown): string {
   if (error instanceof MutationError) return error.message
   return 'Não foi possível concluir a ação. Verifique sua conexão e tente de novo.'
+}
+
+/**
+ * Os pedidos de apresentação de um sacado. Só carrega quando o card ABRE: a
+ * lista tem dezenas de sacados e ninguém quer o histórico de todos.
+ */
+export function usePedidosApresentacaoQuery(
+  cnpjSacado: string,
+  enabled: boolean,
+): UseQueryResult<PedidoApresentacao[], Error> {
+  return useQuery({
+    queryKey: prospeccaoKeys.pedidos(cnpjSacado),
+    queryFn: () => fetchPedidosApresentacao(cnpjSacado),
+    enabled,
+    staleTime: 60 * 1000,
+  })
 }

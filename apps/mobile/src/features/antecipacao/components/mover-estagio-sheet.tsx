@@ -12,7 +12,7 @@ import { Sheet } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import { mensagemDeErro, useMoverEstagio } from '../queries'
-import type { NotaFunil } from '../types'
+import type { Oportunidade } from '../types'
 
 /**
  * Mover a nota de estágio, do swipe.
@@ -28,7 +28,7 @@ import type { NotaFunil } from '../types'
 const DESTINOS: readonly EstagioFunil[] = [...ESTAGIOS_ABERTOS, 'convertida', 'perdida']
 
 export interface MoverEstagioSheetProps {
-  nota: NotaFunil
+  nota: Oportunidade
   sugerido?: EstagioFunil
   open: boolean
   onOpenChange: (open: boolean) => void

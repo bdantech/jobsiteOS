@@ -10,7 +10,11 @@ import { Text } from '@/components/ui/text'
 import { formatarData, formatarMoeda } from '@/features/antecipacao/format'
 import { cn } from '@/lib/utils'
 import { STATUS_TEXTO } from '../format'
-import { useNotasDoCardQuery, useQuebraFornecedoresQuery } from '../queries'
+import {
+  useNotasDoCardQuery,
+  usePedidosApresentacaoQuery,
+  useQuebraFornecedoresQuery,
+} from '../queries'
 import type { ConfigProspeccao, QuebraFornecedor, SacadoProspeccao } from '../types'
 
 /**
@@ -101,10 +105,20 @@ export function SacadoProspeccaoCard({
   const [aberto, setAberto] = useState(false)
   const [expandido, setExpandido] = useState<string | null>(null)
   const quebra = useQuebraFornecedoresQuery(aberto ? (sacado.id ?? undefined) : undefined)
+  const pedidos = usePedidosApresentacaoQuery(sacado.cnpj_sacado ?? '', aberto && Boolean(sacado.cnpj_sacado))
 
   const estagio = (sacado.estagio ?? 'identificado') as EstagioProspeccao
   const janelaMeses = config.janelas.janela_recorrencia_meses
   const fragil = Number(sacado.score_completude ?? 0) < 0.5 && sacado.score_credito !== null
+
+  /*
+   * Vencida é comparada contra o DIA, não contra o instante: uma condição que
+   * expira hoje vale hoje inteiro, e `new Date()` a mataria às 00h01.
+   */
+  const condicaoVencida = Boolean(
+    sacado.condicao_expira_em &&
+      new Date(sacado.condicao_expira_em) < new Date(new Date().toDateString()),
+  )
 
   return (
     <View className="gap-2 rounded-xl border border-border bg-card p-3">
@@ -150,6 +164,35 @@ export function SacadoProspeccaoCard({
           </Badge>
         ) : null}
       </View>
+
+      {/*
+        A CONDIÇÃO PUBLICADA pelo Crédito — o preço que já foi aprovado.
+        
+        Sem ela o originador em campo negociava sem saber a taxa que a casa já
+        publicou para este sacado, e ou inventava um número ou ligava para
+        perguntar. A data importa tanto quanto o número: condição vencida é uma
+        que NÃO se pode mais oferecer, e prometê-la é pior que não ter nenhuma.
+      */}
+      {sacado.condicao_taxa_am !== null && sacado.condicao_taxa_am !== undefined ? (
+        <View
+          className={cn(
+            'rounded-md border px-2 py-1.5',
+            condicaoVencida
+              ? 'border-destructive/30 bg-destructive/10'
+              : 'border-emerald-600/25 bg-emerald-500/10',
+          )}
+        >
+          <Text className={cn('text-[11px]', condicaoVencida ? 'text-destructive' : 'text-emerald-700')}>
+            {Number(sacado.condicao_taxa_am).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% a.m.
+            {sacado.condicao_tac !== null && sacado.condicao_tac !== undefined
+              ? ` · TAC ${formatarMoeda(sacado.condicao_tac)}`
+              : ''}
+            {condicaoVencida
+              ? ` · vencida em ${formatarData(sacado.condicao_expira_em)}`
+              : ` · publicada em ${formatarData(sacado.condicao_publicada_em)}`}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Os quatro números */}
       <View className="flex-row flex-wrap gap-x-4 gap-y-1">
@@ -221,6 +264,32 @@ export function SacadoProspeccaoCard({
 
       {aberto ? (
         <View className="gap-2">
+          {/*
+            OS PEDIDOS DE APRESENTAÇÃO já feitos, e o que voltou deles.
+            
+            O app sabia PEDIR e não sabia mostrar: quem pedia pelo celular não
+            tinha como saber se o analista já respondeu, e pedia de novo. A
+            direção importa porque o pedido tem duas pontas (0222d) e a resposta
+            volta para quem pediu (0248).
+          */}
+          {(pedidos.data ?? []).length > 0 ? (
+            <View className="gap-1 rounded-lg border border-border bg-muted/30 p-2">
+              <Text variant="muted" className="text-[10px]">
+                Pedidos de apresentação
+              </Text>
+              {(pedidos.data ?? []).map((pd) => (
+                <Text key={pd.id} className="text-[11px]">
+                  {pd.respondido_em ? '✓ ' : '· '}
+                  {formatCnpj(pd.fornecedor_cnpj ?? '')}
+                  {pd.status ? ` — ${pd.status}` : ''}
+                  {pd.respondido_em
+                    ? ` · respondido em ${formatarData(pd.respondido_em)}`
+                    : ` · pedido em ${formatarData(pd.criado_em)}, sem resposta`}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+
           {quebra.isPending ? <Skeleton className="h-14 w-full" /> : null}
           {(quebra.data ?? []).map((f) => (
             <View key={f.id} className="gap-1 rounded-lg border border-border p-2">

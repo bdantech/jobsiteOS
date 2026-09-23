@@ -1,9 +1,13 @@
 import {
   ESTAGIOS_ABERTOS,
   ESTAGIOS_ENCERRADOS,
+  TIPOS_OPORTUNIDADE,
+  VIEW_DA_FONTE,
+  juntarPaginas,
   renderizarTemplate,
   formatarMoeda as moedaCore,
   type Faixa,
+  type TipoOportunidade,
 } from '@jobsiteos/core'
 
 import { supabase } from '@/lib/supabase'
@@ -13,6 +17,7 @@ import type {
   FiltrosFunil,
   FornecedorFunil,
   NotaFunil,
+  Oportunidade,
   PaginaFunil,
   SacadoFunil,
   SacadoProspectar,
@@ -34,45 +39,93 @@ import type {
 const COLUNAS_CARD =
   'access_key, numero, serie, valor, vencimento, vencimento_origem, dias_para_vencimento, receita_esperada, tac_estimada, seguro_estimado, faixa, faixa_motivo, estagio_funil, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_nota, perda_motivo'
 
+/**
+ * As colunas do card do funil, agora nas TRÊS fontes.
+ *
+ * `linha_contexto` vem pronta do banco e é a única linha que varia por tipo — a
+ * frase depende de dados que só a fonte tem (quantas parcelas o título tem, qual
+ * o guardReason, quantos dias faltam para a oferta expirar). Montá-la aqui
+ * exigiria trazer todos esses campos para pintar um texto.
+ *
+ * `conversao_*` e `pre_autorizacao_*` são o que faltava no celular: sem elas o
+ * app mostrava como trabalho a fazer 259 notas que já foram antecipadas.
+ */
+const COLUNAS_OPORTUNIDADE =
+  'tipo, id, access_key, valor, vencimento, dias_para_vencimento, data_base, numero_exibicao, linha_contexto, estado_origem, relogio, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, operavel, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
+
 export const PAGINA_FUNIL = 30
 
 export async function fetchFunil(filtros: FiltrosFunil, pagina = 0): Promise<PaginaFunil> {
-  let query = supabase
-    .from('notas_funil')
-    .select(COLUNAS_CARD, { count: 'exact' })
-    // Receita esperada decrescente: o vendedor na rua trabalha de cima para baixo,
-    // e o topo tem que ser onde há mais ROI.
-    .order('receita_esperada', { ascending: false, nullsFirst: false })
-    .range(pagina * PAGINA_FUNIL, pagina * PAGINA_FUNIL + PAGINA_FUNIL - 1)
-    // Fornecedor marcado como sem interesse em se cadastrar sai do funil, aqui como
-    // na web. Um filtro que só o desktop respeita faria o vendedor na rua ligar para
-    // quem o escritório já descartou.
-    .eq('fornecedor_sem_interesse', false)
+  /*
+   * UMA CONSULTA POR FONTE, e a junção no cliente.
+   *
+   * Ler `funil_oportunidades` (a união) com `order` + `range` seria mais curto e
+   * está errado: o `union all` é BARREIRA DE OTIMIZAÇÃO — o `Append` impede que
+   * o ordenar-e-cortar chegue ao índice de cada fonte. Na web isso levou a
+   * primeira página de 1,85 ms para 8.382 ms e tirou o funil do ar.
+   *
+   * Pedir `(pagina+1) * limite` de cada fonte é o que torna a junção correta: o
+   * top-N global é sempre subconjunto da união dos top-N de cada fonte.
+   */
+  const ate = (pagina + 1) * PAGINA_FUNIL
 
-  if (filtros.estagio === 'encerradas') query = query.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
-  else if (filtros.estagio) query = query.eq('estagio_funil', filtros.estagio)
-  else query = query.in('estagio_funil', [...ESTAGIOS_ABERTOS])
+  const consulta = (tipo: TipoOportunidade) => {
+    let q = supabase
+      .from(VIEW_DA_FONTE[tipo])
+      .select(COLUNAS_OPORTUNIDADE, { count: 'exact' })
+      // Receita esperada decrescente: o vendedor na rua trabalha de cima para
+      // baixo, e o topo tem que ser onde há mais ROI.
+      .order('receita_esperada', { ascending: false, nullsFirst: false })
+      /*
+       * O DESEMPATE por `id`. `range` é OFFSET: sem uma última chave única, duas
+       * linhas de mesma receita trocam de lugar entre páginas e um card aparece
+       * duas vezes enquanto outro nunca aparece.
+       */
+      .order('id', { ascending: true })
+      .range(0, ate - 1)
+      // Fornecedor sem interesse sai do funil, aqui como na web. Um filtro que só
+      // o desktop respeita faria o vendedor na rua ligar para quem o escritório
+      // já descartou.
+      .eq('fornecedor_sem_interesse', false)
 
-  if (filtros.faixa) query = query.eq('faixa', filtros.faixa)
-  if (filtros.tipagem) query = query.eq('fornecedor_tipagem', filtros.tipagem)
+    if (filtros.estagio === 'encerradas') q = q.in('estagio_funil', [...ESTAGIOS_ENCERRADOS])
+    else if (filtros.estagio) q = q.eq('estagio_funil', filtros.estagio)
+    else q = q.in('estagio_funil', [...ESTAGIOS_ABERTOS])
 
-  const termo = (filtros.termo ?? '').replace(/[,()%*\\]/g, ' ').trim()
-  if (termo) {
-    const t = `*${termo}*`
-    query = query.or(
-      `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},numero.ilike.${t}`,
-    )
+    if (filtros.faixa) q = q.eq('faixa', filtros.faixa)
+    if (filtros.tipagem) q = q.eq('fornecedor_tipagem', filtros.tipagem)
+
+    const termo = (filtros.termo ?? '').replace(/[,()%*\\]/g, ' ').trim()
+    if (termo) {
+      const t = `*${termo}*`
+      // `numero_exibicao` no lugar de `numero`: é a coluna que as três fontes
+      // têm. `numero` só existe na nota, e buscar por ele calaria as outras duas.
+      q = q.or(
+        `fornecedor_nome.ilike.${t},sacado_nome.ilike.${t},fornecedor_cnpj.ilike.${t},sacado_cnpj.ilike.${t},numero_exibicao.ilike.${t}`,
+      )
+    }
+    return q
   }
 
-  const { data, error, count } = await query
-  if (error) throw error
+  const respostas = await Promise.all(TIPOS_OPORTUNIDADE.map((t) => consulta(t)))
 
-  const notas = (data ?? []) as NotaFunil[]
-  const fornecedores = await fetchFornecedores(
-    notas.map((n) => n.fornecedor_cnpj).filter((c): c is string => Boolean(c)),
+  const erro = respostas.find((r) => r.error)?.error
+  if (erro) throw erro
+
+  const oportunidades = juntarPaginas(
+    respostas.map((r) => (r.data ?? []) as unknown as Oportunidade[]),
+    { coluna: 'receita_esperada', ascendente: false, pagina, limite: PAGINA_FUNIL },
   )
 
-  return { notas, fornecedores, total: count ?? 0 }
+  const fornecedores = await fetchFornecedores(
+    oportunidades.map((o) => o.fornecedor_cnpj).filter((c): c is string => Boolean(c)),
+  )
+
+  return {
+    oportunidades,
+    fornecedores,
+    total: respostas.reduce((s, r) => s + (r.count ?? 0), 0),
+  }
 }
 
 async function fetchFornecedores(cnpjs: readonly string[]): Promise<Map<string, FornecedorFunil>> {
@@ -104,9 +157,17 @@ async function fetchFornecedores(cnpjs: readonly string[]): Promise<Map<string, 
 export async function fetchDetalheFornecedor(cnpj: string): Promise<DetalheFornecedor> {
   const [agregado, notasRes] = await Promise.all([
     supabase.from('antecipacao_fornecedores').select('*').eq('fornecedor_cnpj', cnpj).maybeSingle(),
+    /*
+     * Aqui a UNIÃO pode ser lida direto, ao contrário do funil.
+     *
+     * A barreira do `union all` só machuca quando se ordena e corta um conjunto
+     * grande: o `Append` impede que o top-N chegue ao índice de cada fonte.
+     * Filtrando por UM fornecedor, o filtro desce para dentro de cada ramo e o
+     * que volta são poucas linhas — a ordenação acontece sobre elas.
+     */
     supabase
-      .from('notas_funil')
-      .select(COLUNAS_CARD)
+      .from('funil_oportunidades')
+      .select(COLUNAS_OPORTUNIDADE)
       .eq('fornecedor_cnpj', cnpj)
       .order('receita_esperada', { ascending: false, nullsFirst: false })
       .limit(100),
@@ -115,7 +176,7 @@ export async function fetchDetalheFornecedor(cnpj: string): Promise<DetalheForne
   if (notasRes.error) throw notasRes.error
 
   const fornecedor = (agregado.data as FornecedorFunil | null) ?? null
-  const notas = (notasRes.data ?? []) as NotaFunil[]
+  const notas = (notasRes.data ?? []) as unknown as Oportunidade[]
   const empresaId = fornecedor?.fornecedor_empresa_id ?? notas[0]?.fornecedor_empresa_id ?? null
 
   const [contatosRes, toquesRes, mensagem] = await Promise.all([
@@ -149,7 +210,7 @@ export async function fetchDetalheFornecedor(cnpj: string): Promise<DetalheForne
 
 async function montarMensagem(
   fornecedor: FornecedorFunil | null,
-  notas: readonly NotaFunil[],
+  notas: readonly Oportunidade[],
 ): Promise<string | null> {
   const faixa = (fornecedor?.melhor_faixa ?? notas.find((n) => n.faixa)?.faixa) as Faixa | undefined
   if (!faixa) return null
@@ -183,7 +244,7 @@ async function montarMensagem(
   })
 }
 
-function cnpjLegivel(notas: readonly NotaFunil[]): string {
+function cnpjLegivel(notas: readonly Oportunidade[]): string {
   return notas[0]?.fornecedor_cnpj ?? 'fornecedor'
 }
 
@@ -210,17 +271,19 @@ export async function fetchDetalheSacado(cnpj: string): Promise<DetalheSacado> {
       .eq('sacado_cnpj', cnpj)
       .maybeSingle(),
     supabase
-      .from('notas_funil')
-      .select(COLUNAS_CARD)
+      .from('funil_oportunidades')
+      .select(COLUNAS_OPORTUNIDADE)
       .eq('sacado_cnpj', cnpj)
-      .order('emitida_em', { ascending: false, nullsFirst: false })
+      // `data_base` e não `emitida_em`: a nota é emitida, a oferta é criada e a
+      // parcela é vista pela primeira vez. É a coluna que as três fontes têm.
+      .order('data_base', { ascending: false, nullsFirst: false })
       .limit(100),
   ])
   if (notas.error) throw notas.error
   return {
     sacado: (capacidade.data as SacadoFunil | null) ?? null,
     prospect: (prospect.data as SacadoProspectar | null) ?? null,
-    notas: (notas.data ?? []) as NotaFunil[],
+    notas: (notas.data ?? []) as unknown as Oportunidade[],
   }
 }
 
@@ -246,14 +309,26 @@ export async function fetchSacadosSemCnae(): Promise<number> {
  */
 export async function fetchXmlDaNota(
   accessKey: string,
-): Promise<{ raw_xml: string | null; xml_parse_erro: string | null }> {
+): Promise<{ raw_xml: string | null; xml_parse_erro: string | null; link_antecipacao: string | null }> {
   const { data, error } = await supabase
     .from('notas_fiscais')
-    .select('raw_xml, xml_parse_erro')
+    /*
+     * O LINK vem de carona nesta leitura, que a folha do documento já faz.
+     *
+     * Ele leva quem EMITIU a nota ao pedido de antecipação já preenchido — é
+     * exatamente o que o vendedor na rua precisa mandar ao fornecedor, e antes
+     * só existia na web. Uma consulta própria seria uma requisição a mais numa
+     * rede 4G de obra para buscar um texto.
+     */
+    .select('raw_xml, xml_parse_erro, link_antecipacao')
     .eq('access_key', accessKey)
-    .maybeSingle()
+    .maybeSingle<{ raw_xml: string | null; xml_parse_erro: string | null; link_antecipacao: string | null }>()
   if (error) throw error
-  return { raw_xml: data?.raw_xml ?? null, xml_parse_erro: data?.xml_parse_erro ?? null }
+  return {
+    raw_xml: data?.raw_xml ?? null,
+    xml_parse_erro: data?.xml_parse_erro ?? null,
+    link_antecipacao: data?.link_antecipacao ?? null,
+  }
 }
 
 /** O mínimo operável, que define os cortes de urgência do card. */

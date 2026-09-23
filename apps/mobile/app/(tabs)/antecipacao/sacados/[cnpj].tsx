@@ -19,7 +19,7 @@ import {
   formatarMoeda,
   labelCredito,
   useDetalheSacadoQuery,
-  type NotaFunil,
+  type Oportunidade,
 } from '@/features/antecipacao'
 
 /**
@@ -37,7 +37,7 @@ export default function SacadoScreen() {
   const cnpj = normalizeCnpj(cnpjParam ?? '')
   const router = useRouter()
   const { colors } = useTheme()
-  const [nota, setNota] = useState<NotaFunil | null>(null)
+  const [nota, setNota] = useState<Oportunidade | null>(null)
 
   const { data, isPending, isError, refetch } = useDetalheSacadoQuery(cnpj || undefined)
 

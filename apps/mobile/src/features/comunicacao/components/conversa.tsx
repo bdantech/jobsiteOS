@@ -158,11 +158,27 @@ export function Conversa({ conversaId }: { conversaId: string }) {
  */
 function Bolha({ m }: { m: MensagemThread }) {
   const entrada = m.direcao === 'entrada'
+
+  /*
+   * A MENSAGEM DIGITADA NO APARELHO NÃO TEM AUTOR.
+   *
+   * O provedor não diz qual das pessoas com acesso ao número escreveu, e o
+   * `vendedor_id` que a linha carrega é o DONO DO APARELHO, posto ali para a
+   * regra de carteira funcionar — não para dizer quem digitou. Mostrar aquele
+   * nome atribui a uma pessoa uma frase que pode não ser dela, e são 7.131
+   * mensagens nessa situação.
+   *
+   * A bolha diz "pelo celular" e para por aí: é o máximo que sabemos. Mesma
+   * regra da web.
+   */
+  const peloCelular = m.origem === 'celular'
   const quem = entrada
     ? (m.contato_nome ?? 'Contato')
-    : m.por_ia
-      ? `${m.vendedor_nome ?? 'IA'} (IA)`
-      : (m.vendedor_nome ?? m.usuario_nome ?? 'Equipe')
+    : peloCelular
+      ? 'Equipe (pelo celular)'
+      : m.por_ia
+        ? `${m.vendedor_nome ?? 'IA'} (IA)`
+        : (m.vendedor_nome ?? m.usuario_nome ?? 'Equipe')
 
   return (
     <View

@@ -9,9 +9,10 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { FileWarning } from 'lucide-react-native'
 import { useMemo } from 'react'
-import { ScrollView, View } from 'react-native'
+import { ScrollView, Share, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Sheet } from '@/components/ui/sheet'
@@ -293,6 +294,41 @@ export function NotaDocumentoSheet({
         ) : doc ? (
           <ScrollView showsVerticalScrollIndicator={false}>
             <Documento doc={doc} />
+            {/*
+              O LINK DE ANTECIPAÇÃO, que é o que se MANDA — e por isso fica aqui,
+              junto do documento que ele abre.
+              
+              Ele leva quem emitiu a nota ao pedido já preenchido, com o arquivo
+              junto. A autorização é conferida na abertura (CNPJ da conta = CNPJ
+              do emissor), então mandá-lo não expõe nada: quem não é o emissor vê
+              um resumo com o CNPJ oculto. O destinatário certo é o FORNECEDOR.
+              
+              Nulo é o caso normal — cerca de um terço das notas recebidas não
+              tem link, por desenho (resumo, cancelada, emissor sem CNPJ, valor
+              fora da faixa). Por isso a frase explica em vez de mostrar "—".
+            */}
+            <View className="gap-1.5 border-t border-border pt-3">
+              <Text variant="muted" className="text-xs">
+                Link de antecipação
+              </Text>
+              {data?.link_antecipacao ? (
+                <Button
+                  variant="outline"
+                  onPress={() => {
+                    // Compartilhar e não abrir: quem está com o celular na mão
+                    // quer MANDAR isto ao fornecedor, não navegar nele.
+                    void Share.share({ message: data.link_antecipacao as string })
+                  }}
+                  accessibilityLabel="Compartilhar o link de antecipação desta nota"
+                >
+                  Enviar ao fornecedor
+                </Button>
+              ) : (
+                <Text variant="muted" className="text-[11px]">
+                  Esta nota não tem link ativo.
+                </Text>
+              )}
+            </View>
             <Text variant="muted" className="py-4 text-center text-[11px]">
               Representação para conferência interna. Não é o DANFE oficial.
             </Text>

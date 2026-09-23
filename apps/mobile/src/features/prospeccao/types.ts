@@ -44,3 +44,18 @@ export interface ConfigProspeccao {
   motivos_descarte: { id: string; label: string }[]
   templates: { abordagem_fornecedor: string; pedido_ponte: string }
 }
+
+/**
+ * Um pedido de apresentação — o originador pede ao fornecedor que o apresente ao
+ * sacado (ou o contrário, e é para isso que existe `direcao`).
+ */
+export interface PedidoApresentacao {
+  id: string
+  fornecedor_cnpj: string | null
+  sacado_cnpj: string | null
+  mensagem: string | null
+  status: string | null
+  direcao: string | null
+  criado_em: string | null
+  respondido_em: string | null
+}

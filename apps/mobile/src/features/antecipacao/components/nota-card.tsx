@@ -2,12 +2,15 @@ import {
   ESTAGIOS_ABERTOS,
   ESTAGIO_FUNIL_LABELS,
   FAIXA_LABELS,
+  STATUS_PRE_AUTORIZACAO_LABELS,
   TIPAGEM_LABELS,
+  TIPO_OPORTUNIDADE_LABELS,
   urgenciaDe,
   valorLiquidoEstimado,
   type EstagioFunil,
   type Faixa,
   type Tipagem,
+  type TipoOportunidade,
 } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
 import { ArrowRight, Ban, Files, Gavel } from 'lucide-react-native'
@@ -30,7 +33,7 @@ import {
   labelCredito,
   textoPrazo,
 } from '../format'
-import type { FornecedorFunil, NotaFunil } from '../types'
+import type { FornecedorFunil, Oportunidade } from '../types'
 import { MoverEstagioSheet } from './mover-estagio-sheet'
 import { NotaDocumentoSheet } from './nota-documento-sheet'
 import { SemInteresseSheet } from './sem-interesse-sheet'
@@ -49,7 +52,7 @@ import { SemInteresseSheet } from './sem-interesse-sheet'
  */
 
 export interface NotaCardProps {
-  nota: NotaFunil
+  nota: Oportunidade
   fornecedor?: FornecedorFunil
   minimoOperavel: number
 }
@@ -106,6 +109,7 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const [semInteresseAberto, setSemInteresseAberto] = useState(false)
   const [documentoAberto, setDocumentoAberto] = useState(false)
 
+  const tipo = (nota.tipo ?? 'nf') as TipoOportunidade
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
   const valorAgrupado = fornecedor?.valor_total ?? nota.valor
@@ -164,7 +168,7 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
         <Pressable
           onPress={abrirDocumento}
           accessibilityRole="button"
-          accessibilityLabel={`Abrir a nota ${nota.numero ?? ''} de ${nota.fornecedor_nome ?? 'fornecedor'}`}
+          accessibilityLabel={`Abrir ${TIPO_OPORTUNIDADE_LABELS[tipo].toLowerCase()} ${nota.numero_exibicao ?? ''} de ${nota.fornecedor_nome ?? 'fornecedor'}`}
           className={cn(
             'gap-2 rounded-xl border border-border bg-card p-3 active:opacity-70',
             nota.fornecedor_suprimido && 'opacity-60',
@@ -175,15 +179,17 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
             <Text numberOfLines={1} className="font-medium">
               {nota.fornecedor_nome ?? nota.fornecedor_cnpj}
             </Text>
-            {/* Identificação da nota: é o que a pessoa confere contra o papel na
-                mão do fornecedor. */}
+            {/* O SELO DE ORIGEM vem primeiro: responde "de onde veio este card"
+                antes de qualquer outra leitura. Depois a linha de contexto, que é
+                a ÚNICA coisa que varia por tipo e vem pronta do banco. */}
             <View className="flex-row items-center gap-1.5">
               <View className="rounded border border-border px-1.5 py-0.5">
-                <Text className="text-[10px] font-medium">{nota.tipo_nf ?? 'NFe'}</Text>
+                <Text className="text-[10px] font-medium">{TIPO_OPORTUNIDADE_LABELS[tipo]}</Text>
               </View>
-              <Text variant="muted" className="text-xs tabular-nums">
-                nº {nota.numero ?? '—'}
-                {nota.serie ? `/${nota.serie}` : ''}
+              {/* `numberOfLines={1}`: no título ela chega a 62 caracteres e
+                  empurraria o resto do card para baixo. */}
+              <Text variant="muted" numberOfLines={1} className="flex-1 text-xs tabular-nums">
+                {nota.linha_contexto ?? nota.numero_exibicao ?? '—'}
               </Text>
             </View>
             <View className="flex-row flex-wrap items-center gap-1.5">
@@ -211,6 +217,49 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
               ) : null}
             </View>
           </View>
+
+          {/*
+            A TIRA, e ela muda o que a pessoa vai FAZER.
+            
+            Sem isto o celular mostrava como trabalho a fazer 259 notas que já
+            foram antecipadas — e o vendedor na rua ligava para o fornecedor
+            oferecendo o que ele já tem. É o pior erro que este card podia
+            cometer, porque acontece na frente do cliente.
+
+            Precedência: convertida ganha de "já tem pré-autorização", porque a
+            primeira encerra a conversa e a segunda só a muda.
+          */}
+          {nota.conversao_antecipacao_id ? (
+            <View
+              className={cn(
+                'rounded-md border px-2 py-1.5',
+                nota.conversao_em_disputa
+                  ? 'border-destructive/30 bg-destructive/10'
+                  : 'border-emerald-600/25 bg-emerald-500/10',
+              )}
+            >
+              <Text
+                className={cn(
+                  'text-[11px]',
+                  nota.conversao_em_disputa ? 'text-destructive' : 'text-emerald-700',
+                )}
+              >
+                Convertida via antecipação #{nota.conversao_antecipacao_id}
+                {nota.conversao_valor ? ` · ${formatarMoeda(nota.conversao_valor)}` : ''}
+                {nota.conversao_em_disputa ? ' — em disputa, revise.' : ''}
+              </Text>
+            </View>
+          ) : nota.pre_autorizacao_id ? (
+            <View className="rounded-md border border-amber-600/25 bg-amber-500/10 px-2 py-1.5">
+              <Text className="text-[11px] text-amber-700">
+                Já tem pré-autorização
+                {nota.pre_autorizacao_status
+                  ? ` (${STATUS_PRE_AUTORIZACAO_LABELS[nota.pre_autorizacao_status] ?? nota.pre_autorizacao_status})`
+                  : ''}
+                {' — a construtora já ofereceu; lembre-o de aceitar.'}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Valor agrupado — a unidade de abordagem é o fornecedor, não a nota */}
           <View className="flex-row items-end justify-between">
