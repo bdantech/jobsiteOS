@@ -103,14 +103,34 @@ export function CabecalhoRetratil({
   })
 
   return (
-    <View className="rounded-b-2xl bg-brand px-5 pb-3" style={{ paddingTop: top + 8 }}>
-      <View className="h-[52px] flex-row items-center justify-between gap-3">
+    /*
+      RECOLHIDO O NAVY ENCOLHE DE VERDADE.
+      
+      Só esconder o painel deixava uma faixa escura alta com um título dentro —
+      ela continuava comendo a tela sem oferecer nada. Recolhido o recuo cai
+      para o mínimo que o status bar exige e o rodapé some: a barra vira uma
+      linha de título com o resumo, que é para o que ela serve ali.
+    */
+    <View
+      className="rounded-b-2xl bg-brand px-5"
+      style={{ paddingTop: top + (recolhido ? 2 : 8), paddingBottom: recolhido ? 6 : 12 }}
+    >
+      <View className="min-h-[44px] flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="font-display text-[26px] leading-7 tracking-tighter text-white">
+          {/*
+            `leading-[34px]` num corpo de 26: a Manrope é alta, e com a
+            entrelinha colada ao corpo o RN corta o topo das ascendentes — o
+            "F" e o "l" de "Funil" apareciam decepados. Folga vertical não é
+            estética aqui, é o que faz a palavra caber.
+          */}
+          <Text
+            numberOfLines={1}
+            className="font-display text-[26px] leading-[34px] tracking-tight text-white"
+          >
             {titulo}
           </Text>
           {recolhido && resumo ? (
-            <Text numberOfLines={1} className="text-xs text-[#CBD5E1]">
+            <Text numberOfLines={1} className="text-xs leading-4 text-[#CBD5E1]">
               {resumo}
             </Text>
           ) : null}

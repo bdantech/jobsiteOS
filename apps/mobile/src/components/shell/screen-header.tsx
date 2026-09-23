@@ -44,7 +44,7 @@ export function ScreenHeader({ title, description, right, children }: ScreenHead
     <View className="rounded-b-2xl bg-brand px-5 pb-4" style={{ paddingTop: top + 8 }}>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1 gap-1">
-          <Text className="font-display text-[26px] leading-7 tracking-tighter text-white">
+          <Text className="font-display text-[26px] leading-[34px] tracking-tight text-white">
             {title}
           </Text>
           {description ? (

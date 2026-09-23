@@ -1,11 +1,11 @@
 import { MODULES, grantedMobileModules } from '@jobsiteos/core'
-import { BlurView } from 'expo-blur'
 import { Tabs } from 'expo-router'
 import { LayoutGrid } from 'lucide-react-native'
 import { View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { AiFab } from '@/components/shell/ai-fab'
+import { BarraFlutuante } from '@/components/shell/barra-flutuante'
 import { BlockedDeepLinkNotice } from '@/components/shell/blocked-deep-link-notice'
 import { useSession } from '@/lib/auth'
 import { moduleIcon } from '@/lib/icons'
@@ -77,68 +77,14 @@ export default function TabsLayout() {
   return (
     <View className="flex-1 bg-background">
       <Tabs
+        tabBar={(props) => <BarraFlutuante {...props} />}
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.mutedForeground,
-          /*
-           * A BARRA FLUTUA, e não é enfeite: ela é uma pílula de vidro solta
-           * sobre o conteúdo, como no desenho.
-           *
-           * `position: absolute` tira a barra do fluxo — a lista passa POR
-           * BAIXO dela, que é o que faz o blur ter o que borrar. O preço é que
-           * cada tela precisa reservar o espaço no fim do scroll; por isso
-           * `ALTURA_TAB_BAR` é exportado daqui e não repetido em número solto.
-           */
-          tabBarStyle: {
-            position: 'absolute',
-            // Mais estreita e mais redonda que a primeira versão: a pílula tem
-            // de parecer um objeto POUSADO sobre a lista, e a 12px de cada lado
-            // com raio 20 ela ainda lia como uma barra presa à moldura.
-            left: 20,
-            right: 20,
-            bottom: 26,
-            height: 68,
-            paddingHorizontal: 4,
-            paddingBottom: 0,
-            borderRadius: 30,
-            borderWidth: 1,
-            borderTopWidth: 1,
-            borderColor: esquema === 'dark' ? 'rgba(63,68,80,0.7)' : 'rgba(228,232,236,0.8)',
-            borderTopColor: esquema === 'dark' ? 'rgba(63,68,80,0.7)' : 'rgba(228,232,236,0.8)',
-            backgroundColor: 'transparent',
-            elevation: 0,
-            // A sombra do desenho: larga e suave, na cor da marca em vez de
-            // preto — preto sobre #F4F6F8 fica cinza sujo.
-            shadowColor: '#050e40',
-            shadowOpacity: 0.12,
-            shadowRadius: 20,
-            shadowOffset: { width: 0, height: 16 },
-          },
-          tabBarBackground: () => (
-            <BlurView
-              intensity={80}
-              tint={esquema === 'dark' ? 'dark' : 'light'}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                borderRadius: 30,
-                overflow: 'hidden',
-                // O blur sozinho fica transparente demais sobre lista clara; a
-                // camada de tinta é o que dá corpo à pílula.
-                backgroundColor:
-                  esquema === 'dark' ? 'rgba(23,24,25,0.72)' : 'rgba(255,255,255,0.72)',
-              }}
-            />
-          ),
-          tabBarItemStyle: { paddingVertical: 8 },
-          // A família traz o peso: em RN um `fontWeight` sobre fonte carregada
-          // por arquivo não engrossa nada (ver o plugin em tailwind.config.js),
-          // e o rótulo da barra não passa pelo <Text> que resolve isso.
-          tabBarLabelStyle: { fontSize: 11, fontFamily: 'Poppins_500Medium' },
+          // A barra inteira é nossa — ver `barra-flutuante.tsx` para por quê.
+          // Com `tabBar` próprio, `tabBarStyle`/`tabBarLabelStyle` deixam de ser
+          // lidos, e mantê-los aqui seria estilo morto fingindo estar vivo.
           /*
            * A CENA NÃO RESERVA ESPAÇO — e é isso que faz o blur existir.
            *

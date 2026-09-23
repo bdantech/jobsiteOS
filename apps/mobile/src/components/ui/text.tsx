@@ -16,7 +16,7 @@ const VARIANTS: Record<TextVariant, string> = {
   default: 'text-base text-foreground',
   muted: 'text-sm text-muted-foreground',
   // `font-display` = Manrope. Título de TELA, não de seção — ver a nota abaixo.
-  title: 'font-display text-[26px] leading-tight tracking-tighter text-foreground',
+  title: 'font-display text-[26px] leading-[34px] tracking-tight text-foreground',
   heading: 'text-lg font-semibold text-foreground',
   label: 'text-sm font-medium text-foreground',
   destructive: 'text-sm text-destructive',

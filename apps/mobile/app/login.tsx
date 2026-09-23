@@ -127,7 +127,7 @@ export default function LoginScreen() {
             </View>
 
             <View className="mt-auto gap-2.5">
-              <Text className="font-display text-[46px] leading-[47px] tracking-tighter text-white">
+              <Text className="font-display text-[46px] leading-[58px] tracking-tight text-white">
                 JobsiteOS
               </Text>
               <Text className="max-w-[300px] text-[15px] leading-[22px] text-[#CBD5E1]">

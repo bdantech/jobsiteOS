@@ -16,7 +16,14 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function AntecipacaoLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Funil' }} />
+      {/*
+        SEM header nativo: o funil desenha o próprio, que RECOLHE ao rolar e
+        carrega busca e estágio dentro do navy. Com os dois ligados a tela
+        mostrava "Funil" duas vezes, os mesmos dois botões duas vezes, e somava
+        dois recuos de status bar — o cabeçalho ocupava um terço da tela antes
+        do primeiro card.
+      */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="fornecedores/[cnpj]" options={{ title: 'Fornecedor' }} />
       <Stack.Screen name="sacados" options={{ headerShown: false }} />
       {/*

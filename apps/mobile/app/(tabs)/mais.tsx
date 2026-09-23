@@ -47,7 +47,7 @@ export default function MaisScreen() {
         */}
         <View className="gap-6 bg-brand px-5 pb-12" style={{ paddingTop: topo + 12 }}>
           <View className="flex-row items-center justify-between gap-3">
-            <Text className="font-display text-[30px] leading-8 tracking-tighter text-white">
+            <Text className="font-display text-[30px] leading-[40px] tracking-tight text-white">
               Mais
             </Text>
             <Pressable
