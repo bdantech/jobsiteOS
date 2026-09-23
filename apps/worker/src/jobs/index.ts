@@ -111,6 +111,7 @@ import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
 import { recalcularPerfil } from './perfil/recalcular.js'
 import { enriquecerLeads } from './leads/enriquecer.js'
+import { enriquecerLeadsDistribuidos } from './comercial/enriquecer-distribuidos.js'
 import { enriquecerEmpresa } from './radar/enriquecer-empresa.js'
 import { alertasJuridico } from './juridico/alertas.js'
 import { processarCallbacks } from './juridico/callbacks.js'
@@ -1452,7 +1453,23 @@ export function dispararSugerirReanalises(): string {
  * pagando duas vezes pelas etapas pagas.
  */
 export function dispararEnriquecerLeads(): string {
-  return dispararAvulso('leads-enriquecer', async () => enriquecerLeads())
+  return dispararAvulso('leads-enriquecer', async () => {
+    const formularios = await enriquecerLeads()
+    /*
+     * A REDE DE SEGURANÇA dos leads distribuídos, de carona nesta hora.
+     *
+     * O caminho normal é a própria distribuição de segunda enriquecer o que
+     * acabou de distribuir. Este repasse existe para o que aquele caminho perde:
+     * deploy no meio da corrida (que reinicia o worker e mata o job em voo),
+     * Apollo fora do ar, teto de orçamento batido no dia.
+     *
+     * Chamar de hora em hora não repete trabalho nem gasto: o TTL de contatos
+     * entra no SQL da consulta, então quem já foi tentado não volta — nem os 42%
+     * de domínios que o Apollo consulta e devolve vazio.
+     */
+    const distribuidos = await enriquecerLeadsDistribuidos()
+    return { formularios, distribuidos }
+  })
 }
 
 /**

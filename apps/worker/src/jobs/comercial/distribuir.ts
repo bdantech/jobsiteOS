@@ -4,6 +4,7 @@ import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
 import { lerDistribuicao } from '../../comercial/config.js'
+import { enriquecerLeadsDistribuidos } from './enriquecer-distribuidos.js'
 
 /**
  * Distribuição semanal de empresas para os SDRs (04g §4), e o SLA que devolve ao pool
@@ -46,6 +47,14 @@ export interface ResultadoDistribuicao {
   distribuidos: number
   por_sdr: Record<string, number>
   motivo?: 'sem_sdr' | 'sem_candidata'
+  /** O que o Apollo trouxe junto. Ver `enriquecer-distribuidos.ts`. */
+  enriquecimento?: {
+    candidatos: number
+    dominios_resolvidos: number
+    com_contatos: number
+    sem_dominio: number
+    falhas: number
+  }
 }
 
 async function sdrsDisponiveis(cotaPadrao: number): Promise<SdrDisponivel[]> {
@@ -201,7 +210,33 @@ export async function distribuirSdrJob(): Promise<ResultadoDistribuicao> {
   })
 
   logger.info({ distribuidos: novos.length, porSdr, camadas }, 'Distribuição semanal de SDR concluída.')
-  return { sdrs: sdrs.length, candidatas: rows.length, distribuidos: novos.length, por_sdr: porSdr }
+
+  /*
+   * Os contatos vêm JUNTO — era a última tarefa manual do SDR na segunda-feira.
+   *
+   * Em try/catch e depois de tudo: os leads já estão gravados e o evento já foi
+   * emitido. Se o Apollo estiver fora do ar, a distribuição da semana não pode
+   * falhar por causa do enriquecimento dela — o SDR prefere a fila sem telefone
+   * à fila que não chegou. E a rede de segurança do cron horário repassa o que
+   * ficou para trás, inclusive se um deploy reiniciar o worker aqui no meio.
+   */
+  let enriquecimento: ResultadoDistribuicao['enriquecimento']
+  try {
+    enriquecimento = await enriquecerLeadsDistribuidos()
+  } catch (e) {
+    logger.error(
+      { erro: e instanceof Error ? e.message : String(e) },
+      'Enriquecimento dos leads distribuídos falhou; a distribuição está feita.',
+    )
+  }
+
+  return {
+    sdrs: sdrs.length,
+    candidatas: rows.length,
+    distribuidos: novos.length,
+    por_sdr: porSdr,
+    enriquecimento,
+  }
 }
 
 export interface ResultadoSla {
