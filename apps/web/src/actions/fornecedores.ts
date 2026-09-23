@@ -190,7 +190,18 @@ export async function buscarContatosAction(input: {
   })
   if (erroVis) return falha(erroVis)
   if (visivel !== true) {
-    return { ok: false, message: 'Este fornecedor não está na sua carteira.', code: 'forbidden' }
+    /*
+     * A mensagem NÃO afirma carteira. `app_fornecedor_visivel` recusa por três
+     * razões diferentes, e só uma delas é carteira — a versão anterior culpava a
+     * carteira nas três. O originador então lia "não está na sua carteira" sobre um
+     * fornecedor que não estava na carteira de ninguém, e o que parecia erro de
+     * cadastro era a função não conhecer as fontes novas do funil (0254).
+     */
+    return {
+      ok: false,
+      message: 'Você não tem acesso a este fornecedor.',
+      code: 'forbidden',
+    }
   }
 
   let forcar = false
@@ -239,7 +250,18 @@ export async function buscaAprofundadaAction(input: {
   })
   if (erroVis) return falha(erroVis)
   if (visivel !== true) {
-    return { ok: false, message: 'Este fornecedor não está na sua carteira.', code: 'forbidden' }
+    /*
+     * A mensagem NÃO afirma carteira. `app_fornecedor_visivel` recusa por três
+     * razões diferentes, e só uma delas é carteira — a versão anterior culpava a
+     * carteira nas três. O originador então lia "não está na sua carteira" sobre um
+     * fornecedor que não estava na carteira de ninguém, e o que parecia erro de
+     * cadastro era a função não conhecer as fontes novas do funil (0254).
+     */
+    return {
+      ok: false,
+      message: 'Você não tem acesso a este fornecedor.',
+      code: 'forbidden',
+    }
   }
 
   let forcar = false

@@ -1,4 +1,5 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
+import { ESTAGIOS_ENCERRADOS } from '../../../../../packages/core/src/antecipacao/schemas.js'
 import {
   deduplicarFunil,
   type NotaParaDedup,
@@ -34,6 +35,16 @@ import { emitirEvento } from '../../radar/eventos.js'
  * teste em vez de como suposição.
  */
 
+/**
+ * `('convertida', 'perdida', 'expirada')` a partir da constante do core.
+ *
+ * Interpolar é seguro aqui e só aqui: a fonte é uma constante literal do core, nunca
+ * entrada de ninguém. Parametrizar custaria um `= any($1)` que o planner trata pior
+ * do que a lista, e a alternativa real — reescrever os três estágios à mão em cada
+ * consulta — é exatamente o que deixou `expirada` de fora.
+ */
+const SQL_ENCERRADOS = ESTAGIOS_ENCERRADOS.map((e) => `'${e}'`).join(', ')
+
 export interface ResultadoDedup {
   notas: number
   pre_autorizacoes: number
@@ -49,10 +60,20 @@ export interface ResultadoDedup {
 /**
  * As NFs candidatas: as VIVAS, e só as vivas.
  *
- * Uma nota convertida ou perdida não pode esconder uma pré-autorização — ela já
- * saiu do funil, e o card que ela escondesse sumiria atrás de um documento que
- * ninguém mais olha. `operavel is not false` pelo mesmo motivo: uma remessa não
- * esconde uma oferta de antecipação.
+ * Uma nota encerrada não pode esconder uma pré-autorização — ela já saiu do funil,
+ * e o card que ela escondesse sumiria atrás de um documento que ninguém mais olha.
+ * `operavel is not false` pelo mesmo motivo: uma remessa não esconde uma oferta de
+ * antecipação.
+ *
+ * ── `ESTAGIOS_ENCERRADOS`, E NÃO A LISTA ESCRITA À MÃO ──────────────────────
+ * A primeira versão desta consulta escrevia `('convertida', 'perdida')` e esquecia
+ * `expirada`. A regra acima estava certa e a lista não a cumpria: medido em
+ * 23/09/2026, 22 pré-autorizações em `a_prospectar` escondidas atrás de um original
+ * EXPIRADO — 20 títulos e 2 NFs. O card saía das colunas abertas do Kanban e
+ * reaparecia em Encerradas, que é o único lugar onde ninguém ia procurá-lo.
+ *
+ * Por isso a constante, e não a enumeração: ela é a mesma que o Kanban usa para
+ * decidir o que é coluna aberta, então "saiu do funil" passa a ter UMA definição.
  */
 async function notasVivas(): Promise<NotaParaDedup[]> {
   const { rows } = await pool.query<{
@@ -74,7 +95,7 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
            n.valor::text as valor,
            n.vencimento::text as vencimento
       from public.notas_fiscais n
-     where n.estagio_funil not in ('convertida', 'perdida')
+     where n.estagio_funil not in (${SQL_ENCERRADOS})
        and n.situacao = 'valida'
        and coalesce(n.operavel_manual, n.operavel) is not false
   `)
@@ -89,6 +110,16 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
   }))
 }
 
+/**
+ * As pré-autorizações candidatas — e aqui `expirada` FICA, de propósito.
+ *
+ * Esta lista é o lado ESCONDIDO, não o lado original: `ESTAGIOS_ENCERRADOS` acima
+ * responde "quem pode esconder", e esta responde "quem pode ser escondido". Uma
+ * oferta expirada atrás de uma NF aberta é o caso CERTO — o card que fica é a nota,
+ * e é nela que o selo "já teve pré-autorização" precisa pousar. Trocar esta lista
+ * pela constante devolveria a oferta morta às Encerradas e tiraria o selo da nota
+ * viva, que é a informação mais quente do funil.
+ */
 async function preAutorizacoesVivas(): Promise<PreAuthParaDedup[]> {
   const { rows } = await pool.query<Omit<PreAuthParaDedup, 'valor'> & { valor: string }>(`
     select id_externo, origin, status, criada_em::text as criada_em,
@@ -106,7 +137,7 @@ async function titulosVivos(): Promise<TituloParaDedup[]> {
     select id_externo, connection_id, bill_id, installment_id,
            bill_access_key, nfe_candidate_access_key, pre_autorizacao_id_externo
       from public.sienge_titulos
-     where estagio_funil not in ('convertida', 'perdida')
+     where estagio_funil not in (${SQL_ENCERRADOS})
   `)
   return rows
 }
