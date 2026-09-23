@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react-native'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   Animated,
   Pressable,
@@ -29,11 +29,16 @@ import { Text } from '@/components/ui/text'
  * de sistema aumentada — o chip cresce, o número não, e o conteúdo vaza por
  * baixo do navy.
  *
- * ── DIREÇÃO, NÃO POSIÇÃO ───────────────────────────────────────────────────
- * Recolhe descendo, volta subindo — o gesto de "quero ver mais lista" e o de
- * "quero voltar ao controle". Amarrar ao offset absoluto faria o cabeçalho
- * ficar preso aberto no topo de uma lista curta e nunca mais voltar numa longa.
- * O limiar de 6px existe porque o dedo nunca rola em linha reta.
+ * ── POSIÇÃO, NÃO DIREÇÃO ───────────────────────────────────────────────────
+ * Recolhe assim que a lista sai do topo e volta inteiro quando ela retorna. A
+ * primeira versão olhava a DIREÇÃO do gesto com um limiar de 6px, e isso
+ * introduzia dois atrasos que se somavam: era preciso acumular movimento
+ * suficiente para o limiar, e depois rolar para CIMA para reabrir — de modo que
+ * um rolar curto deixava o cabeçalho recolhido no topo da lista, escondendo a
+ * busca com nada acima dela para justificar.
+ *
+ * Por posição o estado é uma função de onde a lista está, não do caminho que
+ * ela fez para chegar ali: não há como divergir do que se vê.
  */
 
 export interface CabecalhoRetratilProps {
@@ -50,18 +55,13 @@ export interface CabecalhoRetratilProps {
 
 export function useCabecalhoRetratil() {
   const [recolhido, setRecolhido] = useState(false)
-  const ultimoY = useRef(0)
 
+  /*
+   * 4px: o bastante para não disparar com o repique do `bounce` do iOS, pouco
+   * o bastante para o cabeçalho já estar recolhendo quando o dedo mal andou.
+   */
   const aoRolar = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y
-    const d = y - ultimoY.current
-    ultimoY.current = y
-
-    // Perto do topo o cabeçalho é sempre inteiro: lá não há "mais lista" a
-    // revelar, e recolher sem ganho nenhum só pisca.
-    if (y < 48) setRecolhido(false)
-    else if (d > 6) setRecolhido(true)
-    else if (d < -6) setRecolhido(false)
+    setRecolhido(e.nativeEvent.contentOffset.y > 4)
   }, [])
 
   return { recolhido, setRecolhido, aoRolar }
@@ -83,7 +83,9 @@ export function CabecalhoRetratil({
   useEffect(() => {
     Animated.timing(progresso, {
       toValue: recolhido ? 1 : 0,
-      duration: 220,
+      // 140ms: em 220 a animação terminava depois do gesto e a sensação era
+      // de atraso, mesmo com o estado já trocado no primeiro pixel.
+      duration: 140,
       // `false` obrigatório: altura e opacidade de layout não rodam na thread
       // de UI. O trecho é curto e a animação é de 220ms — o custo é invisível,
       // e `true` aqui simplesmente não animaria.

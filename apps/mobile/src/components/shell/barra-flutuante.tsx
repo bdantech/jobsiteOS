@@ -4,7 +4,7 @@
 // alguém adicione a dependência e passe a descrever outra coisa.
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs'
 import { BlurView } from 'expo-blur'
-import { Platform, Pressable, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '@/components/color-scheme-provider'
@@ -36,7 +36,8 @@ import { Text } from '@/components/ui/text'
  */
 
 /** Altura da pílula + distância do fundo. As listas reservam isto no fim. */
-export const ALTURA_BARRA = 68
+// 82 = 68 + 20%: a pílula anterior apertava ícone e rótulo contra as bordas.
+export const ALTURA_BARRA = 82
 export const FUNDO_BARRA = 24
 
 export function BarraFlutuante({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -95,6 +96,22 @@ export function BarraFlutuante({ state, descriptors, navigation }: BottomTabBarP
 
           {state.routes.map((route, indice) => {
             const { options } = descriptors[route.key]!
+
+            /*
+             * SÓ AS ABAS VISÍVEIS.
+             *
+             * `href: null` no <Tabs.Screen> não remove a rota — ela precisa
+             * existir para um deep link resolver — e o Expo Router a esconde
+             * traduzindo isso em `tabBarItemStyle: { display: 'none' }`. A
+             * barra padrão respeita; a nossa precisa respeitar também, senão
+             * desenha os nove módulos declarados em vez dos quatro que o perfil
+             * liberou, espremidos.
+             */
+            const escondida =
+              (StyleSheet.flatten(options.tabBarItemStyle) as ViewStyle | undefined)?.display ===
+              'none'
+            if (escondida) return null
+
             const ativo = state.index === indice
             const rotulo =
               typeof options.tabBarLabel === 'string' ? options.tabBarLabel : (options.title ?? route.name)
