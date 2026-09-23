@@ -4,7 +4,7 @@ import { Building2, Handshake, Search, Sparkles } from 'lucide-react-native'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  FlatList,
+  Animated,
   RefreshControl,
   ScrollView,
   View,
@@ -50,8 +50,15 @@ export default function FunilScreen() {
   const { grantedModuleIds } = useSession()
   const { colors } = useTheme()
   const buscaRef = useRef<TextInput>(null)
-  const { deslocamento, recolhido, aoRolar, listaRef, voltarAoTopo } =
-    useCabecalhoRetratil<Oportunidade>()
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<Oportunidade>()
 
   const [estagio, setEstagio] = useState<string>('a_prospectar')
   const [faixa, setFaixa] = useState<string | undefined>()
@@ -129,6 +136,7 @@ export default function FunilScreen() {
         gesto.
       */
       onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
       aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
       busca={
         <Input
@@ -224,19 +232,28 @@ export default function FunilScreen() {
     </View>
   )
 
+  /*
+    O CABEÇALHO É ABSOLUTO e sai do fluxo — é o que permite animá-lo só com
+    transform. Quem reserva o espaço dele é o `paddingTop` da lista, com a
+    altura que ele mesmo mediu.
+  */
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
   return (
     <View className="flex-1 bg-background">
-      {cabecalho}
-
       {isPending ? (
-        <FunilSkeleton />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <FunilSkeleton />
+        </View>
       ) : isError ? (
-        <ErrorState
-          description="Não foi possível carregar o funil. Verifique sua conexão e tente novamente."
-          onRetry={() => void refetch()}
-        />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState
+            description="Não foi possível carregar o funil. Verifique sua conexão e tente novamente."
+            onRetry={() => void refetch()}
+          />
+        </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           ref={listaRef}
           data={oportunidades}
           keyExtractor={(item) => item.access_key as string}
@@ -249,6 +266,7 @@ export default function FunilScreen() {
             é isso que dá ao blur o que borrar — então o fim dela precisa de
             folga para o último card chegar acima da barra.
           */
+          contentContainerStyle={recuoDoCabecalho}
           contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -292,6 +310,10 @@ export default function FunilScreen() {
           }
         />
       )}
+
+      {/* Depois da lista de propósito: em RN quem é irmão posterior pinta por
+          cima, e não depender de `zIndex` evita a divergência iOS/Android. */}
+      {cabecalho}
     </View>
   )
 }
