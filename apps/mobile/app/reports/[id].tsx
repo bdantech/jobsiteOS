@@ -59,7 +59,7 @@ export default function ReportScreen() {
     <>
       <BannerBeta />
 
-      <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-12">
+      <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4">
         <Card>
           <CardHeader>
             <View className="flex-row items-center gap-2">

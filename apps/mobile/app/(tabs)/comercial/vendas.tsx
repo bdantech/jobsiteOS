@@ -41,7 +41,7 @@ export default function FunilVendasScreen() {
     <FlatList
       data={data}
       keyExtractor={(v) => v.id}
-      contentContainerClassName="gap-2 p-4"
+      contentContainerClassName="gap-2 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
       renderItem={({ item }) => {
         const proximo = proximoEstagioVenda(item.estagio)

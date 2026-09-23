@@ -105,7 +105,7 @@ export default function EmpresasScreen() {
           data={empresas}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerClassName="gap-3 px-4 pb-10"
+          contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={

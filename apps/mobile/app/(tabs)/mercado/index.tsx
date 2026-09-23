@@ -57,7 +57,7 @@ export default function MapaDoMercadoScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScrollView
-        contentContainerClassName="gap-6 p-4 pb-12"
+        contentContainerClassName="gap-6 p-4 pb-28"
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

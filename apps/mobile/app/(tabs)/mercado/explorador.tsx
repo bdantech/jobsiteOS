@@ -180,7 +180,7 @@ export default function ExploradorScreen() {
           data={data.rows}
           keyExtractor={(item) => item.cnpj}
           renderItem={renderItem}
-          contentContainerClassName="gap-3 px-4 pb-10"
+          contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={

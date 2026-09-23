@@ -85,6 +85,10 @@ export interface FiltroSegmentadoProps<T> {
   rotulo?: (label: string) => string
   /** Ver <Faixa>: ligue quando o pai já tiver padding horizontal. */
   sangra?: boolean
+  /** Dentro do cabeçalho navy: pílulas soltas, claras sobre escuro. */
+  sobreNavy?: boolean
+  /** Quantos itens em cada opção, por valor. Só aparece com `sobreNavy`. */
+  contagem?: Record<string, number | undefined>
 }
 
 /** Escolha exclusiva: sempre exatamente uma ativa, e não dá para desmarcar. */
@@ -94,11 +98,20 @@ export function FiltroSegmentado<T extends string>({
   onChange,
   rotulo = (label) => `Ver ${label}`,
   sangra,
+  sobreNavy = false,
+  contagem,
 }: FiltroSegmentadoProps<T>) {
   return (
-    <Faixa className="gap-1" sangra={sangra}>
-      {/* A cápsula é o que diz "escolha uma destas". Sem ela, viram chips. */}
-      <View className="flex-row gap-1 rounded-full border border-border p-1">
+    <Faixa className="gap-2" sangra={sangra}>
+      {/*
+        SOBRE O NAVY a cápsula some e cada opção vira uma pílula solta.
+        
+        A cápsula existe para dizer "escolha uma destas" quando as opções
+        dividem um fundo com o resto da tela. No cabeçalho escuro elas já estão
+        isoladas numa faixa própria, e a borda da cápsula sobre navy só
+        acrescenta uma linha que o olho tem de ignorar.
+      */}
+      <View className={sobreNavy ? 'flex-row gap-2' : 'flex-row gap-1 rounded-full border border-border p-1'}>
         {opcoes.map((opcao) => {
           const ativo = opcao.valor === valor
 
@@ -109,16 +122,42 @@ export function FiltroSegmentado<T extends string>({
               accessibilityState={{ selected: ativo }}
               accessibilityLabel={rotulo(opcao.label)}
               onPress={() => onChange(opcao.valor)}
-              className={cn(BASE_TOQUE, ativo && 'bg-primary')}
+              className={cn(
+                BASE_TOQUE,
+                sobreNavy
+                  ? cn(
+                      'h-9 flex-row items-center gap-2 rounded-full border px-3.5',
+                      ativo ? 'border-white bg-white' : 'border-white/10 bg-white/[0.06]',
+                    )
+                  : ativo && 'bg-primary',
+              )}
             >
               <Text
                 className={cn(
                   BASE_TEXTO,
-                  ativo ? 'text-primary-foreground' : 'text-muted-foreground',
+                  sobreNavy
+                    ? ativo
+                      ? 'text-[13.5px] font-semibold text-brand'
+                      : 'text-[13.5px] font-medium text-[#CBD5E1]'
+                    : ativo
+                      ? 'text-primary-foreground'
+                      : 'text-muted-foreground',
                 )}
               >
                 {opcao.label}
               </Text>
+              {/* A contagem ao lado do rótulo, como no desenho: ela responde
+                  "vale a pena abrir esta coluna?" antes do toque. */}
+              {sobreNavy && contagem?.[String(opcao.valor)] !== undefined ? (
+                <Text
+                  className={cn(
+                    'text-[11.5px] font-semibold tabular-nums',
+                    ativo ? 'text-brand/70' : 'text-[#CBD5E1]/80',
+                  )}
+                >
+                  {contagem[String(opcao.valor)]}
+                </Text>
+              ) : null}
             </Pressable>
           )
         })}

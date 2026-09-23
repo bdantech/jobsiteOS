@@ -70,7 +70,7 @@ export default function PerfilScreen() {
         />
       ) : (
         <ScrollView
-          contentContainerClassName="gap-6 p-4 pb-12"
+          contentContainerClassName="gap-6 p-4 pb-28"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
           }

@@ -68,7 +68,7 @@ export default function RelatoriosScreen() {
   return (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="gap-4 p-4"
+      contentContainerClassName="gap-4 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       <View className="gap-0.5">

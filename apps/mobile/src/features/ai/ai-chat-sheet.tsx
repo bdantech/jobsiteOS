@@ -148,7 +148,7 @@ export function AiChatSheet({ open: openProp, onOpenChange: onOpenChangeProp }: 
           className="flex-1"
           // `grow` lets the empty state centre itself in the viewport while still
           // allowing a long transcript to scroll past it.
-          contentContainerClassName="grow gap-3 pb-2"
+          contentContainerClassName="grow gap-3 pb-28"
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={scrollToEnd}
           showsVerticalScrollIndicator={false}

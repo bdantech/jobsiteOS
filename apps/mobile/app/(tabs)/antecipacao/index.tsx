@@ -1,15 +1,27 @@
 import { ESTAGIO_FUNIL_LABELS, type EstagioFunil } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
 import { Building2, Handshake, Search, Sparkles } from 'lucide-react-native'
-import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  View,
+  type TextInput,
+} from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import {
+  EstagiosDoFunil,
   FiltrosFunil,
   FunilSkeleton,
   NotaCard,
@@ -37,6 +49,8 @@ export default function FunilScreen() {
   const router = useRouter()
   const { grantedModuleIds } = useSession()
   const { colors } = useTheme()
+  const buscaRef = useRef<TextInput>(null)
+  const { recolhido, setRecolhido, aoRolar } = useCabecalhoRetratil()
 
   const [estagio, setEstagio] = useState<string>('a_prospectar')
   const [faixa, setFaixa] = useState<string | undefined>()
@@ -93,13 +107,24 @@ export default function FunilScreen() {
    */
   const podeVerFornecedores = canOpenOnMobile('/comercial/fornecedores', grantedModuleIds)
 
-  const header = (
-    <View className="gap-3 pb-3 pt-3">
-      <View className="justify-center px-4">
-        <View className="absolute left-7 z-10">
-          <Search size={18} color={colors.mutedForeground} />
-        </View>
+  /*
+    O CABEÇALHO fica preso ao topo; o resto do painel (faixa, tipagem, atalhos)
+    rola junto com a lista. A divisão não é estética: estágio e busca trocam a
+    LISTA, e ter de rolar de volta ao topo para trocar de estágio é o que fazia
+    a pessoa desistir de trocar.
+  */
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Funil"
+      resumo={`${ESTAGIO_FUNIL_LABELS[estagio as EstagioFunil] ?? estagio} · ${
+        isPending ? '…' : total.toLocaleString('pt-BR')
+      } oportunidades`}
+      recolhido={recolhido}
+      onExpandir={() => setRecolhido(false)}
+      aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
+      busca={
         <Input
+          ref={buscaRef}
           value={termo}
           onChangeText={setTermo}
           placeholder="Buscar fornecedor, sacado ou nota"
@@ -108,10 +133,19 @@ export default function FunilScreen() {
           returnKeyType="search"
           clearButtonMode="while-editing"
           accessibilityLabel="Buscar no funil"
-          className="pl-10"
+          icone={<Search size={20} color={colors.mutedForeground} />}
+          containerClassName="gap-0"
+          // Sem borda: sobre o navy o campo já se destaca por ser claro, e a
+          // borda de `input` (cinza claro) sobre escuro vira um halo sujo.
+          className="border-0"
         />
-      </View>
+      }
+      chips={<EstagiosDoFunil estagio={estagio} onEstagio={setEstagio} />}
+    />
+  )
 
+  const painelDaLista = (
+    <View className="gap-3 pb-3 pt-3">
       <FiltrosFunil
         estagio={estagio}
         onEstagio={setEstagio}
@@ -184,7 +218,7 @@ export default function FunilScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      {header}
+      {cabecalho}
 
       {isPending ? (
         <FunilSkeleton />
@@ -198,7 +232,15 @@ export default function FunilScreen() {
           data={oportunidades}
           keyExtractor={(item) => item.access_key as string}
           renderItem={renderItem}
-          contentContainerClassName="gap-3 px-4 pb-10"
+          ListHeaderComponent={painelDaLista}
+          onScroll={aoRolar}
+          scrollEventThrottle={16}
+          /*
+            `pb-28` e não `pb-10`: a lista passa POR BAIXO da barra flutuante —
+            é isso que dá ao blur o que borrar — então o fim dela precisa de
+            folga para o último card chegar acima da barra.
+          */
+          contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={

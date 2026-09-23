@@ -83,7 +83,7 @@ export default function FornecedorScreen() {
   const pontoFocal = data.contatos.find((c) => c.ponto_focal)
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-12">
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-28">
       {/* ─── Identidade + números ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>

@@ -59,7 +59,7 @@ export function FilaNaoVinculadas() {
       ListHeaderComponent={seletor}
       data={fila.data ?? []}
       keyExtractor={(n) => n.id}
-      contentContainerClassName="p-4 gap-3 pb-8"
+      contentContainerClassName="p-4 gap-3 pb-28"
       refreshControl={
         <RefreshControl refreshing={fila.isFetching} onRefresh={() => void fila.refetch()} />
       }

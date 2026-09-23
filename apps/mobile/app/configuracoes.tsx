@@ -47,7 +47,7 @@ export default function ConfiguracoesScreen() {
 
       <ScrollView
         className="flex-1 bg-background"
-        contentContainerClassName="gap-4 p-4 pb-12"
+        contentContainerClassName="gap-4 p-4"
         keyboardShouldPersistTaps="handled"
       >
         <ContaCard />

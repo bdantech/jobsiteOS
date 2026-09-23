@@ -1,5 +1,5 @@
 export { AcoesContato } from './components/acoes-contato'
-export { FiltrosFunil } from './components/filtros-funil'
+export { EstagiosDoFunil, FiltrosFunil } from './components/filtros-funil'
 export { MoverEstagioSheet } from './components/mover-estagio-sheet'
 export { NotaCard } from './components/nota-card'
 export { NotaDocumentoSheet } from './components/nota-documento-sheet'

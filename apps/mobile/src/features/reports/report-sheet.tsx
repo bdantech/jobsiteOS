@@ -178,7 +178,7 @@ function Formulario({ onEnviado }: { onEnviado: () => void }) {
   }
 
   return (
-    <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-6" keyboardShouldPersistTaps="handled">
+    <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-28" keyboardShouldPersistTaps="handled">
       {/* Dois botões grandes, não um seletor: a escolha muda o resto do formulário. */}
       <View className="flex-row gap-2">
         <BotaoTipo
@@ -358,7 +358,7 @@ function MeusReports({ onFechar }: { onFechar: () => void }) {
   }
 
   return (
-    <ScrollView className="flex-1" contentContainerClassName="gap-2 pb-6">
+    <ScrollView className="flex-1" contentContainerClassName="gap-2 pb-28">
       {data.map((r) => (
         <Pressable
           key={r.id}

@@ -94,7 +94,7 @@ export default function FornecedoresScreen() {
     <>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="gap-3 p-4 pb-28"
         refreshControl={
           <RefreshControl refreshing={funil.isRefetching} onRefresh={() => void funil.refetch()} />
         }
@@ -233,7 +233,7 @@ function FichaModal({
     >
       <ScrollView
         className="flex-1 bg-background"
-        contentContainerClassName="gap-3 p-4"
+        contentContainerClassName="gap-3 p-4 pb-28"
         style={Platform.OS === 'android' ? { paddingTop: insets.top } : undefined}
       >
         <Pressable

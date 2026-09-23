@@ -86,7 +86,7 @@ export function Conversa({ conversaId }: { conversaId: string }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerClassName="p-4 gap-3">
+      <ScrollView contentContainerClassName="p-4 gap-3 pb-28">
         {conversa?.sugestao_id ? (
           <View className="gap-2 rounded-xl border border-primary/40 bg-primary/5 p-3">
             <View className="flex-row items-center gap-2">

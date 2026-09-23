@@ -36,7 +36,7 @@ export default function MaisScreen() {
           demais. Sem esta linha, "Mais" seria a única tela sem o aviso de beta. */}
       <BannerBeta />
 
-      <ScrollView contentContainerClassName="pb-8" showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="pb-28" showsVerticalScrollIndicator={false}>
         {/*
           O CABEÇALHO NAVY com a conta dentro dele.
           

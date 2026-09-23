@@ -79,7 +79,7 @@ export default function PainelComercialScreen() {
      * que é o que faltava.
      */
     return (
-      <ScrollView className="flex-1" contentContainerClassName="gap-3 p-4">
+      <ScrollView className="flex-1" contentContainerClassName="gap-3 p-4 pb-28">
         {seletor}
         <EmptyState
           title={podeTrocar ? 'Escolha uma pessoa' : 'Você não é vendedor'}
@@ -98,7 +98,7 @@ export default function PainelComercialScreen() {
   return (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="gap-3 p-4"
+      contentContainerClassName="gap-3 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       {seletor}

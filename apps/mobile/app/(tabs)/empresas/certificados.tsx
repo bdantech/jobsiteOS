@@ -50,7 +50,7 @@ export default function CertificadosScreen() {
 
   return (
     <ScrollView
-      contentContainerClassName="p-4"
+      contentContainerClassName="p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />}
     >
       <ResumoCertificados

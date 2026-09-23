@@ -281,7 +281,7 @@ export default function ComissoesScreen() {
   return (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="gap-3 p-4"
+      contentContainerClassName="gap-3 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       <FilaAceite />

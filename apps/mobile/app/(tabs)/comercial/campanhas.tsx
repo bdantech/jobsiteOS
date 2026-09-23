@@ -81,7 +81,7 @@ export default function CampanhasScreen() {
     <FlatList
       data={data}
       keyExtractor={(c) => c.id as string}
-      contentContainerClassName="gap-2 p-4"
+      contentContainerClassName="gap-2 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
       renderItem={({ item }) => {
         const enviadas = item.enviadas ?? 0

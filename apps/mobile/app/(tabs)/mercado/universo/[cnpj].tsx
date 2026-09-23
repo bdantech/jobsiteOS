@@ -75,7 +75,7 @@ export default function UniversoDetalheScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-4 p-4 pb-12"
+        contentContainerClassName="gap-4 p-4 pb-28"
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

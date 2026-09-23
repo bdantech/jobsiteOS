@@ -91,7 +91,7 @@ export function ProcessosLista() {
       <FlatList
         data={linhas}
         keyExtractor={(item) => item.numero_cnj ?? String(item.data_distribuicao)}
-        contentContainerClassName="gap-3 px-4 pb-8"
+        contentContainerClassName="gap-3 px-4 pb-28"
         refreshControl={
           <RefreshControl
             refreshing={carteira.isRefetching}

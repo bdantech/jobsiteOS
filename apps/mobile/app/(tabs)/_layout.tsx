@@ -92,13 +92,16 @@ export default function TabsLayout() {
            */
           tabBarStyle: {
             position: 'absolute',
-            left: 12,
-            right: 12,
+            // Mais estreita e mais redonda que a primeira versão: a pílula tem
+            // de parecer um objeto POUSADO sobre a lista, e a 12px de cada lado
+            // com raio 20 ela ainda lia como uma barra presa à moldura.
+            left: 20,
+            right: 20,
             bottom: 26,
             height: 68,
             paddingHorizontal: 4,
             paddingBottom: 0,
-            borderRadius: 20,
+            borderRadius: 30,
             borderWidth: 1,
             borderTopWidth: 1,
             borderColor: esquema === 'dark' ? 'rgba(63,68,80,0.7)' : 'rgba(228,232,236,0.8)',
@@ -122,7 +125,7 @@ export default function TabsLayout() {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                borderRadius: 20,
+                borderRadius: 30,
                 overflow: 'hidden',
                 // O blur sozinho fica transparente demais sobre lista clara; a
                 // camada de tinta é o que dá corpo à pílula.
@@ -132,24 +135,24 @@ export default function TabsLayout() {
             />
           ),
           tabBarItemStyle: { paddingVertical: 8 },
-          // Peso 400, igual à sidebar da web: o SidebarMenuButton não aplica
-          // font-* nenhum, então o rótulo de módulo lá é normal. O 500 daqui
-          // deixava a barra mais pesada que a navegação equivalente na web, e a
-          // cor do item ativo já é o canal que distingue selecionado de não
-          // selecionado — o peso era um segundo canal dizendo a mesma coisa.
+          // A família traz o peso: em RN um `fontWeight` sobre fonte carregada
+          // por arquivo não engrossa nada (ver o plugin em tailwind.config.js),
+          // e o rótulo da barra não passa pelo <Text> que resolve isso.
           tabBarLabelStyle: { fontSize: 11, fontFamily: 'Poppins_500Medium' },
           /*
-           * O ESPAÇO DA BARRA, reservado AQUI e em nenhum outro lugar.
+           * A CENA NÃO RESERVA ESPAÇO — e é isso que faz o blur existir.
            *
-           * Com a barra em `position: absolute` ela deixa de empurrar o
-           * conteúdo, e sem isto o fim de toda lista do app ficaria escondido
-           * atrás dela. Pôr o padding na cena resolve para as ~30 telas de uma
-           * vez; espalhá-lo por FlatList garantiria que a próxima tela nascesse
-           * sem ele e ninguém notasse até alguém rolar até o fim.
+           * Com `paddingBottom` aqui, o conteúdo parava antes da barra e o
+           * vidro não tinha o que borrar: a pílula ficava leitosa sobre o fundo
+           * da tela. Sem ele, a lista passa POR BAIXO e o blur mostra o card
+           * desfocado atravessando — que é o efeito pedido.
            *
-           * 94 = 26 (distância do fundo) + 68 (altura da pílula).
+           * O preço é que cada lista precisa de folga no FIM (`pb-28`), senão o
+           * último item nunca sobe acima da barra. É um padding de
+           * `contentContainer`, não de cena: ele adiciona espaço depois do
+           * conteúdo em vez de encurtar a área de rolagem.
            */
-          sceneStyle: { backgroundColor: colors.background, paddingBottom: 94 },
+          sceneStyle: { backgroundColor: colors.background },
         }}
       >
         {MOBILE_MODULES.map((module) => {

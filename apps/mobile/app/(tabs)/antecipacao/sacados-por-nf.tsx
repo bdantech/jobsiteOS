@@ -92,7 +92,7 @@ export default function SacadosPorNfScreen() {
         data={data}
         keyExtractor={(item) => item.id as string}
         renderItem={renderItem}
-        contentContainerClassName="gap-3 p-4 pb-10"
+        contentContainerClassName="gap-3 p-4 pb-28"
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

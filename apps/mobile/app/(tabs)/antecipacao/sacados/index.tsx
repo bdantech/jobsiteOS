@@ -122,7 +122,7 @@ export default function SacadosScreen() {
       data={data}
       keyExtractor={(item) => item.sacado_cnpj as string}
       renderItem={renderItem}
-      contentContainerClassName="gap-3 p-4 pb-10"
+      contentContainerClassName="gap-3 p-4 pb-28"
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}

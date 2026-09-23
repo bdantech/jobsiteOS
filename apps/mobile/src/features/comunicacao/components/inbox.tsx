@@ -112,7 +112,7 @@ export function Inbox() {
       <FlatList
         data={conversas.data ?? []}
         keyExtractor={(c) => c.id ?? ''}
-        contentContainerClassName="px-4 pb-8 gap-2"
+        contentContainerClassName="px-4 gap-2 pb-28"
         refreshControl={
           <RefreshControl refreshing={conversas.isFetching} onRefresh={() => void conversas.refetch()} />
         }

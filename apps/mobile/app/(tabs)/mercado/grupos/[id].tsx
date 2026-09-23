@@ -103,7 +103,7 @@ export default function GrupoDetalheScreen() {
         data={outros}
         keyExtractor={(membro, index) => membro.cnpj ?? String(index)}
         renderItem={({ item }) => <MembroCard membro={item} onPress={abrirMembro} />}
-        contentContainerClassName="gap-3 p-4 pb-12"
+        contentContainerClassName="gap-3 p-4 pb-28"
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

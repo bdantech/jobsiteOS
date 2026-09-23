@@ -149,7 +149,7 @@ export function EsteiraLista() {
       <FlatList
         data={itens}
         keyExtractor={(a) => a.id}
-        contentContainerClassName="gap-2 px-4 pb-8"
+        contentContainerClassName="gap-2 px-4 pb-28"
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} tintColor={colors.mutedForeground} />
         }

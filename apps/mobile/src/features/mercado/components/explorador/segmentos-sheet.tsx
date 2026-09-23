@@ -116,7 +116,7 @@ export function SegmentosSheet({ open, onOpenChange, ativo, onSelect }: Segmento
     >
       {/* No height cap here: <Sheet> already bounds the panel at 90% and lets the
           body shrink, so the ScrollView inherits a bounded box and scrolls. */}
-      <ScrollView contentContainerClassName="gap-2 pb-2">
+      <ScrollView contentContainerClassName="gap-2 pb-28">
         {isPending ? (
           <SegmentosSkeleton />
         ) : isError ? (

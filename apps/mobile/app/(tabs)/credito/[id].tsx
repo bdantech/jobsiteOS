@@ -56,7 +56,7 @@ export default function AnaliseScreen() {
   if (isError || !data) return <ErrorState onRetry={() => void refetch()} />
 
   return (
-    <ScrollView contentContainerClassName="gap-3 p-4 pb-8">
+    <ScrollView contentContainerClassName="gap-3 p-4 pb-28">
       <View className="gap-1">
         <Text className="text-xl font-semibold">{data.razao_social ?? formatCnpj(data.cnpj)}</Text>
         <Text variant="muted" className="text-sm tabular-nums">

@@ -51,7 +51,7 @@ export function PrazosMobile() {
     <FlatList
       data={agenda.data ?? []}
       keyExtractor={(item) => item.id ?? ''}
-      contentContainerClassName="gap-3 p-4 pb-8"
+      contentContainerClassName="gap-3 p-4 pb-28"
       refreshControl={
         <RefreshControl
           refreshing={agenda.isRefetching}

@@ -52,7 +52,7 @@ export default function FunilSdrScreen() {
     <FlatList
       data={data}
       keyExtractor={(l) => l.id}
-      contentContainerClassName="gap-2 p-4"
+      contentContainerClassName="gap-2 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
       renderItem={({ item }) => {
         const proximo = proximoEstagioSdr(item.estagio)

@@ -133,7 +133,7 @@ export default function MeuDiaScreen() {
      * devolveu `espelhado`); o que faltava era esta tela oferecê-lo.
      */
     return (
-      <ScrollView className="flex-1" contentContainerClassName="pb-8">
+      <ScrollView className="flex-1" contentContainerClassName="pb-28">
         {seletor}
         <EmptyState
           title={podeTrocar ? 'Escolha uma pessoa' : 'Você não é vendedor'}
@@ -178,7 +178,7 @@ export default function MeuDiaScreen() {
   return (
     <ScrollView
       className="flex-1"
-      contentContainerClassName="gap-4 p-4"
+      contentContainerClassName="gap-4 p-4 pb-28"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       {/* Já dentro do padding da lista: o seletor do estado vazio traz o seu

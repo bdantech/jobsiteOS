@@ -124,7 +124,7 @@ export function ProcessoDetalheMobile({ numeroCnj }: { numeroCnj: string }) {
   const saldo = Number(p.saldo_liquido ?? 0)
 
   return (
-    <ScrollView contentContainerClassName="gap-4 p-4 pb-16">
+    <ScrollView contentContainerClassName="gap-4 p-4 pb-28">
       {/* ── Capa ── */}
       <Card>
         <CardHeader>

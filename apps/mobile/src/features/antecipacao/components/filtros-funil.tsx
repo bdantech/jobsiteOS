@@ -51,8 +51,6 @@ export function FiltrosFunil({
 }: FiltrosFunilProps) {
   return (
     <View className="gap-2">
-      <FiltroSegmentado opcoes={ESTAGIOS} valor={estagio} onChange={onEstagio} />
-
       <FiltroFaixa className="gap-2">
         {FAIXAS.map((f) => (
           <FiltroChip
@@ -77,5 +75,34 @@ export function FiltrosFunil({
         ))}
       </FiltroFaixa>
     </View>
+  )
+}
+
+/**
+ * O ESTÁGIO, separado do resto — ele mora no cabeçalho navy.
+ *
+ * Faixa e tipagem afinam o que já está na tela; o estágio troca a LISTA. São
+ * perguntas de ordens diferentes, e deixá-las na mesma faixa fazia a mais
+ * importante parecer mais um chip. Agora o estágio fica preso ao topo, com a
+ * contagem ao lado, e some junto com a busca quando o cabeçalho recolhe.
+ */
+export function EstagiosDoFunil({
+  estagio,
+  onEstagio,
+  contagem,
+}: {
+  estagio: string
+  onEstagio: (v: string) => void
+  contagem?: Record<string, number | undefined>
+}) {
+  return (
+    <FiltroSegmentado
+      opcoes={ESTAGIOS}
+      valor={estagio}
+      onChange={onEstagio}
+      contagem={contagem}
+      sobreNavy
+      sangra
+    />
   )
 }

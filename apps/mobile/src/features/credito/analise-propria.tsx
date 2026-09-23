@@ -324,7 +324,7 @@ export function AnalisePropriaMobile({ analiseCreditoId }: { analiseCreditoId: s
   const parecer = p.parecer_editado ?? p.parecer_markdown
 
   return (
-    <ScrollView contentContainerClassName="gap-3">
+    <ScrollView contentContainerClassName="gap-3 pb-28">
       <Card>
         <CardHeader className="pb-2">
           <View className="flex-row flex-wrap items-center justify-between gap-2">
