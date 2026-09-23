@@ -1,13 +1,6 @@
 import { Search } from 'lucide-react-native'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import {
-  Animated,
-  Pressable,
-  useAnimatedValue,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Animated, Pressable, View, type FlatList } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HeaderActions } from '@/components/shell/header-actions'
@@ -21,24 +14,40 @@ import { Text } from '@/components/ui/text'
  * linha do scroll eles subiam e sumiam junto com os cards, e a pessoa perdia de
  * vista em qual estágio está justamente quando rolou o bastante para esquecer.
  * Dentro do navy, eles saem de cena mas deixam um rastro: o resumo ("Em
- * prospecção · 231 notas") assume a linha debaixo do título.
+ * prospecção · 231 oportunidades") assume a linha debaixo do título.
  *
- * ── O QUE ENCOLHE É A ALTURA, E ELA É MEDIDA, NÃO CHUTADA ───────────────────
- * O painel (busca + chips) é medido no primeiro layout via `onLayout`. Fixar a
- * altura em pixel funcionaria hoje e quebraria no primeiro aparelho com fonte
- * de sistema aumentada — o chip cresce, o número não, e o conteúdo vaza por
- * baixo do navy.
+ * ── O CABEÇALHO É UMA FUNÇÃO DO SCROLL, NÃO UMA REAÇÃO A ELE ────────────────
+ * Esta é a decisão que importa, e a primeira versão errou nela.
  *
- * ── POSIÇÃO, NÃO DIREÇÃO ───────────────────────────────────────────────────
- * Recolhe assim que a lista sai do topo e volta inteiro quando ela retorna. A
- * primeira versão olhava a DIREÇÃO do gesto com um limiar de 6px, e isso
- * introduzia dois atrasos que se somavam: era preciso acumular movimento
- * suficiente para o limiar, e depois rolar para CIMA para reabrir — de modo que
- * um rolar curto deixava o cabeçalho recolhido no topo da lista, escondendo a
- * busca com nada acima dela para justificar.
+ * Lá a cadeia era: evento de scroll → `setState` → re-render da tela inteira
+ * (FlatList incluída) → `useEffect` → `Animated.timing` de 140ms. Quatro saltos
+ * antes de um pixel se mexer, e o re-render entrando na fila da thread JS que
+ * já está ocupada desenhando linhas durante o scroll. O resultado era o atraso
+ * enorme que se via no aparelho — e não adiantava encurtar a animação, porque
+ * o atraso não estava nela.
  *
- * Por posição o estado é uma função de onde a lista está, não do caminho que
- * ela fez para chegar ali: não há como divergir do que se vê.
+ * Além de tardio, era um GATILHO: cruzou o limiar, toca uma animação pronta. Um
+ * cabeçalho que segue o dedo não pode ser uma animação; ele tem que ser uma
+ * interpolação da posição da lista.
+ *
+ * Agora `Animated.event` escreve o deslocamento DIRETO no `Animated.Value`, sem
+ * passar por render nenhum, e altura, opacidade e recuos são interpolações
+ * desse valor. Não há o que atrasar: não existe etapa entre rolar e encolher.
+ *
+ * `useNativeDriver` segue `false` — altura e padding são layout, e layout não
+ * roda na thread de UI. Mas o caminho crítico deixou de ter React no meio, que
+ * era o custo real.
+ *
+ * ── O BOOLEANO SOBREVIVE, E CUSTA UM RENDER POR TRAVESSIA ───────────────────
+ * O resumo e a lupa aparecem/somem, e isso é troca de árvore, não de estilo —
+ * precisa de estado. Mas ele é atualizado por um listener no próprio valor
+ * animado, só quando o limiar é cruzado: um render por travessia, não por
+ * quadro.
+ *
+ * ── O PAINEL É MEDIDO, NÃO CHUTADO ──────────────────────────────────────────
+ * Fixar a altura em pixel funcionaria hoje e quebraria no primeiro aparelho com
+ * fonte de sistema aumentada — o chip cresce, o número não, e o conteúdo vaza
+ * por baixo do navy.
  */
 
 export interface CabecalhoRetratilProps {
@@ -53,18 +62,41 @@ export interface CabecalhoRetratilProps {
   aoReabrir?: () => void
 }
 
-export function useCabecalhoRetratil() {
+/**
+ * O deslocamento da lista, e o gesto de voltar ao topo.
+ *
+ * A tela passa `aoRolar` para a FlatList e `listaRef` para cá: reabrir o
+ * cabeçalho é ROLAR ATÉ O TOPO, não mexer num estado à parte. Com o cabeçalho
+ * sendo função do scroll, qualquer outro jeito de reabri-lo criaria um segundo
+ * dono da mesma verdade.
+ */
+export function useCabecalhoRetratil<T>() {
+  const deslocamento = useRef(new Animated.Value(0)).current
+  const listaRef = useRef<FlatList<T>>(null)
   const [recolhido, setRecolhido] = useState(false)
 
-  /*
-   * 4px: o bastante para não disparar com o repique do `bounce` do iOS, pouco
-   * o bastante para o cabeçalho já estar recolhendo quando o dedo mal andou.
-   */
-  const aoRolar = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setRecolhido(e.nativeEvent.contentOffset.y > 4)
+  const aoRolar = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: deslocamento } } }], {
+        useNativeDriver: false,
+      }),
+    [deslocamento],
+  )
+
+  useEffect(() => {
+    // 12px: acima do repique do `bounce` do iOS, que chega a oscilar alguns
+    // pixels parado no topo e faria o resumo piscar.
+    const id = deslocamento.addListener(({ value }) => {
+      setRecolhido(value > 12)
+    })
+    return () => deslocamento.removeListener(id)
+  }, [deslocamento])
+
+  const voltarAoTopo = useCallback(() => {
+    listaRef.current?.scrollToOffset({ offset: 0, animated: true })
   }, [])
 
-  return { recolhido, setRecolhido, aoRolar }
+  return { deslocamento, recolhido, aoRolar, listaRef, voltarAoTopo }
 }
 
 export function CabecalhoRetratil({
@@ -73,57 +105,57 @@ export function CabecalhoRetratil({
   busca,
   chips,
   aoReabrir,
+  deslocamento,
   recolhido,
   onExpandir,
-}: CabecalhoRetratilProps & { recolhido: boolean; onExpandir: () => void }) {
+}: CabecalhoRetratilProps & {
+  deslocamento: Animated.Value
+  recolhido: boolean
+  onExpandir: () => void
+}) {
   const { top } = useSafeAreaInsets()
   const [alturaPainel, setAlturaPainel] = useState(0)
-  const progresso = useAnimatedValue(0)
 
-  useEffect(() => {
-    Animated.timing(progresso, {
-      toValue: recolhido ? 1 : 0,
-      // 140ms: em 220 a animação terminava depois do gesto e a sensação era
-      // de atraso, mesmo com o estado já trocado no primeiro pixel.
-      duration: 140,
-      // `false` obrigatório: altura e opacidade de layout não rodam na thread
-      // de UI. O trecho é curto e a animação é de 220ms — o custo é invisível,
-      // e `true` aqui simplesmente não animaria.
-      useNativeDriver: false,
-    }).start()
-  }, [recolhido, progresso])
+  /*
+   * O curso é a própria altura do painel: o cabeçalho termina de encolher
+   * exatamente quando a lista andou o tanto que ele ocupava. Um curso fixo
+   * faria o encolhimento correr mais rápido ou mais devagar que o dedo.
+   *
+   * `|| 1` só para o primeiro quadro, antes da medição: um `inputRange` com
+   * início igual ao fim é intervalo inválido e o RN reclama.
+   */
+  const curso = alturaPainel || 1
 
-  const alturaPainelAnimada = progresso.interpolate({
-    inputRange: [0, 1],
-    outputRange: [alturaPainel, 0],
-  })
-  const opacidadePainel = progresso.interpolate({
-    inputRange: [0, 0.6, 1],
-    // Some antes de a altura acabar: um painel meio-alto e ainda opaco parece
-    // cortado ao meio, que é pior que um que desaparece cedo.
-    outputRange: [1, 0, 0],
+  const interp = (de: number, para: number) =>
+    deslocamento.interpolate({
+      inputRange: [0, curso],
+      outputRange: [de, para],
+      extrapolate: 'clamp',
+    })
+
+  const alturaAnimada = interp(alturaPainel, 0)
+  const recuoTopo = interp(top + 8, top + 2)
+  const recuoBase = interp(12, 6)
+
+  // Some na METADE do curso: um painel meio-alto e ainda opaco parece cortado
+  // ao meio, que é pior que um que desaparece cedo.
+  const opacidadePainel = deslocamento.interpolate({
+    inputRange: [0, curso * 0.5],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
   })
 
   return (
-    /*
-      RECOLHIDO O NAVY ENCOLHE DE VERDADE.
-      
-      Só esconder o painel deixava uma faixa escura alta com um título dentro —
-      ela continuava comendo a tela sem oferecer nada. Recolhido o recuo cai
-      para o mínimo que o status bar exige e o rodapé some: a barra vira uma
-      linha de título com o resumo, que é para o que ela serve ali.
-    */
-    <View
+    <Animated.View
       className="rounded-b-2xl bg-brand px-5"
-      style={{ paddingTop: top + (recolhido ? 2 : 8), paddingBottom: recolhido ? 6 : 12 }}
+      style={{ paddingTop: recuoTopo, paddingBottom: recuoBase }}
     >
       <View className="min-h-[44px] flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1">
           {/*
             `leading-[34px]` num corpo de 26: a Manrope é alta, e com a
             entrelinha colada ao corpo o RN corta o topo das ascendentes — o
-            "F" e o "l" de "Funil" apareciam decepados. Folga vertical não é
-            estética aqui, é o que faz a palavra caber.
+            "F" e o "l" de "Funil" apareciam decepados.
           */}
           <Text
             numberOfLines={1}
@@ -159,13 +191,13 @@ export function CabecalhoRetratil({
       </View>
 
       <Animated.View
-        style={{ height: alturaPainel === 0 ? undefined : alturaPainelAnimada, opacity: opacidadePainel }}
+        style={{ height: alturaPainel === 0 ? undefined : alturaAnimada, opacity: opacidadePainel }}
         className="overflow-hidden"
       >
         <View
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height
-            // Só cresce: medir durante o recolhimento gravaria uma altura
+            // Só cresce: medir durante o encolhimento gravaria uma altura
             // intermediária como se fosse a final, e o painel nunca mais
             // reabriria inteiro.
             setAlturaPainel((atual) => (h > atual ? h : atual))
@@ -176,6 +208,6 @@ export function CabecalhoRetratil({
           {chips}
         </View>
       </Animated.View>
-    </View>
+    </Animated.View>
   )
 }

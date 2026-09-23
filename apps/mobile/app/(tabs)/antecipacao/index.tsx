@@ -50,7 +50,8 @@ export default function FunilScreen() {
   const { grantedModuleIds } = useSession()
   const { colors } = useTheme()
   const buscaRef = useRef<TextInput>(null)
-  const { recolhido, setRecolhido, aoRolar } = useCabecalhoRetratil()
+  const { deslocamento, recolhido, aoRolar, listaRef, voltarAoTopo } =
+    useCabecalhoRetratil<Oportunidade>()
 
   const [estagio, setEstagio] = useState<string>('a_prospectar')
   const [faixa, setFaixa] = useState<string | undefined>()
@@ -119,8 +120,15 @@ export default function FunilScreen() {
       resumo={`${ESTAGIO_FUNIL_LABELS[estagio as EstagioFunil] ?? estagio} · ${
         isPending ? '…' : total.toLocaleString('pt-BR')
       } oportunidades`}
+      deslocamento={deslocamento}
       recolhido={recolhido}
-      onExpandir={() => setRecolhido(false)}
+      /*
+        Reabrir é ROLAR ATÉ O TOPO, não mexer num estado à parte: com o
+        cabeçalho sendo função do scroll, qualquer outro caminho criaria um
+        segundo dono da mesma verdade — e os dois discordariam no primeiro
+        gesto.
+      */
+      onExpandir={voltarAoTopo}
       aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
       busca={
         <Input
@@ -229,6 +237,7 @@ export default function FunilScreen() {
         />
       ) : (
         <FlatList
+          ref={listaRef}
           data={oportunidades}
           keyExtractor={(item) => item.access_key as string}
           renderItem={renderItem}
