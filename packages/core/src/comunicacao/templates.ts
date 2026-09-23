@@ -31,6 +31,7 @@ export const VARIAVEIS_MENSAGEM = {
   data_vencimento: 'Data de vencimento do certificado',
   qtd_spes: 'Quantidade de SPEs com certificado a vencer',
   link_agendamento: 'Link para o calendário do vendedor',
+  link_antecipacao: 'Link que abre o pedido de antecipação DESTA nota, preenchido',
 } as const
 
 export type VariavelMensagem = keyof typeof VARIAVEIS_MENSAGEM

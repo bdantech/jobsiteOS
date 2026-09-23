@@ -491,6 +491,7 @@ export function OportunidadeCard({
                   empresaId={item.fornecedor_empresa_id}
                   fornecedorCnpj={item.fornecedor_cnpj}
                   fornecedorNome={nomeFornecedor}
+                  notaAccessKey={item.access_key}
                   onMandarMensagem={(id) => {
                     setContatoEscolhido(id)
                     setAba('mensagens')

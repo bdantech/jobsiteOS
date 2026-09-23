@@ -134,9 +134,22 @@ export function Compositor({
   // consulta só: as chaves atravessam quatro módulos, e quinze idas ao banco
   // pelo cliente seriam quinze chances de o texto sair pela metade.
   const valores = useQuery({
-    queryKey: ['comunicacao', 'valores-variaveis', empresaId, contatoId],
+    // O card entra na chave: `{link_antecipacao}` é de UMA nota, e duas notas do
+    // mesmo fornecedor têm links diferentes. Sem isto o cache da primeira
+    // serviria a segunda, e o fornecedor receberia o link da nota errada.
+    queryKey: ['comunicacao', 'valores-variaveis', empresaId, contatoId, funilCardId ?? null],
     queryFn: async () => {
-      const r = await valoresVariaveisAction(empresaId, contatoId || null)
+      /*
+       * `funilCardId` só é a chave de acesso de uma NF quando o funil é o de NFs
+       * — nos outros ele é o id do lead, do negócio ou do certificado. Mandar
+       * qualquer um deles não faria mal (o resolvedor não acharia nota nenhuma),
+       * mas mandar só o que é nota diz o que se quis dizer.
+       */
+      const r = await valoresVariaveisAction(
+        empresaId,
+        contatoId || null,
+        funil === 'nfs' ? (funilCardId ?? null) : null,
+      )
       if (!r.ok) throw new Error(r.message)
       return r.data
     },

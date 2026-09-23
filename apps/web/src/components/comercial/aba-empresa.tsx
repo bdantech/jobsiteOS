@@ -1,8 +1,9 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink, Mail, MessageCircle } from 'lucide-react'
+import { Check, Copy, ExternalLink, Mail, MessageCircle } from 'lucide-react'
 import { formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -89,10 +90,99 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   )
 }
 
+/**
+ * O LINK DE ANTECIPAÇÃO DESTA NOTA.
+ *
+ * ── POR QUE ELE MORA NA ABA DO FORNECEDOR ──────────────────────────────────
+ * O link leva quem EMITIU a nota ao pedido de antecipação já preenchido, e a
+ * autorização é conferida na abertura: CNPJ da conta = CNPJ do emissor.
+ * Mandá-lo ao sacado não vaza nada (ele veria um resumo com o CNPJ oculto), mas
+ * é uma mensagem inútil. O destinatário certo é sempre o fornecedor — e esta é
+ * a aba onde se decide com quem falar.
+ *
+ * ── A CONSULTA É PRÓPRIA, E PEQUENA ────────────────────────────────────────
+ * Poderia vir junto do XML que o modal já busca, mas aquele `select` traz
+ * `raw_xml` — dezenas a centenas de KB. Esta pede uma coluna.
+ *
+ * ── NULO NÃO É FALHA ───────────────────────────────────────────────────────
+ * Cerca de um terço das notas recebidas não tem link, por desenho: resumo sem
+ * XML completo, cancelada, emissor sem CNPJ, valor fora da faixa. Dizer "—"
+ * faria a pessoa procurar defeito onde não há; a frase explica e encerra.
+ */
+function LinhaLinkAntecipacao({ accessKey }: { accessKey: string }) {
+  const [copiado, setCopiado] = React.useState(false)
+
+  const q = useQuery({
+    queryKey: ['antecipacao', 'link-da-nota', accessKey],
+    queryFn: async () => {
+      const { data } = await createClient()
+        .from('notas_fiscais')
+        .select('link_antecipacao')
+        .eq('access_key', accessKey)
+        .maybeSingle<{ link_antecipacao: string | null }>()
+      return data?.link_antecipacao ?? null
+    },
+  })
+
+  if (q.isPending) {
+    return <Linha rotulo="Link de antecipação" valor={<Skeleton className="h-4 w-40" />} />
+  }
+
+  const link = q.data
+  if (!link) {
+    return (
+      <Linha
+        rotulo="Link de antecipação"
+        valor={<span className="text-xs text-muted-foreground">Esta nota não tem link ativo.</span>}
+      />
+    )
+  }
+
+  const copiar = () => {
+    /*
+     * O valor é copiado COMO VEIO. Encurtar, reescrever ou remontar a URL a
+     * partir da chave quebraria o link: o token tem 43 caracteres e é opaco —
+     * não é derivável de nada que esteja nesta tela.
+     */
+    void navigator.clipboard.writeText(link).then(() => {
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 1500)
+    })
+  }
+
+  return (
+    <Linha
+      rotulo="Link de antecipação"
+      valor={
+        <span className="flex items-center justify-end gap-1">
+          <span className="min-w-0 truncate font-mono text-xs" title={link}>
+            {link}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 shrink-0 p-0"
+            onClick={copiar}
+            aria-label={copiado ? 'Link copiado' : 'Copiar link'}
+          >
+            {copiado ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 shrink-0 p-0" asChild>
+            <a href={link} target="_blank" rel="noopener noreferrer" aria-label="Abrir link">
+              <ExternalLink className="size-3" />
+            </a>
+          </Button>
+        </span>
+      }
+    />
+  )
+}
+
 export function AbaEmpresa({
   empresaId,
   fornecedorCnpj,
   fornecedorNome,
+  notaAccessKey,
   onMandarMensagem,
 }: {
   empresaId: string | null
@@ -104,6 +194,12 @@ export function AbaEmpresa({
    */
   fornecedorCnpj?: string | null
   fornecedorNome?: string | null
+  /**
+   * A chave de acesso da NF, quando o card é uma nota. Só com ela esta aba mostra
+   * o link de antecipação — ele é de UMA nota, não da empresa, e um fornecedor
+   * com doze notas tem doze links diferentes.
+   */
+  notaAccessKey?: string | null
   /** Quando dado, cada contato ganha o botão que abre o compositor já nele. */
   onMandarMensagem?: (contatoId: string) => void
 }) {
@@ -188,6 +284,7 @@ export function AbaEmpresa({
         <Linha rotulo="Valor esperado" valor={`${brl(e.valor_esperado_mensal)}/mês`} />
         <Linha rotulo="ERP atual" valor={e.erp_atual ?? '—'} />
         <Linha rotulo="Gestão" valor={e.gestao_operacao ?? '—'} />
+        {notaAccessKey ? <LinhaLinkAntecipacao accessKey={notaAccessKey} /> : null}
       </div>
 
       <div className="space-y-1.5">

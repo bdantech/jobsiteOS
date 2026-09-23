@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   direcaoDaNota,
   extrairNotas,
+  linkDeAntecipacao,
   normalizarNfPayload,
   situacaoDaNota,
   tipoDaNota,
@@ -365,4 +366,49 @@ test('nota cancelada é reconhecida nos dois vocabulários, e o status cru é pr
     // Cru, porque é a evidência do que o outro lado disse.
     assert.equal(r.nota.status_sync, s)
   }
+})
+
+/**
+ * O link de antecipação sai daqui e vai para o WhatsApp de um fornecedor. Um
+ * valor estranho que passasse vira um link quebrado na mão de um cliente, e ele
+ * não tem como saber que o defeito é nosso — por isso a porta é estreita.
+ */
+test('o link de antecipação só passa se for um endereço https navegável', () => {
+  const bom = 'https://app.oneos.com.br/nota/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE'
+  assert.equal(linkDeAntecipacao(bom), bom)
+
+  // `null` é o caso NORMAL: ~um terço das notas recebidas não tem link.
+  assert.equal(linkDeAntecipacao(null), null)
+  assert.equal(linkDeAntecipacao(undefined), null)
+  assert.equal(linkDeAntecipacao(''), null)
+  assert.equal(linkDeAntecipacao('   '), null)
+
+  // O que já chegou de API de terceiro em outros campos, e chegaria aqui igual.
+  assert.equal(linkDeAntecipacao('null'), null)
+  assert.equal(linkDeAntecipacao('/nota/abc'), null)
+  assert.equal(linkDeAntecipacao('app.oneos.com.br/nota/abc'), null)
+  // http puro não: o link pede login do fornecedor do outro lado.
+  assert.equal(linkDeAntecipacao('http://app.oneos.com.br/nota/abc'), null)
+  assert.equal(linkDeAntecipacao('javascript:alert(1)'), null)
+})
+
+test('o link atravessa a normalização, e a falta dele não é descarte', () => {
+  const base = {
+    accessKey: '4'.repeat(44),
+    amount: 15000,
+    recipient: { taxId: '12345678000190' },
+    supplier: { taxId: '98765432000110' },
+  }
+  const link = 'https://app.oneos.com.br/nota/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE'
+
+  const com = normalizarNfPayload({ ...base, anticipationLink: link })
+  assert.equal(com.ok, true)
+  if (!com.ok) return
+  assert.equal(com.nota.link_antecipacao, link)
+
+  // Nota sem link continua sendo nota: ela é a maioria, e o funil vive dela.
+  const sem = normalizarNfPayload(base)
+  assert.equal(sem.ok, true)
+  if (!sem.ok) return
+  assert.equal(sem.nota.link_antecipacao, null)
 })

@@ -83,6 +83,12 @@ const ROTA = '/comunicacao'
 export async function valoresVariaveisAction(
   empresaId: string,
   contatoId: string | null,
+  /**
+   * A NF de onde o compositor foi aberto. Só com ela `{link_antecipacao}` é
+   * preenchido, e o resolvedor ainda exige que a nota seja DESTA empresa como
+   * fornecedora — o link é para quem emitiu, nunca para quem recebeu.
+   */
+  notaAccessKey?: string | null,
 ): Promise<ActionResult<ValoresVariaveis>> {
   const { erro, supabase, context } = await autorizar()
   if (erro || !supabase || !context) return erro as ActionResult<never>
@@ -103,6 +109,7 @@ export async function valoresVariaveisAction(
       empresaId,
       contatoId,
       remetenteNome: vendedor?.nome ?? context.usuario.nome,
+      notaAccessKey: notaAccessKey ?? null,
     })
     return { ok: true, data: valores }
   } catch (e) {

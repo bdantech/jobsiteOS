@@ -461,6 +461,7 @@ export function NotaCard({
                   empresaId={nota.fornecedor_empresa_id}
                   fornecedorCnpj={nota.fornecedor_cnpj}
                   fornecedorNome={nomeFornecedor}
+                  notaAccessKey={nota.access_key}
                   onMandarMensagem={(id) => {
                     setContatoEscolhido(id)
                     setAba('mensagens')

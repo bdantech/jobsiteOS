@@ -481,6 +481,16 @@ async function processarNota(
     direction: direcaoEstavel,
     situacao: nota.situacao,
     xml_resumo: nota.xml_resumo,
+    /*
+     * O link SOBRESCREVE, inclusive com null — e é isso que se quer.
+     *
+     * Um link revogado pelo operador passa a voltar `null` da API, e revogação
+     * não tem volta: continuar mostrando o que guardamos ontem faria a tela
+     * oferecer ao fornecedor um endereço que só diz "este link não está mais
+     * ativo". No sentido inverso vale o mesmo — a nota que estava em resumo
+     * ganha o link no instante em que o XML completo chega, sem nada especial.
+     */
+    link_antecipacao: nota.link_antecipacao,
     // Só sobe para true; uma nota que já foi vista dos dois lados não deixa de ter
     // sido, e a passagem seguinte enxerga apenas uma das cópias.
     ...(bilateral ? { bilateral: true } : {}),

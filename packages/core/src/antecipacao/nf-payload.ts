@@ -66,6 +66,11 @@ export interface NfPayload {
   /** O XML bruto. O campo real é `rawXml`. */
   rawXml?: string | null
   xml?: string | null
+  /**
+   * O endereço que leva o EMISSOR da nota ao pedido de antecipação preenchido.
+   * Aditivo desde 21/09/2026; `null` é o caso normal (ver `linkDeAntecipacao`).
+   */
+  anticipationLink?: string | null
 }
 
 export interface RespostaNf {
@@ -111,6 +116,36 @@ function data(v: unknown): string | null {
   if (!s) return null
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
   return m?.[1] ?? null
+}
+
+/**
+ * O link de antecipação, ou `null` — e `null` é o caso NORMAL.
+ *
+ * Só ganha link a nota `received`, completa, autorizada, com emissor de CNPJ e
+ * valor na faixa; nota em resumo, cancelada ou de emissor pessoa física vem sem.
+ * Cerca de um terço do estoque recebido não tem, por desenho.
+ *
+ * ── POR QUE FILTRAR O QUE CHEGA ─────────────────────────────────────────────
+ * Este valor não fica no banco: ele é colado numa mensagem e enviada ao
+ * fornecedor. Um campo que volte como `"null"`, `""`, um caminho relativo ou
+ * qualquer coisa que não seja um endereço navegável viraria um link quebrado no
+ * WhatsApp de um cliente — e quem recebe não tem como saber que o defeito é
+ * nosso. `https` e nada mais: é o que o contrato promete
+ * (`https://app.oneos.com.br/nota/<token>`), e o custo de recusar um valor
+ * estranho é uma nota sem link, que a tela já sabe mostrar.
+ *
+ * O host NÃO é conferido de propósito: eles trocarem de domínio é mudança de
+ * ambiente, não defeito, e travar nisso deixaria a feature muda até alguém
+ * lembrar deste arquivo.
+ */
+export function linkDeAntecipacao(v: unknown): string | null {
+  const s = texto(v)
+  if (!s) return null
+  try {
+    return new URL(s).protocol === 'https:' ? s : null
+  } catch {
+    return null
+  }
 }
 
 // ─── A normalização ─────────────────────────────────────────────────────────
@@ -229,6 +264,11 @@ export interface NotaNormalizada {
   fornecedor_cadastrado: boolean | null
   contato_fornecedor: ContatoPayload | null
   credito: CreditAnalysisPayload | null
+  /**
+   * O endereço do pedido de antecipação preenchido, para mandar ao FORNECEDOR.
+   * `null` é o caso normal — ver `linkDeAntecipacao`.
+   */
+  link_antecipacao: string | null
   /** Itens e erro do parse do XML — o XML bruto é guardado à parte, sempre. */
   raw_xml: string | null
   xml_parse_erro: string | null
@@ -363,6 +403,7 @@ export function normalizarNfPayload(
       // seria jogar fora o dado que o módulo mais precisa.
       contato_fornecedor: item.supplier?.contact ?? null,
       credito: item.creditAnalysis ?? null,
+      link_antecipacao: linkDeAntecipacao(item.anticipationLink),
       raw_xml: item.rawXml ?? item.xml ?? null,
       xml_parse_erro: parsed.erro,
       itens: parsed.itens,

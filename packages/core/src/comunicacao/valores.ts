@@ -40,6 +40,9 @@ export const VARIAVEIS_AUTOMATICAS = [
   'data_vencimento',
   'dias_para_vencer',
   'qtd_spes',
+  // Automática, mas só quando o compositor foi aberto A PARTIR de uma nota:
+  // sem `notaAccessKey` no contexto ela não tem de qual link falar.
+  'link_antecipacao',
   // Não sai do banco, mas o compositor sempre tem: é quem está logado.
   'remetente_nome',
 ] as const
@@ -53,6 +56,16 @@ export interface ContextoDoDestinatario {
   contatoId?: string | null
   /** Quem assina. Vem da sessão; o banco não sabe quem apertou o botão. */
   remetenteNome?: string | null
+  /**
+   * A NF de onde o compositor foi aberto (o `funil_card_id` do funil de NFs).
+   *
+   * É o que permite preencher `{link_antecipacao}`, e ele é de UMA nota: um
+   * fornecedor com doze notas vivas tem doze links diferentes, e escolher um
+   * "principal" mandaria o fornecedor antecipar a nota errada. Sem esta chave a
+   * variável simplesmente não é preenchida — a régua e a campanha, que falam de
+   * um fornecedor e não de um papel, não têm como usá-la.
+   */
+  notaAccessKey?: string | null
 }
 
 export async function montarValoresVariaveis(
@@ -67,7 +80,7 @@ export async function montarValoresVariaveis(
 
   por('remetente_nome', ctx.remetenteNome)
 
-  const [contato, empresa, notas, reuniao, certificados] = await Promise.all([
+  const [contato, empresa, notas, reuniao, certificados, nota] = await Promise.all([
     ctx.contatoId
       ? supabase.from('contatos').select('nome, cargo').eq('id', ctx.contatoId).maybeSingle()
       : nada<{ nome: string | null; cargo: string | null }>(),
@@ -120,6 +133,33 @@ export async function montarValoresVariaveis(
           .eq('empresa_id', ctx.empresaId)
           .limit(1000)
       : nadaLista<{ expires_at: string | null; e_matriz: boolean | null }>(),
+    /*
+     * O link de antecipação DESTA nota.
+     *
+     * `fornecedor_empresa_id` entra no filtro e não é conferido depois: é a
+     * TRAVA da variável, não um detalhe da consulta. O link leva quem EMITIU a
+     * nota ao pedido preenchido, e a mesma aba de comunicação existe no card do
+     * sacado — mandar de lá seria oferecer a um comprador que antecipe a nota
+     * que ele tem a pagar. Não vaza nada (quem não é o emissor só vê um resumo
+     * com o CNPJ oculto), mas é uma mensagem que não faz sentido nenhum.
+     *
+     * Quando não casa, a chave fica de fora e `{link_antecipacao}` sobrevive no
+     * texto — que é o que trava o botão de enviar. É o comportamento certo:
+     * melhor a pessoa ver a chave crua do que mandar o link errado.
+     */
+    ctx.notaAccessKey && ctx.empresaId
+      ? supabase
+          .from('notas_fiscais')
+          .select('link_antecipacao')
+          .eq('access_key', ctx.notaAccessKey)
+          .eq('fornecedor_empresa_id', ctx.empresaId)
+          /*
+           * O genérico é o mesmo remendo de `taxa_analise_*` no `sync-nfs`:
+           * `database.ts` é GERADO do banco, e a coluna nasceu na 0251. Ele some
+           * no dia em que `pnpm db:types` rodar.
+           */
+          .maybeSingle<{ link_antecipacao: string | null }>()
+      : nada<{ link_antecipacao: string | null }>(),
   ])
 
   por('contato_nome', primeiroNome(contato.data?.nome))
@@ -160,6 +200,9 @@ export async function montarValoresVariaveis(
     const spes = comData.filter((c) => !c.e_matriz).length
     if (spes > 0) por('qtd_spes', String(spes))
   }
+
+  // Cru, como veio: o token é opaco e a URL não se remonta a partir da chave.
+  por('link_antecipacao', nota.data?.link_antecipacao)
 
   return valores as ValoresVariaveis
 }
