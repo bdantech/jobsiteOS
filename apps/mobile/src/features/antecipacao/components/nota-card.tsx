@@ -13,7 +13,7 @@ import {
   type TipoOportunidade,
 } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { ArrowRight, Ban, Files, Gavel } from 'lucide-react-native'
+import { ArrowRight, Ban, Clock, Files, Gavel } from 'lucide-react-native'
 import { useCallback, useRef, useState } from 'react'
 import { Animated, Pressable, View } from 'react-native'
 import { Swipeable } from 'react-native-gesture-handler'
@@ -110,6 +110,15 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const [documentoAberto, setDocumentoAberto] = useState(false)
 
   const tipo = (nota.tipo ?? 'nf') as TipoOportunidade
+
+  /*
+   * O que acende a barra da esquerda: as MESMAS condições que já pintavam uma
+   * tira ou uma frase de aviso no card. A barra não acrescenta informação —
+   * ela dá ao que já existia um canal que se lê sem ler.
+   */
+  const limiteNaoCobre =
+    nota.sacado_credito_status === 'APPROVED' && nota.sacado_limite_cobre_valor === false
+  const alerta = Boolean(nota.conversao_antecipacao_id ?? nota.pre_autorizacao_id) || limiteNaoCobre
   const urgencia = urgenciaDe(nota.dias_para_vencimento, minimoOperavel)
   const outras = (fornecedor?.notas_vivas ?? 1) - 1
   const valorAgrupado = fornecedor?.valor_total ?? nota.valor
@@ -170,29 +179,70 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
           accessibilityRole="button"
           accessibilityLabel={`Abrir ${TIPO_OPORTUNIDADE_LABELS[tipo].toLowerCase()} ${nota.numero_exibicao ?? ''} de ${nota.fornecedor_nome ?? 'fornecedor'}`}
           className={cn(
-            'gap-2 rounded-xl border border-border bg-card p-3 active:opacity-70',
+            'overflow-hidden rounded-lg border border-border bg-card active:border-input',
             nota.fornecedor_suprimido && 'opacity-60',
           )}
         >
-          {/* Fornecedor + classificação */}
-          <View className="gap-1.5">
-            <Text numberOfLines={1} className="font-medium">
-              {nota.fornecedor_nome ?? nota.fornecedor_cnpj}
-            </Text>
+          {/*
+            A BARRA DA ESQUERDA é o único canal que funciona de relance numa
+            lista longa: ela aparece na borda do card, fora da coluna de texto,
+            então o olho a encontra rolando sem ler nada. Só acende quando há
+            algo a fazer — se acendesse sempre, viraria enfeite.
+          */}
+          <View
+            className={cn(
+              'absolute bottom-0 left-0 top-0 w-1',
+              alerta ? 'bg-[#C4851A]' : 'bg-transparent',
+            )}
+          />
+          <View className="gap-2.5 py-3.5 pl-[18px] pr-4">
+          {/*
+            NOME E VALOR NA MESMA LINHA.
+            
+            Eram duas alturas diferentes do card, e a pessoa lia o nome, descia
+            para o valor e voltava. Lado a lado, a pergunta "quanto vale esta"
+            se responde na mesma sacada em que se lê de quem é.
+          */}
+          <View className="gap-[3px]">
+            <View className="flex-row items-baseline justify-between gap-3">
+              <Text numberOfLines={1} className="min-w-0 flex-1 text-[15px] font-bold leading-tight">
+                {nota.fornecedor_nome ?? nota.fornecedor_cnpj}
+              </Text>
+              <Text className="text-[15px] font-extrabold tabular-nums">
+                {formatarMoeda(nota.valor)}
+              </Text>
+            </View>
             {/* O SELO DE ORIGEM vem primeiro: responde "de onde veio este card"
                 antes de qualquer outra leitura. Depois a linha de contexto, que é
                 a ÚNICA coisa que varia por tipo e vem pronta do banco. */}
-            <View className="flex-row items-center gap-1.5">
-              <View className="rounded border border-border px-1.5 py-0.5">
-                <Text className="text-[10px] font-medium">{TIPO_OPORTUNIDADE_LABELS[tipo]}</Text>
-              </View>
-              {/* `numberOfLines={1}`: no título ela chega a 62 caracteres e
-                  empurraria o resto do card para baixo. */}
-              <Text variant="muted" numberOfLines={1} className="flex-1 text-xs tabular-nums">
-                {nota.linha_contexto ?? nota.numero_exibicao ?? '—'}
+            {/*
+              A SEGUNDA LINHA responde "qual documento" e "quanto sobra", que é
+              o par que o originador repete na ligação. `numberOfLines={1}`
+              porque no título a linha de contexto chega a 62 caracteres e
+              empurraria o resto do card para baixo.
+            */}
+            <View className="flex-row items-baseline justify-between gap-3">
+              <Text numberOfLines={1} className="min-w-0 flex-1 text-[12.5px] text-muted-foreground">
+                {TIPO_OPORTUNIDADE_LABELS[tipo]} · {nota.linha_contexto ?? nota.numero_exibicao ?? '—'}
+                {nota.sacado_nome ? ` · ${nota.sacado_nome}` : ''}
               </Text>
+              {liquido !== null ? (
+                <Text className="text-[12.5px] font-semibold tabular-nums text-secondary-foreground">
+                  líq. {formatarMoeda(liquido)}
+                </Text>
+              ) : null}
             </View>
             <View className="flex-row flex-wrap items-center gap-1.5">
+              {/*
+                O CRÉDITO DO SACADO vem primeiro entre os chips: ele é o que
+                decide se a conversa pode existir. Faixa e tipagem ordenam a
+                fila; "não aprovado" a encerra.
+              */}
+              <Badge variant={creditoVariant(nota.sacado_credito_status)}>
+                <Text className="text-xs font-semibold">
+                  {labelCredito(nota.sacado_credito_status)}
+                </Text>
+              </Badge>
               {nota.faixa ? (
                 <Chip
                   className={FAIXA_CHIP[nota.faixa as Faixa]}
@@ -210,10 +260,32 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
                 </Chip>
               ) : null}
               {nota.fornecedor_tem_protesto ? (
-                <View className="flex-row items-center gap-1 rounded-full border border-border px-2 py-0.5">
+                <View className="flex-row items-center gap-1 rounded-full border border-border px-2.5 py-0.5">
                   <Gavel size={10} color={colors.destructive} />
-                  <Text className="text-[11px] text-destructive">Protesto</Text>
+                  <Text className="text-xs text-destructive">Protesto</Text>
                 </View>
+              ) : null}
+              {/*
+                "+N notas" é CHIP e é o caminho para o fornecedor.
+                
+                Era um link sublinhado embaixo do card. Como chip ele fica na
+                mesma linha do resto do contexto do fornecedor, e some quando
+                não há o que somar — um "Ver fornecedor" permanente ocupava uma
+                linha inteira para repetir o que o nome no topo já leva.
+              */}
+              {outras > 0 ? (
+                <Pressable
+                  onPress={abrirFornecedor}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver as ${outras + 1} notas de ${nota.fornecedor_nome ?? 'fornecedor'}, ${formatarMoeda(valorAgrupado)} no total`}
+                  hitSlop={6}
+                  className="flex-row items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 active:opacity-70"
+                >
+                  <Files size={10} color={colors.mutedForeground} />
+                  <Text className="text-xs font-semibold text-secondary-foreground">
+                    +{outras} nota{outras > 1 ? 's' : ''}
+                  </Text>
+                </Pressable>
               ) : null}
             </View>
           </View>
@@ -261,69 +333,24 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
             </View>
           ) : null}
 
-          {/* Valor agrupado — a unidade de abordagem é o fornecedor, não a nota */}
-          <View className="flex-row items-end justify-between">
-            <View>
-              <Text variant="muted" className="text-[11px]">
-                {outras > 0 ? 'Total do fornecedor' : 'Valor da nota'}
-              </Text>
-              <Text className="text-lg font-semibold tabular-nums">
-                {formatarMoeda(valorAgrupado)}
-              </Text>
-            </View>
-            <View className="items-end">
-              <Text variant="muted" className="text-[11px]">
-                Receita esperada
-              </Text>
-              <Text className="font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-                {formatarMoeda(nota.receita_esperada)}
-              </Text>
-              {/*
-                O líquido é sempre DESTA nota, mesmo quando o valor à esquerda é o
-                total do fornecedor: ele fica colado na receita esperada, que também
-                é da nota, e as duas somam o valor de face dela. Derivar do total
-                agrupado daria um número que não fecha com nada na tela.
-
-                É o que o originador fala na ligação — e muda todo dia, porque um
-                dia a menos de prazo é um deságio menor.
-              */}
-              {liquido !== null ? (
-                <Text variant="muted" className="text-[11px] tabular-nums">
-                  líquido hoje {formatarMoeda(liquido)}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-
-          {/* O toque no card abre a NOTA, então o caminho para o fornecedor
-              precisa ser explícito — e é aqui, onde o agregado já está. */}
-          <Pressable
-            onPress={abrirFornecedor}
-            accessibilityRole="button"
-            accessibilityLabel={`Ver todas as notas de ${nota.fornecedor_nome ?? 'fornecedor'}`}
-            className="flex-row items-center gap-1 self-start active:opacity-60"
-          >
-            <Files size={12} color={colors.mutedForeground} />
-            <Text variant="muted" className="text-[11px] underline">
-              {outras > 0
-                ? `+${outras} nota${outras > 1 ? 's' : ''} viva${outras > 1 ? 's' : ''} — ver fornecedor`
-                : 'Ver fornecedor'}
+          {/*
+            O RODAPÉ é o par que decide a ordem da fila: quanto rende e quanto
+            tempo resta. O sacado saiu daqui e foi para a linha de contexto —
+            ele diz de QUEM é a nota, que é identificação, não decisão.
+          */}
+          <View className="flex-row items-center justify-between gap-3 border-t border-border pt-2.5">
+            <Text className="text-[12.5px] text-muted-foreground">
+              Receita esperada{' '}
+              <Text className="font-bold text-[#1E7A4D]">{formatarMoeda(nota.receita_esperada)}</Text>
             </Text>
-          </Pressable>
-
-          {/* Prazo + sacado */}
-          <View className="flex-row items-center justify-between gap-2 border-t border-border pt-2">
-            <Text className={cn('text-xs tabular-nums', URGENCIA_TEXTO[urgencia])}>
-              {textoPrazo(nota.dias_para_vencimento)}
-              {nota.vencimento_origem === 'estimado' ? ' (est.)' : ''}
-            </Text>
-            <View className="min-w-0 flex-row items-center gap-1.5">
-              <Text variant="muted" numberOfLines={1} className="max-w-[9rem] text-xs">
-                {nota.sacado_nome ?? nota.sacado_cnpj}
+            <View className="flex-row items-center gap-1.5">
+              <Clock size={14} color={urgencia === 'confortavel' ? colors.mutedForeground : '#A06A12'} />
+              <Text
+                className={cn('text-[12.5px] font-semibold tabular-nums', URGENCIA_TEXTO[urgencia])}
+              >
+                {textoPrazo(nota.dias_para_vencimento)}
+                {nota.vencimento_origem === 'estimado' ? ' (est.)' : ''}
               </Text>
-              <Badge variant={creditoVariant(nota.sacado_credito_status)}>
-                <Text className="text-[10px]">{labelCredito(nota.sacado_credito_status)}</Text>
-              </Badge>
             </View>
           </View>
 
@@ -333,6 +360,7 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
               Aprovado, mas o limite disponível não cobre esta nota.
             </Text>
           ) : null}
+          </View>
         </Pressable>
       </Swipeable>
 

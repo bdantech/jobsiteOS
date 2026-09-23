@@ -15,7 +15,8 @@ export type TextVariant = 'default' | 'muted' | 'title' | 'heading' | 'label' | 
 const VARIANTS: Record<TextVariant, string> = {
   default: 'text-base text-foreground',
   muted: 'text-sm text-muted-foreground',
-  title: 'text-2xl font-bold text-foreground',
+  // `font-display` = Manrope. Título de TELA, não de seção — ver a nota abaixo.
+  title: 'font-display text-[26px] leading-tight tracking-tighter text-foreground',
   heading: 'text-lg font-semibold text-foreground',
   label: 'text-sm font-medium text-foreground',
   destructive: 'text-sm text-destructive',
@@ -29,5 +30,11 @@ export interface TextProps extends RNTextProps {
 export function Text({ variant = 'default', className, ...props }: TextProps) {
   const inherited = useContext(TextClassContext)
 
-  return <RNText className={cn(VARIANTS[variant], inherited, className)} {...props} />
+  /*
+   * A família NÃO é escolhida aqui: os utilitários `font-*` do Tailwind já
+   * apontam para o arquivo do peso certo (ver o plugin em tailwind.config.js).
+   * Uma segunda régua neste componente daria duas respostas para a mesma
+   * pergunta, e a que ganharia dependeria da ordem de merge do NativeWind.
+   */
+  return <RNText className={cn('font-normal', VARIANTS[variant], inherited, className)} {...props} />
 }

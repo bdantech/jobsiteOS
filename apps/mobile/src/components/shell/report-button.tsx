@@ -2,7 +2,6 @@ import { MessageSquareWarning } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable } from 'react-native'
 
-import { useTheme } from '@/components/color-scheme-provider'
 import { ReportSheet } from '@/features/reports'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +14,6 @@ import { cn } from '@/lib/utils'
  * conceder.
  */
 export function ReportButton({ className }: { className?: string }) {
-  const { colors } = useTheme()
   const [aberto, setAberto] = useState(false)
 
   return (
@@ -25,9 +23,19 @@ export function ReportButton({ className }: { className?: string }) {
         accessibilityLabel="Reportar bug ou melhoria"
         onPress={() => setAberto(true)}
         hitSlop={8}
-        className={cn('h-10 w-10 items-center justify-center rounded-full active:bg-muted', className)}
+              /*
+       * Este botão vive SEMPRE sobre o navy do cabeçalho, então ele não lê
+       * `colors`: um ícone em `foreground` aqui seria quase invisível no tema
+       * claro e sumiria de vez no escuro, onde `foreground` é quase branco...
+       * sobre um fundo que também não muda. Cor fixa é o que descreve a
+       * verdade desta superfície.
+       */
+      className={cn(
+        'size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70',
+        className,
+      )}
       >
-        <MessageSquareWarning size={22} color={colors.foreground} />
+        <MessageSquareWarning size={20} color="#FFFFFF" />
       </Pressable>
 
       {/*

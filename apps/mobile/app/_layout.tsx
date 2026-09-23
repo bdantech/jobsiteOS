@@ -10,6 +10,16 @@ import { ActivityIndicator, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/poppins'
+import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope'
+
 import { ColorSchemeProvider, useTheme } from '@/components/color-scheme-provider'
 import { SessionProvider, useSession } from '@/lib/auth'
 import { canOpenOnMobile, landingRoute } from '@/lib/linking'
@@ -149,6 +159,30 @@ export default function RootLayout() {
   // One client for the app's lifetime; useState so Fast Refresh doesn't wipe the
   // cache on every save.
   const [queryClient] = useState(makeQueryClient)
+
+  /*
+   * AS DUAS FAMÍLIAS, E POR QUE SÃO DUAS.
+   *
+   * Poppins é o texto: leitura, rótulo, número. Manrope entra SÓ nos títulos de
+   * tela ("Funil", "Mais", "JobsiteOS") — é mais estreita e mais dura, e a
+   * diferença entre as duas é o que dá hierarquia sem precisar de mais um
+   * tamanho de corpo.
+   *
+   * Enquanto não carregam, a tela fica em branco em vez de renderizar na fonte
+   * do sistema: um flash de Helvetica e depois Poppins reposiciona cada linha
+   * do app, e isso é mais feio que meio segundo de espera.
+   */
+  const [fontesProntas] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+  })
+
+  if (!fontesProntas) return <View style={{ flex: 1, backgroundColor: '#050e40' }} />
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

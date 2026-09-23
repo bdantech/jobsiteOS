@@ -1,14 +1,13 @@
+import { grantedMobileModules } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { LogOut, Settings } from 'lucide-react-native'
+import { StatusBar } from 'expo-status-bar'
+import { ChevronRight, LogOut, Settings } from 'lucide-react-native'
 import { Pressable, ScrollView, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { ModuleGrid } from '@/components/shell/module-grid'
-import { ScreenHeader } from '@/components/shell/screen-header'
 import { Avatar } from '@/components/ui/avatar'
-import { Card } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { BannerBeta } from '@/features/reports'
@@ -21,72 +20,99 @@ import { useSession } from '@/lib/auth'
  * and zero data. The grid handles that with its own empty state.
  */
 export default function MaisScreen() {
-  const { usuario, loading, signOut } = useSession()
+  const { usuario, loading, signOut, grantedModuleIds } = useSession()
   const router = useRouter()
   const { colors } = useTheme()
+  const { top: topo } = useSafeAreaInsets()
+  // A contagem é dos módulos que ABREM no app, não de todos os liberados: o
+  // grid mostra os webOnly acinzentados, e dizer "9 no app" sobre uma grade que
+  // inclui um card riscado seria contar o que não se pode tocar.
+  const quantos = grantedMobileModules(grantedModuleIds).length
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <View className="flex-1 bg-card">
+      <StatusBar style="light" />
       {/* Esta tela não passa por <ModuleStack>, que é quem injeta a tarja nas
           demais. Sem esta linha, "Mais" seria a única tela sem o aviso de beta. */}
       <BannerBeta />
 
-      <ScreenHeader title="Mais" />
-
-      <ScrollView contentContainerClassName="gap-6 p-4 pb-24">
-        <View className="flex-row items-center gap-3">
-          {loading ? (
-            <>
-              <Skeleton className="h-12 w-12 rounded-full" />
-              <View className="flex-1 gap-2">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-56" />
-              </View>
-            </>
-          ) : (
-            <>
-              <Avatar nome={usuario?.nome ?? '?'} size="lg" />
-              <View className="flex-1">
-                <Text variant="heading">{usuario?.nome ?? 'Usuário'}</Text>
-                <Text variant="muted">{usuario?.email ?? ''}</Text>
-              </View>
-            </>
-          )}
-        </View>
-
-        <View className="gap-3">
-          <Text variant="label">Módulos</Text>
-          <ModuleGrid />
-        </View>
-
-        <View className="gap-3">
-          <Text variant="label">Conta</Text>
-
-          <Card>
+      <ScrollView contentContainerClassName="pb-8" showsVerticalScrollIndicator={false}>
+        {/*
+          O CABEÇALHO NAVY com a conta dentro dele.
+          
+          A conta subiu para cá porque ela é o assunto desta tela, não um item
+          da lista: "Mais" é onde se troca de módulo E onde se cuida de quem
+          está logado. Deixá-la como primeira linha de um scroll branco fazia
+          as duas coisas parecerem do mesmo peso.
+        */}
+        <View className="gap-6 bg-brand px-5 pb-12" style={{ paddingTop: topo + 12 }}>
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className="font-display text-[30px] leading-8 tracking-tighter text-white">
+              Mais
+            </Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Configurações"
               onPress={() => router.push('/configuracoes')}
-              className="flex-row items-center gap-3 p-4 active:opacity-70"
+              className="size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70"
             >
-              <Settings size={18} color={colors.mutedForeground} />
-              <Text>Configurações</Text>
+              <Settings size={20} color="#FFFFFF" />
             </Pressable>
+          </View>
 
-            <Separator />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Abrir configurações da conta"
+            onPress={() => router.push('/configuracoes')}
+            className="flex-row items-center gap-3.5 rounded-lg border border-white/10 bg-white/[0.06] p-3.5 active:opacity-70"
+          >
+            {loading ? (
+              <>
+                <Skeleton className="size-13 rounded-full" />
+                <View className="flex-1 gap-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </View>
+              </>
+            ) : (
+              <>
+                <Avatar nome={usuario?.nome ?? '?'} size="lg" />
+                <View className="min-w-0 flex-1 gap-0.5">
+                  <Text className="text-[17px] font-bold text-white">
+                    {usuario?.nome ?? 'Usuário'}
+                  </Text>
+                  <Text numberOfLines={1} className="text-[13px] text-[#CBD5E1]">
+                    {usuario?.email ?? ''}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color="#8FB4E0" />
+              </>
+            )}
+          </Pressable>
+        </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Sair"
-              onPress={() => void signOut()}
-              className="flex-row items-center gap-3 p-4 active:opacity-70"
-            >
-              <LogOut size={18} color={colors.destructive} />
-              <Text className="text-destructive">Sair</Text>
-            </Pressable>
-          </Card>
+        {/* A folha branca sobe por cima do navy — a mesma dobra do login. */}
+        <View className="-mt-6 gap-4 rounded-t-2xl bg-card px-5 pb-8 pt-7">
+          <View className="flex-row items-baseline justify-between">
+            <Text className="text-lg font-bold text-foreground">Módulos</Text>
+            <Text className="text-xs text-muted-foreground">{quantos} no app</Text>
+          </View>
+
+          <ModuleGrid />
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sair da conta"
+            onPress={() => void signOut()}
+            className="mt-3 h-[52px] flex-row items-center justify-center gap-2.5 rounded-md border border-border bg-card active:border-destructive"
+          >
+            <LogOut size={20} color={colors.destructive} />
+            <Text className="text-[15px] font-semibold text-destructive">Sair da conta</Text>
+          </Pressable>
+
+          <Text className="text-center text-xs text-muted-foreground">JobsiteOS · v2.4.0</Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }

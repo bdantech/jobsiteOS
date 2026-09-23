@@ -1,4 +1,5 @@
 import { MODULES, grantedMobileModules } from '@jobsiteos/core'
+import { BlurView } from 'expo-blur'
 import { Tabs } from 'expo-router'
 import { LayoutGrid } from 'lucide-react-native'
 import { View } from 'react-native'
@@ -65,7 +66,7 @@ function segmentFor(route: string): string {
  */
 export default function TabsLayout() {
   const { grantedModuleIds } = useSession()
-  const { colors } = useTheme()
+  const { colors, scheme: esquema } = useTheme()
 
   const inBar = new Set(
     grantedMobileModules(grantedModuleIds)
@@ -80,17 +81,75 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.mutedForeground,
+          /*
+           * A BARRA FLUTUA, e não é enfeite: ela é uma pílula de vidro solta
+           * sobre o conteúdo, como no desenho.
+           *
+           * `position: absolute` tira a barra do fluxo — a lista passa POR
+           * BAIXO dela, que é o que faz o blur ter o que borrar. O preço é que
+           * cada tela precisa reservar o espaço no fim do scroll; por isso
+           * `ALTURA_TAB_BAR` é exportado daqui e não repetido em número solto.
+           */
           tabBarStyle: {
-            backgroundColor: colors.background,
-            borderTopColor: colors.border,
+            position: 'absolute',
+            left: 12,
+            right: 12,
+            bottom: 26,
+            height: 68,
+            paddingHorizontal: 4,
+            paddingBottom: 0,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderTopWidth: 1,
+            borderColor: esquema === 'dark' ? 'rgba(63,68,80,0.7)' : 'rgba(228,232,236,0.8)',
+            borderTopColor: esquema === 'dark' ? 'rgba(63,68,80,0.7)' : 'rgba(228,232,236,0.8)',
+            backgroundColor: 'transparent',
+            elevation: 0,
+            // A sombra do desenho: larga e suave, na cor da marca em vez de
+            // preto — preto sobre #F4F6F8 fica cinza sujo.
+            shadowColor: '#050e40',
+            shadowOpacity: 0.12,
+            shadowRadius: 20,
+            shadowOffset: { width: 0, height: 16 },
           },
+          tabBarBackground: () => (
+            <BlurView
+              intensity={80}
+              tint={esquema === 'dark' ? 'dark' : 'light'}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderRadius: 20,
+                overflow: 'hidden',
+                // O blur sozinho fica transparente demais sobre lista clara; a
+                // camada de tinta é o que dá corpo à pílula.
+                backgroundColor:
+                  esquema === 'dark' ? 'rgba(23,24,25,0.72)' : 'rgba(255,255,255,0.72)',
+              }}
+            />
+          ),
+          tabBarItemStyle: { paddingVertical: 8 },
           // Peso 400, igual à sidebar da web: o SidebarMenuButton não aplica
           // font-* nenhum, então o rótulo de módulo lá é normal. O 500 daqui
           // deixava a barra mais pesada que a navegação equivalente na web, e a
           // cor do item ativo já é o canal que distingue selecionado de não
           // selecionado — o peso era um segundo canal dizendo a mesma coisa.
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '400' },
-          sceneStyle: { backgroundColor: colors.background },
+          tabBarLabelStyle: { fontSize: 11, fontFamily: 'Poppins_500Medium' },
+          /*
+           * O ESPAÇO DA BARRA, reservado AQUI e em nenhum outro lugar.
+           *
+           * Com a barra em `position: absolute` ela deixa de empurrar o
+           * conteúdo, e sem isto o fim de toda lista do app ficaria escondido
+           * atrás dela. Pôr o padding na cena resolve para as ~30 telas de uma
+           * vez; espalhá-lo por FlatList garantiria que a próxima tela nascesse
+           * sem ele e ninguém notasse até alguém rolar até o fim.
+           *
+           * 94 = 26 (distância do fundo) + 68 (altura da pílula).
+           */
+          sceneStyle: { backgroundColor: colors.background, paddingBottom: 94 },
         }}
       >
         {MOBILE_MODULES.map((module) => {

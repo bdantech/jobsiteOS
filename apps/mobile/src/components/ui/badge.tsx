@@ -8,18 +8,18 @@ export type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive' |
 
 const ROOT: Record<BadgeVariant, string> = {
   default: 'bg-primary border-transparent',
-  secondary: 'bg-secondary border-transparent',
+  secondary: 'bg-muted border-transparent',
   outline: 'bg-transparent border-border',
   destructive: 'bg-destructive border-transparent',
-  success: 'bg-primary/15 border-transparent',
+  success: 'bg-[#E7F2EC] border-transparent',
 }
 
 const LABEL: Record<BadgeVariant, string> = {
   default: 'text-primary-foreground',
-  secondary: 'text-secondary-foreground',
+  secondary: 'text-primary',
   outline: 'text-foreground',
   destructive: 'text-destructive-foreground',
-  success: 'text-primary',
+  success: 'text-[#1E7A4D]',
 }
 
 export interface BadgeProps extends ViewProps {
@@ -33,7 +33,13 @@ export function Badge({ variant = 'default', className, children, ...props }: Ba
     <TextClassContext.Provider value={cn('text-xs font-medium', LABEL[variant])}>
       <View
         className={cn(
-          'flex-row items-center self-start rounded-md border px-2 py-0.5',
+          /*
+           * Pílula, não retângulo. No desenho todo estado é um chip redondo —
+           * faixa, tipagem, status de crédito. O raio é o que separa "rótulo"
+           * de "botão": os botões do app são de canto suave (6–10px), e um
+           * badge de canto igual ao do botão convida ao toque.
+           */
+          'flex-row items-center self-start rounded-full border px-2.5 py-0.5',
           ROOT[variant],
           className,
         )}

@@ -2,7 +2,6 @@ import { Bell } from 'lucide-react-native'
 import { useRouter } from 'expo-router'
 import { Pressable, View } from 'react-native'
 
-import { useTheme } from '@/components/color-scheme-provider'
 import { Text } from '@/components/ui/text'
 import { useSession } from '@/lib/auth'
 import { cn } from '@/lib/utils'
@@ -29,7 +28,6 @@ const MAX_BADGE = 9
  */
 export function NotificationsBell({ className }: NotificationsBellProps) {
   const router = useRouter()
-  const { colors } = useTheme()
   const { grantedModuleIds } = useSession()
 
   const canOpen = grantedModuleIds.includes('notificacoes')
@@ -51,9 +49,19 @@ export function NotificationsBell({ className }: NotificationsBellProps) {
       accessibilityLabel={label}
       onPress={() => router.push('/notificacoes')}
       hitSlop={8}
-      className={cn('h-10 w-10 items-center justify-center rounded-full active:bg-muted', className)}
+            /*
+       * Este botão vive SEMPRE sobre o navy do cabeçalho, então ele não lê
+       * `colors`: um ícone em `foreground` aqui seria quase invisível no tema
+       * claro e sumiria de vez no escuro, onde `foreground` é quase branco...
+       * sobre um fundo que também não muda. Cor fixa é o que descreve a
+       * verdade desta superfície.
+       */
+      className={cn(
+        'size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70',
+        className,
+      )}
     >
-      <Bell size={22} color={colors.foreground} />
+      <Bell size={20} color="#FFFFFF" />
 
       {unread > 0 ? (
         <View

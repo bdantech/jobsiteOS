@@ -43,12 +43,25 @@ function ModuleCard({
         oferecia. Os cards ficam do mesmo tamanho pelo CONTEÚDO ser do mesmo
         tamanho — ver o espaçador do badge abaixo —, não por flex.
       */}
-      <Card className={disabled ? 'gap-3 p-4 opacity-60' : 'gap-3 p-4'}>
+      {/*
+        O card do módulo BLOQUEADO é tracejado, não só esmaecido.
+        
+        Opacidade sozinha lê como "desabilitado por enquanto"; o tracejado diz
+        que ele não é um botão — é um lugar que existe noutro canto. É a mesma
+        distinção que o desenho faz entre Radar e os oito que abrem aqui.
+      */}
+      <Card
+        className={
+          disabled
+            ? 'min-h-[112px] gap-3.5 rounded-lg border-dashed border-input bg-secondary p-4'
+            : 'min-h-[112px] gap-3.5 rounded-lg p-4'
+        }
+      >
         <View
           className={
             disabled
-              ? 'h-10 w-10 items-center justify-center rounded-lg bg-muted'
-              : 'h-10 w-10 items-center justify-center rounded-lg bg-primary/15'
+              ? 'size-10 items-center justify-center rounded-md bg-card'
+              : 'size-10 items-center justify-center rounded-md bg-muted'
           }
         >
           <Icon size={20} color={disabled ? colors.mutedForeground : colors.primary} />
@@ -57,7 +70,14 @@ function ModuleCard({
         <View className="gap-1">
           {/* Uma linha sempre: "Administração" quebrando em duas deixaria aquele
               card mais alto que os outros, e a altura voltaria a divergir. */}
-          <Text variant="label" numberOfLines={1}>
+          <Text
+            numberOfLines={1}
+            className={
+              disabled
+                ? 'text-[15px] font-semibold text-secondary-foreground'
+                : 'text-[15px] font-semibold text-foreground'
+            }
+          >
             {module.name}
           </Text>
 

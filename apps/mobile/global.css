@@ -40,35 +40,35 @@
  */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 210 20% 97%;
+    --foreground: 220 3% 9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 220 3% 9%;
 
     /* ONE OS navy #1e293f, exato */
-    --primary: 220 35% 18%;
+    --primary: 215 72% 33%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 210 20% 97%;
+    --secondary-foreground: 220 9% 27%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 213 41% 94%;
+    --muted-foreground: 220 9% 46%;
 
     /* superfície neutra de press — veja a nota acima, não é a cor da marca */
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 213 41% 94%;
+    --accent-foreground: 215 72% 33%;
 
-    --destructive: 0 72.2% 50.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 51% 47%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 220 35% 18%;
+    --border: 210 18% 91%;
+    --input: 213 20% 80%;
+    --ring: 215 72% 33%;
 
     /* superfícies de marca: sempre o navy exato, em qualquer tema */
-    --brand: 220 35% 18%;
+    --brand: 231 86% 14%;
     --brand-foreground: 0 0% 100%;
 
     /* rampa ordinal da pirâmide: claro → escuro */
@@ -87,8 +87,8 @@
     --card-foreground: 0 0% 98%;
 
     /* mesmo matiz (220°), luminosidade invertida: 18% seria invisível aqui */
-    --primary: 220 50% 66%;
-    --primary-foreground: 220 40% 12%;
+    --primary: 213 60% 66%;
+    --primary-foreground: 231 60% 12%;
 
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
@@ -97,9 +97,9 @@
     --muted-foreground: 240 5% 64.9%;
 
     --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent-foreground: 213 60% 66%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 62% 58%;
     --destructive-foreground: 0 0% 98%;
 
     --border: 240 3.7% 15.9%;
@@ -108,7 +108,7 @@
 
     /* o navy puro segue sendo a marca, mesmo no escuro: é SUPERFÍCIE, não
        elemento sobre superfície, então o contraste não o afeta */
-    --brand: 220 35% 18%;
+    --brand: 231 86% 14%;
     --brand-foreground: 0 0% 100%;
 
     /* âncora invertida: escuro → claro */

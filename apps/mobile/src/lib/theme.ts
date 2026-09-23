@@ -2,6 +2,16 @@ import type { Theme } from '@react-navigation/native'
 import { BRAND_ACCENT } from '@jobsiteos/core'
 
 /**
+ * O navy da marca no app: #050E40.
+ *
+ * É mais escuro e mais saturado que `BRAND_ACCENT` (#1e293f), que continua
+ * sendo o navy da WEB. Os dois convivem de propósito enquanto a repaginação não
+ * atravessa para o desktop — trocar a constante compartilhada mudaria a web
+ * junto, num commit que fala do app.
+ */
+const BRAND_NAVY = '#050e40'
+
+/**
  * The same tokens as global.css, as raw hex.
  *
  * NativeWind classes cover anything that renders through a styled component;
@@ -54,23 +64,23 @@ export interface ColorTokens {
 
 export const COLORS: Record<'light' | 'dark', ColorTokens> = {
   light: {
-    background: '#ffffff',
-    foreground: '#09090b', // zinc-950
+    background: '#f4f6f8',
+    foreground: '#171819',
     card: '#ffffff',
-    cardForeground: '#09090b',
-    primary: BRAND_ACCENT, // navy #1e293f — 14,56:1 sobre branco
+    cardForeground: '#171819',
+    primary: '#184b90', // azul de ação — 7,4:1 sobre branco
     primaryForeground: '#ffffff',
-    brand: BRAND_ACCENT,
+    brand: BRAND_NAVY,
     brandForeground: '#ffffff',
-    secondary: '#f4f4f5', // zinc-100
-    secondaryForeground: '#18181b', // zinc-900
-    muted: '#f4f4f5',
-    mutedForeground: '#71717a', // zinc-500
-    destructive: '#dc2626',
-    destructiveForeground: '#fafafa',
-    border: '#e4e4e7', // zinc-200
-    input: '#e4e4e7',
-    ring: BRAND_ACCENT,
+    secondary: '#f4f6f8',
+    secondaryForeground: '#3f4450',
+    muted: '#eaf0f8',
+    mutedForeground: '#6b7280',
+    destructive: '#b33a3a',
+    destructiveForeground: '#ffffff',
+    border: '#e4e8ec',
+    input: '#cbd5e1',
+    ring: '#184b90',
     // claro → escuro
     chart1: '#a8b7d1', // universo — abaixo de 3:1 de propósito, sempre rotulado
     chart2: '#7590b8', // tam
@@ -83,9 +93,9 @@ export const COLORS: Record<'light' | 'dark', ColorTokens> = {
     foreground: '#fafafa', // zinc-50
     card: '#18181b', // zinc-900
     cardForeground: '#fafafa',
-    primary: '#7d9ad4', // hsl(220 50% 66%) — mesmo matiz, luminosidade invertida
-    primaryForeground: '#121b2b', // hsl(220 40% 12%) — 6,12:1 sobre a primária
-    brand: BRAND_ACCENT, // a marca não clareia: como superfície, o navy funciona
+    primary: '#7fa9e0', // mesmo matiz do #184b90, luminosidade invertida
+    primaryForeground: '#0a1430', // 6,4:1 sobre a primária clara
+    brand: BRAND_NAVY, // a marca não clareia: como superfície, o navy funciona
     brandForeground: '#ffffff',
     secondary: '#27272a', // zinc-800
     secondaryForeground: '#fafafa',
@@ -156,9 +166,22 @@ export const NAV_THEME: Record<'light' | 'dark', Theme> = {
  */
 export function opcoesDeHeader(colors: ColorTokens) {
   return {
-    headerStyle: { backgroundColor: colors.background },
-    headerTintColor: colors.foreground,
-    headerTitleStyle: { color: colors.foreground },
+    /*
+     * O header de STACK também é navy — é a mesma superfície do <ScreenHeader>,
+     * só que desenhada pelo react-navigation.
+     *
+     * Se um ficasse branco e o outro navy, empurrar uma tela (funil → ficha do
+     * fornecedor) trocaria a cor do topo no meio da animação, e a pessoa leria
+     * isso como "mudei de app", não "entrei num detalhe".
+     *
+     * `Poppins_600SemiBold` no título, e não Manrope: aqui o texto é o NOME DO
+     * ITEM aberto ("Empresa no universo"), não o nome da tela. Manrope é a voz
+     * do produto; o item é conteúdo.
+     */
+    headerStyle: { backgroundColor: colors.brand },
+    headerTintColor: '#ffffff',
+    headerTitleStyle: { color: '#ffffff', fontFamily: 'Poppins_600SemiBold', fontSize: 17 },
+    headerShadowVisible: false,
     contentStyle: { backgroundColor: colors.background },
   } as const
 }
