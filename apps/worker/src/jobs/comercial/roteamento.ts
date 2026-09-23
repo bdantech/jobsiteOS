@@ -299,6 +299,22 @@ export async function detectarPrimeiraOperacaoJob(): Promise<{ marcadas: number 
  * CNPJ, não casa com `empresas` e fica fora do roteamento. Ele continua visível
  * para o gestor; só não entra na carteira de ninguém, porque não há entidade a
  * quem atribuir.
+ *
+ * ── E POR QUE ELE NÃO OLHA `origem_exibida` ─────────────────────────────────
+ * Olhava, e isso deixava o dono na mão do RELÓGIO. `origem_exibida` é decisão da
+ * dedup, e a dedup roda em três lugares — dois deles sem roteamento atrás. Uma
+ * pré-autorização escondida hoje e reexibida amanhã ficava sem dono até a próxima
+ * corrida diária, e sem dono a RLS a esconde do originador: ela reaparece no funil
+ * do gestor e em mais ninguém.
+ *
+ * Medido em 23/09/2026: 43 pré-autorizações visíveis com `vendedor_definido_em`
+ * NULO — nunca roteadas, a mais antiga de 24/08 —, contra 200 de 298 títulos com
+ * dono na MESMA corrida. O mesmo sacado (VENTO SUL, `prospeccao_ativa`, na carteira
+ * do Rodrigo) tinha 103 títulos com dono e 19 pré-autorizações sem. Filtrar o funil
+ * por vendedor devolvia uma pré-autorização, de 806.
+ *
+ * Esconder é decisão de APRESENTAÇÃO; de quem é o item é decisão de CARTEIRA. As
+ * duas não têm por que depender uma da outra, e custa ~90 linhas a mais por corrida.
  */
 export async function rotearOportunidadesJob(): Promise<ResultadoRoteamento> {
   const lista = await originadores()
@@ -346,7 +362,6 @@ export async function rotearOportunidadesJob(): Promise<ResultadoRoteamento> {
       left join lateral (select public.app_holding_do_sacado(t.sacado_cnpj) as id) h on true
       left join empresas hold on hold.id = h.id
       where t.estagio_funil not in ('convertida', 'perdida')
-        and t.origem_exibida
         and coalesce(t.vendedor_origem, '') <> 'manual'
     `)
 

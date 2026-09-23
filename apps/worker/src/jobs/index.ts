@@ -702,6 +702,26 @@ async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<un
   }
   await anotarMeta(idTit, { dedup: resultado.dedup })
 
+  /*
+   * O ROTEAMENTO DAS DUAS FONTES, AQUI DENTRO — e não só na corrente diária.
+   *
+   * A RLS das duas tabelas recorta por `vendedor_id`: item sem dono não é item na
+   * fila do gestor, é item que o originador LITERALMENTE não vê. E o que acabou de
+   * rodar acima muda exatamente quem entra no funil — o sync traz linhas novas e a
+   * dedup reexibe linhas antigas.
+   *
+   * Sem esta chamada, as duas entradas de `sincronizarFontesDoFunil` que não são a
+   * corrente diária (o ciclo de 4h e o botão "sincronizar agora") deixavam o item
+   * novo ou reexibido sem dono até a madrugada seguinte. `rotearOportunidadesJob`
+   * grava só o que MUDA, então repeti-lo na corrente diária não custa escrita.
+   */
+  try {
+    resultado.roteamento = await rotearOportunidadesJob()
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Roteamento das fontes do funil falhou; a corrente segue.')
+    resultado.roteamento = { erro: String(erro) }
+  }
+
   return resultado
 }
 
