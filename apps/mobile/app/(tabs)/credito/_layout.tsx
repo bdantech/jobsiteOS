@@ -14,7 +14,13 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function CreditoLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Esteira' }} />
+      {/*
+        SEM header nativo: a esteira desenha o próprio, que recolhe ao rolar e
+        leva busca e estágio dentro do navy. Com os dois ligados, "Esteira"
+        apareceria duas vezes e os recuos de status bar se somariam — o mesmo
+        defeito que o funil teve.
+      */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="[id]" options={{ title: 'Análise' }} />
     </ModuleStack>
   )

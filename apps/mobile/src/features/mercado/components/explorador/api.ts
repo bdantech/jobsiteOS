@@ -1,4 +1,4 @@
-import { compileToPostgrest, normalizeCnpj } from '@jobsiteos/core'
+import { normalizeCnpj, resolverParaJson, type Grupo, type Json, type No } from '@jobsiteos/core'
 
 import { supabase } from '@/lib/supabase'
 import type {
@@ -21,43 +21,27 @@ const DETALHE_LIMIT = 50
  * type widens to `string`, the inference collapses, and every field access
  * downstream becomes an error on `GenericStringError`.
  */
-const LIST_COLUMNS =
-  'cnpj, razao_social, nome_fantasia, uf, municipio, camada, estagio, capital_social, is_spe, obras_ativas, erp_atual, grupo_id, empresa_id'
-
 /**
- * PostgREST parses `or=(col.op.value,col.op.value)`. A comma or parenthesis
- * inside `value` is re-read as a clause separator / grouping, which lets a search
- * term restructure the filter; `%`, `_` and `*` are ILIKE wildcards (PostgREST
- * maps `*` → `%`). The `or` grammar gives us no way to escape any of them, so
- * strip them instead of handing PostgREST a filter the user can rewrite.
+ * O termo, limpo dos curingas do ILIKE.
  *
- * Dots and slashes are deliberately kept: PostgREST splits each clause on its
- * first two dots only, so a dot in the value is safe — and "S.A." / "0001/81"
- * are exactly what people type into a company search box.
+ * `%` e `_` são curingas: quem digitasse "100%" pediria, sem saber, um `like`
+ * que casa qualquer coisa. `*` some junto porque o PostgREST o traduz para `%`,
+ * e a caixa de busca é a mesma nas duas plataformas.
  *
- * Note this is the SEARCH BOX only. The composite tree does not come through
- * here: it is compiled by `compileToPostgrest()`, which quotes its own values.
+ * Os parênteses e a vírgula saem por herança do caminho anterior, que montava
+ * uma expressão `or=(...)` onde eles eram separadores. A RPC recebe o termo
+ * como PARÂMETRO e o interpola com `quote_literal`, então hoje eles seriam
+ * inofensivos — mas um termo de busca não precisa deles, e deixá-los passar só
+ * criaria a dúvida na próxima vez.
+ *
+ * Ponto e barra ficam de propósito: "S.A." e "0001/81" são exatamente o que se
+ * digita numa busca de empresa.
  */
 function sanitizeTermo(termo: string): string {
   return termo
     .replace(/[(),"\\%_*]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-/**
- * Everything that must hold at once, as a single PostgREST expression.
- *
- * `.or(x)` sends `or=(x)`. A one-element OR is just `x`, so `.or('and(a,b)')` is
- * `a AND b` — which is why the composite tree (itself an `and(...)`/`or(...)`)
- * and the search clause can be ANDed together and passed through the same call.
- * Calling `.or()` twice would ALSO work (PostgREST ANDs repeated params), but
- * one expression is one thing to reason about.
- */
-function combinar(partes: readonly string[]): string | null {
-  if (partes.length === 0) return null
-  if (partes.length === 1) return partes[0] ?? null
-  return `and(${partes.join(',')})`
 }
 
 export interface ExploradorPage {
@@ -73,56 +57,55 @@ export async function fetchExploradorPage(
   filtros: ExploradorFiltros,
   page: number,
 ): Promise<ExploradorPage> {
-  const from = page * PAGE_SIZE
-  const contar = page === 0
+  /*
+   * A BUSCA VAI PELA RPC, e isso não é preferência: é o que faz ela responder.
+   *
+   * Lendo `mercado_explorador` direto pelo PostgREST, o ILIKE roda SOB A RLS —
+   * e sob a política o planner não usa os índices trigrama que existem em
+   * `razao_social` e `nome_fantasia`. Ele escolhe percorrer o índice de
+   * ordenação procurando as 25 primeiras correspondências, e num termo raro
+   * isso é varrer 906 mil linhas: a consulta estoura o tempo e a tela mostra
+   * vazio. Termo comum funcionava, termo específico não — que é justamente o
+   * caso de quem digita o nome de UMA empresa.
+   *
+   * `mercado_explorar` é SECURITY DEFINER: por dentro não há RLS, o planner vê
+   * as estatísticas limpas e o trigrama entra. É a mesma função que a web usa
+   * desde sempre; o mobile é que tinha um segundo caminho, e era o quebrado.
+   *
+   * Ela já devolve uma linha a mais que a página para responder "tem próxima"
+   * sem contar nada, e o total é a estimativa do planner.
+   */
+  const partes: No[] = []
 
-  let query = supabase
-    .from('mercado_explorador')
-    .select(LIST_COLUMNS, {
-      // 'estimated' = exact for small result sets, the planner's estimate for big
-      // ones. 'exact' would seq-scan millions of rows on every keystroke.
-      count: contar ? 'estimated' : undefined,
-    })
-    // Biggest capital first: that is the order a prospector reads a market in.
-    // `cnpj` is the tiebreak that makes range() pagination deterministic —
-    // without it two rows with the same capital can swap pages.
-    .order('capital_social', { ascending: false, nullsFirst: false })
-    .order('cnpj', { ascending: true })
-    .range(from, from + PAGE_SIZE - 1)
+  // Chips viram nós da árvore: a RPC só conhece UMA linguagem de filtro, e
+  // manter camada/UF como parâmetro à parte criaria uma segunda.
+  if (filtros.camada) partes.push({ variavel: 'camada', operador: 'igual', valor: filtros.camada })
+  if (filtros.uf) partes.push({ variavel: 'uf', operador: 'igual', valor: filtros.uf })
+  if (filtros.filtro) partes.push(filtros.filtro.arvore)
 
-  // Chips are plain equality — one query param each, ANDed by PostgREST.
-  if (filtros.camada) query = query.eq('camada', filtros.camada)
-  if (filtros.uf) query = query.eq('uf', filtros.uf)
-
-  const partes: string[] = []
-
+  const arvore: Grupo | null = partes.length > 0 ? { operador: 'e', condicoes: partes } : null
   const termo = sanitizeTermo(filtros.termo)
-  if (termo) {
-    const clauses = [`razao_social.ilike.*${termo}*`, `nome_fantasia.ilike.*${termo}*`]
 
-    // "11.222.333/0001-81" and "11222333" must both find the row whose `cnpj`
-    // column stores bare digits, so match the digits of the term against it.
-    const digitos = normalizeCnpj(termo)
-    if (digitos.length >= 2) clauses.push(`cnpj.ilike.*${digitos}*`)
-
-    partes.push(`or(${clauses.join(',')})`)
-  }
-
-  // The composite tree — from a saved segmento or a Mapa deep link — compiled to
-  // PostgREST, never to SQL. It runs under RLS like every other read here.
-  if (filtros.filtro) partes.push(compileToPostgrest(filtros.filtro.arvore))
-
-  const expressao = combinar(partes)
-  if (expressao) query = query.or(expressao)
-
-  const { data, count, error } = await query
+  const { data, error } = await supabase.rpc('mercado_explorar', {
+    p_termo: termo || undefined,
+    p_arvore: arvore ? (resolverParaJson(arvore) as unknown as Json) : undefined,
+    // Maior capital primeiro: é a ordem em que um prospector lê um mercado.
+    p_ordem: 'capital_social',
+    p_asc: false,
+    p_offset: page * PAGE_SIZE,
+    p_limite: PAGE_SIZE,
+  })
   if (error) throw error
 
-  // The view widens every column to nullable; `cnpj` is `not null` in both base
-  // tables, so this narrowing drops nothing and buys a non-null key downstream.
-  const rows = (data ?? []).filter((row): row is ExploradorListItem => row.cnpj !== null)
+  const resposta = data as unknown as { linhas: ExploradorListItem[]; total: number | null } | null
+  const linhas = resposta?.linhas ?? []
 
-  return { rows, total: contar ? (count ?? rows.length) : null }
+  // A view alarga toda coluna para nullable; `cnpj` é `not null` nas duas
+  // tabelas de base, então este estreitamento não descarta nada e garante uma
+  // chave não-nula para a lista.
+  const rows = linhas.slice(0, PAGE_SIZE).filter((row) => row.cnpj !== null)
+
+  return { rows, total: page === 0 ? (resposta?.total ?? rows.length) : null }
 }
 
 // ─── Segmentos ──────────────────────────────────────────────────────────────

@@ -7,11 +7,17 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import * as React from 'react'
-import { FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { Search } from 'lucide-react-native'
+import { Animated, Pressable, RefreshControl, View, type TextInput } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
 import { Badge } from '@/components/ui/badge'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
@@ -99,6 +105,17 @@ export function EsteiraLista() {
   const router = useRouter()
   const { colors } = useTheme()
   const [filtro, setFiltro] = React.useState<EstagioAnalise | null>(null)
+  const [termo, setTermo] = React.useState('')
+  const buscaRef = React.useRef<TextInput>(null)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<ItemEsteira>()
 
   const { data, isPending, isError, refetch, isRefetching } = useQuery({
     queryKey: ['credito', 'esteira'],
@@ -113,50 +130,125 @@ export function EsteiraLista() {
 
   const opcoesEsteira = React.useMemo<readonly OpcaoFiltro<string>[]>(
     () => [
-      { valor: TODAS, label: `Todas (${(data ?? []).length})` },
+      { valor: TODAS, label: 'Todas' },
       ...COLUNAS_ESTEIRA.filter((e) => (contagem[e] ?? 0) > 0).map((e) => ({
         valor: e as string,
-        label: `${ESTAGIO_ANALISE_LABELS[e]} (${contagem[e]})`,
+        label: ESTAGIO_ANALISE_LABELS[e],
       })),
     ],
     [data, contagem],
   )
 
-  const itens = (data ?? []).filter((a) => filtro === null || a.estagio === filtro)
+  /*
+   * A BUSCA É LOCAL, e pode ser: `buscarEsteira` já traz a esteira inteira —
+   * ela tem dezenas de linhas, não milhares. Uma consulta por tecla iria ao
+   * banco para reordenar um array que já está na memória.
+   *
+   * Razão social E CNPJ: quem procura uma análise tem um dos dois na mão, e
+   * normalmente é o que está no e-mail que o fez abrir o app.
+   */
+  const busca = termo.trim().toLowerCase()
+  const itens = (data ?? []).filter(
+    (a) =>
+      (filtro === null || a.estagio === filtro) &&
+      (busca === '' ||
+        (a.razao_social ?? '').toLowerCase().includes(busca) ||
+        a.cnpj.includes(busca.replace(/\D/g, ''))),
+  )
 
-  if (isPending) {
-    return (
-      <View className="gap-2 p-4">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
-      </View>
-    )
+  // A contagem por estágio é da esteira INTEIRA, não do que a busca deixou:
+  // ela responde "onde está o trabalho", e encolher com o filtro de texto
+  // faria os números dançarem a cada tecla.
+  const contagemDosChips: Record<string, number | undefined> = {
+    [TODAS]: (data ?? []).length,
+    ...contagem,
   }
 
-  if (isError) return <ErrorState onRetry={() => void refetch()} />
-
-  return (
-    <View className="flex-1">
-      <View className="py-3">
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Esteira"
+      resumo={`${filtro === null ? 'Todas' : ESTAGIO_ANALISE_LABELS[filtro]} · ${itens.length} análise${itens.length === 1 ? '' : 's'}`}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
+      busca={
+        <Input
+          ref={buscaRef}
+          value={termo}
+          onChangeText={setTermo}
+          placeholder="Buscar por razão social ou CNPJ"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Buscar na esteira"
+          icone={<Search size={20} color={colors.mutedForeground} />}
+          containerClassName="gap-0"
+          className="border-0"
+        />
+      }
+      chips={
         <FiltroSegmentado
           opcoes={opcoesEsteira}
           valor={filtro ?? TODAS}
           onChange={(valor) => setFiltro(valor === TODAS ? null : (valor as EstagioAnalise))}
+          contagem={contagemDosChips}
+          sobreNavy
+          sangra
         />
-      </View>
+      }
+    />
+  )
 
-      <FlatList
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
+  if (isPending) {
+    return (
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="gap-2 p-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </View>
+        {cabecalho}
+      </View>
+    )
+  }
+
+  if (isError) {
+    return (
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState onRetry={() => void refetch()} />
+        </View>
+        {cabecalho}
+      </View>
+    )
+  }
+
+  return (
+    <View className="flex-1">
+      <Animated.FlatList
+        ref={listaRef}
         data={itens}
         keyExtractor={(a) => a.id}
+        onScroll={aoRolar}
+        scrollEventThrottle={16}
+        contentContainerStyle={recuoDoCabecalho}
         contentContainerClassName="gap-2 px-4 pb-28"
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} tintColor={colors.mutedForeground} />
         }
         ListEmptyComponent={
           <EmptyState
-            title="Nenhuma análise"
-            description="As solicitações nascem na ficha de um sacado, ou vêm do histórico da apólice."
+            title={busca ? 'Nada com esta busca' : 'Nenhuma análise'}
+            description={
+              busca
+                ? 'Nenhuma análise com esse nome ou CNPJ neste estágio.'
+                : 'As solicitações nascem na ficha de um sacado, ou vêm do histórico da apólice.'
+            }
           />
         }
         renderItem={({ item }) => {
@@ -238,6 +330,9 @@ export function EsteiraLista() {
           )
         }}
       />
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
     </View>
   )
 }
