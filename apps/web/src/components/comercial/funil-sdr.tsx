@@ -244,6 +244,15 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
       return false
     }
     toast.success(`Movido para ${ESTAGIO_SDR_LABELS[estagio]}.`)
+    // A empresa já estava no funil de vendas de outro closer: a reunião foi para ele
+    // (0261). O SDR não enxerga vendas alheias, então é aqui que ele fica sabendo.
+    const pedido = extra.vendedor_destino_id
+    const efetivo = r.data.vendedor_destino_id
+    if (typeof pedido === 'string' && efetivo && efetivo !== pedido) {
+      toast.info(
+        `A empresa já estava no funil de vendas de ${nomeDoVendedor(efetivo) ?? 'outro closer'} — a reunião foi para ele.`,
+      )
+    }
     setAberto(null)
     recarregar()
     return true
@@ -877,7 +886,9 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
                   id="destino"
                   name="destino"
                   required
-                  defaultValue={sugestao?.vendedor_id ?? ''}
+                  // Remarcação abre no closer que já tem a reunião — a venda pode ser dele
+                  // desde antes do SDR (0261), e o território sugeriria tirá-la dele.
+                  defaultValue={agendando?.vendedor_destino_id ?? sugestao?.vendedor_id ?? ''}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Selecione…</option>

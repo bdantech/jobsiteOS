@@ -237,11 +237,17 @@ export async function definirCarteiraPassivaAction(
   }
 }
 
-export async function moverLeadAction(input: unknown): Promise<ActionResult<{ id: string | null }>> {
+export async function moverLeadAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string | null; vendedor_destino_id: string | null }>> {
   const { erro, supabase } = await autorizar()
   if (erro || !supabase) return erro as ActionResult<never>
   try {
-    const l = (await moverLeadSdr(supabase, input)) as { id?: string; estagio?: string } | null
+    const l = (await moverLeadSdr(supabase, input)) as {
+      id?: string
+      estagio?: string
+      vendedor_destino_id?: string | null
+    } | null
 
     /*
      * Reunião marcada como realizada abre a fila de aceite (04k §5) — e ela é acordada
@@ -266,7 +272,9 @@ export async function moverLeadAction(input: unknown): Promise<ActionResult<{ id
      */
     if (l?.estagio === 'reuniao_agendada') void dispararReunioesGoogle()
 
-    return { ok: true, data: { id: l?.id ?? null } }
+    // O closer EFETIVO: desde a 0261 o banco pode trocar o escolhido pelo dono da venda
+    // que já estava aberta, e a tela precisa dizer isso a quem agendou.
+    return { ok: true, data: { id: l?.id ?? null, vendedor_destino_id: l?.vendedor_destino_id ?? null } }
   } catch (error) {
     return falha(error)
   }
