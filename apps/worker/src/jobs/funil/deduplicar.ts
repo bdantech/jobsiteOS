@@ -53,14 +53,20 @@ export interface ResultadoDedup {
   reexibidos: number
   selos: number
   ambiguidades: number
-  /** Parcelas que a oferta encerrou nesta corrida. */
+  /** Parcelas e notas que a oferta encerrou nesta corrida. */
   encerradas: number
   eventos: number
   prioridade: string
 }
 
 /**
- * As NFs candidatas: as VIVAS, e só as vivas.
+ * As NFs candidatas: as VIVAS — e as `convertida`, que só servem a um papel.
+ *
+ * A convertida está aqui para segurar atrás de si a oferta cuja antecipação a
+ * encerrou; sem ela a oferta voltaria como card próprio e Encerradas mostraria o
+ * mesmo recebível duas vezes. Quem impede que ela esconda qualquer outra coisa é o
+ * core, pelo `estagio_funil` que vai junto. São ~300 linhas contra 64 mil
+ * expiradas, e por isso só ela entra, e não as encerradas todas.
  *
  * Uma nota encerrada não pode esconder uma pré-autorização — ela já saiu do funil,
  * e o card que ela escondesse sumiria atrás de um documento que ninguém mais olha.
@@ -77,7 +83,7 @@ export interface ResultadoDedup {
  * Por isso a constante, e não a enumeração: ela é a mesma que o Kanban usa para
  * decidir o que é coluna aberta, então "saiu do funil" passa a ter UMA definição.
  */
-async function notasVivas(): Promise<NotaParaDedup[]> {
+async function carregarNotas(): Promise<NotaParaDedup[]> {
   const { rows } = await pool.query<{
     access_key: string
     sacado_matriz_cnpj: string
@@ -85,6 +91,7 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
     numero_normalizado: string | null
     valor: string | null
     vencimento: string | null
+    estagio_funil: string
   }>(`
     select n.access_key,
            public.app__matriz_do_cnpj(n.sacado_cnpj) as sacado_matriz_cnpj,
@@ -95,9 +102,10 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
            nullif(ltrim(regexp_replace(coalesce(n.numero, ''), '\\D', '', 'g'), '0'), '')
              as numero_normalizado,
            n.valor::text as valor,
-           n.vencimento::text as vencimento
+           n.vencimento::text as vencimento,
+           n.estagio_funil
       from public.notas_fiscais n
-     where n.estagio_funil not in (${SQL_ENCERRADOS})
+     where (n.estagio_funil not in (${SQL_ENCERRADOS}) or n.estagio_funil = 'convertida')
        and n.situacao = 'valida'
        and coalesce(n.operavel_manual, n.operavel) is not false
   `)
@@ -109,6 +117,7 @@ async function notasVivas(): Promise<NotaParaDedup[]> {
     numero_normalizado: r.numero_normalizado,
     valor: r.valor === null ? null : Number(r.valor),
     vencimento: r.vencimento,
+    estagio_funil: r.estagio_funil,
   }))
 }
 
@@ -132,7 +141,8 @@ async function carregarPreAutorizacoes(): Promise<PreAuthParaDedup[]> {
            sacado_matriz_cnpj, fornecedor_cnpj, numero_normalizado,
            valor::text as valor, vencimento::text as vencimento,
            sienge_bill_id, sienge_installment_id,
-           estagio_funil, perda_motivo
+           estagio_funil, perda_motivo,
+           anticipation_id_externo as antecipacao_id_externo
       from public.pre_autorizacoes
   `)
   return rows.map((r) => ({ ...r, valor: Number(r.valor) }))
@@ -159,7 +169,7 @@ async function carregarTitulos(): Promise<TituloParaDedup[]> {
 export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
   const cfg = await lerConfigFunilOportunidades()
   const [notas, preAutorizacoes, titulos] = await Promise.all([
-    notasVivas(),
+    carregarNotas(),
     carregarPreAutorizacoes(),
     carregarTitulos(),
   ])
@@ -287,7 +297,10 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
      * `estagio_alterado_em` de toda parcela encerrada seria reescrito de hora em
      * hora, e "quando isto encerrou?" perderia a resposta.
      */
-    if (r.encerramentos.length > 0) {
+    const daParcela = r.encerramentos.filter((e) => e.tipo === 'titulo')
+    const daNota = r.encerramentos.filter((e) => e.tipo === 'nf')
+
+    if (daParcela.length > 0) {
       const { rowCount } = await cliente.query(
         `update public.sienge_titulos t
             set estagio_funil = e.estagio,
@@ -297,12 +310,39 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
           where t.id_externo = e.id
             and t.estagio_funil is distinct from e.estagio`,
         [
-          r.encerramentos.map((e) => Number(e.referencia_id)),
-          r.encerramentos.map((e) => e.estagio),
-          r.encerramentos.map((e) => e.perda_motivo),
+          daParcela.map((e) => Number(e.referencia_id)),
+          daParcela.map((e) => e.estagio),
+          daParcela.map((e) => e.perda_motivo),
         ],
       )
       acc.encerradas = rowCount ?? 0
+    }
+
+    /*
+     * A NOTA HERDA A ANTECIPAÇÃO DA OFERTA — o mesmo que `converterNota` grava quando
+     * a antecipação chega com a chave da NF, menos o evento: a conversão aconteceu
+     * na oferta, e emitir `NF_CONVERTIDA` aqui contaria a mesma receita duas vezes
+     * nas métricas por faixa.
+     *
+     * A guarda de estágio repete a do core contra o banco: se alguém encerrou a nota
+     * entre a leitura e aqui, a decisão dela vale.
+     */
+    if (daNota.length > 0) {
+      const { rowCount } = await cliente.query(
+        `update public.notas_fiscais n
+            set estagio_funil = 'convertida',
+                estagio_alterado_em = now(),
+                estagio_alterado_por = null,
+                conversao_antecipacao_id = coalesce(n.conversao_antecipacao_id, e.antecipacao_id)
+           from unnest($1::text[], $2::int[]) as e(access_key, antecipacao_id)
+          where n.access_key = e.access_key
+            and n.estagio_funil not in (${SQL_ENCERRADOS})`,
+        [
+          daNota.map((e) => e.referencia_id),
+          daNota.map((e) => e.conversao_antecipacao_id ?? null),
+        ],
+      )
+      acc.encerradas += rowCount ?? 0
     }
 
     await cliente.query('commit')

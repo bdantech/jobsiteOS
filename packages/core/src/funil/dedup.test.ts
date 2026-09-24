@@ -17,6 +17,7 @@ const nf = (over: Partial<EntradaDedup['notas'][number]> = {}) => ({
   numero_normalizado: '8821',
   valor: 10_000,
   vencimento: '2026-10-10',
+  estagio_funil: 'a_prospectar',
   ...over,
 })
 
@@ -64,6 +65,89 @@ test('pré-auth com original NF: some da lista e deixa o selo na nota', () => {
   assert.equal(r.selos.length, 1)
   assert.equal(r.selos[0]?.referencia_id, '3'.repeat(44))
   assert.equal(r.selos[0]?.status, 'WAITING_CONTRACTED')
+})
+
+/**
+ * 24/09/2026: a oferta antecipada ficava escondida atrás da nota, e a nota seguia em
+ * `a_prospectar` — o SDR via na coluna aberta um recebível que o fornecedor já
+ * tinha pedido para antecipar.
+ */
+test('oferta ANTECIPADA atrás de NF aberta encerra a nota como convertida', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    notas: [nf()],
+    preAutorizacoes: [pre({ estagio_funil: 'convertida', antecipacao_id_externo: 7788 })],
+  })
+
+  assert.equal(r.ocultacoes.length, 1, 'a oferta segue escondida atrás da nota')
+  assert.deepEqual(r.encerramentos, [
+    {
+      tipo: 'nf',
+      referencia_id: '3'.repeat(44),
+      estagio: 'convertida',
+      perda_motivo: null,
+      conversao_antecipacao_id: 7788,
+    },
+  ])
+})
+
+for (const estagio of ['perdida', 'expirada'] as const) {
+  test(`oferta ${estagio} atrás de NF aberta NÃO encerra a nota — ela segue sendo trabalho`, () => {
+    const r = deduplicarFunil({
+      ...VAZIO,
+      notas: [nf()],
+      preAutorizacoes: [pre({ estagio_funil: estagio })],
+    })
+    assert.deepEqual(r.encerramentos, [])
+    assert.equal(r.selos.length, 1)
+  })
+}
+
+test('as duas metades antecipadas encerram a nota UMA vez', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    notas: [nf()],
+    preAutorizacoes: [
+      pre({ id_externo: 501, valor: 5_000, estagio_funil: 'convertida' }),
+      pre({ id_externo: 502, valor: 5_000, estagio_funil: 'convertida' }),
+    ],
+  })
+  assert.equal(r.encerramentos.length, 1)
+  assert.equal(r.ocultacoes.length, 2)
+})
+
+test('nota já convertida segura a oferta convertida — Encerradas não mostra o recebível duas vezes', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    notas: [nf({ estagio_funil: 'convertida' })],
+    preAutorizacoes: [pre({ estagio_funil: 'convertida' })],
+  })
+  assert.equal(r.ocultacoes.length, 1)
+  assert.deepEqual(r.encerramentos, [], 'já está encerrada, não reescreve')
+})
+
+test('nota encerrada NÃO esconde oferta aberta — a outra metade vira card próprio', () => {
+  const r = deduplicarFunil({
+    ...VAZIO,
+    notas: [nf({ estagio_funil: 'convertida' })],
+    preAutorizacoes: [pre({ estagio_funil: 'a_prospectar' })],
+  })
+  assert.deepEqual(r.ocultacoes, [])
+  assert.deepEqual(r.selos, [])
+})
+
+test('nota encerrada nesta passada não é escondida pela parcela', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil(
+    {
+      notas: [nf({ access_key: chave })],
+      preAutorizacoes: [pre({ estagio_funil: 'convertida' })],
+      titulos: [titulo({ bill_access_key: chave })],
+    },
+    'titulo',
+  )
+  assert.equal(r.encerramentos[0]?.tipo, 'nf')
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'nf'), undefined)
 })
 
 test('pré-auth ↔ título: a OFERTA fica e a parcela sai — o par é 1:1', () => {

@@ -58,21 +58,13 @@ export interface ResponsavelInbox {
  * dono não é um dono.
  */
 export async function buscarResponsaveisInbox(): Promise<ResponsavelInbox[]> {
+  // O DISTINCT é no banco (0259). Ler 500 linhas e tirar os distintos aqui perdia
+  // quem tinha poucas conversas: sem `order by`, a amostra mudava com o plano, e a
+  // Pamela, com 3 de 1.058, sumia do filtro.
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('inbox_conversas')
-    .select('responsavel_vendedor_id, responsavel_nome, responsavel_is_ia')
-    .not('responsavel_vendedor_id', 'is', null)
-    .limit(500)
+  const { data, error } = await supabase.rpc('app_inbox_responsaveis')
   if (error) throw new Error(error.message)
-
-  const porId = new Map<string, ResponsavelInbox>()
-  for (const l of data ?? []) {
-    const id = l.responsavel_vendedor_id
-    if (!id || porId.has(id)) continue
-    porId.set(id, { id, nome: l.responsavel_nome ?? 'Sem nome', is_ia: l.responsavel_is_ia === true })
-  }
-  return [...porId.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  return [...(data ?? [])].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 const COLUNAS_INBOX =

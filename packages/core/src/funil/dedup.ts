@@ -58,6 +58,12 @@ export interface NotaParaDedup {
   numero_normalizado: string | null
   valor: number | null
   vencimento: string | null
+  /**
+   * A lista traz as ABERTAS e as `convertida`, e o estágio decide o papel: aberta é
+   * original de qualquer oferta; convertida só da oferta que também converteu — é
+   * ela que mantém a oferta escondida atrás da nota que a conversão encerrou.
+   */
+  estagio_funil: string
 }
 
 export interface PreAuthParaDedup {
@@ -79,6 +85,8 @@ export interface PreAuthParaDedup {
   estagio_funil: string
   /** Acompanha o encerramento da parcela: perda sem causa não tem resposta. */
   perda_motivo?: string | null
+  /** A antecipação que a oferta virou. Desce para a NF que a conversão encerra. */
+  antecipacao_id_externo?: number | null
 }
 
 export interface TituloParaDedup {
@@ -137,18 +145,23 @@ export interface EntradaDedup {
 }
 
 /**
- * A parcela que a oferta encerrou, com o estágio que ela herda.
+ * O documento que a oferta encerrou, com o estágio que ele herda.
  *
- * Só existe para `titulo`: é o único par em que o derivado (a oferta) ganha do
- * documento, e portanto o único em que o estado do card visível tem de descer para
- * quem ficou escondido.
+ *   `titulo` ... a oferta ganha da parcela, então o estado do card visível desce
+ *                para quem ficou escondido — qualquer um dos três encerramentos.
+ *   `nf` ....... a nota ganha da oferta e fica na tela, então só a CONVERSÃO sobe
+ *                para ela. Oferta perdida ou expirada atrás de nota aberta é o caso
+ *                certo: a nota segue sendo trabalho. Oferta antecipada, não — o
+ *                fornecedor já pediu, e a nota numa coluna aberta pedia de novo.
  */
 export interface EncerramentoDerivado {
-  tipo: 'titulo'
+  tipo: 'titulo' | 'nf'
   referencia_id: string
   /** Sempre um de `ESTAGIOS_ENCERRADOS`, espelhado da oferta. */
   estagio: string
   perda_motivo: string | null
+  /** Só na `nf`: a antecipação que a converteu, para o card dizer qual foi. */
+  conversao_antecipacao_id?: number | null
 }
 
 export interface ResultadoDedup {
@@ -254,14 +267,19 @@ export function deduplicarFunil(
 
   // ── 2. Pré-auth ↔ NF, por sacado MATRIZ + fornecedor + número normalizado. ──
 
+  const notasPorAcesso = new Map<string, NotaParaDedup>()
   const notasPorChave = new Map<string, NotaParaDedup[]>()
   for (const n of entrada.notas) {
+    notasPorAcesso.set(n.access_key, n)
     if (!n.numero_normalizado) continue
     const k = `${n.sacado_matriz_cnpj}/${n.fornecedor_cnpj}/${n.numero_normalizado}`
     const lista = notasPorChave.get(k)
     if (lista) lista.push(n)
     else notasPorChave.set(k, [n])
   }
+
+  // Uma nota com duas ofertas antecipadas (as duas metades de uma NF) encerra uma vez.
+  const notasEncerradas = new Set<string>()
 
   for (const pre of entrada.preAutorizacoes) {
     const chavePre = chaveDedup('pre_autorizacao', pre.id_externo)
@@ -326,7 +344,15 @@ export function deduplicarFunil(
     let original: { tipo: TipoOportunidade; id: string } | null = null
     if (pre.numero_normalizado) {
       const k = `${pre.sacado_matriz_cnpj}/${pre.fornecedor_cnpj}/${pre.numero_normalizado}`
-      const candidatos = notasPorChave.get(k) ?? []
+      /*
+       * Nota encerrada só é original de oferta CONVERTIDA. É o que mantém a oferta
+       * atrás da nota depois que a conversão encerrou as duas — sem isso a oferta
+       * voltaria como card próprio e Encerradas mostraria o mesmo recebível duas
+       * vezes. E oferta aberta não se esconde atrás de nota que saiu do funil.
+       */
+      const candidatos = (notasPorChave.get(k) ?? []).filter(
+        (n) => !ENCERRADOS.has(n.estagio_funil) || pre.estagio_funil === 'convertida',
+      )
       if (candidatos.length === 1) {
         original = { tipo: 'nf', id: (candidatos[0] as NotaParaDedup).access_key }
       } else if (candidatos.length > 1) {
@@ -371,6 +397,32 @@ export function deduplicarFunil(
       status: pre.status,
       criada_em: pre.criada_em,
     })
+
+    /*
+     * OFERTA ANTECIPADA ENCERRA A NOTA. Medido em 24/09/2026: 9 NFs em
+     * `a_prospectar` com a oferta já em ANTICIPATION_REQUESTED, o card na coluna
+     * aberta pedindo ao SDR um trabalho que o fornecedor já tinha feito.
+     *
+     * No par 1:N isto encerra a nota inteira mesmo que só uma metade tenha virado
+     * oferta, e é seguro: a nota encerrada sai da lista de originais, então a
+     * oferta da outra metade, quando vier, nasce como card próprio.
+     */
+    const nota = notasPorAcesso.get(original.id)
+    if (
+      pre.estagio_funil === 'convertida' &&
+      nota &&
+      !ENCERRADOS.has(nota.estagio_funil) &&
+      !notasEncerradas.has(nota.access_key)
+    ) {
+      notasEncerradas.add(nota.access_key)
+      encerramentos.push({
+        tipo: 'nf',
+        referencia_id: nota.access_key,
+        estagio: 'convertida',
+        perda_motivo: null,
+        conversao_antecipacao_id: pre.antecipacao_id_externo ?? null,
+      })
+    }
   }
 
   // ── 3. Título ↔ NF, pela chave de acesso, sob a config. ──────────────────
@@ -381,8 +433,16 @@ export function deduplicarFunil(
    * com as três, e esconder a nota em favor de uma delas — ou as três em favor da
    * nota — descreveria errado o que está disponível para antecipar hoje.
    */
+  /*
+   * Só as notas ABERTAS, contando o encerramento desta passada: a `convertida` está
+   * na lista só para segurar a oferta que a encerrou, e não esconde nem é escondida
+   * por parcela nenhuma.
+   */
   const notasPorChaveAcesso = new Map<string, NotaParaDedup>()
-  for (const n of entrada.notas) notasPorChaveAcesso.set(n.access_key, n)
+  for (const n of entrada.notas) {
+    if (ENCERRADOS.has(n.estagio_funil) || notasEncerradas.has(n.access_key)) continue
+    notasPorChaveAcesso.set(n.access_key, n)
+  }
 
   /*
    * O estágio EFETIVO da parcela: o dela, ou o que a oferta acabou de lhe dar.
@@ -393,7 +453,9 @@ export function deduplicarFunil(
    * por um encerramento decidido nesta mesma passada.
    */
   const estagioEfetivo = new Map<string, string>()
-  for (const e of encerramentos) estagioEfetivo.set(e.referencia_id, e.estagio)
+  for (const e of encerramentos) {
+    if (e.tipo === 'titulo') estagioEfetivo.set(e.referencia_id, e.estagio)
+  }
 
   for (const t of entrada.titulos) {
     const chave = t.bill_access_key ?? t.nfe_candidate_access_key

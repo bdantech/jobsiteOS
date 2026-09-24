@@ -290,21 +290,24 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
      * movimento pelo funil desceu para a trilha de etapas.
      *
      * Agendar continua aqui: não é julgamento nem etapa, é uma ação que abre um formulário.
+     *
+     * SEM fit vale desde "A contatar": o SDR muitas vezes vê pelo cadastro que a empresa
+     * não serve antes de escrever, e obrigá-lo a mandar uma mensagem só para poder
+     * descartar era gastar um toque com quem não devia receber nenhum. COM fit, não —
+     * isso é julgamento de conversa, e continua pedindo o primeiro contato.
      */
     return (
       <>
-        {l.estagio !== 'a_contatar' && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={agindo}
-            onClick={() => setSemFit(l)}
-            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <ThumbsDown className="mr-1 h-3.5 w-3.5" aria-hidden />
-            Sem fit
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={agindo}
+          onClick={() => setSemFit(l)}
+          className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        >
+          <ThumbsDown className="mr-1 h-3.5 w-3.5" aria-hidden />
+          Sem fit
+        </Button>
         {l.estagio !== 'a_contatar' && l.fit !== true && (
           <Button
             size="sm"

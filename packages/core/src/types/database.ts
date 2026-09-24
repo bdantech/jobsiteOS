@@ -14452,6 +14452,14 @@ export type Database = {
       app_gerar_token_ics: { Args: { p: Json }; Returns: string }
       app_gestor_comercial: { Args: never; Returns: boolean }
       app_holding_do_sacado: { Args: { p_cnpj: string }; Returns: string }
+      app_inbox_responsaveis: {
+        Args: never
+        Returns: {
+          id: string
+          is_ia: boolean
+          nome: string
+        }[]
+      }
       app_is_admin: { Args: never; Returns: boolean }
       app_juridico_atualizar_processo: {
         Args: { p: Json }
