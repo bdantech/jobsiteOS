@@ -7000,6 +7000,29 @@ export type Database = {
         }
         Relationships: []
       }
+      plantao_enviados: {
+        Row: {
+          enviado_em: string
+          evento_id: string
+        }
+        Insert: {
+          enviado_em?: string
+          evento_id: string
+        }
+        Update: {
+          enviado_em?: string
+          evento_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plantao_enviados_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: true
+            referencedRelation: "empresa_eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pre_autorizacoes: {
         Row: {
           anticipation_id_externo: number | null
@@ -17073,6 +17096,10 @@ export type Database = {
       notificacao_emitir: {
         Args: { p_ator?: string; p_empresa_id?: string; p_payload?: Json; p_tipo: string }
         Returns: string[]
+      }
+      notificacao_texto: {
+        Args: { p_empresa_id?: string; p_payload?: Json; p_tipo: string }
+        Returns: Json
       }
     }
     Enums: {

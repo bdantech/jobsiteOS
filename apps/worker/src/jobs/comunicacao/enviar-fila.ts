@@ -9,6 +9,7 @@ import {
   type BaseLegal,
   type CanalThread,
   type FatosDoEnvio,
+  type OrigemComunicacao,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import type { Transporte } from '../../../../../packages/core/src/transportes/index.js'
@@ -275,7 +276,8 @@ async function processar(
 
   // O cooldown já foi decidido no enfileiramento (que é onde a pessoa viu o
   // motivo). Reaplicá-lo aqui bloquearia a segunda mensagem de uma conversa que
-  // a própria pessoa escolheu continuar.
+  // a própria pessoa escolheu continuar. O lembrete de reunião também fica de
+  // fora (origem `lembrete`, 0264): quem o recebe marcou a reunião.
   const vereditoCfg = { ...cfg, cooldown_dias: linha.origem === 'outbox' ? cfg.cooldown_dias : 0 }
   const veredito = podeEnviar(fatos, vereditoCfg)
 
@@ -372,7 +374,7 @@ async function processar(
     threadExterna: r.threadExterna,
     contaRemetente: remetente,
     statusEnvio: 'enviada',
-    origem: (linha.origem as 'compositor' | 'outbox' | 'agente') ?? 'outbox',
+    origem: (linha.origem as OrigemComunicacao) ?? 'outbox',
     templateId: linha.template_id,
     funil: linha.funil,
     funilCardId: linha.funil_card_id,

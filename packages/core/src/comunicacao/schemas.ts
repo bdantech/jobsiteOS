@@ -59,6 +59,8 @@ export const STATUS_ENVIO_LABELS: Record<StatusEnvio, string> = {
  * fora da plataforma (0162): ela entra no ledger pelo webhook `message.sent`
  * para o histórico não mentir, mas NÃO passou pelo portão — e é por isso que
  * precisa ser distinguível de `compositor` numa auditoria de supressão.
+ * `lembrete` é o de reunião (0264): saía como `outbox` e herdava o cooldown da
+ * régua, que o descartava porque o SDR tinha acabado de falar com a pessoa.
  */
 export const ORIGENS = [
   'compositor',
@@ -69,6 +71,7 @@ export const ORIGENS = [
   'sistema',
   'campanha',
   'celular',
+  'lembrete',
 ] as const
 export type OrigemComunicacao = (typeof ORIGENS)[number]
 

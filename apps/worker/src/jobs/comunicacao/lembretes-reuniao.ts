@@ -281,7 +281,13 @@ async function enfileirarLembrete(
     corpo,
     assunto: template.assunto,
     status: 'aprovada',
-    origem: 'outbox',
+    /*
+     * Origem PRÓPRIA (0264), e não `outbox`: a fila aplica o intervalo mínimo entre
+     * contatos só à régua, e o lembrete herdava a regra. Como o último toque é
+     * qualquer saída — inclusive a conversa em que o SDR marcou a reunião —, 97%
+     * dos lembretes eram descartados como "falamos com este contato há pouco".
+     */
+    origem: 'lembrete',
     empresa_id: ev.empresa_id,
     vendedor_id: assinante,
     whatsapp_conta_id: conta?.id ?? null,

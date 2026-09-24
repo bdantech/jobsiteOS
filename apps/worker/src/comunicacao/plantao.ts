@@ -144,31 +144,75 @@ async function numerosDoPlantao(perfis: string[]): Promise<{ numero: string; usu
 }
 
 /**
- * A varredura que liga os eventos críticos ao plantão. Roda de hora em hora e
- * olha só a última hora — um alerta que chega seis horas depois não é plantão.
+ * A varredura que liga os eventos críticos ao plantão. Roda de hora em hora.
+ *
+ * ─── CADA EVENTO SAI UMA VEZ ────────────────────────────────────────────────
+ * Olhava 65 minutos a cada 60, sem registro do que já tinha ido: o evento que
+ * caía nos 5 minutos de sobra saía duas vezes. Agora a janela é de três horas —
+ * cobre uma rodada perdida — e cada evento é REIVINDICADO em `plantao_enviados`
+ * antes do envio (0264): quem insere manda, quem esbarra na chave pula. Um
+ * alerta de seis horas atrás continua não sendo plantão.
+ *
+ * A reivindicação vem depois de saber que há por onde mandar: sem conta de
+ * plantão ou sem ninguém com número, marcar o evento como enviado o esconderia
+ * de quem configurar o plantão na hora seguinte.
  */
 export async function plantaoDeEventos(agora = new Date()): Promise<ResultadoPlantao> {
+  const acc: ResultadoPlantao = { destinatarios: 0, enviadas: 0, falhas: 0 }
   const cfg = await lerConfigComunicacao()
-  const desde = new Date(agora.getTime() - 65 * 60_000)
+  const conta = await contaDePlantao()
+  if (!conta || !env.WASENDER_BASE_URL || !(await lerSegredo(conta.token_secret_id))) return acc
+  if ((await numerosDoPlantao(cfg.plantao.perfis)).length === 0) return acc
 
+  const desde = new Date(agora.getTime() - 3 * 60 * 60_000)
   const { data } = await supabaseAdmin
     .from('empresa_eventos')
-    .select('id, tipo, payload, criado_em')
+    .select('id, tipo, empresa_id, payload, criado_em')
     .in('tipo', cfg.plantao.eventos)
     .gte('criado_em', desde.toISOString())
     .order('criado_em', { ascending: true })
-    .limit(20)
+    .limit(50)
 
-  const acc: ResultadoPlantao = { destinatarios: 0, enviadas: 0, falhas: 0 }
   for (const ev of data ?? []) {
-    const p = (ev.payload ?? {}) as { titulo?: string; resumo?: string }
-    const r = await avisarPlantao({
-      titulo: p.titulo ?? ev.tipo,
-      corpo: p.resumo ?? 'Sem detalhes.',
-    })
+    const payload = (ev.payload ?? {}) as Record<string, unknown>
+    // A decisão do aceite reusa o tipo do pedido (ver `fanout_evento_para_notificacoes`).
+    // O plantão é do pedido que espera alguém; a decisão já foi tomada.
+    if (ev.tipo === 'sdr.aceite_pendente' && 'decisao' in payload) continue
+
+    const { data: reivindicado } = await supabaseAdmin
+      .from('plantao_enviados')
+      .upsert({ evento_id: ev.id }, { onConflict: 'evento_id', ignoreDuplicates: true })
+      .select('evento_id')
+    if (!reivindicado?.length) continue
+
+    const texto = await textoDoAviso(ev.tipo, ev.empresa_id, payload)
+    const r = await avisarPlantao({ titulo: texto.titulo, corpo: texto.corpo ?? 'Sem detalhes.' })
     acc.destinatarios = Math.max(acc.destinatarios, r.destinatarios)
     acc.enviadas += r.enviadas
     acc.falhas += r.falhas
   }
   return acc
+}
+
+/**
+ * O texto do evento pela régua do sino (0264): modelo do painel, senão o do
+ * evento, senão "Empresa — nome do tipo". Era `titulo ?? tipo`, e o aceite
+ * pendente, que nasce em SQL sem título, chegava como "sdr.aceite_pendente".
+ */
+async function textoDoAviso(
+  tipo: string,
+  empresaId: string | null,
+  payload: Record<string, unknown>,
+): Promise<{ titulo: string; corpo: string | null }> {
+  const { data, error } = await supabaseAdmin.rpc('notificacao_texto', {
+    p_tipo: tipo,
+    p_empresa_id: empresaId ?? undefined,
+    p_payload: payload as never,
+  })
+  const texto = data as { titulo?: string | null; corpo?: string | null } | null
+  if (error || !texto?.titulo) {
+    const p = payload as { titulo?: string; resumo?: string }
+    return { titulo: p.titulo ?? tipo, corpo: p.resumo ?? null }
+  }
+  return { titulo: texto.titulo, corpo: texto.corpo ?? null }
 }
