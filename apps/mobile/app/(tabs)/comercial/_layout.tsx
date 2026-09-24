@@ -8,10 +8,12 @@ import { ModuleStack } from '@/components/shell/module-stack'
  * um módulo registrado sem pasta aqui é uma tela que o React Navigation não resolve,
  * e o app quebra na inicialização, não no clique.
  *
- * A home é o MEU DIA (04p) — é no celular que essa tela mais importa, porque é a
- * primeira coisa aberta no café, antes do computador. O painel do mês continua aqui, um
- * toque abaixo: ele responde "como está o meu mês", que é consulta; o Meu Dia responde
- * "o que eu faço agora", que é trabalho.
+ * A home é o MENU do módulo — a grade de `index.tsx`, com os itens que o tipo de
+ * vendedor da pessoa abre (régua em `features/comercial/menu.ts`). O MEU DIA (04p) é o
+ * primeiro deles, e mora em /comercial/meu-dia, a mesma rota da web: um link de
+ * notificação vindo de lá abre a mesma tela aqui. O painel do mês continua um toque
+ * abaixo do Meu Dia: ele responde "como está o meu mês", que é consulta; o Meu Dia
+ * responde "o que eu faço agora", que é trabalho.
  *
  * Só o que se usa em pé: Meu Dia, painel, funis, a COMISSÃO — que entrou porque o motor v2
  * (04k) a tornou live: o número muda enquanto a pessoa trabalha, e é justamente esse
@@ -31,17 +33,23 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function ComercialLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Meu Dia' }} />
+      <Stack.Screen name="index" options={{ title: 'Comercial' }} />
+      <Stack.Screen name="meu-dia" options={{ title: 'Meu Dia' }} />
       <Stack.Screen name="painel" options={{ title: 'Meu Painel' }} />
       {/* Relatórios (04q) é do GESTOR, e a própria RPC recusa quem não é: a tela cai no
           estado vazio em vez de esconder a rota. Esconder daria um item de menu que some
           e volta conforme o cadastro, e ninguém saberia se a tela sumiu ou se o acesso
           mudou. */}
-      <Stack.Screen name="relatorios" options={{ title: 'Report semanal' }} />
-      <Stack.Screen name="sdr" options={{ title: 'Reuniões' }} />
-      <Stack.Screen name="vendas" options={{ title: 'Vendas' }} />
+      <Stack.Screen name="relatorios" options={{ title: 'Relatórios' }} />
+      {/* Os funis filtram por estágio e desenham o cabeçalho retrátil. O de NFs
+          desliga o da pilha por conta própria: antes do funil ele tem estados
+          (sem acesso, carregando o contexto) que precisam do cabeçalho fixo. */}
+      <Stack.Screen name="sdr" options={{ title: 'Funil de Reuniões', headerShown: false }} />
+      <Stack.Screen name="vendas" options={{ title: 'Funil de Vendas', headerShown: false }} />
+      <Stack.Screen name="nfs" options={{ title: 'Funil de NFs' }} />
       <Stack.Screen name="comissoes" options={{ title: 'Comissão' }} />
-      <Stack.Screen name="fornecedores" options={{ title: 'Fornecedores' }} />
+      {/* Fornecedores filtra por estágio e desenha o cabeçalho retrátil. */}
+      <Stack.Screen name="fornecedores" options={{ title: 'Fornecedores', headerShown: false }} />
       <Stack.Screen name="campanhas" options={{ title: 'Campanhas' }} />
     </ModuleStack>
   )

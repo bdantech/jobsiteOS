@@ -12,6 +12,7 @@ import * as React from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { useSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { Badge, Button, Input, Skeleton, Text } from '@/components/ui'
@@ -45,6 +46,7 @@ import { dataHora } from '../format'
 export function Conversa({ conversaId }: { conversaId: string }) {
   const qc = useQueryClient()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const thread = useQuery({
     queryKey: comunicacaoKeys.thread(conversaId),
@@ -73,20 +75,27 @@ export function Conversa({ conversaId }: { conversaId: string }) {
 
   if (thread.isPending) {
     return (
-      <View className="gap-3 p-4">
-        <Skeleton className="h-16 w-3/4 rounded-xl" />
-        <Skeleton className="h-16 w-2/3 self-end rounded-xl" />
-      </View>
+      <AbaixoDoCabecalho>
+        <View className="gap-3 p-4">
+          <Skeleton className="h-16 w-3/4 rounded-xl" />
+          <Skeleton className="h-16 w-2/3 self-end rounded-xl" />
+        </View>
+      </AbaixoDoCabecalho>
     )
   }
 
   return (
     <KeyboardAvoidingView
       className="flex-1"
+      // Sem `keyboardVerticalOffset`: ele compensava o header nativo, que empurrava
+      // a tela para baixo. O cabeçalho de vidro flutua, a tela começa no topo, e o
+      // deslocamento deixaria um vão entre o compositor e o teclado.
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerClassName="p-4 gap-3 pb-28">
+      <ScrollView
+        contentContainerClassName="p-4 gap-3 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
+      >
         {conversa?.sugestao_id ? (
           <View className="gap-2 rounded-xl border border-primary/40 bg-primary/5 p-3">
             <View className="flex-row items-center gap-2">

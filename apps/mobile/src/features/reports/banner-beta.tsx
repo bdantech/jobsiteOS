@@ -12,10 +12,9 @@ import { useBeta } from './queries'
  * não uma notificação. Se desse para dispensar, cada pessoa veria uma coisa
  * diferente e a tarja passaria a significar "você ainda não fechou".
  *
- * Ela é injetada pelo `screenLayout` do <ModuleStack>, ou seja: ABAIXO do header
- * nativo, dentro da tela. Acima do navegador ela brigaria com o inset de status
- * bar que o header nativo calcula sozinho — e o resultado seria uma faixa de
- * espaço em branco entre a tarja e o título, diferente em cada plataforma.
+ * Ela mora DENTRO do cabeçalho de vidro, abaixo da linha do título. Como faixa
+ * da tela ela ficaria por baixo do vidro — o cabeçalho flutua sobre o conteúdo —
+ * e passaria borrada, ilegível, justamente no lugar onde deveria ser lida.
  */
 export function BannerBeta() {
   const beta = useBeta()
@@ -24,12 +23,10 @@ export function BannerBeta() {
   return (
     <View
       accessibilityRole="text"
-      className="flex-row items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5"
+      className="mt-2 flex-row items-center justify-center gap-2 rounded-md bg-amber-400/15 px-4 py-1.5"
     >
-      <FlaskConical size={13} color="#92400e" />
-      <Text className="flex-1 text-center text-xs text-amber-900 dark:text-amber-200">
-        {beta.texto}
-      </Text>
+      <FlaskConical size={13} color="#fcd34d" />
+      <Text className="flex-1 text-center text-xs text-amber-200">{beta.texto}</Text>
     </View>
   )
 }

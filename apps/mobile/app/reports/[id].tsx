@@ -9,13 +9,13 @@ import {
 } from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { EmptyState } from '@/components/ui/states'
-import { BannerBeta } from '@/features/reports'
 import { useComentarReport, useComentarios, useReport } from '@/features/reports'
 
 /**
@@ -33,6 +33,7 @@ import { useComentarReport, useComentarios, useReport } from '@/features/reports
 export default function ReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const report = useReport(id ?? null)
   const comentarios = useComentarios(id ?? null)
 
@@ -46,10 +47,12 @@ export default function ReportScreen() {
 
   if (!report.data) {
     return (
-      <EmptyState
-        title="Report não encontrado"
-        description="Ele pode ter sido removido, ou pertence a outra pessoa."
-      />
+      <AbaixoDoCabecalho>
+        <EmptyState
+          title="Report não encontrado"
+          description="Ele pode ter sido removido, ou pertence a outra pessoa."
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -57,9 +60,11 @@ export default function ReportScreen() {
 
   return (
     <>
-      <BannerBeta />
-
-      <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4">
+      <ScrollView
+        className="flex-1 bg-background"
+        contentContainerClassName="gap-4 p-4"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
+      >
         <Card>
           <CardHeader>
             <View className="flex-row items-center gap-2">

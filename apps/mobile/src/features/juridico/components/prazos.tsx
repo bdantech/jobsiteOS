@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { Alert, FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -22,6 +23,7 @@ export function PrazosMobile() {
   const router = useRouter()
   const qc = useQueryClient()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const agenda = useQuery({ queryKey: juridicoKeys.agenda(), queryFn: buscarAgenda })
 
@@ -33,16 +35,22 @@ export function PrazosMobile() {
 
   if (agenda.isPending) {
     return (
-      <View className="gap-3 p-4">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
-      </View>
+      <AbaixoDoCabecalho>
+        <View className="gap-3 p-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </View>
+      </AbaixoDoCabecalho>
     )
   }
 
   if (agenda.isError) {
-    return <ErrorState title="Não foi possível carregar a agenda" onRetry={() => void agenda.refetch()} />
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState title="Não foi possível carregar a agenda" onRetry={() => void agenda.refetch()} />
+      </AbaixoDoCabecalho>
+    )
   }
 
   const agora = Date.now()
@@ -52,6 +60,7 @@ export function PrazosMobile() {
       data={agenda.data ?? []}
       keyExtractor={(item) => item.id ?? ''}
       contentContainerClassName="gap-3 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={
         <RefreshControl
           refreshing={agenda.isRefetching}

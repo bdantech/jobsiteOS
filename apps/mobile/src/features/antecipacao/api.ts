@@ -92,6 +92,9 @@ export async function fetchFunil(filtros: FiltrosFunil, pagina = 0): Promise<Pag
     else if (filtros.estagio) q = q.eq('estagio_funil', filtros.estagio)
     else q = q.in('estagio_funil', [...ESTAGIOS_ABERTOS])
 
+    // As três fontes têm `vendedor_id`: a nota, a pré-autorização e o título são
+    // roteados para uma carteira pela mesma regra.
+    if (filtros.vendedorId) q = q.eq('vendedor_id', filtros.vendedorId)
     if (filtros.faixa) q = q.eq('faixa', filtros.faixa)
     if (filtros.tipagem) q = q.eq('fornecedor_tipagem', filtros.tipagem)
 

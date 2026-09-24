@@ -27,6 +27,8 @@ export interface FiltrosFunil {
   faixa?: string
   tipagem?: string
   termo?: string
+  /** Só as notas roteadas para esta carteira — o funil de NFs do originador. */
+  vendedorId?: string
 }
 
 /** Oportunidades + contexto de fornecedor, numa leitura só (nunca N+1 no celular). */

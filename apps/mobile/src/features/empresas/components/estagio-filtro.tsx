@@ -34,6 +34,9 @@ export function EstagioFiltro({ value, onChange }: EstagioFiltroProps) {
       valor={value ?? TODAS}
       onChange={(valor) => onChange(valor === TODAS ? undefined : (valor as Estagio))}
       rotulo={(label) => `Filtrar por ${label}`}
+      // Mora no painel do cabeçalho retrátil, sobre o navy.
+      sobreNavy
+      sangra
     />
   )
 }

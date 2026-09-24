@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ScrollView, View } from 'react-native'
 
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +44,7 @@ function moeda(v: number | null): string {
 export default function AnaliseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
+  const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['credito', 'analise-detalhe', id],
@@ -52,11 +55,26 @@ export default function AnaliseScreen() {
       ['enviada_seguradora', 'em_analise'].includes(q.state.data?.estagio ?? '') ? 60_000 : false,
   })
 
-  if (isPending) return <Skeleton className="m-4 h-64 rounded-xl" />
-  if (isError || !data) return <ErrorState onRetry={() => void refetch()} />
+  if (isPending) {
+    return (
+      <AbaixoDoCabecalho>
+        <Skeleton className="m-4 h-64 rounded-xl" />
+      </AbaixoDoCabecalho>
+    )
+  }
+  if (isError || !data) {
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState onRetry={() => void refetch()} />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   return (
-    <ScrollView contentContainerClassName="gap-3 p-4 pb-28">
+    <ScrollView
+      contentContainerClassName="gap-3 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
+    >
       <View className="gap-1">
         <Text className="text-xl font-semibold">{data.razao_social ?? formatCnpj(data.cnpj)}</Text>
         <Text variant="muted" className="text-sm tabular-nums">

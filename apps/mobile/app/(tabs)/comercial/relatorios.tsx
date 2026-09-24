@@ -8,6 +8,7 @@ import {
 } from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Card } from '@/components/ui/card'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils'
  */
 export default function RelatoriosScreen() {
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const { data, isPending, isError, refetch, isRefetching } = useReportSemanal()
 
   if (isPending) {
@@ -35,13 +37,21 @@ export default function RelatoriosScreen() {
       </View>
     )
   }
-  if (isError) return <ErrorState onRetry={() => void refetch()} />
+  if (isError) {
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState onRetry={() => void refetch()} />
+      </AbaixoDoCabecalho>
+    )
+  }
   if (!data?.report) {
     return (
-      <EmptyState
-        title="Sem acesso"
-        description="O Report Semanal é leitura de gestor — ele mostra a carteira inteira e a comissão de cada pessoa."
-      />
+      <AbaixoDoCabecalho>
+        <EmptyState
+          title="Sem acesso"
+          description="O Report Semanal é leitura de gestor — ele mostra a carteira inteira e a comissão de cada pessoa."
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -69,6 +79,7 @@ export default function RelatoriosScreen() {
     <ScrollView
       className="flex-1"
       contentContainerClassName="gap-4 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       <View className="gap-0.5">

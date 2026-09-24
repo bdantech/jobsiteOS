@@ -4,12 +4,12 @@ import { useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Text } from '@/components/ui/text'
 import { AparenciaCard, ContaCard, NotificacoesCard } from '@/features/auth'
-import { BannerBeta } from '@/features/reports'
 import { useSession } from '@/lib/auth'
 
 /**
@@ -24,6 +24,7 @@ export default function ConfiguracoesScreen() {
   const router = useRouter()
   const { signOut } = useSession()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const [confirmandoSaida, setConfirmandoSaida] = useState(false)
   const [saindo, setSaindo] = useState(false)
@@ -42,12 +43,10 @@ export default function ConfiguracoesScreen() {
 
   return (
     <>
-      {/* Tela raiz: o header é do RootNavigator, e não de um <ModuleStack>. */}
-      <BannerBeta />
-
       <ScrollView
         className="flex-1 bg-background"
         contentContainerClassName="gap-4 p-4"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
         keyboardShouldPersistTaps="handled"
       >
         <ContaCard />

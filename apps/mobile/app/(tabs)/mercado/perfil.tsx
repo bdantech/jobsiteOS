@@ -11,9 +11,14 @@ import {
   type Trilha,
 } from '@jobsiteos/core'
 import { useState } from 'react'
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Animated, RefreshControl, View } from 'react-native'
 
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Badge } from '@/components/ui/badge'
+import { FiltroSegmentado } from '@/components/ui/filtros'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { usePerfilQuery, type SnapshotPerfilMobile } from '@/features/mercado/perfil'
@@ -30,66 +35,98 @@ import { usePerfilQuery, type SnapshotPerfilMobile } from '@/features/mercado/pe
  * lida com razão de prevalência; duas barras, uma três vezes maior que a outra,
  * dizem para qualquer pessoa.
  */
+const OPCOES_TRILHA = TRILHAS.map((t) => ({ valor: t, label: TRILHA_LABELS[t] }))
+
 export default function PerfilScreen() {
   const [trilha, setTrilha] = useState<Trilha>('sacados')
   const { data, isPending, isError, refetch, isRefetching } = usePerfilQuery(trilha)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<SnapshotPerfilMobile>()
+
+  /*
+    A trilha é o recorte da tela — sacados ou cedentes — e por isso mora no
+    cabeçalho retrátil, como o estágio no funil. Sem busca: a lista é de poucas
+    comparações, e um campo de texto sobre ela seria controle sem uso.
+  */
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Perfil dos Clientes"
+      resumo={TRILHA_LABELS[trilha]}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      chips={
+        <FiltroSegmentado
+          opcoes={OPCOES_TRILHA}
+          valor={trilha}
+          onChange={setTrilha}
+          sobreNavy
+          sangra
+        />
+      }
+    />
+  )
+
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row gap-2 border-b border-border p-4">
-        {TRILHAS.map((t) => (
-          <Pressable
-            key={t}
-            onPress={() => setTrilha(t)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: trilha === t }}
-            className={`rounded-full px-3 py-1.5 ${trilha === t ? 'bg-primary' : 'bg-muted'}`}
-          >
-            <Text
-              className={`text-sm ${trilha === t ? 'font-medium text-primary-foreground' : 'text-muted-foreground'}`}
-            >
-              {TRILHA_LABELS[t]}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
       {isError ? (
-        <ErrorState
-          description="Não foi possível carregar o perfil. Verifique sua conexão e tente novamente."
-          onRetry={() => void refetch()}
-        />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState
+            description="Não foi possível carregar o perfil. Verifique sua conexão e tente novamente."
+            onRetry={() => void refetch()}
+          />
+        </View>
       ) : isPending ? (
-        <View className="p-4">
+        <View style={recuoDoCabecalho} className="flex-1 p-4">
           <Text variant="muted">Carregando…</Text>
         </View>
       ) : data.length === 0 ? (
-        <EmptyState
-          title="Perfil ainda não calculado"
-          description="O cálculo roda uma vez por mês, depois das calibrações de faturamento e de crédito. Ele pode ser antecipado pela versão web."
-        />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <EmptyState
+            title="Perfil ainda não calculado"
+            description="O cálculo roda uma vez por mês, depois das calibrações de faturamento e de crédito. Ele pode ser antecipado pela versão web."
+          />
+        </View>
       ) : (
-        <ScrollView
+        <Animated.FlatList
+          ref={listaRef}
+          data={data}
+          keyExtractor={(s) => s.id}
+          renderItem={({ item }) => <Comparacao snapshot={item} />}
+          onScroll={aoRolar}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingTop: alturaCabecalho + 16 }}
           contentContainerClassName="gap-6 p-4 pb-28"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
           }
-        >
-          <Text variant="muted" className="text-sm">
-            {TRILHA_PERGUNTAS[trilha]}
-          </Text>
-
-          {data.map((s) => (
-            <Comparacao key={s.id} snapshot={s} />
-          ))}
-
-          <View className="rounded-lg border border-dashed border-border p-3">
-            <Text variant="muted" className="text-xs leading-relaxed">
-              {AVISO_VIES}
+          ListHeaderComponent={
+            <Text variant="muted" className="text-sm">
+              {TRILHA_PERGUNTAS[trilha]}
             </Text>
-          </View>
-        </ScrollView>
+          }
+          ListFooterComponent={
+            <View className="rounded-lg border border-dashed border-border p-3">
+              <Text variant="muted" className="text-xs leading-relaxed">
+                {AVISO_VIES}
+              </Text>
+            </View>
+          }
+        />
       )}
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
     </View>
   )
 }

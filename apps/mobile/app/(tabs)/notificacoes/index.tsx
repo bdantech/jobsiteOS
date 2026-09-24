@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Card } from '@/components/ui/card'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -58,6 +59,7 @@ function NotificacaoSkeleton() {
 export default function NotificacoesScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const { grantedModuleIds } = useSession()
 
   // Live: an INSERT from notify() or the empresa_eventos trigger, or an UPDATE
@@ -84,17 +86,19 @@ export default function NotificacoesScreen() {
 
   if (isPending) {
     return (
-      <View className="flex-1 gap-3 bg-background p-4">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <NotificacaoSkeleton key={i} />
-        ))}
-      </View>
+      <AbaixoDoCabecalho>
+        <View className="gap-3 p-4">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <NotificacaoSkeleton key={i} />
+          ))}
+        </View>
+      </AbaixoDoCabecalho>
     )
   }
 
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <ErrorState
           description="Não foi possível carregar suas notificações. Verifique sua conexão e tente novamente."
           onRetry={() => void refetch()}
@@ -111,6 +115,7 @@ export default function NotificacoesScreen() {
       // flex-grow only when empty, so <EmptyState className="flex-1"> can centre
       // itself in the viewport instead of hugging the top.
       contentContainerClassName={cn('gap-3 p-4 pb-10', data.length === 0 && 'flex-grow')}
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}

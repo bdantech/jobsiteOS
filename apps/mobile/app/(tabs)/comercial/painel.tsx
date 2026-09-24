@@ -10,6 +10,7 @@ import { CalendarDays, Clock, Coins, Inbox, PackageSearch, Target, Users } from 
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Text } from '@/components/ui/text'
@@ -31,6 +32,7 @@ const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', curren
 export default function PainelComercialScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   /**
    * `null` = o painel do próprio usuário, que é o default da RPC. Um gestor sem
@@ -50,8 +52,20 @@ export default function PainelComercialScreen() {
       </View>
     )
   }
-  if (isError) return <ErrorState onRetry={() => void refetch()} />
-  if (!data.tem_acesso) return <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
+  if (isError) {
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState onRetry={() => void refetch()} />
+      </AbaixoDoCabecalho>
+    )
+  }
+  if (!data.tem_acesso) {
+    return (
+      <AbaixoDoCabecalho>
+        <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   const visiveis = vendedores.data ?? []
   // Cadastro de vendedor próprio: a RPC responde `sem_vendedor` para quem não tem,
@@ -79,7 +93,11 @@ export default function PainelComercialScreen() {
      * que é o que faltava.
      */
     return (
-      <ScrollView className="flex-1" contentContainerClassName="gap-3 p-4 pb-28">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-3 p-4 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
+      >
         {seletor}
         <EmptyState
           title={podeTrocar ? 'Escolha uma pessoa' : 'Você não é vendedor'}
@@ -99,6 +117,7 @@ export default function PainelComercialScreen() {
     <ScrollView
       className="flex-1"
       contentContainerClassName="gap-3 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       {seletor}

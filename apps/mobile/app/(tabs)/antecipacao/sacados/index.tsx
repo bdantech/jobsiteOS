@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
@@ -51,6 +52,7 @@ function Contencao({ demanda, disponivel }: { demanda: number; disponivel: numbe
 export default function SacadosScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const { data, isPending, isError, refetch, isRefetching } = useSacadosQuery()
 
   const renderItem = useCallback(
@@ -105,14 +107,22 @@ export default function SacadosScreen() {
     [router],
   )
 
-  if (isPending) return <ListaSkeleton />
+  if (isPending) {
+    return (
+      <AbaixoDoCabecalho>
+        <ListaSkeleton />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   if (isError) {
     return (
-      <ErrorState
-        description="Não foi possível carregar os sacados. Verifique sua conexão e tente novamente."
-        onRetry={() => void refetch()}
-      />
+      <AbaixoDoCabecalho>
+        <ErrorState
+          description="Não foi possível carregar os sacados. Verifique sua conexão e tente novamente."
+          onRetry={() => void refetch()}
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -123,6 +133,7 @@ export default function SacadosScreen() {
       keyExtractor={(item) => item.sacado_cnpj as string}
       renderItem={renderItem}
       contentContainerClassName="gap-3 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}

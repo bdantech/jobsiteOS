@@ -1,11 +1,9 @@
 import { Stack } from 'expo-router'
 import type { ReactNode } from 'react'
-import { View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { opcoesDePilha } from '@/components/shell/cabecalho-de-vidro'
 import { HeaderActions } from '@/components/shell/header-actions'
-import { BannerBeta } from '@/features/reports'
-import { opcoesDeHeader } from '@/lib/theme'
 
 export interface ModuleStackProps {
   /** The module's <Stack.Screen> declarations. */
@@ -17,14 +15,12 @@ export interface ModuleStackProps {
 /**
  * The per-module navigator. Every module folder under app/(tabs) renders one of
  * these instead of a raw <Stack>, which is what makes the module chrome uniform:
- * themed header, themed content background, as ações de header em toda tela que o
- * módulo empilha — e, desde o 04m, a tarja de beta.
+ * o cabeçalho de vidro (ver `cabecalho-de-vidro.tsx`), o fundo da cena, e as
+ * ações de header em toda tela que o módulo empilha.
  *
- * A TARJA VEM DO `screenLayout`, e não de um <View> em volta do <Stack>.
- * `screenLayout` embrulha CADA TELA, ou seja: ela renderiza dentro da tela, logo
- * abaixo do header nativo. Acima do navegador ela brigaria com o inset de status
- * bar que o header nativo calcula por conta própria, e o resultado seria uma
- * faixa em branco entre a tarja e o título — diferente em cada plataforma.
+ * A tarja de beta morava aqui, no `screenLayout`, como faixa acima de cada tela.
+ * Com o cabeçalho flutuando sobre a cena ela ficaria POR BAIXO do vidro; agora
+ * ela é desenhada dentro do próprio cabeçalho.
  */
 export function ModuleStack({ children, bell = true }: ModuleStackProps) {
   const { colors } = useTheme()
@@ -32,15 +28,9 @@ export function ModuleStack({ children, bell = true }: ModuleStackProps) {
   return (
     <Stack
       screenOptions={{
-        ...opcoesDeHeader(colors),
+        ...opcoesDePilha(colors),
         headerRight: bell ? () => <HeaderActions /> : undefined,
       }}
-      screenLayout={({ children: tela }) => (
-        <View className="flex-1">
-          <BannerBeta />
-          {tela}
-        </View>
-      )}
     >
       {children}
     </Stack>

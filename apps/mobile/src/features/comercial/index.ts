@@ -124,6 +124,15 @@ export function useResumoComercial(vendedorId?: string | null) {
   })
 }
 
+/** O que o card do funil mostra da empresa — o mesmo recorte do card da web. */
+interface EmpresaDoCard {
+  id: string
+  razao_social: string | null
+  uf: string | null
+  valor_esperado_mensal: number | null
+  score_faixa: string | null
+}
+
 export interface LeadMobile {
   id: string
   estagio: string
@@ -132,22 +141,31 @@ export interface LeadMobile {
   encerrado_em: string | null
   /** Por qual porta o lead entrou: 'distribuicao' | 'inbound' | 'manual'. */
   origem: string
-  empresas: { id: string; razao_social: string | null; uf: string | null } | null
+  /** O dono do card. Vira nome só quando a pessoa enxerga mais alguém além de si. */
+  sdr_id: string | null
+  empresas: EmpresaDoCard | null
 }
 
+/**
+ * O funil de reuniões inteiro que a RLS devolve — as SEIS colunas, como na web.
+ *
+ * `qualificada` estava fora ("não pede trabalho"), e com ela a tela deixava de ser
+ * o funil: o SDR não tinha como conferir o que já entregou ao closer, e a contagem
+ * por estágio mentia. Encerrado continua fora, como é o padrão da web — lá ele só
+ * volta com um interruptor, que é conferência de escritório.
+ */
 export function useLeads() {
   return useQuery({
     queryKey: comercialKeys.leads(),
     queryFn: async (): Promise<LeadMobile[]> => {
       const { data, error } = await supabase
         .from('sdr_leads')
-        .select('id, estagio, reuniao_em, fit, encerrado_em, origem, empresas(id, razao_social, uf)')
-        // Só o que pede trabalho: no celular ninguém rola cem cards, e lead encerrado
-        // não pede nada.
+        .select(
+          'id, estagio, reuniao_em, fit, encerrado_em, origem, sdr_id, empresas(id, razao_social, uf, valor_esperado_mensal, score_faixa)',
+        )
         .is('encerrado_em', null)
-        .neq('estagio', 'qualificada')
         .order('distribuido_em', { ascending: false })
-        .limit(100)
+        .limit(500)
       if (error) throw new Error(error.message)
       return (data ?? []) as unknown as LeadMobile[]
     },
@@ -159,7 +177,14 @@ export interface VendaMobile {
   estagio: string
   situacao: string
   primeira_operacao_em: string | null
-  empresas: { id: string; razao_social: string | null; uf: string | null } | null
+  vendedor_id: string | null
+  empresas: EmpresaDoCard | null
+  /** Nula também quando a RLS esconde a análise de quem abriu. */
+  analises_credito: {
+    estagio: string
+    limite_aprovado: number | null
+    motivo: string | null
+  } | null
 }
 
 export function useVendas() {
@@ -168,12 +193,15 @@ export function useVendas() {
     queryFn: async (): Promise<VendaMobile[]> => {
       const { data, error } = await supabase
         .from('vendas')
-        .select('id, estagio, situacao, primeira_operacao_em, empresas(id, razao_social, uf)')
-        // O que ainda é assunto: em andamento, ou ganho que não operou.
+        .select(
+          'id, estagio, situacao, primeira_operacao_em, vendedor_id, empresas(id, razao_social, uf, valor_esperado_mensal, score_faixa), analises_credito(estagio, limite_aprovado, motivo)',
+        )
+        // O que ainda é assunto — a mesma régua do `vendaNoFunil` da web: em
+        // andamento, ou ganho que ainda não operou.
         .neq('situacao', 'perdido')
         .is('primeira_operacao_em', null)
         .order('atualizada_em', { ascending: false })
-        .limit(100)
+        .limit(500)
       if (error) throw new Error(error.message)
       return (data ?? []) as unknown as VendaMobile[]
     },

@@ -5,6 +5,7 @@ import * as React from 'react'
 import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge, Button, EmptyState, Input, Skeleton, Text } from '@/components/ui'
 import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
 import {
@@ -26,6 +27,7 @@ import { useEscopoFila, useNaoVinculadas } from '../hooks'
  */
 export function FilaNaoVinculadas() {
   const qc = useQueryClient()
+  const recuo = useRecuoDoCabecalho()
   const escopo = useEscopoFila()
   const fila = useNaoVinculadas(escopo.vendedorId)
 
@@ -46,11 +48,13 @@ export function FilaNaoVinculadas() {
 
   if (fila.isPending) {
     return (
-      <View className="gap-3 p-4">
-        {seletor}
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-      </View>
+      <AbaixoDoCabecalho>
+        <View className="gap-3 p-4">
+          {seletor}
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </View>
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -60,6 +64,7 @@ export function FilaNaoVinculadas() {
       data={fila.data ?? []}
       keyExtractor={(n) => n.id}
       contentContainerClassName="p-4 gap-3 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={
         <RefreshControl refreshing={fila.isFetching} onRefresh={() => void fila.refetch()} />
       }

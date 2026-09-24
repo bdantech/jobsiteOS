@@ -18,8 +18,13 @@ export default function MercadoLayout() {
   return (
     <ModuleStack>
       <Stack.Screen name="index" options={{ title: 'Mapa do Mercado' }} />
-      <Stack.Screen name="explorador" options={{ title: 'Explorador' }} />
-      <Stack.Screen name="perfil" options={{ title: 'Perfil dos Clientes' }} />
+      {/*
+        Explorador e Perfil têm recorte (busca, camada, UF; trilha) e desenham o
+        cabeçalho retrátil. Com o da pilha ligado junto, o título sairia duas
+        vezes e os recuos da status bar se somariam.
+      */}
+      <Stack.Screen name="explorador" options={{ title: 'Explorador', headerShown: false }} />
+      <Stack.Screen name="perfil" options={{ title: 'Perfil dos Clientes', headerShown: false }} />
       <Stack.Screen name="universo/[cnpj]" options={{ title: 'Empresa no universo' }} />
       <Stack.Screen name="grupos/[id]" options={{ title: 'Grupo econômico' }} />
     </ModuleStack>

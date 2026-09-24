@@ -30,7 +30,11 @@ export default function AntecipacaoLayout() {
         Sacados por NF (04r) ABSORVEU a antiga "Sacados a Prospectar": aquela era uma
         lista ordenada por valor recebido, sem dono, sem estágio e sem ação.
       */}
-      <Stack.Screen name="sacados-por-nf" options={{ title: 'Sacados por NF' }} />
+      <Stack.Screen
+        name="sacados-por-nf"
+        // Filtra por estágio: desenha o cabeçalho retrátil, como o funil.
+        options={{ title: 'Sacados por NF', headerShown: false }}
+      />
     </ModuleStack>
   )
 }

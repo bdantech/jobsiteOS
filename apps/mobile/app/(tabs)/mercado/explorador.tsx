@@ -1,10 +1,20 @@
-import { CAMADAS, parseArvore, type Camada } from '@jobsiteos/core'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { CAMADAS, CAMADA_LABELS, parseArvore, type Camada } from '@jobsiteos/core'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ListFilter, Search } from 'lucide-react-native'
-import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Animated,
+  RefreshControl,
+  View,
+  type TextInput,
+} from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, ErrorState } from '@/components/ui/states'
@@ -61,6 +71,16 @@ function filtroInicial(raw: string | undefined): FiltroComposto | undefined {
 export default function ExploradorScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const buscaRef = useRef<TextInput>(null)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<ExploradorListItem>()
 
   const params = useLocalSearchParams<{ camada?: string; uf?: string; filtro?: string }>()
 
@@ -121,65 +141,100 @@ export default function ExploradorScreen() {
     setFiltro(undefined)
   }, [])
 
+  /*
+    Busca, camada e UF são o RECORTE e moram no cabeçalho; o filtro composto
+    ativo, a contagem e os segmentos salvos rolam com a lista. A divisão é a do
+    funil: o que troca a lista a cada toque fica ao alcance do polegar mesmo
+    depois de rolar.
+  */
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Explorador"
+      resumo={[
+        camada ? CAMADA_LABELS[camada] : 'Todas as camadas',
+        uf ?? 'Brasil',
+        isError ? null : formatTotal(data?.total ?? null),
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
+      busca={
+        <Input
+          ref={buscaRef}
+          value={termo}
+          onChangeText={setTermo}
+          placeholder="Buscar por razão social, fantasia ou CNPJ"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Buscar no universo"
+          icone={<Search size={20} color={colors.mutedForeground} />}
+          containerClassName="gap-0"
+          className="border-0"
+        />
+      }
+      chips={
+        <>
+          <CamadaFiltro value={camada} onChange={setCamada} />
+          <UfFiltro value={uf} onChange={setUf} />
+        </>
+      }
+    />
+  )
+
+  const painelDaLista = (
+    <View className="-mx-4 gap-3 pb-3 pt-3">
+      {filtro ? <FiltroAtivo filtro={filtro} onClear={() => setFiltro(undefined)} /> : null}
+
+      <View className="flex-row items-center justify-between gap-3 px-4">
+        <Text variant="muted" className="flex-1 text-xs" numberOfLines={1}>
+          {formatTotal(data?.total ?? null)}
+        </Text>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => setSegmentosAbertos(true)}
+          accessibilityLabel="Aplicar um segmento salvo"
+        >
+          <ListFilter size={16} color={colors.foreground} />
+          <Text>Segmentos</Text>
+        </Button>
+      </View>
+    </View>
+  )
+
+  // O cabeçalho é absoluto: quem reserva o espaço dele é o `paddingTop` da lista.
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
   return (
     <View className="flex-1 bg-background">
-      <Stack.Screen options={{ title: 'Explorador' }} />
-
-      {/* The search box and the chips stay mounted OUTSIDE the FlatList: inside
-          ListHeaderComponent the TextInput remounts on every re-render and loses
-          focus, which makes typing drop characters. */}
-      <View className="gap-3 pb-3 pt-3">
-        <View className="justify-center px-4">
-          <View className="absolute left-7 z-10">
-            <Search size={18} color={colors.mutedForeground} />
-          </View>
-          <Input
-            value={termo}
-            onChangeText={setTermo}
-            placeholder="Buscar por razão social, fantasia ou CNPJ"
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            accessibilityLabel="Buscar no universo"
-            className="pl-10"
+      {isPending ? (
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ExploradorListSkeleton />
+        </View>
+      ) : isError ? (
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState
+            description="Não foi possível carregar o universo. Verifique sua conexão e tente novamente."
+            onRetry={() => void refetch()}
           />
         </View>
-
-        <CamadaFiltro value={camada} onChange={setCamada} />
-        <UfFiltro value={uf} onChange={setUf} />
-
-        {filtro ? <FiltroAtivo filtro={filtro} onClear={() => setFiltro(undefined)} /> : null}
-
-        <View className="flex-row items-center justify-between gap-3 px-4">
-          <Text variant="muted" className="flex-1 text-xs" numberOfLines={1}>
-            {isError ? '' : formatTotal(data?.total ?? null)}
-          </Text>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => setSegmentosAbertos(true)}
-            accessibilityLabel="Aplicar um segmento salvo"
-          >
-            <ListFilter size={16} color={colors.foreground} />
-            <Text>Segmentos</Text>
-          </Button>
-        </View>
-      </View>
-
-      {isPending ? (
-        <ExploradorListSkeleton />
-      ) : isError ? (
-        <ErrorState
-          description="Não foi possível carregar o universo. Verifique sua conexão e tente novamente."
-          onRetry={() => void refetch()}
-        />
       ) : (
-        <FlatList
+        <Animated.FlatList
+          ref={listaRef}
           data={data.rows}
           keyExtractor={(item) => item.cnpj}
           renderItem={renderItem}
+          ListHeaderComponent={painelDaLista}
+          onScroll={aoRolar}
+          scrollEventThrottle={16}
+          contentContainerStyle={recuoDoCabecalho}
           contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -215,6 +270,9 @@ export default function ExploradorScreen() {
           }
         />
       )}
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
 
       <SegmentosSheet
         open={segmentosAbertos}

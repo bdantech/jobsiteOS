@@ -1,9 +1,14 @@
 import { ESTAGIOS_PROSPECCAO_ABERTOS, ESTAGIO_PROSPECCAO_LABELS } from '@jobsiteos/core'
 import { AlertTriangle } from 'lucide-react-native'
 import { useCallback, useState } from 'react'
-import { FlatList, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Animated, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { ListaSkeleton, formatarMoeda } from '@/features/antecipacao'
@@ -41,9 +46,29 @@ import { cn } from '@/lib/utils'
  * Seguir é `webOnly` de propósito: é uma decisão de carteira, e o celular é a tela de
  * trabalhar o que já está na sua.
  */
+/** "Todos" é o primeiro segmento: é como se diz "sem filtro" num controle exclusivo. */
+const TODOS = '__todos__'
+
+const OPCOES_ESTAGIO: readonly OpcaoFiltro<string>[] = [
+  { valor: TODOS, label: 'Todos' },
+  ...ESTAGIOS_PROSPECCAO_ABERTOS.map((e) => ({
+    valor: e as string,
+    label: ESTAGIO_PROSPECCAO_LABELS[e],
+  })),
+]
+
 export default function SacadosPorNfScreen() {
   const { colors } = useTheme()
   const [estagio, setEstagio] = useState<string | undefined>()
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<SacadoProspeccao>()
   const [descartando, setDescartando] = useState<SacadoProspeccao | null>(null)
   const [analisando, setAnalisando] = useState<SacadoProspeccao | null>(null)
   const [pedindoPonte, setPedindoPonte] = useState<{
@@ -74,24 +99,67 @@ export default function SacadosPorNfScreen() {
     [config],
   )
 
-  if (isPending) return <ListaSkeleton />
+  // Os estágios são o recorte — as colunas da web viram filtro — e moram no
+  // cabeçalho retrátil. O painel de números rola com a lista.
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Sacados por NF"
+      resumo={`${OPCOES_ESTAGIO.find((o) => o.valor === (estagio ?? TODOS))?.label ?? 'Todos'}${
+        isPending ? '' : ` · ${data?.length ?? 0} sacado${(data?.length ?? 0) === 1 ? '' : 's'}`
+      }`}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      chips={
+        <FiltroSegmentado
+          opcoes={OPCOES_ESTAGIO}
+          valor={estagio ?? TODOS}
+          onChange={(v) => setEstagio(v === TODOS ? undefined : v)}
+          sobreNavy
+          sangra
+        />
+      }
+    />
+  )
+
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
+  if (isPending) {
+    return (
+      <View className="flex-1 bg-background">
+        <View style={recuoDoCabecalho} className="flex-1 pt-4">
+          <ListaSkeleton />
+        </View>
+        {cabecalho}
+      </View>
+    )
+  }
 
   if (isError) {
     return (
-      <ErrorState
-        description="Não foi possível carregar o funil. Verifique sua conexão e tente novamente."
-        onRetry={() => void refetch()}
-      />
+      <View className="flex-1 bg-background">
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState
+            description="Não foi possível carregar o funil. Verifique sua conexão e tente novamente."
+            onRetry={() => void refetch()}
+          />
+        </View>
+        {cabecalho}
+      </View>
     )
   }
 
   return (
-    <>
-      <FlatList
-        className="flex-1 bg-background"
+    <View className="flex-1 bg-background">
+      <Animated.FlatList
+        ref={listaRef}
         data={data}
         keyExtractor={(item) => item.id as string}
         renderItem={renderItem}
+        onScroll={aoRolar}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: alturaCabecalho + 16 }}
         contentContainerClassName="gap-3 p-4 pb-28"
         refreshControl={
           <RefreshControl
@@ -146,41 +214,6 @@ export default function SacadosPorNfScreen() {
               ) : null}
             </View>
 
-            {/* Os estágios como filtro, não como colunas. */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-1.5">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: estagio === undefined }}
-                  onPress={() => setEstagio(undefined)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 active:opacity-70',
-                    estagio === undefined ? 'border-primary bg-primary/10' : 'border-border',
-                  )}
-                >
-                  <Text className={cn('text-xs', estagio === undefined && 'text-primary')}>
-                    Todos
-                  </Text>
-                </Pressable>
-                {ESTAGIOS_PROSPECCAO_ABERTOS.map((e) => (
-                  <Pressable
-                    key={e}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: estagio === e }}
-                    onPress={() => setEstagio(e)}
-                    className={cn(
-                      'rounded-full border px-3 py-1.5 active:opacity-70',
-                      estagio === e ? 'border-primary bg-primary/10' : 'border-border',
-                    )}
-                  >
-                    <Text className={cn('text-xs', estagio === e && 'text-primary')}>
-                      {ESTAGIO_PROSPECCAO_LABELS[e]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-
             {(data?.length ?? 0) === 0 && estagio === undefined ? (
               <View className="flex-row items-start gap-2 rounded-lg border border-border bg-muted/50 p-3">
                 <AlertTriangle size={14} color={colors.mutedForeground} />
@@ -202,6 +235,9 @@ export default function SacadosPorNfScreen() {
         }
       />
 
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
+
       <DescartarSacadoSheet
         sacado={descartando}
         config={config}
@@ -209,6 +245,6 @@ export default function SacadosPorNfScreen() {
       />
       <SolicitarAnaliseSheet sacado={analisando} onFechar={() => setAnalisando(null)} />
       <PedirPonteSheet alvo={pedindoPonte} config={config} onFechar={() => setPedindoPonte(null)} />
-    </>
+    </View>
   )
 }

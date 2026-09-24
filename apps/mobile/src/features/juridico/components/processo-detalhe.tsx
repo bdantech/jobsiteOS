@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker'
 import * as React from 'react'
 import { Alert, Pressable, ScrollView, View } from 'react-native'
 
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,6 +79,7 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
 
 export function ProcessoDetalheMobile({ numeroCnj }: { numeroCnj: string }) {
   const qc = useQueryClient()
+  const recuo = useRecuoDoCabecalho()
   const [aba, setAba] = React.useState<'resumo' | 'movimentacoes' | 'parecer' | 'custos'>('resumo')
 
   const processo = useQuery({
@@ -108,23 +110,32 @@ export function ProcessoDetalheMobile({ numeroCnj }: { numeroCnj: string }) {
 
   if (processo.isPending) {
     return (
-      <View className="gap-3 p-4">
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-      </View>
+      <AbaixoDoCabecalho>
+        <View className="gap-3 p-4">
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </View>
+      </AbaixoDoCabecalho>
     )
   }
 
   const p = processo.data
   if (!p) {
-    return <EmptyState title="Processo não encontrado" description="Ele pode ter saído da carteira." />
+    return (
+      <AbaixoDoCabecalho>
+        <EmptyState title="Processo não encontrado" description="Ele pode ter saído da carteira." />
+      </AbaixoDoCabecalho>
+    )
   }
 
   const cronograma = montarCronograma(fases.data ?? [], benchmark)
   const saldo = Number(p.saldo_liquido ?? 0)
 
   return (
-    <ScrollView contentContainerClassName="gap-4 p-4 pb-28">
+    <ScrollView
+      contentContainerClassName="gap-4 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
+    >
       {/* ── Capa ── */}
       <Card>
         <CardHeader>

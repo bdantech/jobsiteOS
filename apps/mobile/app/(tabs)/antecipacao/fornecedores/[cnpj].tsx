@@ -12,6 +12,7 @@ import { Building2, Star } from 'lucide-react-native'
 import { ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { CadastroRfbCard } from '@/features/cadastro/cadastro-rfb-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,27 +47,38 @@ export default function FornecedorScreen() {
   const cnpj = normalizeCnpj(cnpjParam ?? '')
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch } = useDetalheFornecedorQuery(cnpj || undefined)
   const { data: minimoOperavel = 7 } = useMinimoOperavelQuery()
 
-  if (isPending) return <DetalheSkeleton />
+  if (isPending) {
+    return (
+      <AbaixoDoCabecalho>
+        <DetalheSkeleton />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   if (isError) {
     return (
-      <ErrorState
-        description="Não foi possível carregar este fornecedor. Verifique sua conexão e tente novamente."
-        onRetry={() => void refetch()}
-      />
+      <AbaixoDoCabecalho>
+        <ErrorState
+          description="Não foi possível carregar este fornecedor. Verifique sua conexão e tente novamente."
+          onRetry={() => void refetch()}
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
   if (data.notas.length === 0) {
     return (
-      <EmptyState
-        title="Nenhuma nota para este CNPJ"
-        description="Ele pode não ter notas sincronizadas, ou você pode não ter acesso a elas."
-      />
+      <AbaixoDoCabecalho>
+        <EmptyState
+          title="Nenhuma nota para este CNPJ"
+          description="Ele pode não ter notas sincronizadas, ou você pode não ter acesso a elas."
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -83,7 +95,11 @@ export default function FornecedorScreen() {
   const pontoFocal = data.contatos.find((c) => c.ponto_focal)
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-28">
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="gap-4 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
+    >
       {/* ─── Identidade + números ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>

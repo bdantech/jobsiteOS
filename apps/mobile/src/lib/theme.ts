@@ -154,34 +154,3 @@ export const NAV_THEME: Record<'light' | 'dark', Theme> = {
     },
   },
 }
-
-/**
- * As opções de header compartilhadas por TODO stack do app.
- *
- * Elas moram aqui, e não dentro do <ModuleStack>, porque não são só dos módulos:
- * o stack RAIZ também empilha telas com header (Configurações e o report aberto
- * por deep link). Enquanto isto vivia só no ModuleStack, essas duas telas caíam
- * no tema padrão do React Navigation em vez dos tokens da casa — o header saía
- * com outro fundo e outro tom, e era visível ao lado de qualquer tela de módulo.
- */
-export function opcoesDeHeader(colors: ColorTokens) {
-  return {
-    /*
-     * O header de STACK também é navy — é a mesma superfície do <ScreenHeader>,
-     * só que desenhada pelo react-navigation.
-     *
-     * Se um ficasse branco e o outro navy, empurrar uma tela (funil → ficha do
-     * fornecedor) trocaria a cor do topo no meio da animação, e a pessoa leria
-     * isso como "mudei de app", não "entrei num detalhe".
-     *
-     * `Poppins_600SemiBold` no título, e não Manrope: aqui o texto é o NOME DO
-     * ITEM aberto ("Empresa no universo"), não o nome da tela. Manrope é a voz
-     * do produto; o item é conteúdo.
-     */
-    headerStyle: { backgroundColor: colors.brand },
-    headerTintColor: '#ffffff',
-    headerTitleStyle: { color: '#ffffff', fontFamily: 'Poppins_600SemiBold', fontSize: 17 },
-    headerShadowVisible: false,
-    contentStyle: { backgroundColor: colors.background },
-  } as const
-}

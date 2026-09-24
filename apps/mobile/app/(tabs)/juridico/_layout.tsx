@@ -15,7 +15,8 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function JuridicoLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Processos' }} />
+      {/* A carteira filtra por situação e desenha o cabeçalho retrátil. */}
+      <Stack.Screen name="index" options={{ title: 'Processos', headerShown: false }} />
       <Stack.Screen name="prazos" options={{ title: 'Prazos' }} />
       <Stack.Screen name="[cnj]" options={{ title: 'Processo' }} />
     </ModuleStack>

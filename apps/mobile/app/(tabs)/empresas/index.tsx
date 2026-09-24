@@ -1,10 +1,21 @@
-import type { Estagio } from '@jobsiteos/core'
+import { ESTAGIO_LABELS, type Estagio } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
 import { Search, ShieldCheck } from 'lucide-react-native'
-import { useCallback, useState } from 'react'
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  RefreshControl,
+  View,
+  type TextInput,
+} from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
@@ -20,6 +31,16 @@ import {
 export default function EmpresasScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const buscaRef = useRef<TextInput>(null)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<EmpresaListItem>()
 
   const [termo, setTermo] = useState('')
   const [estagio, setEstagio] = useState<Estagio | undefined>(undefined)
@@ -52,16 +73,23 @@ export default function EmpresasScreen() {
 
   const buscando = termoDebounced.trim().length > 0 || estagio !== undefined
 
-  // The search box and chips stay mounted OUTSIDE the list: inside
-  // ListHeaderComponent the TextInput remounts on re-render and loses focus,
-  // which makes typing drop characters.
-  const header = (
-    <View className="gap-3 pb-3 pt-3">
-      <View className="justify-center px-4">
-        <View className="absolute left-7 z-10">
-          <Search size={18} color={colors.mutedForeground} />
-        </View>
+  // A busca e o estágio moram no cabeçalho, FORA da lista: dentro de
+  // ListHeaderComponent o TextInput remonta a cada render e perde o foco, o que
+  // faz a digitação comer caracteres.
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Empresas"
+      resumo={`${estagio ? ESTAGIO_LABELS[estagio] : 'Todos os estágios'}${
+        termoDebounced.trim() ? ` · “${termoDebounced.trim()}”` : ''
+      }`}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      aoReabrir={() => setTimeout(() => buscaRef.current?.focus(), 240)}
+      busca={
         <Input
+          ref={buscaRef}
           value={termo}
           onChangeText={setTermo}
           placeholder="Buscar por razão social, fantasia ou CNPJ"
@@ -70,18 +98,24 @@ export default function EmpresasScreen() {
           returnKeyType="search"
           clearButtonMode="while-editing"
           accessibilityLabel="Buscar empresas"
-          className="pl-10"
+          icone={<Search size={20} color={colors.mutedForeground} />}
+          containerClassName="gap-0"
+          className="border-0"
         />
-      </View>
+      }
+      chips={<EstagioFiltro value={estagio} onChange={setEstagio} />}
+    />
+  )
 
-      <EstagioFiltro value={estagio} onChange={setEstagio} />
-
-      {/* Certificados (04b §5): consulta do mesmo módulo, empilha sobre a lista. */}
+  // Certificados (04b §5): consulta do mesmo módulo, empilha sobre a lista. É um
+  // atalho, não um recorte, e por isso rola com os cards.
+  const painelDaLista = (
+    <View className="pb-3 pt-3">
       <Pressable
         onPress={() => router.push('/empresas/certificados')}
         accessibilityRole="button"
         accessibilityLabel="Abrir certificados digitais"
-        className="mx-4 flex-row items-center gap-2 rounded-md border border-border px-3 py-2 active:opacity-70"
+        className="flex-row items-center gap-2 rounded-md border border-border px-3 py-2 active:opacity-70"
       >
         <ShieldCheck size={16} color={colors.mutedForeground} />
         <Text className="text-sm">Certificados digitais</Text>
@@ -89,22 +123,32 @@ export default function EmpresasScreen() {
     </View>
   )
 
+  // O cabeçalho é absoluto: quem reserva o espaço dele é o `paddingTop` da lista.
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
   return (
     <View className="flex-1 bg-background">
-      {header}
-
       {isPending ? (
-        <EmpresasListSkeleton />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <EmpresasListSkeleton />
+        </View>
       ) : isError ? (
-        <ErrorState
-          description="Não foi possível carregar as empresas. Verifique sua conexão e tente novamente."
-          onRetry={() => void refetch()}
-        />
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState
+            description="Não foi possível carregar as empresas. Verifique sua conexão e tente novamente."
+            onRetry={() => void refetch()}
+          />
+        </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
+          ref={listaRef}
           data={empresas}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          ListHeaderComponent={painelDaLista}
+          onScroll={aoRolar}
+          scrollEventThrottle={16}
+          contentContainerStyle={recuoDoCabecalho}
           contentContainerClassName="gap-3 px-4 pb-28"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -147,6 +191,9 @@ export default function EmpresasScreen() {
           }
         />
       )}
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
     </View>
   )
 }

@@ -1,10 +1,16 @@
-import { Search } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Animated, Pressable, View, type FlatList } from 'react-native'
+import { useNavigation } from 'expo-router'
+import { HeaderBackContext } from 'expo-router/react-navigation'
+import { ListFilter, Search } from 'lucide-react-native'
+import { use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Animated, type FlatList } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { HeaderActions } from '@/components/shell/header-actions'
-import { Text } from '@/components/ui/text'
+import {
+  BotaoDoCabecalho,
+  FundoDeVidro,
+  LinhaDoTitulo,
+} from '@/components/shell/cabecalho-de-vidro'
+import { BannerBeta } from '@/features/reports'
 
 /**
  * O CABEÇALHO NAVY QUE ENCOLHE — busca e filtros moram DENTRO dele.
@@ -44,6 +50,11 @@ import { Text } from '@/components/ui/text'
  * precisa de `paddingTop` igual à altura dele. Por isso a altura é medida e
  * devolvida para a tela, em vez de o cabeçalho se resolver sozinho.
  *
+ * ── O FUNDO É VIDRO, E A GEOMETRIA É A DO FIXO ──────────────────────────────
+ * Blur com tinta navy, e a linha do título é a mesma <LinhaDoTitulo> do
+ * <CabecalhoFixo> (ver `cabecalho-de-vidro.tsx`): recolhido, este cabeçalho é
+ * pixel a pixel o das telas sem recorte.
+ *
  * ── O BOOLEANO CUSTA UM RENDER POR TRAVESSIA ────────────────────────────────
  * O resumo e a lupa aparecem/somem, e isso é troca de árvore, não de estilo —
  * precisa de estado. Um listener no valor animado o atualiza só quando o limiar
@@ -55,8 +66,8 @@ export interface CabecalhoRetratilProps {
   /** A linha que assume o lugar do painel quando ele recolhe. */
   resumo?: string
   /** A busca. Recebe o `ref` do campo para o botão de lupa poder focá-lo. */
-  busca: ReactNode
-  /** Os chips de estágio, logo abaixo da busca. */
+  busca?: ReactNode
+  /** Os filtros, logo abaixo da busca — uma ou mais faixas. */
   chips?: ReactNode
   /** Chamado quando a lupa reabre o cabeçalho — a tela foca o campo. */
   aoReabrir?: () => void
@@ -128,6 +139,16 @@ export function CabecalhoRetratil({
   const [curso, setCurso] = useState(0)
 
   /*
+   * A seta de voltar aparece sozinha quando a tela foi EMPILHADA (explorador
+   * sobre o mapa, sacados por NF sobre o funil). O stack entrega isso pelo
+   * `HeaderBackContext` mesmo com `headerShown: false`; a raiz de uma aba não
+   * o recebe, e fica sem seta — que é o certo, porque ali não há para onde
+   * voltar dentro do módulo.
+   */
+  const temVolta = use(HeaderBackContext) !== undefined
+  const navigation = useNavigation()
+
+  /*
    * O curso é a altura do PAINEL: o cabeçalho termina de encolher exatamente
    * quando a lista andou o tanto que o painel ocupava. Um curso fixo faria o
    * encolhimento correr mais rápido ou mais devagar que o dedo.
@@ -158,50 +179,39 @@ export function CabecalhoRetratil({
   return (
     <Animated.View
       onLayout={(e) => onAltura(e.nativeEvent.layout.height)}
-      className="absolute left-0 right-0 top-0 rounded-b-2xl bg-brand px-5 pb-3"
+      className="absolute left-0 right-0 top-0 overflow-hidden rounded-b-2xl px-5 pb-3"
       style={{ paddingTop: top + 8, transform: [{ translateY: subir }] }}
     >
-      <Animated.View
-        className="min-h-[44px] flex-row items-center justify-between gap-3"
-        style={{ transform: [{ translateY: descer }] }}
-      >
-        <View className="min-w-0 flex-1">
-          {/*
-            `leading-[34px]` num corpo de 26: a Manrope é alta, e com a
-            entrelinha colada ao corpo o RN corta o topo das ascendentes — o
-            "F" e o "l" de "Funil" apareciam decepados.
-          */}
-          <Text
-            numberOfLines={1}
-            className="font-display text-[26px] leading-[34px] tracking-tight text-white"
-          >
-            {titulo}
-          </Text>
-          {recolhido && resumo ? (
-            <Text numberOfLines={1} className="text-xs leading-4 text-[#CBD5E1]">
-              {resumo}
-            </Text>
-          ) : null}
-        </View>
+      <FundoDeVidro />
 
-        <View className="flex-row items-center gap-2">
-          {/* A lupa só existe recolhido: expandido, o campo está à vista e um
-              botão que rola até ele seria um atalho para o que já se vê. */}
-          {recolhido ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Buscar e filtrar"
-              onPress={() => {
-                onExpandir()
-                aoReabrir?.()
-              }}
-              className="size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70"
-            >
-              <Search size={20} color="#FFFFFF" />
-            </Pressable>
-          ) : null}
-          <HeaderActions />
-        </View>
+      <Animated.View style={{ transform: [{ translateY: descer }] }}>
+        <LinhaDoTitulo
+          titulo={titulo}
+          resumo={recolhido ? resumo : undefined}
+          voltar={temVolta ? () => navigation.goBack() : undefined}
+          extra={
+            /* O botão só existe recolhido: expandido, o painel está à vista e um
+               botão que rola até ele seria um atalho para o que já se vê. Lupa
+               quando há busca; sem ela, o ícone de filtro — uma lupa que abre só
+               chips prometeria um campo que não existe. */
+            recolhido ? (
+              <BotaoDoCabecalho
+                accessibilityLabel={busca ? 'Buscar e filtrar' : 'Filtrar'}
+                onPress={() => {
+                  onExpandir()
+                  aoReabrir?.()
+                }}
+              >
+                {busca ? (
+                  <Search size={20} color="#FFFFFF" />
+                ) : (
+                  <ListFilter size={20} color="#FFFFFF" />
+                )}
+              </BotaoDoCabecalho>
+            ) : null
+          }
+        />
+        <BannerBeta />
       </Animated.View>
 
       {/*

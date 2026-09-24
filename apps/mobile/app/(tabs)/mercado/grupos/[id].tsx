@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react'
 import { FlatList, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { formatInteiro, registroRota, useGrupoQuery, type MembroGrupo } from '@/features/mercado'
@@ -28,6 +29,7 @@ export default function GrupoDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch, isRefetching } = useGrupoQuery(id)
 
@@ -63,7 +65,7 @@ export default function GrupoDetalheScreen() {
 
   if (isPending) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Grupo' }} />
         <GrupoSkeleton />
       </View>
@@ -72,7 +74,7 @@ export default function GrupoDetalheScreen() {
 
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Grupo' }} />
         <ErrorState
           description="Não foi possível carregar este grupo econômico. Verifique sua conexão e tente novamente."
@@ -85,7 +87,7 @@ export default function GrupoDetalheScreen() {
   // Zero rows: the group doesn't exist, or RLS hid it. Same answer either way.
   if (!data) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Grupo' }} />
         <EmptyState
           title="Grupo não encontrado"
@@ -104,6 +106,7 @@ export default function GrupoDetalheScreen() {
         keyExtractor={(membro, index) => membro.cnpj ?? String(index)}
         renderItem={({ item }) => <MembroCard membro={item} onPress={abrirMembro} />}
         contentContainerClassName="gap-3 p-4 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

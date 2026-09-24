@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,27 +38,38 @@ export default function SacadoScreen() {
   const cnpj = normalizeCnpj(cnpjParam ?? '')
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const [nota, setNota] = useState<Oportunidade | null>(null)
 
   const { data, isPending, isError, refetch } = useDetalheSacadoQuery(cnpj || undefined)
 
-  if (isPending) return <DetalheSkeleton />
+  if (isPending) {
+    return (
+      <AbaixoDoCabecalho>
+        <DetalheSkeleton />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   if (isError) {
     return (
-      <ErrorState
-        description="Não foi possível carregar este sacado. Verifique sua conexão e tente novamente."
-        onRetry={() => void refetch()}
-      />
+      <AbaixoDoCabecalho>
+        <ErrorState
+          description="Não foi possível carregar este sacado. Verifique sua conexão e tente novamente."
+          onRetry={() => void refetch()}
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
   if (data.notas.length === 0) {
     return (
-      <EmptyState
-        title="Nenhuma nota para este CNPJ"
-        description="Ele pode não ter notas sincronizadas, ou você pode não ter acesso a elas."
-      />
+      <AbaixoDoCabecalho>
+        <EmptyState
+          title="Nenhuma nota para este CNPJ"
+          description="Ele pode não ter notas sincronizadas, ou você pode não ter acesso a elas."
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -74,7 +86,11 @@ export default function SacadoScreen() {
   const disponivel = Number(data.sacado?.available_limit ?? 0)
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-4 pb-28">
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="gap-4 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
+    >
       <Card>
         <CardHeader>
           <CardTitle>{nome}</CardTitle>

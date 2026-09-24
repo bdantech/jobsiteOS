@@ -3,6 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router'
 import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import {
   PromoverAcao,
@@ -27,12 +28,13 @@ import {
 export default function UniversoDetalheScreen() {
   const { cnpj } = useLocalSearchParams<{ cnpj: string }>()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch, isRefetching } = useUniversoQuery(cnpj)
 
   if (isPending) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Universo' }} />
         <UniversoDetalheSkeleton />
       </View>
@@ -41,7 +43,7 @@ export default function UniversoDetalheScreen() {
 
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Universo' }} />
         <ErrorState
           description="Não foi possível carregar este registro do universo. Verifique sua conexão e tente novamente."
@@ -55,7 +57,7 @@ export default function UniversoDetalheScreen() {
   // RLS hid it. Same answer to the user either way.
   if (!data) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Universo' }} />
         <EmptyState
           title="CNPJ não encontrado no universo"
@@ -76,6 +78,7 @@ export default function UniversoDetalheScreen() {
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-4 p-4 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

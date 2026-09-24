@@ -10,9 +10,13 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import * as React from 'react'
-import { FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { Animated, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Badge } from '@/components/ui/badge'
 import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -55,6 +59,15 @@ export function ProcessosLista() {
   const router = useRouter()
   const { colors } = useTheme()
   const [filtro, setFiltro] = React.useState<SituacaoInterna | null>(null)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<LinhaCarteira>()
 
   const carteira = useQuery({ queryKey: juridicoKeys.carteira(), queryFn: buscarCarteira })
   const config = useQuery({ queryKey: juridicoKeys.config(), queryFn: buscarConfig })
@@ -64,33 +77,64 @@ export function ProcessosLista() {
 
   const linhas = (carteira.data ?? []).filter((l) => !filtro || l.situacao_interna === filtro)
 
+  // A situação é o recorte da carteira e mora no cabeçalho retrátil.
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Processos"
+      resumo={`${filtro ? SITUACAO_INTERNA_LABELS[filtro] : 'Todos'} · ${linhas.length} processo${
+        linhas.length === 1 ? '' : 's'
+      }`}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      chips={
+        <FiltroSegmentado
+          opcoes={OPCOES_SITUACAO}
+          valor={filtro ?? TODOS}
+          onChange={(valor) => setFiltro(valor === TODOS ? null : (valor as SituacaoInterna))}
+          sobreNavy
+          sangra
+        />
+      }
+    />
+  )
+
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
   if (carteira.isPending) {
     return (
-      <View className="gap-3 p-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-xl" />
-        ))}
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="gap-3 p-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </View>
+        {cabecalho}
       </View>
     )
   }
 
   if (carteira.isError) {
-    return <ErrorState title="Não foi possível carregar os processos" onRetry={() => void carteira.refetch()} />
+    return (
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState title="Não foi possível carregar os processos" onRetry={() => void carteira.refetch()} />
+        </View>
+        {cabecalho}
+      </View>
+    )
   }
 
   return (
     <View className="flex-1">
-      <View className="py-3">
-        <FiltroSegmentado
-          opcoes={OPCOES_SITUACAO}
-          valor={filtro ?? TODOS}
-          onChange={(valor) => setFiltro(valor === TODOS ? null : (valor as SituacaoInterna))}
-        />
-      </View>
-
-      <FlatList
+      <Animated.FlatList
+        ref={listaRef}
         data={linhas}
         keyExtractor={(item) => item.numero_cnj ?? String(item.data_distribuicao)}
+        onScroll={aoRolar}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: alturaCabecalho + 12 }}
         contentContainerClassName="gap-3 px-4 pb-28"
         refreshControl={
           <RefreshControl
@@ -162,6 +206,9 @@ export function ProcessosLista() {
           )
         }}
       />
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
     </View>
   )
 }

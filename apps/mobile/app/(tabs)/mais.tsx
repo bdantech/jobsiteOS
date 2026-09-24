@@ -3,14 +3,17 @@ import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { ChevronRight, LogOut, Settings } from 'lucide-react-native'
 import { Pressable, ScrollView, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  BotaoDoCabecalho,
+  CabecalhoFixo,
+  useRecuoDoCabecalho,
+} from '@/components/shell/cabecalho-de-vidro'
 import { ModuleGrid } from '@/components/shell/module-grid'
 import { Avatar } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
-import { BannerBeta } from '@/features/reports'
 import { useSession } from '@/lib/auth'
 
 /**
@@ -23,7 +26,7 @@ export default function MaisScreen() {
   const { usuario, loading, signOut, grantedModuleIds } = useSession()
   const router = useRouter()
   const { colors } = useTheme()
-  const { top: topo } = useSafeAreaInsets()
+  const recuo = useRecuoDoCabecalho()
   // A contagem é dos módulos que ABREM no app, não de todos os liberados: o
   // grid mostra os webOnly acinzentados, e dizer "9 no app" sobre uma grade que
   // inclui um card riscado seria contar o que não se pode tocar.
@@ -32,34 +35,21 @@ export default function MaisScreen() {
   return (
     <View className="flex-1 bg-card">
       <StatusBar style="light" />
-      {/* Esta tela não passa por <ModuleStack>, que é quem injeta a tarja nas
-          demais. Sem esta linha, "Mais" seria a única tela sem o aviso de beta. */}
-      <BannerBeta />
 
       <ScrollView contentContainerClassName="pb-28" showsVerticalScrollIndicator={false}>
         {/*
-          O CABEÇALHO NAVY com a conta dentro dele.
-          
-          A conta subiu para cá porque ela é o assunto desta tela, não um item
-          da lista: "Mais" é onde se troca de módulo E onde se cuida de quem
-          está logado. Deixá-la como primeira linha de um scroll branco fazia
-          as duas coisas parecerem do mesmo peso.
-        */}
-        <View className="gap-6 bg-brand px-5 pb-12" style={{ paddingTop: topo + 12 }}>
-          <View className="flex-row items-center justify-between gap-3">
-            <Text className="font-display text-[30px] leading-[40px] tracking-tight text-white">
-              Mais
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Configurações"
-              onPress={() => router.push('/configuracoes')}
-              className="size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70"
-            >
-              <Settings size={20} color="#FFFFFF" />
-            </Pressable>
-          </View>
+          O BLOCO NAVY com a conta dentro dele.
 
+          A conta mora aqui porque ela é o assunto desta tela, não um item da
+          lista: "Mais" é onde se troca de módulo E onde se cuida de quem está
+          logado. Deixá-la como primeira linha de um scroll branco fazia as duas
+          coisas parecerem do mesmo peso.
+
+          O recuo do cabeçalho entra DENTRO do navy, e não no container: parado,
+          o vidro fica sobre navy e emenda com o bloco; rolando, o bloco passa
+          por baixo dele como qualquer lista.
+        */}
+        <View className="bg-brand px-5 pb-12" style={{ paddingTop: recuo + 12 }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir configurações da conta"
@@ -113,6 +103,25 @@ export default function MaisScreen() {
           <Text className="text-center text-xs text-muted-foreground">JobsiteOS · v2.4.0</Text>
         </View>
       </ScrollView>
+
+      {/*
+        O cabeçalho comum, recolhido: esta tela não tem busca nem filtro. Ela
+        não passa por um <ModuleStack>, então o monta à mão — por cima do
+        scroll, e por isso depois dele.
+      */}
+      <View className="absolute left-0 right-0 top-0">
+        <CabecalhoFixo
+          titulo="Mais"
+          extra={
+            <BotaoDoCabecalho
+              accessibilityLabel="Configurações"
+              onPress={() => router.push('/configuracoes')}
+            >
+              <Settings size={20} color="#FFFFFF" />
+            </BotaoDoCabecalho>
+          }
+        />
+      </View>
     </View>
   )
 }

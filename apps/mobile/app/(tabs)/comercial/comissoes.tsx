@@ -18,6 +18,7 @@ import {
 } from '@jobsiteos/core'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -247,6 +248,7 @@ type Aba = 'mes' | 'historico' | 'extrato'
 
 export default function ComissoesScreen() {
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const [aba, setAba] = React.useState<Aba>('mes')
   const [competencia, setCompetencia] = React.useState(competenciaCorrente())
   const { data, isPending, isError, refetch, isRefetching } = usePainelComissao()
@@ -261,9 +263,19 @@ export default function ComissoesScreen() {
       </View>
     )
   }
-  if (isError) return <ErrorState onRetry={() => void refetch()} />
+  if (isError) {
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState onRetry={() => void refetch()} />
+      </AbaixoDoCabecalho>
+    )
+  }
   if (!data.tem_acesso) {
-    return <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
+    return (
+      <AbaixoDoCabecalho>
+        <EmptyState title="Sem acesso" description="O módulo Comercial não está liberado para o seu perfil." />
+      </AbaixoDoCabecalho>
+    )
   }
 
   async function marcar(comp: string, status: 'aprovada' | 'paga') {
@@ -282,6 +294,7 @@ export default function ComissoesScreen() {
     <ScrollView
       className="flex-1"
       contentContainerClassName="gap-3 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
     >
       <FilaAceite />

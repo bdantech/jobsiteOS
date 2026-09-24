@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { EmptyState, ErrorState } from '@/components/ui/states'
@@ -29,6 +30,7 @@ import {
 export default function MapaDoMercadoScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const { data: resumo, isPending, isError, refetch, isRefetching } = useResumoPiramideQuery()
 
@@ -39,11 +41,17 @@ export default function MapaDoMercadoScreen() {
     [router],
   )
 
-  if (isPending) return <MapaSkeleton />
+  if (isPending) {
+    return (
+      <AbaixoDoCabecalho>
+        <MapaSkeleton />
+      </AbaixoDoCabecalho>
+    )
+  }
 
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <ErrorState
           description="Não foi possível carregar o mapa do mercado. Verifique sua conexão e tente novamente."
           onRetry={() => void refetch()}
@@ -58,6 +66,7 @@ export default function MapaDoMercadoScreen() {
     <View className="flex-1 bg-background">
       <ScrollView
         contentContainerClassName="gap-6 p-4 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}

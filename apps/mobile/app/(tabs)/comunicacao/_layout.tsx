@@ -17,7 +17,8 @@ import { ModuleStack } from '@/components/shell/module-stack'
 export default function ComunicacaoLayout() {
   return (
     <ModuleStack>
-      <Stack.Screen name="index" options={{ title: 'Inbox' }} />
+      {/* O inbox filtra por aba e desenha o cabeçalho retrátil. */}
+      <Stack.Screen name="index" options={{ title: 'Inbox', headerShown: false }} />
       <Stack.Screen name="nao-vinculadas" options={{ title: 'Aguardando identificação' }} />
       <Stack.Screen name="[id]" options={{ title: 'Conversa' }} />
     </ModuleStack>

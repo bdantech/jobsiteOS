@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ActivityIndicator, Alert, FlatList, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -34,6 +35,7 @@ import {
  */
 export default function CampanhasScreen() {
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
   const qc = useQueryClient()
   const [agindo, setAgindo] = useState<string | null>(null)
 
@@ -67,13 +69,21 @@ export default function CampanhasScreen() {
       </View>
     )
   }
-  if (isError) return <ErrorState onRetry={() => void refetch()} />
+  if (isError) {
+    return (
+      <AbaixoDoCabecalho>
+        <ErrorState onRetry={() => void refetch()} />
+      </AbaixoDoCabecalho>
+    )
+  }
   if ((data ?? []).length === 0) {
     return (
-      <EmptyState
-        title="Nenhuma campanha"
-        description="Campanhas são criadas no computador — aqui você acompanha e controla."
-      />
+      <AbaixoDoCabecalho>
+        <EmptyState
+          title="Nenhuma campanha"
+          description="Campanhas são criadas no computador — aqui você acompanha e controla."
+        />
+      </AbaixoDoCabecalho>
     )
   }
 
@@ -82,6 +92,7 @@ export default function CampanhasScreen() {
       data={data}
       keyExtractor={(c) => c.id as string}
       contentContainerClassName="gap-2 p-4 pb-28"
+      contentContainerStyle={{ paddingTop: recuo + 16 }}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
       renderItem={({ item }) => {
         const enviadas = item.enviadas ?? 0

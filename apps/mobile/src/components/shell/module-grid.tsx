@@ -1,6 +1,7 @@
 import { grantedModules, type AppModule } from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { useState } from 'react'
+import type { LucideIcon } from 'lucide-react-native'
+import { useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
@@ -16,22 +17,33 @@ import { useSession } from '@/lib/auth'
 import { moduleIcon } from '@/lib/icons'
 import { canOpenOnMobile } from '@/lib/linking'
 
-function ModuleCard({
-  module,
-  disabled,
+/**
+ * O cartão da grade — o de "Mais" e o do menu do Comercial.
+ *
+ * Um só componente para as duas grades: são a mesma pergunta ("para onde eu vou
+ * daqui?"), e dois cartões parecidos divergiriam no primeiro ajuste de raio ou de
+ * espaçamento.
+ */
+export function CartaoDeMenu({
+  icone: Icon,
+  titulo,
+  rodape,
+  disabled = false,
   onPress,
 }: {
-  module: AppModule
-  disabled: boolean
+  icone: LucideIcon
+  titulo: string
+  /** A linha de baixo: o badge "Somente na web", ou uma descrição curta. */
+  rodape: ReactNode
+  disabled?: boolean
   onPress: () => void
 }) {
   const { colors } = useTheme()
-  const Icon = moduleIcon(module.icon)
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={module.name}
+      accessibilityLabel={titulo}
       accessibilityState={{ disabled }}
       onPress={onPress}
       className="min-w-[45%] flex-1 active:opacity-80"
@@ -78,38 +90,60 @@ function ModuleCard({
                 : 'text-[15px] font-semibold text-foreground'
             }
           >
-            {module.name}
+            {titulo}
           </Text>
 
-          {/*
-            Todos os cards têm a altura do card com badge, e a linha do badge é
-            SEMPRE reservada — invisível quando o módulo abre no celular.
-
-            Um `min-h` em pixels resolveria a mesma coisa em uma linha, mas
-            quebraria no primeiro usuário que aumenta o tamanho da fonte do
-            sistema: a caixa do badge cresce com a fonte e o número fixo não. O
-            espaçador é o próprio badge, então cresce junto, por construção.
-
-            Fora da árvore de acessibilidade: um leitor de tela anunciando
-            "Somente na web" em Empresas seria uma informação falsa.
-          */}
-          {disabled ? (
-            <Badge variant="secondary">
-              <Text>Somente na web</Text>
-            </Badge>
-          ) : (
-            <Badge
-              variant="secondary"
-              className="opacity-0"
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            >
-              <Text>Somente na web</Text>
-            </Badge>
-          )}
+          {rodape}
         </View>
       </Card>
     </Pressable>
+  )
+}
+
+function ModuleCard({
+  module,
+  disabled,
+  onPress,
+}: {
+  module: AppModule
+  disabled: boolean
+  onPress: () => void
+}) {
+  return (
+    <CartaoDeMenu
+      icone={moduleIcon(module.icon)}
+      titulo={module.name}
+      disabled={disabled}
+      onPress={onPress}
+      rodape={
+        /*
+          Todos os cards têm a altura do card com badge, e a linha do badge é
+          SEMPRE reservada — invisível quando o módulo abre no celular.
+
+          Um `min-h` em pixels resolveria a mesma coisa em uma linha, mas
+          quebraria no primeiro usuário que aumenta o tamanho da fonte do
+          sistema: a caixa do badge cresce com a fonte e o número fixo não. O
+          espaçador é o próprio badge, então cresce junto, por construção.
+
+          Fora da árvore de acessibilidade: um leitor de tela anunciando
+          "Somente na web" em Empresas seria uma informação falsa.
+        */
+        disabled ? (
+          <Badge variant="secondary">
+            <Text>Somente na web</Text>
+          </Badge>
+        ) : (
+          <Badge
+            variant="secondary"
+            className="opacity-0"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Text>Somente na web</Text>
+          </Badge>
+        )
+      }
+    />
   )
 }
 

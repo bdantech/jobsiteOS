@@ -15,11 +15,15 @@ import {
   ArrowLeft, Building2, Mail, MessageSquare, Phone, Star, ThumbsDown,
 } from 'lucide-react-native'
 import {
-  ActivityIndicator, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, View,
+  ActivityIndicator, Animated, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
@@ -75,87 +79,124 @@ export default function FornecedoresScreen() {
   const { colors } = useTheme()
   const [estagio, setEstagio] = React.useState<EstagioFornecedor | 'todos'>('todos')
   const [aberto, setAberto] = React.useState<FornecedorMobile | null>(null)
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<FornecedorMobile>()
 
   const painel = usePainelFornecedores()
   const funil = useFunilFornecedores(estagio)
 
-  if (funil.isPending) {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <ActivityIndicator color={colors.mutedForeground} />
-      </View>
-    )
-  }
-  if (funil.isError) return <ErrorState onRetry={() => void funil.refetch()} />
-
   const lista = funil.data ?? []
 
-  return (
-    <>
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-3 p-4 pb-28"
-        refreshControl={
-          <RefreshControl refreshing={funil.isRefetching} onRefresh={() => void funil.refetch()} />
-        }
-      >
-        {painel.data?.tem_acesso ? (
-          <Card className="gap-1 p-4">
-            <Text variant="muted" className="text-xs uppercase tracking-wide">
-              Potencial na carteira
-            </Text>
-            <Text className="text-2xl font-semibold">{brl(painel.data.potencial_total)}</Text>
-            <Text variant="muted" className="text-[11px]">
-              Faturamento mensal estimado dos fornecedores ainda não cadastrados. Gasto em
-              descoberta este mês: {brl(painel.data.gasto_mes)} de {brl(painel.data.teto_mensal)}.
-            </Text>
-          </Card>
-        ) : null}
-
-        {/* Filtro por estágio, no padrão das demais telas: a escolha é exclusiva
-            (um estágio ou todos), então é controle segmentado. `sangra` porque
-            esta faixa vive dentro do `p-4` da lista. */}
+  /*
+    O estágio é o recorte e mora no cabeçalho retrátil. A escolha é exclusiva
+    (um estágio ou todos), então é controle segmentado.
+  */
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Fornecedores"
+      resumo={`${OPCOES_ESTAGIO.find((o) => o.valor === estagio)?.label ?? 'Todos'}${
+        funil.isPending ? '' : ` · ${lista.length} fornecedor${lista.length === 1 ? '' : 'es'}`
+      }`}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      chips={
         <FiltroSegmentado
           opcoes={OPCOES_ESTAGIO}
           valor={estagio}
           onChange={(v) => setEstagio(v as EstagioFornecedor | 'todos')}
+          sobreNavy
           sangra
         />
+      }
+    />
+  )
 
-        {lista.length === 0 ? (
-          <EmptyState
-            title="Nada por aqui"
-            description="Fornecedores que faturam contra os sacados da sua carteira e passam do corte de volume entram sozinhos, no sync das notas."
-          />
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
+  return (
+    <>
+      <View className="flex-1 bg-background">
+        {funil.isPending ? (
+          <View style={recuoDoCabecalho} className="flex-1 items-center justify-center">
+            <ActivityIndicator color={colors.mutedForeground} />
+          </View>
+        ) : funil.isError ? (
+          <View style={recuoDoCabecalho} className="flex-1">
+            <ErrorState onRetry={() => void funil.refetch()} />
+          </View>
         ) : (
-          lista.map((f) => (
-            <Pressable key={f.fornecedor_cnpj} onPress={() => setAberto(f)}>
-              <Card className="gap-1 p-4">
-                <Text className="font-medium">{f.fornecedor_nome}</Text>
-                <Text variant="muted" className="text-xs">
-                  {[f.municipio, f.uf].filter(Boolean).join('/') || '—'} · {f.qtd_nfs_90d ?? 0} NFs ·{' '}
-                  {brl(f.potencial_mensal)}/mês de potencial
-                </Text>
-                <View className="flex-row items-baseline justify-between pt-1">
-                  {/* O VOLUME lidera: é a chave da ordenação, e é ele que explica por
-                      que este card está acima daquele. */}
-                  <Text className="text-lg font-semibold">
-                    {brl(f.volume_90d)}
-                    <Text variant="muted" className="text-xs"> em 90d</Text>
+          <Animated.FlatList
+            ref={listaRef}
+            data={lista}
+            keyExtractor={(f) => f.fornecedor_cnpj}
+            onScroll={aoRolar}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ paddingTop: alturaCabecalho + 16 }}
+            contentContainerClassName="gap-3 p-4 pb-28"
+            refreshControl={
+              <RefreshControl refreshing={funil.isRefetching} onRefresh={() => void funil.refetch()} />
+            }
+            ListHeaderComponent={
+              painel.data?.tem_acesso ? (
+                <Card className="gap-1 p-4">
+                  <Text variant="muted" className="text-xs uppercase tracking-wide">
+                    Potencial na carteira
                   </Text>
-                  <Badge variant={f.melhor_confianca === 'alta' ? 'default' : 'outline'}>
-                    <Text className="text-[10px]">
-                      {f.contatos_encontrados
-                        ? `${f.contatos_encontrados} · ${CONFIANCA_LABELS[f.melhor_confianca as Confianca] ?? '—'}`
-                        : 'sem contato'}
+                  <Text className="text-2xl font-semibold">{brl(painel.data.potencial_total)}</Text>
+                  <Text variant="muted" className="text-[11px]">
+                    Faturamento mensal estimado dos fornecedores ainda não cadastrados. Gasto em
+                    descoberta este mês: {brl(painel.data.gasto_mes)} de {brl(painel.data.teto_mensal)}.
+                  </Text>
+                </Card>
+              ) : null
+            }
+            ListEmptyComponent={
+              <EmptyState
+                title="Nada por aqui"
+                description="Fornecedores que faturam contra os sacados da sua carteira e passam do corte de volume entram sozinhos, no sync das notas."
+              />
+            }
+            renderItem={({ item: f }) => (
+              <Pressable onPress={() => setAberto(f)}>
+                <Card className="gap-1 p-4">
+                  <Text className="font-medium">{f.fornecedor_nome}</Text>
+                  <Text variant="muted" className="text-xs">
+                    {[f.municipio, f.uf].filter(Boolean).join('/') || '—'} · {f.qtd_nfs_90d ?? 0} NFs ·{' '}
+                    {brl(f.potencial_mensal)}/mês de potencial
+                  </Text>
+                  <View className="flex-row items-baseline justify-between pt-1">
+                    {/* O VOLUME lidera: é a chave da ordenação, e é ele que explica por
+                        que este card está acima daquele. */}
+                    <Text className="text-lg font-semibold">
+                      {brl(f.volume_90d)}
+                      <Text variant="muted" className="text-xs"> em 90d</Text>
                     </Text>
-                  </Badge>
-                </View>
-              </Card>
-            </Pressable>
-          ))
+                    <Badge variant={f.melhor_confianca === 'alta' ? 'default' : 'outline'}>
+                      <Text className="text-[10px]">
+                        {f.contatos_encontrados
+                          ? `${f.contatos_encontrados} · ${CONFIANCA_LABELS[f.melhor_confianca as Confianca] ?? '—'}`
+                          : 'sem contato'}
+                      </Text>
+                    </Badge>
+                  </View>
+                </Card>
+              </Pressable>
+            )}
+          />
         )}
-      </ScrollView>
+
+        {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+        {cabecalho}
+      </View>
 
       <FichaModal fornecedor={aberto} onFechar={() => setAberto(null)} />
     </>

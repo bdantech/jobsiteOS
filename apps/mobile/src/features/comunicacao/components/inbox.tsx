@@ -3,9 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { Bot, Link2Off, Mail, MessageCircle } from 'lucide-react-native'
 import * as React from 'react'
-import { FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { Animated, Pressable, RefreshControl, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import {
+  CabecalhoRetratil,
+  useCabecalhoRetratil,
+} from '@/components/shell/cabecalho-retratil'
 import { Badge, EmptyState, ErrorState, Skeleton, Text } from '@/components/ui'
 import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import {
@@ -47,6 +51,15 @@ export function Inbox() {
   const router = useRouter()
   const { colors } = useTheme()
   const [aba, setAba] = React.useState<AbaMobile>('nao_lidas')
+  const {
+    deslocamento,
+    recolhido,
+    aoRolar,
+    listaRef,
+    voltarAoTopo,
+    alturaCabecalho,
+    setAlturaCabecalho,
+  } = useCabecalhoRetratil<ConversaInbox>()
 
   const conversas = useQuery({
     queryKey: comunicacaoKeys.inbox(aba),
@@ -70,19 +83,42 @@ export function Inbox() {
   const escopo = useEscopoFila()
   const pendentes = useNaoVinculadas(escopo.vendedorId)
 
+  // As abas são o recorte do inbox e moram no cabeçalho retrátil.
+  const cabecalho = (
+    <CabecalhoRetratil
+      titulo="Inbox"
+      resumo={ABAS.find((a) => a.valor === aba)?.label}
+      deslocamento={deslocamento}
+      recolhido={recolhido}
+      onExpandir={voltarAoTopo}
+      onAltura={setAlturaCabecalho}
+      chips={<FiltroSegmentado opcoes={ABAS} valor={aba} onChange={setAba} sobreNavy sangra />}
+    />
+  )
+
+  const recuoDoCabecalho = { paddingTop: alturaCabecalho }
+
   if (conversas.isPending) {
     return (
-      <View className="gap-3 p-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="gap-3 p-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </View>
+        {cabecalho}
       </View>
     )
   }
 
   if (conversas.isError) {
     return (
-      <ErrorState title="Não foi possível carregar o inbox" onRetry={() => void conversas.refetch()} />
+      <View className="flex-1">
+        <View style={recuoDoCabecalho} className="flex-1">
+          <ErrorState title="Não foi possível carregar o inbox" onRetry={() => void conversas.refetch()} />
+        </View>
+        {cabecalho}
+      </View>
     )
   }
 
@@ -90,28 +126,30 @@ export function Inbox() {
 
   return (
     <View className="flex-1">
-      <View className="py-3">
-        <FiltroSegmentado opcoes={ABAS} valor={aba} onChange={setAba} />
-      </View>
-
-      {naoVinculadas > 0 ? (
-        <Pressable
-          onPress={() => router.push('/comunicacao/nao-vinculadas')}
-          className="mx-4 mb-3 flex-row items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5"
-        >
-          <Link2Off size={16} color={colors.mutedForeground} />
-          <Text className="flex-1 text-sm">
-            <Text className="font-medium">
-              {naoVinculadas} conversa{naoVinculadas === 1 ? '' : 's'}
-            </Text>{' '}
-            aguardando identificação
-          </Text>
-        </Pressable>
-      ) : null}
-
-      <FlatList
+      <Animated.FlatList
+        ref={listaRef}
         data={conversas.data ?? []}
         keyExtractor={(c) => c.id ?? ''}
+        onScroll={aoRolar}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: alturaCabecalho + 12 }}
+        // A tarja da fila de identificação rola com a lista: é aviso, não recorte.
+        ListHeaderComponent={
+          naoVinculadas > 0 ? (
+            <Pressable
+              onPress={() => router.push('/comunicacao/nao-vinculadas')}
+              className="mb-1 flex-row items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5"
+            >
+              <Link2Off size={16} color={colors.mutedForeground} />
+              <Text className="flex-1 text-sm">
+                <Text className="font-medium">
+                  {naoVinculadas} conversa{naoVinculadas === 1 ? '' : 's'}
+                </Text>{' '}
+                aguardando identificação
+              </Text>
+            </Pressable>
+          ) : null
+        }
         contentContainerClassName="px-4 gap-2 pb-28"
         refreshControl={
           <RefreshControl refreshing={conversas.isFetching} onRefresh={() => void conversas.refetch()} />
@@ -131,6 +169,9 @@ export function Inbox() {
           </Pressable>
         )}
       />
+
+      {/* Depois da lista: em RN o irmão posterior pinta por cima. */}
+      {cabecalho}
     </View>
   )
 }

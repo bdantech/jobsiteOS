@@ -2,6 +2,7 @@ import { Stack, useLocalSearchParams } from 'expo-router'
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
+import { useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import {
   ContatosSection,
@@ -26,12 +27,13 @@ import { GrupoSection } from '@/features/mercado/components/grupo'
 export default function EmpresaDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
+  const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch, isRefetching } = useEmpresa360Query(id)
 
   if (isPending) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Empresa' }} />
         <Empresa360Skeleton />
       </View>
@@ -40,7 +42,7 @@ export default function EmpresaDetalheScreen() {
 
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Empresa' }} />
         <ErrorState
           description="Não foi possível carregar esta empresa. Verifique sua conexão e tente novamente."
@@ -53,7 +55,7 @@ export default function EmpresaDetalheScreen() {
   // Zero rows: the company doesn't exist, or RLS hid it. Same answer either way.
   if (!data) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-background" style={{ paddingTop: recuo }}>
         <Stack.Screen options={{ title: 'Empresa' }} />
         <EmptyState
           title="Empresa não encontrada"
@@ -76,6 +78,7 @@ export default function EmpresaDetalheScreen() {
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-4 p-4 pb-28"
+        contentContainerStyle={{ paddingTop: recuo + 16 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl

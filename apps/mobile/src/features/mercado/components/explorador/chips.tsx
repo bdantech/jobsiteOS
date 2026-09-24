@@ -49,6 +49,9 @@ export function CamadaFiltro({ value, onChange }: CamadaFiltroProps) {
       valor={value ?? TODAS}
       onChange={(v) => onChange(v === TODAS ? undefined : (v as Camada))}
       rotulo={(label) => `Filtrar pela camada ${label}`}
+      // As duas faixas moram no painel do cabeçalho retrátil, sobre o navy.
+      sobreNavy
+      sangra
     />
   )
 }
@@ -67,6 +70,8 @@ export function UfFiltro({ value, onChange }: UfFiltroProps) {
       valor={value ?? BRASIL}
       onChange={(v) => onChange(v === BRASIL ? undefined : v)}
       rotulo={(label) => (label === 'Brasil' ? 'Mostrar todos os estados' : `Filtrar pelo estado ${label}`)}
+      sobreNavy
+      sangra
     />
   )
 }
