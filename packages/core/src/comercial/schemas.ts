@@ -500,6 +500,16 @@ export const criarLeadSdrSchema = z.object({
 })
 export type CriarLeadSdrInput = z.infer<typeof criarLeadSdrSchema>
 
+/**
+ * Pôr uma empresa direto no funil de vendas, sem passar pelo SDR. O closer põe
+ * no próprio funil e não manda `vendedor_id`; o admin manda o closer escolhido.
+ */
+export const criarVendaSchema = z.object({
+  empresa_id: uuid,
+  vendedor_id: uuid.optional(),
+})
+export type CriarVendaInput = z.infer<typeof criarVendaSchema>
+
 export const atribuirVendaSchema = z.object({
   venda_id: uuid,
   vendedor_id: uuid,

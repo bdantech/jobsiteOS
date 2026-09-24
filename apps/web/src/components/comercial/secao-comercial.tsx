@@ -4,10 +4,10 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Handshake, Target } from 'lucide-react'
+import { Briefcase, Handshake, Target } from 'lucide-react'
 import {
   ESTAGIO_SDR_LABELS, ESTAGIO_VENDA_LABELS, GESTAO_OPERACAO_DESCRICOES, GESTAO_OPERACAO_LABELS,
-  PAPEL_CARTEIRA_LABELS, TIPO_VENDEDOR_LABELS, aceitaGestaoOperacao,
+  PAPEL_CARTEIRA_LABELS, TIPO_VENDEDOR_LABELS, aceitaGestaoOperacao, vendaNoFunil,
   type EstagioSdr, type EstagioVenda, type GestaoOperacao, type PapelCarteira, type TipoVendedorId,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { criarLeadSdrAction, definirCarteiraAction, definirGestaoAction } from '@/actions/comercial'
+import {
+  criarLeadSdrAction, criarVendaAction, definirCarteiraAction, definirGestaoAction,
+} from '@/actions/comercial'
 import { buscarVendedores, comercialKeys } from './queries'
 
 /**
@@ -37,13 +39,15 @@ import { buscarVendedores, comercialKeys } from './queries'
  */
 async function buscarMeuPapel() {
   const supabase = createClient()
-  const [vendedor, gestor] = await Promise.all([
+  const [vendedor, gestor, admin] = await Promise.all([
     supabase.rpc('app_vendedor_atual'),
     supabase.rpc('app_gestor_comercial'),
+    supabase.rpc('app_is_admin'),
   ])
   return {
     vendedorId: (vendedor.data as string | null) ?? null,
     ehGestor: gestor.data === true,
+    ehAdmin: admin.data === true,
   }
 }
 
@@ -67,7 +71,7 @@ async function buscarComercialDaEmpresa(empresaId: string) {
       .limit(10),
     supabase
       .from('vendas')
-      .select('id, estagio, criada_em, vendedores(nome)')
+      .select('id, estagio, situacao, primeira_operacao_em, criada_em, vendedores(nome)')
       .eq('empresa_id', empresaId)
       .order('criada_em', { ascending: false })
       .limit(10),
@@ -95,6 +99,7 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   // existe naquele papel — e concluía, com razão, que a tela estava quebrada.
   const [escolha, setEscolha] = React.useState<'' | GestaoOperacao>('')
   const [pondoNoFunil, setPondoNoFunil] = React.useState(false)
+  const [pondoEmVendas, setPondoEmVendas] = React.useState(false)
   const [definindoTitular, setDefinindoTitular] = React.useState(false)
 
   const chave = ['comercial', 'empresa', empresaId] as const
@@ -136,6 +141,31 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
   // sabe. Mas ela precisa aparecer ANTES do clique, com a data, para a decisão
   // ser tomada de olhos abertos — e o RPC registra que a carência foi ignorada.
   const recusadaPorFit = data.leads.find((l) => l.encerrado_motivo === 'sem_fit') ?? null
+
+  // ─── Pôr direto no funil de vendas (0260) ─────────────────────────────────
+  // Closer põe no próprio funil; admin escolhe o closer. Mesma lógica de espelhar o
+  // RPC: a venda viva só aparece aqui se for visível a quem olha, e quando não é, o
+  // banco recusa no clique dizendo por quê.
+  const ehAdmin = papel.data?.ehAdmin === true
+  const vendaViva = data.vendas.find((v) => vendaNoFunil(v)) ?? null
+  const podePorEmVendas =
+    !ehClienteOuEx && !vendaViva && (ehAdmin || meuVendedor?.tipo === 'vendedor')
+
+  async function porEmVendas(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const escolhido = String(fd.get('closer') ?? '')
+    setSalvando(true)
+    const r = await criarVendaAction({
+      empresa_id: empresaId,
+      ...(escolhido === '' ? {} : { vendedor_id: escolhido }),
+    })
+    setSalvando(false)
+    if (!r.ok) return toast.error(r.message)
+    toast.success(`No funil de vendas de ${r.data.vendedor_nome}, em "Reunião agendada".`)
+    setPondoEmVendas(false)
+    void qc.invalidateQueries({ queryKey: ['comercial'] })
+  }
 
   async function porNoFunil(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -248,6 +278,12 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
               <Button size="sm" onClick={() => setPondoNoFunil(true)}>
                 <Target className="mr-2 h-4 w-4" aria-hidden />
                 Pôr no funil de reuniões
+              </Button>
+            ) : null}
+            {podePorEmVendas ? (
+              <Button size="sm" variant={podePorNoFunil ? 'outline' : 'default'} onClick={() => setPondoEmVendas(true)}>
+                <Briefcase className="mr-2 h-4 w-4" aria-hidden />
+                Pôr no funil de vendas
               </Button>
             ) : null}
             {podeDefinirGestao ? (
@@ -405,6 +441,72 @@ export function SecaoComercial({ empresaId }: { empresaId: string }) {
                 Cancelar
               </Button>
               <Button type="submit" disabled={salvando || (podeEscolherSdr && sdrs.length === 0)}>
+                {salvando ? 'Colocando…' : 'Pôr no funil'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pondoEmVendas} onOpenChange={setPondoEmVendas}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={porEmVendas}>
+            <DialogHeader>
+              <DialogTitle>Pôr no funil de vendas</DialogTitle>
+              <DialogDescription>
+                Cria a venda em &ldquo;Reunião agendada&rdquo;, sem passar pelo funil de reuniões do
+                SDR. A reunião em si quem marca é o closer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              {ehAdmin ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="closer">Closer que vai trabalhar esta empresa</Label>
+                  <select
+                    id="closer"
+                    name="closer"
+                    required
+                    defaultValue={
+                      meuVendedor?.tipo === 'vendedor'
+                        ? meuVendedor.id
+                        : closers.some((c) => c.id === donoAtual('vendedor'))
+                          ? (donoAtual('vendedor') ?? '')
+                          : ''
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Selecione…</option>
+                    {closers.map((v) => (
+                      <option key={v.id} value={v.id}>{v.nome}</option>
+                    ))}
+                  </select>
+                  {closers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhum closer ativo cadastrado — cadastre um em Comercial › Configurações.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="rounded-md border bg-muted/40 p-3 text-sm">
+                  Vai para o <span className="font-medium">seu</span> funil de vendas. Só o admin
+                  põe empresa no funil de outro closer.
+                </p>
+              )}
+
+              {leadVivo ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  Esta empresa está no funil de reuniões de{' '}
+                  <span className="font-medium">{leadVivo.vendedores?.nome ?? 'um SDR'}</span>{' '}
+                  ({ESTAGIO_SDR_LABELS[leadVivo.estagio as EstagioSdr] ?? leadVivo.estagio}). O card
+                  dele continua lá — avise o SDR para não abordarem a empresa em dobro.
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPondoEmVendas(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={salvando || (ehAdmin && closers.length === 0)}>
                 {salvando ? 'Colocando…' : 'Pôr no funil'}
               </Button>
             </DialogFooter>

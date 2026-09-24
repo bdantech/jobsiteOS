@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import {
   atribuirLeadSdr,
   criarLeadSdr,
+  criarVenda,
   atribuirNf,
   atribuirVenda,
   definirCarteira,
@@ -377,6 +378,24 @@ export async function criarLeadSdrAction(
       carencia_ignorada: boolean
     }
     revalidatePath('/comercial/sdr')
+    return { ok: true, data: r }
+  } catch (error) {
+    return falha(error)
+  }
+}
+
+/**
+ * A porta manual do funil de vendas (0260). Devolve o nome do closer para a tela
+ * dizer para quem foi, como `criarLeadSdrAction`.
+ */
+export async function criarVendaAction(
+  input: unknown,
+): Promise<ActionResult<{ venda_id: string; vendedor_nome: string }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const r = (await criarVenda(supabase, input)) as { venda_id: string; vendedor_nome: string }
+    revalidatePath('/comercial/vendas')
     return { ok: true, data: r }
   } catch (error) {
     return falha(error)

@@ -1,5 +1,6 @@
 import {
   ESTAGIO_ANALISE_LABELS,
+  ESTAGIOS_ANALISE_ABERTOS,
   FAIXA_SCORE_LABELS,
   KNOCKOUT_LABELS,
   MOTIVO_SEM_POTENCIAL_LABELS,
@@ -87,6 +88,17 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
     enabled: ehSacado,
   })
 
+  // Admin, closer e originador pedem a qualquer hora (0260); a régua é a do banco.
+  const podeSempre = useQuery({
+    queryKey: ['credito', 'pode-pedir-sempre'],
+    queryFn: async () => {
+      const { data } = await supabase.rpc('app_pode_pedir_analise_sempre')
+      return data === true
+    },
+    enabled: ehSacado,
+    staleTime: 5 * 60_000,
+  })
+
   const solicitar = useMutation({
     /*
      * PELA API, e não pelo RPC direto.
@@ -117,6 +129,12 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
   const s = score.data
   const semScore = !s || s.score === null
   const aberta = analise.data
+  // A última análise ainda EM CURSO bloqueia o pedido para quem o RPC recusaria.
+  // Decidida ou cancelada, não: aí o pedido é uma análise nova, e a tela escondia a porta.
+  const emCurso = aberta
+    ? (ESTAGIOS_ANALISE_ABERTOS as readonly string[]).includes(aberta.estagio)
+    : false
+  const podePedir = !emCurso || podeSempre.data === true
 
   return (
     <Card>
@@ -198,7 +216,7 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
           )}
         </View>
 
-        <View className="border-t border-border pt-3">
+        <View className="gap-2 border-t border-border pt-3">
           {aberta ? (
             <Button
               variant="outline"
@@ -208,14 +226,15 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
                 Análise: {ESTAGIO_ANALISE_LABELS[aberta.estagio as EstagioAnalise] ?? aberta.estagio}
               </Text>
             </Button>
-          ) : (
+          ) : null}
+          {podePedir ? (
             <Button
               variant="outline"
               disabled={solicitar.isPending}
               onPress={() =>
                 Alert.alert(
-                  'Solicitar análise de crédito',
-                  `Cria a solicitação na esteira com ${moeda(empresa.limite_potencial)}. NÃO envia à seguradora — o envio é um passo separado, porque resolver o cadastro na Atradius pode ser cobrado.`,
+                  aberta ? 'Solicitar nova análise' : 'Solicitar análise de crédito',
+                  `${emCurso ? 'Já existe uma análise em curso; esta abre uma segunda, em paralelo. ' : ''}Cria a solicitação na esteira com ${moeda(empresa.limite_potencial)}. NÃO envia à seguradora — o envio é um passo separado, porque resolver o cadastro na Atradius pode ser cobrado.`,
                   [
                     { text: 'Cancelar', style: 'cancel' },
                     { text: 'Solicitar', onPress: () => solicitar.mutate() },
@@ -223,9 +242,11 @@ export function CreditoBlock({ empresa }: { empresa: Empresa }) {
                 )
               }
             >
-              <Text>{solicitar.isPending ? 'Solicitando…' : 'Solicitar análise'}</Text>
+              <Text>
+                {solicitar.isPending ? 'Solicitando…' : aberta ? 'Nova análise' : 'Solicitar análise'}
+              </Text>
             </Button>
-          )}
+          ) : null}
         </View>
       </CardContent>
     </Card>

@@ -13689,6 +13689,7 @@ export type Database = {
         }
       }
       app_criar_lead_sdr: { Args: { p: Json }; Returns: Json }
+      app_criar_venda: { Args: { p: Json }; Returns: Json }
       app_criar_lote: {
         Args: { p: Json }
         Returns: {
@@ -15071,6 +15072,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_pode_pedir_analise_sempre: { Args: never; Returns: boolean }
       app_pode_ver_folha: { Args: { p_vendedor_id: string }; Returns: boolean }
       app_pode_ver_vendedor: {
         Args: { p_vendedor_id: string }

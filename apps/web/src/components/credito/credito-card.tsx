@@ -9,7 +9,7 @@ import {
   FAIXA_SCORE_LABELS,
   KNOCKOUT_LABELS,
   MOTIVO_SEM_POTENCIAL_LABELS,
-  ehEstagioDecidido,
+  ESTAGIOS_ANALISE_ABERTOS,
   type EstagioAnalise,
   type FaixaScore,
   type Knockout,
@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import { buscarEsteira, buscarScore, creditoKeys } from './queries'
 import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
 
@@ -98,6 +99,16 @@ export function CreditoCard(props: CreditoCardProps) {
 
   const score = useQuery({ queryKey: creditoKeys.score(props.cnpj), queryFn: () => buscarScore(props.cnpj) })
   const esteira = useQuery({ queryKey: creditoKeys.esteira(), queryFn: buscarEsteira })
+  // Admin, closer e originador pedem análise a qualquer hora (0260). A régua é a do
+  // banco — a mesma função que o RPC consulta —, não uma conta de perfil aqui.
+  const podeSempre = useQuery({
+    queryKey: ['credito', 'pode-pedir-sempre'],
+    queryFn: async () => {
+      const { data } = await createClient().rpc('app_pode_pedir_analise_sempre')
+      return data === true
+    },
+    staleTime: 5 * 60_000,
+  })
 
   // O escopo é do prompt, não uma limitação de tela: "quanto de limite" é a pergunta de
   // SACADO. Fornecedor tem outra (adesão), e mostrar este card para ele seria oferecer
@@ -106,6 +117,13 @@ export function CreditoCard(props: CreditoCardProps) {
   if (!ehSacado) return null
 
   const analise = (esteira.data ?? []).find((a) => a.cnpj === props.cnpj) ?? null
+  const emCurso =
+    analise && (ESTAGIOS_ANALISE_ABERTOS as readonly string[]).includes(analise.estagio)
+      ? (ESTAGIO_ANALISE_LABELS[analise.estagio as EstagioAnalise] ?? analise.estagio)
+      : null
+  // Cancelada também libera: o RPC só recusa análise EM CURSO, e `ehEstagioDecidido`
+  // deixava o botão sumido depois de um cancelamento.
+  const podePedir = !emCurso || podeSempre.data === true
   const breakdown: LinhaBreakdown[] = Array.isArray(score.data?.breakdown)
     ? (score.data.breakdown as LinhaBreakdown[])
     : []
@@ -148,11 +166,11 @@ export function CreditoCard(props: CreditoCardProps) {
               </Button>
             ) : null}
             {/*
-              Sem análise nenhuma, ou com uma já decidida. Enquanto uma está EM CURSO o
-              botão some: o RPC recusa ("já existe uma análise em andamento"), e oferecer
-              para depois recusar ensina que o sistema erra.
+              Enquanto uma análise está EM CURSO o botão some para quem o RPC recusaria
+              ("já existe uma análise em andamento"). Admin, closer e originador não são
+              recusados: para eles o botão fica sempre, e o diálogo avisa da paralela.
             */}
-            {(analise === null || ehEstagioDecidido(analise.estagio)) && (
+            {podePedir && (
               <Button variant="outline" size="sm" onClick={() => setSolicitando(true)}>
                 {analise ? 'Nova análise' : 'Solicitar análise'}
               </Button>
@@ -308,6 +326,7 @@ export function CreditoCard(props: CreditoCardProps) {
           empresaId={props.empresaId}
           limitePotencial={props.limitePotencial}
           ehNova={analise !== null}
+          emCurso={emCurso}
           onSalvo={() => void qc.invalidateQueries({ queryKey: creditoKeys.esteira() })}
         />
       )}

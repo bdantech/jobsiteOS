@@ -43,6 +43,8 @@ export function SolicitarAnaliseDialog({
   limitePotencial,
   /** Texto do botão e do título. A segunda tentativa não é "a" análise, é outra. */
   ehNova = false,
+  /** Rótulo do estágio da análise que ainda está EM CURSO, se houver. */
+  emCurso = null,
   onSalvo,
 }: {
   aberto: boolean
@@ -50,6 +52,7 @@ export function SolicitarAnaliseDialog({
   empresaId: string
   limitePotencial: number | null
   ehNova?: boolean
+  emCurso?: string | null
   onSalvo: (analiseId: string) => void
 }) {
   const [salvando, setSalvando] = React.useState(false)
@@ -86,7 +89,13 @@ export function SolicitarAnaliseDialog({
               {ehNova ? 'Solicitar nova análise' : 'Solicitar análise de crédito'}
             </DialogTitle>
             <DialogDescription>
-              {ehNova ? (
+              {emCurso ? (
+                <>
+                  Já existe uma análise <strong>em curso</strong> ({emCurso}). Esta abre uma
+                  segunda, em paralelo — a outra segue como está, e o time de Crédito vê as
+                  duas na esteira.
+                </>
+              ) : ehNova ? (
                 <>
                   Abre uma análise <strong>nova</strong> na esteira. A anterior fica no
                   histórico como está — o desfecho dela continua sendo o que foi, e é por isso
