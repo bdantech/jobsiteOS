@@ -71,9 +71,8 @@ function NotaComposer({ empresaId }: { empresaId: string }) {
         multiline
         maxLength={MAX_CONTEUDO}
         editable={!criar.isPending}
-        // h-12 is the single-line default; twMerge lets h-24 win.
-        className="h-24 py-3"
-        style={{ textAlignVertical: 'top' }}
+        // O <Input> multilinha já alinha o texto no topo e deixa a caixa crescer.
+        className="h-24"
         error={criar.isError ? notaErrorMessage(criar.error) : undefined}
       />
 

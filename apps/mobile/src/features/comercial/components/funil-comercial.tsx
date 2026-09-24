@@ -79,7 +79,13 @@ export function FunilComercial<T>({
 }: FunilComercialProps<T>) {
   const { colors } = useTheme()
   const buscaRef = useRef<TextInput>(null)
-  const [estagio, setEstagio] = useState<string>(TODOS)
+  /*
+   * O funil ABRE no primeiro estágio, não em "Todos": é onde está o trabalho novo,
+   * e é como o funil da Antecipação sempre abriu. "Todos" continua a um toque,
+   * para quem quer conferir o funil inteiro.
+   */
+  const estagioInicial = estagios[0] ?? TODOS
+  const [estagio, setEstagio] = useState<string>(estagioInicial)
   const [termo, setTermo] = useState('')
   const {
     deslocamento,
@@ -192,19 +198,32 @@ export function FunilComercial<T>({
               tintColor={colors.mutedForeground}
             />
           }
+          /*
+            TRÊS VAZIOS DIFERENTES, e dizer o errado engana: o funil inteiro vazio
+            é o aviso do módulo; a busca sem resultado se desfaz limpando a busca;
+            e um estágio vazio num funil que tem cards em outros não pode dizer
+            "nenhum lead" — agora que o funil abre no primeiro estágio, esse é o
+            caso mais comum.
+          */
           ListEmptyComponent={
-            busca || estagio !== TODOS ? (
+            todos.length === 0 ? (
+              <EmptyState title={vazio.titulo} description={vazio.descricao} />
+            ) : busca ? (
               <EmptyState
-                title="Nada neste recorte"
-                description="Nenhum card com este nome ou neste estágio."
-                actionLabel="Limpar filtros"
-                onAction={() => {
-                  setTermo('')
-                  setEstagio(TODOS)
-                }}
+                title="Nada com esta busca"
+                description={`Nenhum card com este nome em ${rotuloAtual}.`}
+                actionLabel="Limpar a busca"
+                onAction={() => setTermo('')}
               />
             ) : (
-              <EmptyState title={vazio.titulo} description={vazio.descricao} />
+              <EmptyState
+                title={`Nada em ${rotuloAtual}`}
+                description={`O funil tem ${todos.length} ${
+                  todos.length === 1 ? unidade[0] : unidade[1]
+                } em outros estágios.`}
+                actionLabel="Ver todos"
+                onAction={() => setEstagio(TODOS)}
+              />
             )
           }
         />

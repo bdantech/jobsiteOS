@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 import {
   CamadaFiltro,
   ExploradorCard,
@@ -70,6 +71,7 @@ function filtroInicial(raw: string | undefined): FiltroComposto | undefined {
 
 export default function ExploradorScreen() {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const buscaRef = useRef<TextInput>(null)
   const {
@@ -117,10 +119,10 @@ export default function ExploradorScreen() {
     (row: ExploradorListItem) => {
       // Promoted → the Company 360, where it has timeline, notas and eventos.
       // Still in staging → the lightweight universe sheet.
-      if (row.empresa_id) router.push(`/empresas/${row.empresa_id}`)
+      if (row.empresa_id) router.push(rotaDaEmpresa(row.empresa_id))
       else router.push(`/mercado/universo/${row.cnpj}`)
     },
-    [router],
+    [router, rotaDaEmpresa],
   )
 
   const renderItem = useCallback(

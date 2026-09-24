@@ -48,6 +48,8 @@ export default function ComercialLayout() {
       <Stack.Screen name="vendas" options={{ title: 'Funil de Vendas', headerShown: false }} />
       <Stack.Screen name="nfs" options={{ title: 'Funil de NFs' }} />
       <Stack.Screen name="comissoes" options={{ title: 'Comissão' }} />
+      {/* A ficha do fornecedor aberta do Funil de NFs, sem trocar de aba. */}
+      <Stack.Screen name="fornecedor/[cnpj]" options={{ title: 'Fornecedor' }} />
       {/* Fornecedores filtra por estágio e desenha o cabeçalho retrátil. */}
       <Stack.Screen name="fornecedores" options={{ title: 'Fornecedores', headerShown: false }} />
       <Stack.Screen name="campanhas" options={{ title: 'Campanhas' }} />

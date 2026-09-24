@@ -59,7 +59,8 @@ const OPCOES_ESTAGIO: readonly OpcaoFiltro<string>[] = [
 
 export default function SacadosPorNfScreen() {
   const { colors } = useTheme()
-  const [estagio, setEstagio] = useState<string | undefined>()
+  // Abre no PRIMEIRO estágio, não em "Todos" — como todo funil do app.
+  const [estagio, setEstagio] = useState<string | undefined>(ESTAGIOS_PROSPECCAO_ABERTOS[0])
   const {
     deslocamento,
     recolhido,
@@ -214,7 +215,9 @@ export default function SacadosPorNfScreen() {
               ) : null}
             </View>
 
-            {(data?.length ?? 0) === 0 && estagio === undefined ? (
+            {/* O aviso é do funil INTEIRO vazio, que o painel conta — a lista
+                vem recortada no estágio e não sabe dizer isso sozinha. */}
+            {painel !== undefined && (painel.sacados ?? 0) === 0 ? (
               <View className="flex-row items-start gap-2 rounded-lg border border-border bg-muted/50 p-3">
                 <AlertTriangle size={14} color={colors.mutedForeground} />
                 <Text variant="muted" className="flex-1 text-xs">

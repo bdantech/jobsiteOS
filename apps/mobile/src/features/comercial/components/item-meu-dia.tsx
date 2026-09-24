@@ -9,6 +9,7 @@ import { useTheme } from '@/components/color-scheme-provider'
 import { Sheet } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 /* A mesma régua da web (core): o faturamento da empresa chega aqui em centenas de
    milhões, e "R$ 716.042.600" não cabe na linha de um celular. */
@@ -59,14 +60,23 @@ function AcaoSwipe({
   )
 }
 
-/** Para onde o toque leva. O mesmo mapa da web, com as rotas do app. */
-export function destinoDoItem(bloco: string, item: ItemMeuDia): string | null {
+/**
+ * Para onde o toque leva. O mesmo mapa da web, com as rotas do app.
+ *
+ * `rotaDaEmpresa` vem de `useRotaDaEmpresa()`: a ficha abre DENTRO da pilha do
+ * Comercial, e voltar devolve ao Meu Dia em vez de à lista de Empresas.
+ */
+export function destinoDoItem(
+  bloco: string,
+  item: ItemMeuDia,
+  rotaDaEmpresa: (empresaId: string) => string = (id) => `/empresas/${id}`,
+): string | null {
   const cat = blocoCatalogado(bloco)
   const meta = item.meta as Record<string, string | undefined>
   switch (cat?.acao) {
     case 'abrir_empresa':
     case 'abrir_certificado':
-      return item.empresa_id ? `/empresas/${item.empresa_id}` : null
+      return item.empresa_id ? rotaDaEmpresa(item.empresa_id) : null
     case 'abrir_card_nf':
       return '/antecipacao'
     case 'abrir_card_venda':
@@ -112,8 +122,9 @@ export function ItemMeuDiaCard({ item, bloco, onAdiar, onDescartar, onConcluir }
   const swipeRef = useRef<Swipeable>(null)
   const [adiarAberto, setAdiarAberto] = useState(false)
 
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const cat = blocoCatalogado(bloco)
-  const rota = destinoDoItem(bloco, item)
+  const rota = destinoDoItem(bloco, item, rotaDaEmpresa)
   const ehTarefa = cat?.acao === 'concluir_tarefa'
 
   const fechar = useCallback(() => swipeRef.current?.close(), [])

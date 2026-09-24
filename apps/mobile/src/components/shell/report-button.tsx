@@ -1,20 +1,25 @@
-import { MessageSquareWarning } from 'lucide-react-native'
+import { ChevronRight, MessageSquareWarning } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable } from 'react-native'
 
+import { useTheme } from '@/components/color-scheme-provider'
+import { Text } from '@/components/ui/text'
 import { ReportSheet } from '@/features/reports'
-import { cn } from '@/lib/utils'
 
 /**
- * O botão de reportar, ao lado do sino em todo header (04m §2/§6).
+ * Reportar bug ou melhoria (04m §2/§6) — uma linha na aba "Mais".
  *
- * Sem guard de módulo — ao contrário do sino, que some para quem não tem o módulo
- * `notificacoes` porque não haveria tela para onde ir. Reportar é direito de
- * qualquer usuário ativo, e o sheet abre por cima da tela atual: não há rota a
- * conceder.
+ * Morava no cabeçalho de toda tela, ao lado do sino. Saiu porque reportar é coisa
+ * que se faz de vez em quando, e um botão permanente no topo disputava espaço com
+ * o título e a lupa a cada tela. "Mais" é onde a pessoa cuida da conta e do app —
+ * é o lugar natural de "algo aqui não está certo".
+ *
+ * Sem guard de módulo: reportar é direito de qualquer usuário ativo, e o sheet abre
+ * por cima da tela atual — não há rota a conceder.
  */
-export function ReportButton({ className }: { className?: string }) {
+export function ReportButton() {
   const [aberto, setAberto] = useState(false)
+  const { colors } = useTheme()
 
   return (
     <>
@@ -22,20 +27,13 @@ export function ReportButton({ className }: { className?: string }) {
         accessibilityRole="button"
         accessibilityLabel="Reportar bug ou melhoria"
         onPress={() => setAberto(true)}
-        hitSlop={8}
-              /*
-       * Este botão vive SEMPRE sobre o navy do cabeçalho, então ele não lê
-       * `colors`: um ícone em `foreground` aqui seria quase invisível no tema
-       * claro e sumiria de vez no escuro, onde `foreground` é quase branco...
-       * sobre um fundo que também não muda. Cor fixa é o que descreve a
-       * verdade desta superfície.
-       */
-      className={cn(
-        'size-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] active:opacity-70',
-        className,
-      )}
+        className="h-[52px] flex-row items-center gap-2.5 rounded-md border border-border bg-card px-4 active:opacity-70"
       >
-        <MessageSquareWarning size={20} color="#FFFFFF" />
+        <MessageSquareWarning size={20} color={colors.primary} />
+        <Text className="flex-1 text-[15px] font-semibold text-foreground">
+          Reportar bug ou melhoria
+        </Text>
+        <ChevronRight size={18} color={colors.mutedForeground} />
       </Pressable>
 
       {/*

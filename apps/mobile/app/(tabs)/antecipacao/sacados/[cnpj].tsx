@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 import {
   DetalheSkeleton,
   NotaDocumentoSheet,
@@ -37,6 +38,7 @@ export default function SacadoScreen() {
   const { cnpj: cnpjParam } = useLocalSearchParams<{ cnpj: string }>()
   const cnpj = normalizeCnpj(cnpjParam ?? '')
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const recuo = useRecuoDoCabecalho()
   const [nota, setNota] = useState<Oportunidade | null>(null)
@@ -174,7 +176,7 @@ export default function SacadoScreen() {
           ) : null}
 
           {empresaId ? (
-            <Button variant="outline" onPress={() => router.push(`/empresas/${empresaId}`)}>
+            <Button variant="outline" onPress={() => router.push(rotaDaEmpresa(empresaId))}>
               <Building2 size={18} color={colors.foreground} />
               <Text>Abrir Company 360</Text>
             </Button>

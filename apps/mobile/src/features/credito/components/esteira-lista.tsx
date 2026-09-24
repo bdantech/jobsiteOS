@@ -104,7 +104,8 @@ function moeda(v: number | null): string {
 export function EsteiraLista() {
   const router = useRouter()
   const { colors } = useTheme()
-  const [filtro, setFiltro] = React.useState<EstagioAnalise | null>(null)
+  // Abre no PRIMEIRO estágio, não em "Todas" — como todo funil do app.
+  const [filtro, setFiltro] = React.useState<EstagioAnalise | null>(COLUNAS_ESTEIRA[0] ?? null)
   const [termo, setTermo] = React.useState('')
   const buscaRef = React.useRef<TextInput>(null)
   const {
@@ -131,12 +132,14 @@ export function EsteiraLista() {
   const opcoesEsteira = React.useMemo<readonly OpcaoFiltro<string>[]>(
     () => [
       { valor: TODAS, label: 'Todas' },
-      ...COLUNAS_ESTEIRA.filter((e) => (contagem[e] ?? 0) > 0).map((e) => ({
+      // O estágio ATIVO fica mesmo vazio: a esteira abre no primeiro, e sem ele
+      // na faixa nenhum chip apareceria marcado.
+      ...COLUNAS_ESTEIRA.filter((e) => (contagem[e] ?? 0) > 0 || e === filtro).map((e) => ({
         valor: e as string,
         label: ESTAGIO_ANALISE_LABELS[e],
       })),
     ],
-    [data, contagem],
+    [contagem, filtro],
   )
 
   /*
@@ -236,7 +239,8 @@ export function EsteiraLista() {
         keyExtractor={(a) => a.id}
         onScroll={aoRolar}
         scrollEventThrottle={16}
-        contentContainerStyle={recuoDoCabecalho}
+        // `+ 12`: sem ele o primeiro card nascia encostado na borda do vidro.
+        contentContainerStyle={{ paddingTop: alturaCabecalho + 12 }}
         contentContainerClassName="gap-2 px-4 pb-28"
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} tintColor={colors.mutedForeground} />

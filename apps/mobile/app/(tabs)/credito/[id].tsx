@@ -13,6 +13,7 @@ import { ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { AnalisePropriaMobile, CondicoesComerciaisMobile } from '@/features/credito'
 import { supabase } from '@/lib/supabase'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 /**
  * Detalhe da análise no celular.
@@ -44,6 +45,7 @@ function moeda(v: number | null): string {
 export default function AnaliseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const recuo = useRecuoDoCabecalho()
 
   const { data, isPending, isError, refetch } = useQuery({
@@ -129,7 +131,7 @@ export default function AnaliseScreen() {
       <CondicoesComerciaisMobile analiseCreditoId={data.id} />
 
       {data.empresa_id ? (
-        <Button variant="outline" onPress={() => router.push(`/empresas/${data.empresa_id}` as never)}>
+        <Button variant="outline" onPress={() => data.empresa_id && router.push(rotaDaEmpresa(data.empresa_id))}>
           <Text>Abrir a empresa</Text>
         </Button>
       ) : null}

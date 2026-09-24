@@ -7,6 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 
+import { API_BASE_URL, ApiError } from '@/lib/api'
+
 import { mensagemDeErro } from '../api'
 import { usePreferencias, usePushDispositivo, useSalvarPreferencias } from '../hooks'
 import { LinhaSwitch } from './linha-switch'
@@ -21,6 +23,25 @@ import { LinhaSwitch } from './linha-switch'
  * not represent the state: "on for this phone, off for the account" is real, and
  * a user staring at one enabled switch receiving nothing has no way to fix it.
  */
+/**
+ * O motivo de verdade, e não "verifique sua conexão" para tudo.
+ *
+ * As preferências não vêm do Supabase: vêm da API da web (`/api/me/preferencias`),
+ * porque a coluna não é legível pelo app. Quando essa API não responde — o
+ * servidor fora do ar, ou `EXPO_PUBLIC_API_BASE_URL` apontando para um endereço
+ * que o aparelho não alcança —, a frase genérica mandava a pessoa conferir um
+ * Wi-Fi que estava funcionando. Em desenvolvimento o endereço aparece na tela,
+ * porque é justamente ele que precisa ser corrigido.
+ */
+function descricaoDoErro(error: unknown): string {
+  if (error instanceof ApiError) {
+    return mensagemDeErro(error, 'O servidor recusou o pedido. Tente novamente.')
+  }
+  return __DEV__
+    ? `O app não alcançou a API em ${API_BASE_URL}. Confira se ela está no ar e se o endereço é acessível pelo aparelho.`
+    : 'Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.'
+}
+
 export function NotificacoesCard() {
   const preferencias = usePreferencias()
   const salvar = useSalvarPreferencias()
@@ -68,7 +89,7 @@ export function NotificacoesCard() {
         ) : preferencias.isError || !prefs ? (
           <ErrorState
             title="Não foi possível carregar suas preferências"
-            description="Verifique sua conexão e tente novamente."
+            description={descricaoDoErro(preferencias.error)}
             onRetry={() => void preferencias.refetch()}
             className="py-8"
           />

@@ -20,6 +20,7 @@ import {
   type LeadMobile,
 } from '@/features/comercial'
 import { FunilComercial, useDonosDoFunil } from '@/features/comercial/components/funil-comercial'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 /**
  * Funil de reuniões no celular: o kanban da web vira lista com filtro por estágio.
@@ -31,6 +32,7 @@ import { FunilComercial, useDonosDoFunil } from '@/features/comercial/components
  */
 export default function FunilSdrScreen() {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const [movendo, setMovendo] = useState<string | null>(null)
   const { data, isPending, isError, refetch, isRefetching } = useLeads()
@@ -54,7 +56,7 @@ export default function FunilSdrScreen() {
     return (
       <Card className="gap-2 p-4">
         <Pressable
-          onPress={() => empresa && router.push(`/empresas/${empresa.id}`)}
+          onPress={() => empresa && router.push(rotaDaEmpresa(empresa.id))}
           accessibilityRole="button"
           accessibilityLabel={`Abrir ${empresa?.razao_social ?? 'empresa'}`}
           className="gap-0.5"

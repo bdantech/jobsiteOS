@@ -7,8 +7,9 @@ import {
   type ParteFiscal,
 } from '@jobsiteos/core'
 import { useQuery } from '@tanstack/react-query'
-import { FileWarning } from 'lucide-react-native'
-import { useMemo } from 'react'
+import * as Clipboard from 'expo-clipboard'
+import { Check, Copy, FileWarning, Send } from 'lucide-react-native'
+import { useMemo, useState } from 'react'
 import { ScrollView, Share, View } from 'react-native'
 
 import { useTheme } from '@/components/color-scheme-provider'
@@ -19,7 +20,7 @@ import { Sheet } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { ErrorState } from '@/components/ui/states'
-import { fetchXmlDaNota } from '../api'
+import { fetchLinkDaNota, fetchXmlDaNota } from '../api'
 import { antecipacaoKeys } from '../queries'
 
 /**
@@ -249,6 +250,86 @@ function Documento({ doc }: { doc: DocumentoFiscal }) {
   )
 }
 
+/**
+ * O LINK DE ANTECIPAÇÃO desta nota, com COPIAR e ENVIAR — os dois botões da web.
+ *
+ * Ele leva quem EMITIU a nota ao pedido de antecipação já preenchido. A
+ * autorização é conferida na abertura (CNPJ da conta = CNPJ do emissor), então
+ * mandá-lo não expõe nada: quem não é o emissor vê um resumo com o CNPJ oculto. O
+ * destinatário certo é o FORNECEDOR.
+ *
+ * Copiar e enviar, e não um só: enviar abre a folha de compartilhamento, que é o
+ * caminho para o WhatsApp; copiar é para colar numa conversa que já está aberta,
+ * ou num e-mail. O valor vai COMO VEIO — o token tem 43 caracteres e é opaco, e
+ * remontá-lo a partir da chave quebraria o link.
+ *
+ * Nulo é o caso normal — cerca de um terço das notas recebidas não tem link, por
+ * desenho (resumo, cancelada, emissor sem CNPJ, valor fora da faixa). Por isso a
+ * frase explica em vez de mostrar "—".
+ */
+function LinkDeAntecipacao({ accessKey, open }: { accessKey: string; open: boolean }) {
+  const { colors } = useTheme()
+  const [copiado, setCopiado] = useState(false)
+  const { data: link, isPending } = useQuery({
+    queryKey: antecipacaoKeys.link(accessKey),
+    queryFn: () => fetchLinkDaNota(accessKey),
+    enabled: open,
+  })
+
+  return (
+    <View className="gap-2 rounded-lg border border-border bg-card p-3">
+      <Text variant="muted" className="text-xs">
+        Link de antecipação
+      </Text>
+      {isPending ? (
+        <Skeleton className="h-9 w-full" />
+      ) : link ? (
+        <>
+          <Text numberOfLines={1} className="font-mono text-xs text-foreground">
+            {link}
+          </Text>
+          <View className="flex-row gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              accessibilityLabel={copiado ? 'Link copiado' : 'Copiar o link de antecipação'}
+              onPress={() => {
+                void Clipboard.setStringAsync(link).then(() => {
+                  setCopiado(true)
+                  setTimeout(() => setCopiado(false), 1500)
+                })
+              }}
+            >
+              {copiado ? (
+                <Check size={16} color="#1E7A4D" />
+              ) : (
+                <Copy size={16} color={colors.foreground} />
+              )}
+              <Text>{copiado ? 'Copiado' : 'Copiar'}</Text>
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              accessibilityLabel="Enviar o link de antecipação ao fornecedor"
+              // Compartilhar e não abrir: quem está com o celular na mão quer
+              // MANDAR isto ao fornecedor, não navegar nele.
+              onPress={() => void Share.share({ message: link })}
+            >
+              <Send size={16} color={colors.primaryForeground} />
+              <Text>Enviar</Text>
+            </Button>
+          </View>
+        </>
+      ) : (
+        <Text variant="muted" className="text-[11px]">
+          Esta nota não tem link ativo.
+        </Text>
+      )}
+    </View>
+  )
+}
+
 export function NotaDocumentoSheet({
   accessKey,
   titulo,
@@ -269,7 +350,11 @@ export function NotaDocumentoSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={titulo} description={subtitulo}>
-      <View className="max-h-[70vh]">
+      <View className="max-h-[70vh] gap-3">
+        {/* NO TOPO: é o que se veio buscar na maioria das vezes, e não depende
+            do XML — aparece mesmo que o documento ainda esteja chegando. */}
+        <LinkDeAntecipacao accessKey={accessKey} open={open} />
+
         {doc ? (
           <View className="flex-row justify-end pb-1">
             <Badge variant="secondary">
@@ -294,41 +379,6 @@ export function NotaDocumentoSheet({
         ) : doc ? (
           <ScrollView showsVerticalScrollIndicator={false}>
             <Documento doc={doc} />
-            {/*
-              O LINK DE ANTECIPAÇÃO, que é o que se MANDA — e por isso fica aqui,
-              junto do documento que ele abre.
-              
-              Ele leva quem emitiu a nota ao pedido já preenchido, com o arquivo
-              junto. A autorização é conferida na abertura (CNPJ da conta = CNPJ
-              do emissor), então mandá-lo não expõe nada: quem não é o emissor vê
-              um resumo com o CNPJ oculto. O destinatário certo é o FORNECEDOR.
-              
-              Nulo é o caso normal — cerca de um terço das notas recebidas não
-              tem link, por desenho (resumo, cancelada, emissor sem CNPJ, valor
-              fora da faixa). Por isso a frase explica em vez de mostrar "—".
-            */}
-            <View className="gap-1.5 border-t border-border pt-3">
-              <Text variant="muted" className="text-xs">
-                Link de antecipação
-              </Text>
-              {data?.link_antecipacao ? (
-                <Button
-                  variant="outline"
-                  onPress={() => {
-                    // Compartilhar e não abrir: quem está com o celular na mão
-                    // quer MANDAR isto ao fornecedor, não navegar nele.
-                    void Share.share({ message: data.link_antecipacao as string })
-                  }}
-                  accessibilityLabel="Compartilhar o link de antecipação desta nota"
-                >
-                  Enviar ao fornecedor
-                </Button>
-              ) : (
-                <Text variant="muted" className="text-[11px]">
-                  Esta nota não tem link ativo.
-                </Text>
-              )}
-            </View>
             <Text variant="muted" className="py-4 text-center text-[11px]">
               Representação para conferência interna. Não é o DANFE oficial.
             </Text>

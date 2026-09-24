@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 import {
   AcoesContato,
   DetalheSkeleton,
@@ -46,6 +47,7 @@ export default function FornecedorScreen() {
   const { cnpj: cnpjParam } = useLocalSearchParams<{ cnpj: string }>()
   const cnpj = normalizeCnpj(cnpjParam ?? '')
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const recuo = useRecuoDoCabecalho()
 
@@ -179,7 +181,7 @@ export default function FornecedorScreen() {
           {empresaId ? (
             <Button
               variant="outline"
-              onPress={() => router.push(`/empresas/${empresaId}`)}
+              onPress={() => router.push(rotaDaEmpresa(empresaId))}
               accessibilityLabel="Abrir a ficha completa da empresa"
             >
               <Building2 size={18} color={colors.foreground} />

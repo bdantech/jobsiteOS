@@ -11,6 +11,7 @@ import {
   useRecuoDoCabecalho,
 } from '@/components/shell/cabecalho-de-vidro'
 import { ModuleGrid } from '@/components/shell/module-grid'
+import { ReportButton } from '@/components/shell/report-button'
 import { Avatar } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
@@ -90,11 +91,15 @@ export default function MaisScreen() {
 
           <ModuleGrid />
 
+          <View className="mt-3">
+            <ReportButton />
+          </View>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Sair da conta"
             onPress={() => void signOut()}
-            className="mt-3 h-[52px] flex-row items-center justify-center gap-2.5 rounded-md border border-border bg-card active:border-destructive"
+            className="h-[52px] flex-row items-center justify-center gap-2.5 rounded-md border border-border bg-card active:border-destructive"
           >
             <LogOut size={20} color={colors.destructive} />
             <Text className="text-[15px] font-semibold text-destructive">Sair da conta</Text>

@@ -25,6 +25,7 @@ import { AbaixoDoCabecalho, useRecuoDoCabecalho } from '@/components/shell/cabec
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { FiltroSegmentado, type OpcaoFiltro } from '@/components/ui/filtros'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/states'
@@ -77,10 +78,19 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   )
 }
 
+type AbaProcesso = 'resumo' | 'movimentacoes' | 'parecer' | 'custos'
+
+const ABAS_PROCESSO: readonly OpcaoFiltro<AbaProcesso>[] = [
+  { valor: 'resumo', label: 'Cronograma' },
+  { valor: 'movimentacoes', label: 'Movimentações' },
+  { valor: 'parecer', label: 'Parecer' },
+  { valor: 'custos', label: 'Custos' },
+]
+
 export function ProcessoDetalheMobile({ numeroCnj }: { numeroCnj: string }) {
   const qc = useQueryClient()
   const recuo = useRecuoDoCabecalho()
-  const [aba, setAba] = React.useState<'resumo' | 'movimentacoes' | 'parecer' | 'custos'>('resumo')
+  const [aba, setAba] = React.useState<AbaProcesso>('resumo')
 
   const processo = useQuery({
     queryKey: juridicoKeys.processo(numeroCnj),
@@ -211,23 +221,21 @@ export function ProcessoDetalheMobile({ numeroCnj }: { numeroCnj: string }) {
         </Card>
       ) : null}
 
-      {/* ── Abas ── */}
-      <View className="flex-row flex-wrap gap-2">
-        {(
-          [
-            ['resumo', 'Cronograma'],
-            ['movimentacoes', 'Movimentações'],
-            ['parecer', 'Parecer'],
-            ['custos', 'Custos'],
-          ] as const
-        ).map(([id, rotulo]) => (
-          <Pressable key={id} onPress={() => setAba(id)}>
-            <Badge variant={aba === id ? 'default' : 'outline'}>
-              <Text>{rotulo}</Text>
-            </Badge>
-          </Pressable>
-        ))}
-      </View>
+      {/*
+        ── Abas ──
+        Controle segmentado, o mesmo das outras telas: a escolha é exclusiva e
+        sempre há uma ativa. Eram <Badge> dentro de <Pressable> — indicador de
+        estado fazendo papel de controle, mais quadrado que o resto do app, sem
+        resposta ao toque e sem `selected` para o leitor de tela. `sangra` porque
+        a faixa vive dentro do `p-4` do scroll.
+      */}
+      <FiltroSegmentado
+        opcoes={ABAS_PROCESSO}
+        valor={aba}
+        onChange={setAba}
+        rotulo={(label) => `Ver ${label}`}
+        sangra
+      />
 
       {aba === 'resumo' ? (
         <Card>

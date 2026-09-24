@@ -7,6 +7,7 @@ import { useRecuoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { formatInteiro, registroRota, useGrupoQuery, type MembroGrupo } from '@/features/mercado'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 import {
   GrupoHeader,
   GrupoMetricas,
@@ -28,6 +29,7 @@ import {
 export default function GrupoDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const recuo = useRecuoDoCabecalho()
 
@@ -57,10 +59,11 @@ export default function GrupoDetalheScreen() {
   /** Promoted → the Company 360. Otherwise the universe sheet in the Explorador. */
   const abrirMembro = useCallback(
     (membro: MembroGrupo) => {
-      const rota = registroRota(membro)
+      // Promovida abre a ficha DENTRO da pilha do Mercado — ver `lib/navegacao.ts`.
+      const rota = membro.empresa_id ? rotaDaEmpresa(membro.empresa_id) : registroRota(membro)
       if (rota) router.push(rota)
     },
-    [router],
+    [router, rotaDaEmpresa],
   )
 
   if (isPending) {

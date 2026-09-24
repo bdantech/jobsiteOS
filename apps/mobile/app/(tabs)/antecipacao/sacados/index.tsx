@@ -17,6 +17,7 @@ import {
   type SacadoFunil,
 } from '@/features/antecipacao'
 import { cn } from '@/lib/utils'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 /**
  * Visão por sacado no mobile — LEITURA (§9). A curadoria (mover estágio, suprimir)
@@ -51,6 +52,7 @@ function Contencao({ demanda, disponivel }: { demanda: number; disponivel: numbe
 
 export default function SacadosScreen() {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const recuo = useRecuoDoCabecalho()
   const { data, isPending, isError, refetch, isRefetching } = useSacadosQuery()
@@ -65,7 +67,7 @@ export default function SacadosScreen() {
         <Pressable
           disabled={!item.sacado_empresa_id}
           onPress={() =>
-            item.sacado_empresa_id && router.push(`/empresas/${item.sacado_empresa_id}`)
+            item.sacado_empresa_id && router.push(rotaDaEmpresa(item.sacado_empresa_id))
           }
           accessibilityRole="button"
           accessibilityLabel={`Abrir ${item.sacado_nome ?? 'sacado'}`}

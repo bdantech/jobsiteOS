@@ -64,12 +64,32 @@ export function NotificationsBell({ className }: NotificationsBellProps) {
       <Bell size={20} color="#FFFFFF" />
 
       {unread > 0 ? (
+        /*
+          UM CÍRCULO DE TAMANHO FIXO, e não uma pílula que cresce.
+
+          A pílula anterior tinha 16px de altura para um texto de 10px com a
+          entrelinha da Poppins, que é alta: o "9+" encostava nas bordas e o
+          dígito saía cortado embaixo. Agora o círculo tem 20px — cabe "9+" com
+          folga — e o texto ocupa a caixa inteira com `lineHeight` igual à
+          altura, centralizado nos dois eixos. `includeFontPadding: false` tira
+          o respiro extra que o Android põe acima da fonte e que empurrava o
+          número para baixo.
+
+          Na quina do botão, meio para fora: dentro dele o círculo cobriria o
+          sino.
+        */
         <View
-          // Sits on the bell's upper-right; min-w + px lets "9+" widen the pill
-          // without the single-digit case turning into an oval.
-          className="absolute right-1 top-1 h-4 min-w-4 items-center justify-center rounded-full border border-background bg-primary px-1"
+          className="absolute -right-1.5 -top-1.5 size-5 items-center justify-center rounded-full border-2 border-brand bg-[#E5484D]"
         >
-          <Text className="text-[10px] font-semibold leading-none text-primary-foreground">
+          <Text
+            className="font-semibold text-white"
+            style={{
+              fontSize: unread > MAX_BADGE ? 9 : 10,
+              lineHeight: 16,
+              textAlign: 'center',
+              includeFontPadding: false,
+            }}
+          >
             {unread > MAX_BADGE ? `${MAX_BADGE}+` : unread}
           </Text>
         </View>

@@ -36,6 +36,7 @@ import {
   type BolhaMobile,
 } from '@/features/comercial/components/graficos'
 import { cn } from '@/lib/utils'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 const brl = (n: number) =>
   n >= 1_000_000
@@ -68,6 +69,7 @@ const brl = (n: number) =>
  */
 export default function MeuDiaScreen() {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const recuo = useRecuoDoCabecalho()
   const { width } = useWindowDimensions()
@@ -301,7 +303,7 @@ export default function MeuDiaScreen() {
           <TreemapCarteira
             clientes={data.mapa_carteira}
             largura={larguraGrafico}
-            onCliente={(c) => c.empresa_id && router.push(`/empresas/${c.empresa_id}`)}
+            onCliente={(c) => c.empresa_id && router.push(rotaDaEmpresa(c.empresa_id))}
           />
         </Widget>
       ) : null}
@@ -368,6 +370,7 @@ function WidgetDoBloco({
   onConcluir: (item: ItemMeuDia) => void
 }) {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const [fatia, setFatia] = useState<string | null>(null)
   const [natureza, setNatureza] = useState<Natureza>('todas')
 
@@ -377,7 +380,7 @@ function WidgetDoBloco({
   const restantes = bloco.total - bloco.itens.length
 
   const abrir = (item: ItemMeuDia) => {
-    const rota = destinoDoItem(bloco.tipo, item)
+    const rota = destinoDoItem(bloco.tipo, item, rotaDaEmpresa)
     if (rota) router.push(rota)
   }
 

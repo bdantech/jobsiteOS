@@ -77,7 +77,10 @@ const OPCOES_ESTAGIO: readonly OpcaoFiltro<string>[] = [
 
 export default function FornecedoresScreen() {
   const { colors } = useTheme()
-  const [estagio, setEstagio] = React.useState<EstagioFornecedor | 'todos'>('todos')
+  // Abre no PRIMEIRO estágio, não em "Todos" — como todo funil do app.
+  const [estagio, setEstagio] = React.useState<EstagioFornecedor | 'todos'>(
+    ESTAGIOS_FORNECEDOR_ATIVOS[0] ?? 'todos',
+  )
   const [aberto, setAberto] = React.useState<FornecedorMobile | null>(null)
   const {
     deslocamento,

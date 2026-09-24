@@ -55,6 +55,7 @@ export const antecipacaoKeys = {
   sacado: (cnpj: string) => [...antecipacaoKeys.all, 'sacado', cnpj] as const,
   minimo: () => [...antecipacaoKeys.all, 'minimo-operavel'] as const,
   xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
+  link: (accessKey: string) => [...antecipacaoKeys.all, 'link-da-nota', accessKey] as const,
 }
 
 // ─── Leituras ───────────────────────────────────────────────────────────────

@@ -312,26 +312,35 @@ export async function fetchSacadosSemCnae(): Promise<number> {
  */
 export async function fetchXmlDaNota(
   accessKey: string,
-): Promise<{ raw_xml: string | null; xml_parse_erro: string | null; link_antecipacao: string | null }> {
+): Promise<{ raw_xml: string | null; xml_parse_erro: string | null }> {
   const { data, error } = await supabase
     .from('notas_fiscais')
-    /*
-     * O LINK vem de carona nesta leitura, que a folha do documento já faz.
-     *
-     * Ele leva quem EMITIU a nota ao pedido de antecipação já preenchido — é
-     * exatamente o que o vendedor na rua precisa mandar ao fornecedor, e antes
-     * só existia na web. Uma consulta própria seria uma requisição a mais numa
-     * rede 4G de obra para buscar um texto.
-     */
-    .select('raw_xml, xml_parse_erro, link_antecipacao')
+    .select('raw_xml, xml_parse_erro')
     .eq('access_key', accessKey)
-    .maybeSingle<{ raw_xml: string | null; xml_parse_erro: string | null; link_antecipacao: string | null }>()
+    .maybeSingle<{ raw_xml: string | null; xml_parse_erro: string | null }>()
   if (error) throw error
   return {
     raw_xml: data?.raw_xml ?? null,
     xml_parse_erro: data?.xml_parse_erro ?? null,
-    link_antecipacao: data?.link_antecipacao ?? null,
   }
+}
+
+/**
+ * O link de antecipação de UMA nota — consulta própria, e pequena, como na web.
+ *
+ * Ele vinha de carona na leitura do XML, e isso o escondia duas vezes: esperava
+ * as dezenas de KB do documento chegarem, e só aparecia se o XML fosse lido, no
+ * fim de uma rolagem longa. É o que o vendedor na rua precisa MANDAR ao
+ * fornecedor; tem de estar no topo e na hora.
+ */
+export async function fetchLinkDaNota(accessKey: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('notas_fiscais')
+    .select('link_antecipacao')
+    .eq('access_key', accessKey)
+    .maybeSingle<{ link_antecipacao: string | null }>()
+  if (error) throw error
+  return data?.link_antecipacao ?? null
 }
 
 /** O mínimo operável, que define os cortes de urgência do card. */

@@ -21,6 +21,7 @@ import { formatarMoeda } from '@/features/antecipacao'
 import { proximoEstagioVenda, useMover, useVendas, type VendaMobile } from '@/features/comercial'
 import { FunilComercial, useDonosDoFunil } from '@/features/comercial/components/funil-comercial'
 import { cn } from '@/lib/utils'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 
 /**
  * Funil do closer no celular. Mesma regra do funil de SDR: um botão, o próximo passo.
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils'
  */
 export default function FunilVendasScreen() {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const [movendo, setMovendo] = useState<string | null>(null)
   const { data, isPending, isError, refetch, isRefetching } = useVendas()
@@ -71,7 +73,7 @@ export default function FunilVendasScreen() {
     return (
       <Card className="gap-2 p-4">
         <Pressable
-          onPress={() => empresa && router.push(`/empresas/${empresa.id}`)}
+          onPress={() => empresa && router.push(rotaDaEmpresa(empresa.id))}
           accessibilityRole="button"
           accessibilityLabel={`Abrir ${empresa?.razao_social ?? 'empresa'}`}
           className="gap-0.5"

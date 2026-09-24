@@ -8,6 +8,7 @@ import { useTheme } from '@/components/color-scheme-provider'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Text } from '@/components/ui/text'
+import { useRotaDaEmpresa } from '@/lib/navegacao'
 import { promoverErrorMessage, usePromoverEmpresa } from './queries'
 import type { UniversoRegistro } from './types'
 
@@ -24,6 +25,7 @@ export interface PromoverAcaoProps {
  */
 export function PromoverAcao({ universo }: PromoverAcaoProps) {
   const router = useRouter()
+  const rotaDaEmpresa = useRotaDaEmpresa()
   const { colors } = useTheme()
   const [confirmando, setConfirmando] = useState(false)
 
@@ -32,10 +34,11 @@ export function PromoverAcao({ universo }: PromoverAcaoProps) {
   // Already promoted: the sheet is a dead end, so send the user where the company
   // actually lives.
   if (universo.empresa_id) {
+    const empresaId = universo.empresa_id
     return (
       <Button
         variant="outline"
-        onPress={() => router.replace(`/empresas/${universo.empresa_id}`)}
+        onPress={() => router.replace(rotaDaEmpresa(empresaId))}
         accessibilityLabel="Abrir esta empresa na base de Empresas"
       >
         <ArrowUpRight size={18} color={colors.foreground} />
@@ -78,7 +81,7 @@ export function PromoverAcao({ universo }: PromoverAcaoProps) {
               setConfirmando(false)
               // replace, not push: going "back" to the staging sheet of a company
               // that is now promoted would show the wrong screen for the row.
-              router.replace(`/empresas/${empresa.id}`)
+              router.replace(rotaDaEmpresa(empresa.id))
             },
             onError: () => setConfirmando(false),
           })

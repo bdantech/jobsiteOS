@@ -22,6 +22,7 @@ import { useTheme } from '@/components/color-scheme-provider'
 import { Badge } from '@/components/ui/badge'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
+import { useRotaDoFornecedor } from '@/lib/navegacao'
 import {
   FAIXA_CHIP,
   FAIXA_CHIP_TEXTO,
@@ -103,6 +104,7 @@ function AcaoSwipe({
 
 export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const router = useRouter()
+  const rotaDoFornecedor = useRotaDoFornecedor()
   const { colors } = useTheme()
   const swipeRef = useRef<Swipeable>(null)
   const [moverAberto, setMoverAberto] = useState(false)
@@ -132,8 +134,10 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const fechar = useCallback(() => swipeRef.current?.close(), [])
 
   const abrirFornecedor = useCallback(() => {
-    if (nota.fornecedor_cnpj) router.push(`/antecipacao/fornecedores/${nota.fornecedor_cnpj}`)
-  }, [router, nota.fornecedor_cnpj])
+    // Dentro da pilha de onde o card veio — o Funil de NFs do Comercial tem a sua
+    // cópia da ficha. Ver `lib/navegacao.ts`.
+    if (nota.fornecedor_cnpj) router.push(rotaDoFornecedor(nota.fornecedor_cnpj))
+  }, [router, rotaDoFornecedor, nota.fornecedor_cnpj])
 
   const abrirDocumento = useCallback(() => setDocumentoAberto(true), [])
 

@@ -140,7 +140,9 @@ export function LinhaDoTitulo({ titulo, resumo, voltar, extra, acoes }: LinhaDoT
         ) : null}
       </View>
 
-      <View className="flex-row items-center gap-2">
+      {/* `gap-3`: com `gap-2` a lupa e o sino pareciam um botão só, e o contador
+          na quina do sino encostava na lupa. */}
+      <View className="flex-row items-center gap-3">
         {extra}
         {acoes === undefined ? <HeaderActions /> : acoes}
       </View>
