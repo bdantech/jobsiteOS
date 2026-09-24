@@ -11,7 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireSessionContext } from '@/lib/auth'
-import { notificar } from '@/lib/notificacoes.server'
+import { avisarEContar } from '@/lib/notificacoes.server'
 
 /**
  * ⚠️ Every export of this module is a `'use server'` action, which means Next
@@ -153,10 +153,10 @@ export type TesteResult =
   | { ok: false; erro: string }
 
 /**
- * Exercises the full notification path — notificar() → notify() → notificacoes
- * row + VAPID fan-out — and is the honest way for a user to verify that push
- * actually reaches this browser, which is otherwise unknowable until the first
- * real event fires at 3am.
+ * Exercises the full notification path — the engine (0262) → notificacoes row →
+ * the push queue → VAPID/Expo — and is the honest way for a user to verify that
+ * push actually reaches this browser, which is otherwise unknowable until the
+ * first real event fires at 3am. Its rule ignores quiet hours on purpose.
  *
  * The recipient is hard-coded to the caller. This is a `'use server'` export, so
  * a `userIds` parameter here would be an open relay for spoofed company-wide
@@ -166,13 +166,14 @@ export async function enviarNotificacaoDeTeste(): Promise<TesteResult> {
   const { usuario } = await requireSessionContext()
 
   try {
-    const resultado = await notificar([usuario.id], {
+    const resultado = await avisarEContar('plataforma.teste', {
       titulo: 'Notificação de teste',
-      corpo: `Tudo certo, ${usuario.nome.split(' ')[0]}. As notificações do JobsiteOS estão funcionando.`,
+      resumo: `Tudo certo, ${usuario.nome.split(' ')[0]}. As notificações do JobsiteOS estão funcionando.`,
       url: '/notificacoes',
+      destinatarios: [usuario.id],
     })
 
-    return { ok: true, webPushEnviados: resultado.webPushEnviados }
+    return { ok: true, webPushEnviados: resultado.push }
   } catch {
     return { ok: false, erro: 'Não foi possível enviar a notificação de teste.' }
   }

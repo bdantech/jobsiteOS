@@ -124,6 +124,31 @@ export function NotificacoesCard({ prefsIniciais }: { prefsIniciais: PrefsNotifi
             />
           </div>
 
+          {/*
+            O resumo diário de avisos por e-mail (0262). Para quem não usa push: o que
+            as regras mandam para o resumo chega também na caixa de entrada, com a lista
+            inteira — o sino fica só com a contagem.
+          */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="resumo_email" className="text-sm font-medium">
+                Resumo diário de avisos por e-mail
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Às 8h, a lista dos avisos de rotina do dia anterior, também no seu e-mail.
+              </p>
+            </div>
+            <Switch
+              id="resumo_email"
+              name="resumo_email"
+              checked={prefs.resumo_email}
+              disabled={isPending}
+              onCheckedChange={(marcado) =>
+                setPrefs((atual) => ({ ...atual, resumo_email: marcado }))
+              }
+            />
+          </div>
+
           <Button type="submit" disabled={isPending}>
             {isPending ? (
               <>

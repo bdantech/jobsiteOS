@@ -9,7 +9,6 @@ import {
   type Triagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { AI_MODEL, EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
@@ -223,12 +222,8 @@ async function registrarOptOut(p: Pendente): Promise<boolean> {
     resumo: `${conversa.identificador_externo} pediu para não receber mais mensagens.`,
     url: `/comunicacao/${p.conversa_id}`,
     canal: conversa.canal,
-  })
-
-  await avisarDono(conversa.responsavel_vendedor_id, {
-    titulo: 'Pedido de descadastro',
-    corpo: `${conversa.identificador_externo} pediu para parar. Já suprimido.`,
-    url: `/comunicacao/${p.conversa_id}`,
+    // O responsável da conversa recebe pelo motor (regra `responsavel_da_conversa`).
+    conversa_id: p.conversa_id,
   })
   return true
 }
@@ -254,12 +249,8 @@ async function escalar(p: Pendente, motivo: string): Promise<boolean> {
     url: `/comunicacao/${p.conversa_id}`,
     conversa_id: p.conversa_id,
   })
-
-  await avisarDono(conversa?.responsavel_vendedor_id ?? null, {
-    titulo: 'Uma conversa precisa de você',
-    corpo: motivo,
-    url: `/comunicacao/${p.conversa_id}`,
-  })
+  // O responsável recebe com push pelo motor (regra `responsavel_da_conversa`); sem
+  // responsável, cai para o Admin. Antes saíam dois avisos: um por perfil, um direto.
   return true
 }
 
@@ -294,22 +285,4 @@ async function moverPrimeiroContato(p: Pendente): Promise<boolean> {
     return false
   }
   return (data ?? []).length > 0
-}
-
-async function avisarDono(
-  vendedorId: string | null,
-  payload: { titulo: string; corpo: string; url: string },
-): Promise<void> {
-  if (!vendedorId) return
-  const { data } = await supabaseAdmin
-    .from('vendedores')
-    .select('usuario_id')
-    .eq('id', vendedorId)
-    .maybeSingle()
-  if (!data?.usuario_id) return
-  try {
-    await notify(supabaseAdmin, [data.usuario_id], payload)
-  } catch (erro) {
-    logger.error({ erro: String(erro) }, 'Falha ao notificar o dono da conversa.')
-  }
 }

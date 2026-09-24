@@ -6457,28 +6457,106 @@ export type Database = {
           },
         ]
       }
+      notificacao_config: {
+        Row: {
+          atualizado_em: string
+          fuso: string
+          id: boolean
+          silencio_fim: number
+          silencio_inicio: number
+        }
+        Insert: {
+          atualizado_em?: string
+          fuso?: string
+          id?: boolean
+          silencio_fim?: number
+          silencio_inicio?: number
+        }
+        Update: {
+          atualizado_em?: string
+          fuso?: string
+          id?: boolean
+          silencio_fim?: number
+          silencio_inicio?: number
+        }
+        Relationships: []
+      }
+      notificacao_historico: {
+        Row: {
+          acao: string
+          antes: Json | null
+          criado_em: string
+          depois: Json | null
+          id: string
+          registro: string
+          tabela: string
+          usuario_id: string | null
+        }
+        Insert: {
+          acao: string
+          antes?: Json | null
+          criado_em?: string
+          depois?: Json | null
+          id?: string
+          registro: string
+          tabela: string
+          usuario_id?: string | null
+        }
+        Update: {
+          acao?: string
+          antes?: Json | null
+          criado_em?: string
+          depois?: Json | null
+          id?: string
+          registro?: string
+          tabela?: string
+          usuario_id?: string | null
+        }
+        Relationships: []
+      }
       notificacao_regras: {
         Row: {
           ativo: boolean
+          atualizado_em: string | null
+          canais: string[]
           criado_em: string
+          dedup_horas: number
+          fallback_admin: boolean
+          frequencia: string
           id: string
+          papel: string | null
           perfil_id: string | null
+          respeita_silencio: boolean
           tipo_evento: string
           usuario_id: string | null
         }
         Insert: {
           ativo?: boolean
+          atualizado_em?: string | null
+          canais?: string[]
           criado_em?: string
+          dedup_horas?: number
+          fallback_admin?: boolean
+          frequencia?: string
           id?: string
+          papel?: string | null
           perfil_id?: string | null
+          respeita_silencio?: boolean
           tipo_evento: string
           usuario_id?: string | null
         }
         Update: {
           ativo?: boolean
+          atualizado_em?: string | null
+          canais?: string[]
           criado_em?: string
+          dedup_horas?: number
+          fallback_admin?: boolean
+          frequencia?: string
           id?: string
+          papel?: string | null
           perfil_id?: string | null
+          respeita_silencio?: boolean
           tipo_evento?: string
           usuario_id?: string | null
         }
@@ -6499,12 +6577,65 @@ export type Database = {
           },
         ]
       }
+      notificacao_tipos: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          atualizado_por: string | null
+          corpo_modelo: string | null
+          criado_em: string
+          descricao: string | null
+          gravidade: string
+          modulo: string
+          nome: string
+          tipo: string
+          titulo_modelo: string | null
+          ultimo_em: string | null
+          ultimo_payload: Json | null
+          url_modelo: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          corpo_modelo?: string | null
+          criado_em?: string
+          descricao?: string | null
+          gravidade?: string
+          modulo?: string
+          nome: string
+          tipo: string
+          titulo_modelo?: string | null
+          ultimo_em?: string | null
+          ultimo_payload?: Json | null
+          url_modelo?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          corpo_modelo?: string | null
+          criado_em?: string
+          descricao?: string | null
+          gravidade?: string
+          modulo?: string
+          nome?: string
+          tipo?: string
+          titulo_modelo?: string | null
+          ultimo_em?: string | null
+          ultimo_payload?: Json | null
+          url_modelo?: string | null
+        }
+        Relationships: []
+      }
       notificacoes: {
         Row: {
           corpo: string | null
           criado_em: string
           id: string
+          chave: string | null
           lida: boolean
+          tipo: string | null
           titulo: string
           url: string | null
           usuario_id: string
@@ -6513,7 +6644,9 @@ export type Database = {
           corpo?: string | null
           criado_em?: string
           id?: string
+          chave?: string | null
           lida?: boolean
+          tipo?: string | null
           titulo: string
           url?: string | null
           usuario_id: string
@@ -6522,7 +6655,9 @@ export type Database = {
           corpo?: string | null
           criado_em?: string
           id?: string
+          chave?: string | null
           lida?: boolean
+          tipo?: string | null
           titulo?: string
           url?: string | null
           usuario_id?: string
@@ -6536,6 +6671,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notificacoes_envios: {
+        Row: {
+          agendado_para: string
+          canal: string
+          criado_em: string
+          enviado_em: string | null
+          erro: string | null
+          id: string
+          notificacao_id: string
+          status: string
+          tentativas: number
+          usuario_id: string
+        }
+        Insert: {
+          agendado_para?: string
+          canal: string
+          criado_em?: string
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          notificacao_id: string
+          status?: string
+          tentativas?: number
+          usuario_id: string
+        }
+        Update: {
+          agendado_para?: string
+          canal?: string
+          criado_em?: string
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          notificacao_id?: string
+          status?: string
+          tentativas?: number
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      notificacoes_resumo: {
+        Row: {
+          canais: string[]
+          chave: string | null
+          corpo: string | null
+          criado_em: string
+          entregue_em: string | null
+          id: string
+          tipo: string
+          titulo: string
+          url: string | null
+          usuario_id: string
+        }
+        Insert: {
+          canais?: string[]
+          chave?: string | null
+          corpo?: string | null
+          criado_em?: string
+          entregue_em?: string | null
+          id?: string
+          tipo: string
+          titulo: string
+          url?: string | null
+          usuario_id: string
+        }
+        Update: {
+          canais?: string[]
+          chave?: string | null
+          corpo?: string | null
+          criado_em?: string
+          entregue_em?: string | null
+          id?: string
+          tipo?: string
+          titulo?: string
+          url?: string | null
+          usuario_id?: string
+        }
+        Relationships: []
       }
       pedidos_apresentacao: {
         Row: {
@@ -14933,6 +15146,22 @@ export type Database = {
         }
       }
       app_mover_oportunidade: { Args: { p: Json }; Returns: Json }
+      app_notificacao_numeros: {
+        Args: never
+        Returns: {
+          enviados: number
+          lidos: number
+          pessoas: number
+          resumidos: number
+          tipo: string
+          ultimo_em: string | null
+        }[]
+      }
+      app_notificacao_previa: {
+        Args: { p_corpo?: string; p_tipo: string; p_titulo?: string; p_url?: string }
+        Returns: Json
+      }
+      app_notificacao_testar: { Args: { p_tipo: string }; Returns: string }
       app_mover_venda: {
         Args: { p: Json }
         Returns: {
@@ -16838,6 +17067,10 @@ export type Database = {
       reports_painel: { Args: never; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      notificacao_emitir: {
+        Args: { p_ator?: string; p_empresa_id?: string; p_payload?: Json; p_tipo: string }
+        Returns: string[]
+      }
     }
     Enums: {
       [_ in never]: never

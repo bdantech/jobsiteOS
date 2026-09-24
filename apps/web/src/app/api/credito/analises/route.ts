@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { MutationError, solicitarAnalise } from '@jobsiteos/core'
 
-import { avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
+import { varrerAgora } from '@/lib/notificacoes.server'
 import { createBearerClient, jsonError, readJsonBody, requireApiSession } from '../../_lib/session'
 
 /**
@@ -43,18 +43,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     // O schema do core valida; o RPC decide se pode. Esta rota não repete nenhum dos dois.
     const analise = await solicitarAnalise(scoped, parsedBody.body)
 
-    const { data: empresa } = await scoped
-      .from('empresas')
-      .select('razao_social')
-      .eq('id', analise.empresa_id ?? '')
-      .maybeSingle()
-
-    // O sino já saiu do gatilho (0248); aqui é só o push — e quem pediu fica de fora,
-    // exatamente como o fan-out já o exclui por ser o ator do evento.
-    await avisarPedidoDeAnalise(
-      { id: analise.id, nome: empresa?.razao_social ?? analise.cnpj },
-      { tipoEvento: 'analise.solicitada', quemPediu: usuario.id },
-    )
+    // O aviso ao Crédito sai do evento `analise.solicitada` que o RPC gravou (0262);
+    // aqui só se entrega o push já, sem esperar a varredura.
+    await varrerAgora()
 
     return NextResponse.json({ analise }, { status: 201 })
   } catch (e) {

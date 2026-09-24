@@ -14,7 +14,7 @@ import {
 } from '../../../../../packages/core/src/comercial/comissao.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { avisar, emitirEvento, usuarioDoVendedor } from '../../radar/eventos.js'
 import { lerComissao } from '../../comercial/config.js'
 
 /**
@@ -295,11 +295,19 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
     url: '/comercial/comissoes',
     competencia,
   })
-  await notificarPerfis(['Admin', 'Comercial'], {
-    titulo: 'Comissões apuradas',
-    corpo: `Competência ${competencia} fechada com ${lancamentos.length} lançamento(s). Revise e aprove.`,
-    url: '/comercial/comissoes',
-  })
+  // O comentário acima prometia o aviso por vendedor e o código mandava um agregado
+  // para a gestão. Agora são os dois: o evento para Admin e Comercial, e um aviso por
+  // vendedor com o total dele.
+  for (const [vendedorId, valor] of porVendedor) {
+    await avisar('comissao.apurada_vendedor', {
+      titulo: 'Sua comissão foi apurada',
+      resumo: `Competência ${competencia}: ${valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. Falta aprovar antes de pagar.`,
+      url: '/comercial/comissoes',
+      vendedor_id: vendedorId,
+      competencia,
+      valor,
+    })
+  }
 
   logger.info(acc, 'Apuração de comissões concluída.')
   return acc
@@ -314,30 +322,35 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
  * quem está na mesa.
  */
 /**
- * Avisa o DONO do negócio, e não o perfil inteiro.
- *
- * O fanout de `empresa_eventos` mira perfil ou usuário fixo, e nenhum dos dois serve aqui:
- * a decisão do crédito interessa a uma pessoa — quem tem aquele negócio na mão. Mandar para
- * todo o comercial treinaria o time a ignorar o sino, que é o oposto de notificar.
+ * Avisa o DONO do negócio, e não o perfil inteiro: a decisão do crédito interessa a
+ * uma pessoa — quem tem aquele negócio na mão. Mandar para todo o comercial treinaria
+ * o time a ignorar o sino, que é o oposto de notificar.
  */
 async function avisarDonoDaVenda(
-  vendedorId: string,
+  analiseId: string,
+  venda: { id: string; vendedor_id: string },
   titulo: string,
-  corpo: string,
-  vendaId: string,
+  resumo: string,
 ): Promise<void> {
-  const { data: vendedor } = await supabaseAdmin
-    .from('vendedores')
-    .select('usuario_id')
-    .eq('id', vendedorId)
-    .maybeSingle()
+  /*
+   * Pelo motor (0262), com push — o insert direto que estava aqui só tocava o sino. A
+   * regra `vendedor_da_venda` acha o dono pelo `venda_id`.
+   *
+   * Quem PEDIU a análise já recebe "a análise que você pediu foi aprovada" pelo
+   * evento da decisão; quando o dono da venda é a mesma pessoa, este aviso seria o
+   * segundo para o mesmo fato, e é pulado.
+   */
+  const [{ data: analise }, usuario] = await Promise.all([
+    supabaseAdmin.from('analises_credito').select('solicitada_por').eq('id', analiseId).maybeSingle(),
+    usuarioDoVendedor(venda.vendedor_id),
+  ])
   // Vendedor de IA não tem usuário, e é um caso normal — não é falha.
-  if (!vendedor?.usuario_id) return
-  await supabaseAdmin.from('notificacoes').insert({
-    usuario_id: vendedor.usuario_id,
+  if (!usuario || usuario === analise?.solicitada_por) return
+  await avisar('venda.credito_decidido', {
     titulo,
-    corpo,
-    url: `/comercial?venda=${vendaId}`,
+    resumo,
+    url: `/comercial/vendas/${venda.id}`,
+    venda_id: venda.id,
   })
 }
 
@@ -358,10 +371,10 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
         venda_id: v.id,
       })
       await avisarDonoDaVenda(
-        v.vendedor_id,
+        analiseId,
+        v,
         'Crédito aprovado parcialmente',
         'A seguradora aprovou parte do limite. O card não andou sozinho — a decisão é sua.',
-        v.id,
       )
     }
     return 0
@@ -414,12 +427,12 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
     })
 
     await avisarDonoDaVenda(
-      v.vendedor_id,
+      analiseId,
+      v,
       aprovada ? 'Crédito aprovado' : 'Crédito negado',
       aprovada
         ? 'A seguradora aprovou o limite. O negócio avançou para proposta enviada.'
         : 'A seguradora negou o limite. O negócio foi encerrado como perdido.',
-      v.id,
     )
   }
 

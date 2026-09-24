@@ -31,6 +31,7 @@ export * from './reports/index.js'
 export * from './crons/index.js'
 export * from './transportes/index.js'
 export * from './voz/index.js'
+export * from './notificacoes/regras.js'
 export * from './constants.js'
 export type {
   Database,

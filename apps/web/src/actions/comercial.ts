@@ -31,7 +31,7 @@ import {
   salvarVendedor,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
-import { avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
+import { varrerAgora } from '@/lib/notificacoes.server'
 import { createClient } from '@/lib/supabase/server'
 import {
   aplicarDeriva,
@@ -333,25 +333,11 @@ export async function pedirAnaliseDaVendaAction(
     if (error) throw new Error(error.message)
     const analise = data as { id?: string; cnpj?: string; criada_em?: string } | null
     /*
-     * O push só sai quando o pedido é NOVO.
-     *
-     * O RPC reaproveita uma análise aberta do mesmo CNPJ quando existe, e nesse caso ele
-     * também não emite evento — ligar o negócio a uma análise que o Crédito já está
-     * tocando não é um pedido novo, e avisar como se fosse treinaria o time a ignorar o
-     * aviso (é o que a 0129 diz, e o push tem de seguir a mesma régua).
-     *
-     * Como o retorno é a linha, e não "criei ou reaproveitei", a distinção sai do
-     * `criada_em`: nascida nesta requisição, ou não.
+     * O aviso ao Crédito sai do evento `credito.analise_solicitada` — que o RPC só emite
+     * quando o pedido é NOVO (reaproveitar uma análise aberta não é pedido novo, 0129).
+     * Aqui só se entrega o push já, sem esperar a varredura.
      */
-    const nova = analise?.criada_em
-      ? Date.now() - new Date(analise.criada_em).getTime() < 10_000
-      : false
-    if (analise?.id && nova) {
-      await avisarPedidoDeAnalise(
-        { id: analise.id, nome: analise.cnpj ?? 'Nova empresa' },
-        { tipoEvento: 'credito.analise_solicitada', quemPediu: usuarioId },
-      )
-    }
+    await varrerAgora()
     revalidatePath('/comercial')
     return { ok: true, data: { id: analise?.id ?? null } }
   } catch (error) {

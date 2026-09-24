@@ -34,6 +34,7 @@ export async function salvarPrefsNotificacoes(
     push_web: formData.get('push_web') === 'on',
     push_mobile: formData.get('push_mobile') === 'on',
     resumo_meu_dia: formData.get('resumo_meu_dia') === 'on',
+    resumo_email: formData.get('resumo_email') === 'on',
   })
 
   if (!parsed.success) {

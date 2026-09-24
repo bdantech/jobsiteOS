@@ -367,6 +367,22 @@ export const CRONS: readonly CronCatalogado[] = [
       'Leva para o serviço de voz o que uma PESSOA pôs na fila em Comunicação → Ligações. Não existe cron que escolha as notas: a régua automática foi deixada de fora de propósito, porque a ligação é o canal mais caro de errar e aqui nem mensagem sai sem alguém aprovar. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez), e o intervalo dá espaço para a retentativa de envio no mesmo dia.',
     destino: 'POST /jobs/voz/enviar',
   },
+  {
+    path: '/api/cron/notificacoes-enviar',
+    nome: 'Fila de avisos (push e e-mail)',
+    moduloId: 'admin',
+    descricao:
+      'Entrega o push e o e-mail dos avisos que ainda estão na fila: os que nascem no banco — o gatilho dos eventos não fala HTTP — e os que o horário de silêncio segurou até de manhã. Quem avisa pelo Node entrega o próprio push na hora; este cron é a rede para o resto. As regras de quem recebe estão em Admin → Notificações.',
+    destino: 'POST /jobs/notificacoes/enviar',
+  },
+  {
+    path: '/api/cron/notificacoes-resumo',
+    nome: 'Resumo diário de avisos',
+    moduloId: 'admin',
+    descricao:
+      'Às 8h dos dias úteis, junta num aviso só por pessoa o que as regras mandaram para o resumo — notas convertidas, limite insuficiente, clientes que viraram ex. É o que tira do sino os avisos de rotina sem que ninguém deixe de sabê-los. Por e-mail também, para quem pediu nas preferências.',
+    destino: 'POST /jobs/notificacoes/resumo',
+  },
 ]
 
 export interface CronAgendado {

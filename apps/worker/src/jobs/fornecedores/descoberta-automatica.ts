@@ -4,7 +4,7 @@ import { dominioDeEmail } from '../../../../../packages/core/src/radar/dominio.j
 import { normalizarTelefoneBr } from '../../../../../packages/core/src/fornecedores/telefone.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { lerCustos, lerMaxNotasPorExtracao, lerTtlAutomatica } from './config.js'
 import {
   atualizarResumo,
@@ -256,21 +256,20 @@ export async function descobertaAutomaticaJob(limite = 200): Promise<ResultadoDe
   let semContato = 0
   let custoTotal = 0
   let interrompido = false
+  // Uma vez por RODADA: o alerta estava dentro do laço, e depois dos 80% cada
+  // fornecedor restante mandava outro push. A regra do evento ainda segura 20h.
+  let alertou = false
 
   for (const alvo of alvos ?? []) {
     const orc = await tetoAutomatico(custos.google_places)
-    if (orc.alerta && !interrompido) {
+    if (orc.alerta && !interrompido && !alertou) {
+      alertou = true
       await emitirEvento(null, EVENTO_TIPOS.ORCAMENTO_DESCOBERTA_ALERTA, {
         titulo: 'Orçamento de descoberta em alerta',
-        resumo: `A descoberta automática gastou ${orc.gasto.toFixed(2)} de ${orc.teto.toFixed(2)} no mês.`,
+        resumo: `A descoberta automática gastou R$ ${orc.gasto.toFixed(2)} de R$ ${orc.teto.toFixed(2)} no mês.`,
         url: '/comercial/admin',
         gasto: orc.gasto,
         teto: orc.teto,
-      })
-      await notificarPerfis(['Admin', 'Comercial'], {
-        titulo: 'Orçamento de descoberta em alerta',
-        corpo: `R$ ${orc.gasto.toFixed(2)} de R$ ${orc.teto.toFixed(2)} usados este mês.`,
-        url: '/comercial/admin',
       })
     }
 

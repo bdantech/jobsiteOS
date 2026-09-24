@@ -1,4 +1,3 @@
-import { notify } from '../../../packages/core/src/server/notify.js'
 import { EVENTO_TIPOS, type EventoTipo } from '../../../packages/core/src/constants.js'
 import {
   FONTE_INGESTAO_LABELS,
@@ -87,12 +86,10 @@ export async function concluirIngestao(
  * so a silent failure means nobody notices until the pyramid is a month stale and
  * the numbers in a board deck are wrong.
  *
- * Two channels on purpose:
- *   - the `empresa_eventos` row → the durable record, and the fan-out trigger
- *     (0014) turns it into a bell notification for the Admin perfil (seeded rule).
- *   - notify() → the same message, but it also PUSHES (Web Push + Expo). The
- *     trigger cannot push; it only writes rows.
- * See the report: this costs one duplicated bell row per failure.
+ * The `empresa_eventos` row is the durable record AND the notification: the
+ * notification engine (0262) delivers it by the `mercado.ingestao_falhou` rules —
+ * Admin, bell + push, and the type is CRITICAL, so it ignores quiet hours. There
+ * used to be a second `notify()` here for the push, which rang the bell twice.
  *
  * The message always carries the manual fallback instruction. The fallback is
  * NEVER automatic — an admin decides to trust the mirror, from the UI.
@@ -122,16 +119,6 @@ export async function falharIngestao(
   const url = `/mercado/ingestoes/${id}`
 
   await registrarEvento(EVENTO_TIPOS.MERCADO_INGESTAO_FALHOU, { titulo, resumo: corpo, url })
-
-  try {
-    const admins = await idsAdmins()
-    if (admins.length > 0) {
-      await notify(supabaseAdmin, admins, { titulo, corpo, url })
-    }
-  } catch (e) {
-    // A push failure must never mask the ingestion failure we are reporting.
-    logger.error({ erro: String(e) }, 'Falha ao notificar os admins.')
-  }
 }
 
 /**
@@ -148,24 +135,6 @@ export async function registrarEvento(
     .insert({ empresa_id: null, tipo, payload: payload as never, ator_usuario_id: null })
 
   if (error) logger.error({ tipo, erro: error.message }, 'Falha ao registrar o evento.')
-}
-
-async function idsAdmins(): Promise<string[]> {
-  const { data: perfil } = await supabaseAdmin
-    .from('perfis')
-    .select('id')
-    .eq('nome', 'Admin')
-    .maybeSingle()
-
-  if (!perfil) return []
-
-  const { data: usuarios } = await supabaseAdmin
-    .from('usuarios')
-    .select('id')
-    .eq('perfil_id', perfil.id)
-    .eq('ativo', true)
-
-  return (usuarios ?? []).map((u) => u.id)
 }
 
 /**

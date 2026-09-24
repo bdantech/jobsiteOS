@@ -1,6 +1,5 @@
 import { identificadorCanonico } from '../../../../../packages/core/src/comunicacao/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import {
   lerEntradasWasender,
   lerEnviosWasender,
@@ -453,6 +452,11 @@ export async function processarWebhookResend(payload: unknown): Promise<Resultad
  * Uma regra de fan-out por perfil daria a todo o time comercial todas as
  * conversas de todo mundo, e o sino viraria ruído em dois dias. É a mesma decisão
  * do advogado do processo (0143).
+ *
+ * O evento É o aviso (0262): a regra `vendedor_citado` do tipo entrega ao
+ * `vendedor_id` do payload, com push, e o modelo do tipo escreve "{{de}}
+ * respondeu". Gravado mesmo sem empresa, para o motor ter o dono — sem empresa ele
+ * só não aparece em timeline nenhuma.
  */
 async function avisarChegada(args: {
   empresaId: string | null
@@ -463,32 +467,14 @@ async function avisarChegada(args: {
   de: string
   preview: string | null
 }): Promise<void> {
-  if (args.empresaId) {
-    await emitirEvento(args.empresaId, EVENTO_TIPOS.COMUNICACAO_RECEBIDA, {
-      titulo: `Mensagem recebida por ${args.canal === 'email' ? 'e-mail' : 'WhatsApp'}`,
-      resumo: (args.preview ?? '(sem texto)').slice(0, 200),
-      url: args.conversaId ? `/comunicacao/${args.conversaId}` : '/comunicacao',
-      canal: args.canal,
-      comunicacao_id: args.comunicacaoId,
-      conversa_id: args.conversaId,
-    })
-  }
-
-  if (!args.vendedorId) return
-  const { data: vendedor } = await supabaseAdmin
-    .from('vendedores')
-    .select('usuario_id')
-    .eq('id', args.vendedorId)
-    .maybeSingle()
-  if (!vendedor?.usuario_id) return
-
-  try {
-    await notify(supabaseAdmin, [vendedor.usuario_id], {
-      titulo: `${args.de} respondeu`,
-      corpo: (args.preview ?? '(sem texto)').slice(0, 140),
-      url: args.conversaId ? `/comunicacao/${args.conversaId}` : '/comunicacao',
-    })
-  } catch (erro) {
-    logger.error({ erro: String(erro) }, 'Falha ao notificar o dono da conversa.')
-  }
+  await emitirEvento(args.empresaId, EVENTO_TIPOS.COMUNICACAO_RECEBIDA, {
+    titulo: `Mensagem recebida por ${args.canal === 'email' ? 'e-mail' : 'WhatsApp'}`,
+    resumo: (args.preview ?? '(sem texto)').slice(0, 200),
+    url: args.conversaId ? `/comunicacao/${args.conversaId}` : '/comunicacao',
+    canal: args.canal,
+    comunicacao_id: args.comunicacaoId,
+    conversa_id: args.conversaId,
+    de: args.de,
+    vendedor_id: args.vendedorId,
+  })
 }

@@ -27,7 +27,7 @@ import {
 import type { GestaoOperacao } from '../../../../../packages/core/src/comercial/schemas.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 
 /**
  * Motor de comissões v2 (04k) — o lado que fala com o banco.
@@ -634,11 +634,22 @@ export async function estornarCessao(
     motivo,
     proporcao,
   })
-  await notificarPerfis(['Admin', 'Comercial'], {
-    titulo: 'Comissão estornada',
-    corpo: resumo,
-    url: '/comercial/comissoes',
-  })
+
+  // Cada vendedor atingido fica sabendo do PRÓPRIO estorno — o evento acima é o da
+  // gestão (Admin e Comercial). A régua de quem vê a folha continua na tela.
+  const porVendedor = new Map<string, number>()
+  for (const e of estornos) porVendedor.set(e.vendedor_id, (porVendedor.get(e.vendedor_id) ?? 0) + e.valor)
+  for (const [vendedorId, valor] of porVendedor) {
+    await avisar('comissao.estornada_vendedor', {
+      titulo: 'Sua comissão foi estornada',
+      resumo: `${moeda(valor)} estornados: a cessão ${origemId} foi revertida (${motivo}).`,
+      url: '/comercial/comissoes',
+      vendedor_id: vendedorId,
+      valor,
+      cessao: origemId,
+      motivo,
+    })
+  }
 
   logger.info({ antecipacao: antecipacaoId, gravados, total }, 'Estorno de comissão registrado.')
   return { antecipacao_id: antecipacaoId, estornos: gravados }
@@ -1109,11 +1120,23 @@ export async function fecharCompetenciaJob(forcarCompetencia?: string): Promise<
     lancamentos: n,
     total,
   })
-  await notificarPerfis(['Admin', 'Comercial'], {
-    titulo: 'Competência fechada',
-    corpo: resumo,
-    url: '/comercial/comissoes',
-  })
+
+  // E cada vendedor, com o total DELE na competência — o evento acima é da gestão.
+  const { rows: porVendedor } = await pool.query<{ vendedor_id: string; total: string }>(
+    `select vendedor_id, coalesce(sum(valor), 0)::text as total
+       from comissao_lancamentos_v2 where competencia = $1::date group by vendedor_id`,
+    [competencia],
+  )
+  for (const v of porVendedor) {
+    await avisar('comissao.fechada_vendedor', {
+      titulo: 'Sua competência foi fechada',
+      resumo: `Competência ${competencia.slice(0, 7)}: ${moeda(Number(v.total))}. Falta aprovar antes de pagar.`,
+      url: '/comercial/comissoes',
+      vendedor_id: v.vendedor_id,
+      competencia,
+      total: Number(v.total),
+    })
+  }
 
   logger.info({ competencia, n, total }, 'Competência de comissão fechada.')
   return { competencia, lancamentos: n, total }

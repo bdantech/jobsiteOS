@@ -294,9 +294,8 @@ export const EVENTO_TIPOS = {
   /*
    * Comunicação (05A).
    *
-   * `comunicacao.recebida` é evento de TIMELINE, não de sino: quem precisa saber
-   * que chegou mensagem é o dono da thread, e o destinatário por linha sai por
-   * `notify()` no worker. Uma regra de fan-out por perfil aqui daria a todo o
+   * `comunicacao.recebida` avisa o DONO da thread, nunca um perfil: a regra dele
+   * é por papel (`vendedor_citado`, 0262). Uma regra de perfil aqui daria a todo o
    * time comercial todas as conversas de todo mundo.
    *
    * `toque.manual` continua onde sempre esteve, na Antecipação: é o mesmo fato, e

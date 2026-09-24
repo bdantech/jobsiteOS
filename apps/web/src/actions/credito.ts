@@ -25,7 +25,7 @@ import {
 } from '@jobsiteos/core'
 import { gerarChave } from '@/app/api/v1/_lib/api-key'
 import { getSessionContext } from '@/lib/auth'
-import { avisarDecisaoAQuemPediu, avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
+import { varrerAgora } from '@/lib/notificacoes.server'
 import { createClient } from '@/lib/supabase/server'
 import {
   dispararAdotarPedidos,
@@ -103,19 +103,12 @@ export async function solicitarAnaliseAction(
   try {
     const a = await solicitarAnalise(supabase, input)
     /*
-     * O SINO já foi tocado pelo gatilho de fan-out, que `analise.solicitada` passou a ter
-     * na 0248 — e é ele que alcança também o mobile e a barra de IA, que chamam o RPC sem
-     * passar por aqui. O que falta é o push, que não sai de dentro do Postgres.
+     * O aviso sai do evento `analise.solicitada` que o RPC gravou — o que também cobre
+     * o mobile e a barra de IA, que chamam o RPC sem passar por aqui. O motor (0262)
+     * entrega ao Crédito, ou ao Admin enquanto o perfil estiver vazio; aqui só se manda
+     * o push já, sem esperar a varredura.
      */
-    const { data: empresa } = await supabase
-      .from('empresas')
-      .select('razao_social')
-      .eq('id', a.empresa_id ?? '')
-      .maybeSingle()
-    await avisarPedidoDeAnalise(
-      { id: a.id, nome: empresa?.razao_social ?? a.cnpj },
-      { tipoEvento: 'analise.solicitada', quemPediu: usuarioId },
-    )
+    await varrerAgora()
     revalidatePath('/credito')
     revalidatePath(`/empresas/${a.empresa_id}`)
     return { ok: true, data: a }
@@ -292,18 +285,11 @@ export async function concluirAnaliseAction(
     const a = await concluirAnalise(supabase, input)
     const r = await dispararDecisaoEmVendas(a.id, a.estagio)
     /*
-     * A decisão volta para QUEM PEDIU (0248). Aqui é a decisão tomada por nós; a que vem
-     * da seguradora é avisada pelo worker, que é onde ela chega.
-     *
-     * O fan-out já avisa o perfil Crédito. O vendedor que abriu o pedido não está em
-     * regra nenhuma — e é ele quem decide o que fazer a seguir com o cliente.
+     * A decisão volta para QUEM PEDIU (0248) pelo evento que `app_concluir_analise`
+     * gravou: a regra de papel `quem_pediu` do motor (0262) o entrega, junto do perfil
+     * Crédito. Aqui só se manda o push já.
      */
-    const { data: empresa } = await supabase
-      .from('empresas')
-      .select('razao_social')
-      .eq('id', a.empresa_id ?? '')
-      .maybeSingle()
-    await avisarDecisaoAQuemPediu(a, empresa?.razao_social ?? a.cnpj, usuarioId)
+    await varrerAgora()
     revalidatePath('/credito')
     revalidatePath(`/credito/analises/${a.id}`)
     if (a.empresa_id) revalidatePath(`/empresas/${a.empresa_id}`)

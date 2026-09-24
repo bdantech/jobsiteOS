@@ -19,5 +19,12 @@ export default async function LoginPage({
 }) {
   const { erro } = await searchParams
 
-  return <LoginForm erroInicial={erro === 'desativado' ? 'Usuário desativado.' : undefined} />
+  // `erro=link`: o link de "esqueci minha senha" venceu ou já foi usado.
+  const mensagem =
+    erro === 'desativado'
+      ? 'Usuário desativado.'
+      : erro === 'link'
+        ? 'Este link para criar a senha venceu ou já foi usado. Peça outro em "Esqueci minha senha".'
+        : undefined
+  return <LoginForm erroInicial={mensagem} />
 }

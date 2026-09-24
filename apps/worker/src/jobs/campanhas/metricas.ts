@@ -5,7 +5,6 @@ import {
   type DesempenhoDaConta,
 } from '../../../../../packages/core/src/campanhas/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { lerLimitesCampanhas } from '../../campanhas/config.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
@@ -41,8 +40,6 @@ export async function varrerSaudeDasCampanhas(): Promise<ResultadoMetricas> {
   const acc: ResultadoMetricas = { campanhas: (campanhas ?? []).length, alertas: 0, contas_suspeitas: 0 }
   if (acc.campanhas === 0) return acc
 
-  const gestores = await idsDosGestores()
-
   for (const c of campanhas ?? []) {
     const { data } = await supabaseAdmin.rpc('app_campanha_metricas', {
       p: { campanha_id: c.id } as never,
@@ -64,19 +61,17 @@ export async function varrerSaudeDasCampanhas(): Promise<ResultadoMetricas> {
     for (const alerta of saude.alertas) {
       if (await jaAlertado(c.id, alerta)) continue
 
+      // O aviso é o próprio evento: Admin e Comercial com push, pela regra do tipo
+      // (0262). O texto vai no payload, e o painel pode trocá-lo.
       await emitirEvento(null, EVENTO_TIPOS.CAMPANHA_ALERTA_SAUDE, {
+        titulo: `Campanha "${c.nome}": ${alerta === 'optout' ? 'opt-out' : 'bounce'} acima do limiar`,
+        resumo: ALERTA_SAUDE_TEXTOS[alerta],
         campanha_id: c.id,
         nome: c.nome,
         tipo: alerta,
         optout_pct: saude.optoutPct,
         bounce_pct: saude.bouncePct,
         enviadas: saude.enviadas,
-        url: `/comercial/campanhas/${c.id}`,
-      })
-
-      await notify(supabaseAdmin, gestores, {
-        titulo: `Campanha "${c.nome}": ${alerta === 'optout' ? 'opt-out' : 'bounce'} acima do limiar`,
-        corpo: ALERTA_SAUDE_TEXTOS[alerta],
         url: `/comercial/campanhas/${c.id}`,
       })
       acc.alertas += 1
@@ -110,13 +105,4 @@ async function jaAlertado(campanhaId: string, tipo: string): Promise<boolean> {
     .limit(1)
     .maybeSingle()
   return !!data
-}
-
-async function idsDosGestores(): Promise<string[]> {
-  const { data } = await supabaseAdmin
-    .from('usuarios')
-    .select('id, perfis!inner(nome)')
-    .eq('ativo', true)
-    .in('perfis.nome', ['Admin', 'Comercial'])
-  return (data ?? []).map((u) => u.id)
 }

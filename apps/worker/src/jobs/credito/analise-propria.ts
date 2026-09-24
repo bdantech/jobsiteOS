@@ -25,12 +25,11 @@ import {
   type ParametrosAnalise,
 } from '../../../../../packages/core/src/credito/analise.js'
 import { formatCnpj } from '../../../../../packages/core/src/schemas/cnpj.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { protestosEmpresa } from '../radar/protestos.js'
 import { recalcularScoresDeCnpjs } from './potencial.js'
 
@@ -610,24 +609,14 @@ async function etapaExtracao(linha: LinhaAnalise): Promise<void> {
     cnpj: linha.cnpj,
     campos_pendentes: pendentes.length,
     titulo: `Extração aguardando revisão — ${formatCnpj(linha.cnpj)}`,
+    resumo: `${pendentes.length} campo(s) crítico(s) de ${formatCnpj(linha.cnpj)} precisam de confirmação antes do cálculo.`,
     url: `/credito/analises/${linha.analise_credito_id}`,
-  })
-
-  // O solicitante é notificado NOMINALMENTE, além do perfil: quem pediu a análise é
-  // quem está esperando por ela, e uma notificação de perfil se perde entre pares.
-  const destinatarios = new Set<string>()
-  if (linha.criada_por) destinatarios.add(linha.criada_por)
-  if (destinatarios.size > 0) {
-    await notify(supabaseAdmin, [...destinatarios], {
-      titulo: 'Extração aguardando sua revisão',
-      corpo: `${pendentes.length} campo(s) crítico(s) de ${formatCnpj(linha.cnpj)} precisam de confirmação antes do cálculo.`,
-      url: `/credito/analises/${linha.analise_credito_id}`,
-    })
-  }
-  await notificarPerfis(['Crédito'], {
-    titulo: 'Extração aguardando revisão',
-    corpo: `${formatCnpj(linha.cnpj)}: ${pendentes.length} campo(s) crítico(s) a confirmar.`,
-    url: `/credito/analises/${linha.analise_credito_id}`,
+    /*
+     * O solicitante NOMINALMENTE, além do perfil: quem pediu a análise é quem está
+     * esperando por ela. O motor (0262) junta os dois num aviso só por pessoa —
+     * antes eram até três: o do perfil, o nominal e o do evento.
+     */
+    destinatarios: linha.criada_por ? [linha.criada_por] : [],
   })
 }
 
@@ -799,7 +788,10 @@ async function etapaCalculoEParecer(linha: LinhaAnalise): Promise<void> {
     limite_recomendado: r.limite_recomendado,
     quadrante,
     titulo: `Análise proprietária concluída — ${formatCnpj(linha.cnpj)}`,
+    resumo: `${formatCnpj(linha.cnpj)}: ${r.recomendacao === 'operar' ? 'OPERAR' : 'NÃO OPERAR'}.`,
     url: `/credito/analises/${linha.analise_credito_id}`,
+    // Quem pediu recebe com push (regra `nomeados`).
+    destinatarios: linha.criada_por ? [linha.criada_por] : [],
   })
 
   // Divergência é evento próprio e com push: é o único caso em que duas leituras
@@ -809,23 +801,13 @@ async function etapaCalculoEParecer(linha: LinhaAnalise): Promise<void> {
       analise_propria_id: linha.id,
       cnpj: linha.cnpj,
       quadrante,
-      titulo: `Divergência com a seguradora — ${formatCnpj(linha.cnpj)}`,
-      url: `/credito/analises/${linha.analise_credito_id}`,
-    })
-    await notificarPerfis(['Crédito', 'Admin'], {
+      // Crédito e Admin com push, pela regra do tipo — o push que saía à parte daqui
+      // tocava o sino uma segunda vez.
       titulo:
         quadrante === 'so_nos'
-          ? 'Nós aprovamos, a seguradora não'
-          : 'A seguradora aprovou, nossa análise não',
-      corpo: `${formatCnpj(linha.cnpj)} precisa de decisão com motivo escrito.`,
-      url: `/credito/analises/${linha.analise_credito_id}`,
-    })
-  }
-
-  if (linha.criada_por) {
-    await notify(supabaseAdmin, [linha.criada_por], {
-      titulo: 'Sua análise proprietária ficou pronta',
-      corpo: `${formatCnpj(linha.cnpj)}: ${r.recomendacao === 'operar' ? 'OPERAR' : 'NÃO OPERAR'}.`,
+          ? `Nós aprovamos, a seguradora não — ${formatCnpj(linha.cnpj)}`
+          : `A seguradora aprovou, nossa análise não — ${formatCnpj(linha.cnpj)}`,
+      resumo: `${formatCnpj(linha.cnpj)} precisa de decisão com motivo escrito.`,
       url: `/credito/analises/${linha.analise_credito_id}`,
     })
   }
@@ -954,13 +936,8 @@ export async function sugerirReanalises(): Promise<{ sugeridas: number }> {
     sugeridas++
   }
 
-  if (sugeridas > 0) {
-    await notificarPerfis(['Crédito'], {
-      titulo: 'Reanálises sugeridas',
-      corpo: `${sugeridas} análise(s) vencem nos próximos 60 dias.`,
-      url: '/credito',
-    })
-  }
+  // Cada sugestão é um evento acima; o Crédito (ou o Admin, enquanto o perfil estiver
+  // vazio) as recebe juntas no resumo diário. O agregado daqui era o mesmo fato.
 
   logger.info({ sugeridas }, 'Sugestão de reanálises concluída.')
   return { sugeridas }

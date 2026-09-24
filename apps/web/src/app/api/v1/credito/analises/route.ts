@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { criarAnaliseExternaSchema, estagioInicial, documentosFaltantes } from '@jobsiteos/core'
 import { montarPayloadCredito } from '@jobsiteos/core/server/credito-api'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { avisarPedidoDeAnalise } from '@/lib/credito-notificacoes.server'
+import { avisarPedidoSemEvento } from '@/lib/credito-notificacoes.server'
 import { dispararDominioEmpresa } from '@/lib/mercado/worker'
 import {
   autenticar,
@@ -199,17 +199,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   void dispararDominioEmpresa(empresaId).catch(() => undefined)
 
   /*
-   * O time de Crédito precisa saber que entrou pedido (0248), e aqui não há evento a que
-   * o fan-out possa reagir: esta rota INSERE a linha direto, com service role, sem passar
-   * por `app_solicitar_analise`. Por isso o `tipoEvento` é null — sino e push saem os
-   * dois daqui, e não há risco de dobrar o sino.
-   *
-   * Não há ator a excluir: quem pediu é um sistema, não uma pessoa desta casa.
+   * O time de Crédito precisa saber que entrou pedido (0248), e aqui não há evento: esta
+   * rota INSERE a linha direto, com service role, sem passar por `app_solicitar_analise`.
+   * O aviso sai com o mesmo tipo dos outros caminhos, e as mesmas regras.
    */
-  await avisarPedidoDeAnalise(
-    { id: analise.id, nome: dados.razao_social ?? dados.cnpj },
-    { tipoEvento: null },
-  )
+  await avisarPedidoSemEvento({ id: analise.id, nome: dados.razao_social ?? dados.cnpj, empresaId })
 
   const corpo = {
     analise_id: analise.id,

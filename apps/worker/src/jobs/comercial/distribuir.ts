@@ -2,7 +2,7 @@ import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import { CAMADAS_DA_FONTE } from '../../../../../packages/core/src/comercial/schemas.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { lerDistribuicao } from '../../comercial/config.js'
 import { enriquecerLeadsDistribuidos } from './enriquecer-distribuidos.js'
 
@@ -280,13 +280,8 @@ export async function slaLeadsJob(): Promise<ResultadoSla> {
     })
   }
 
-  if (rows.length > 0) {
-    await notificarPerfis(['Comercial'], {
-      titulo: 'Leads expirados',
-      corpo: `${rows.length} lead(s) sem toque em ${cfg.sla_lead_dias} dias voltaram ao pool.`,
-      url: '/comercial/sdr',
-    })
-  }
+  // Um aviso por lead, ao SDR que o tinha (regra `sdr_do_lead`), e a gestão os vê
+  // no resumo diário. O aviso agregado que saía aqui repetia os mesmos leads.
 
   logger.info({ expirados: rows.length }, 'SLA de leads aplicado.')
   // A redistribuição em si é da rotina semanal: devolver ao pool e redistribuir no

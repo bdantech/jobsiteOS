@@ -4,66 +4,90 @@ import 'server-only'
 //
 // `@jobsiteos/core/src/server/notify.js` does not resolve: core declares an
 // `exports` map ({ ".", "./registry", "./schemas", "./types" }) and that subpath
-// is not in it, so both tsc (moduleResolution: Bundler) and webpack reject it
-// with "Cannot find module". core is off-limits to this agent, so the deep
-// relative path is the only way in without touching it.
-//
-// The cost is contained to this one file precisely so nobody else pays it:
-// every other module imports `notificar()` from here, not notify() from core.
-// See the report — the real fix is one line in packages/core/package.json:
-//   "./server/notify": "./src/server/notify.ts"
+// is not in it, so both tsc (moduleResolution: Bundler) and webpack reject it.
+// The cost is contained to this one file: every other module imports from here.
 import {
-  notificarNomeados,
-  notify,
-  type NotifyPayload,
-  type NotifyResult,
+  emitirNotificacao,
+  entregarEnvios,
+  type ConfigEmailInterno,
 } from '../../../../packages/core/src/server/notify.js'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type { NotifyPayload, NotifyResult }
-
-/**
- * The one way the app sends a notification. Writes the `notificacoes` rows (the
- * bell reads them over Realtime) and fans out to Web Push + Expo push for
- * whichever channels each recipient has actually registered.
- *
- * SERVER ONLY, and deliberately NOT a server action: `notify()` runs on the
- * service-role client, so if this were exported from a `'use server'` module
- * Next would mint an RPC endpoint for it and any authenticated browser could
- * push an arbitrary title/body/url to any user in the company. Callers must be
- * server code that has already authorised the send.
- *
- * Never throws on push-delivery problems — a dead browser subscription must not
- * roll back the caller's mutation. It only throws if the durable `notificacoes`
- * rows cannot be written, which is a real failure worth surfacing.
- */
-export async function notificar(
-  userIds: readonly string[],
-  payload: NotifyPayload,
-): Promise<NotifyResult> {
-  // De-dup: two rules matching the same user must not produce two bells.
-  const destinatarios = [...new Set(userIds)].filter((id) => id.length > 0)
-
-  if (destinatarios.length === 0) {
-    return { notificacoes: 0, webPushEnviados: 0, expoPushEnviados: 0, inscricoesRemovidas: 0 }
-  }
-
-  return notify(createAdminClient(), destinatarios, payload)
+/** O remetente interno, se configurado. Sem ele o canal e-mail é ignorado. */
+export function emailInterno(): ConfigEmailInterno | null {
+  const apiKey = process.env.RESEND_API_KEY
+  const remetente = process.env.RESEND_REMETENTE_INTERNO ?? process.env.RESEND_FROM_EMAIL
+  if (!apiKey || !remetente) return null
+  return { apiKey, remetente, urlBase: process.env.NEXT_PUBLIC_APP_URL ?? null }
 }
 
 /**
- * Notifica quem o DADO nomeia — o solicitante da análise, o dono do card — sem tocar o
- * sino duas vezes em quem o fan-out daquele evento já alcançou.
+ * O jeito de a web AVISAR (0262): emite pelo motor de avisos e entrega o push na
+ * hora. Quem recebe, o texto e o canal são das regras do tipo no painel de Admin
+ * (/admin/notificacoes); o `payload` leva o texto padrão e os dados de que os papéis
+ * precisam (`destinatarios`, `vendedor_id`…).
  *
- * `tipoEvento` é o evento que o chamador acabou de provocar. `null` significa que não
- * houve evento nenhum (uma escrita direta, como a da API de produção), e aí todo mundo
- * recebe sino + push.
+ * SERVER ONLY, and deliberately NOT a server action: it runs on the service-role
+ * client, so if this were exported from a `'use server'` module Next would mint an
+ * RPC endpoint for it and any authenticated browser could push an arbitrary
+ * title/body/url to anyone. Callers must be server code that already authorised it.
+ *
+ * Best-effort: nunca lança. O fato que gerou o aviso já foi gravado, e um push que
+ * não sai não pode desfazê-lo nem virar erro numa tela onde a ação deu certo.
  */
-export async function notificarNomeadosPeloDado(
-  userIds: readonly string[],
-  tipoEvento: string | null,
-  payload: NotifyPayload,
-): Promise<NotifyResult> {
-  return notificarNomeados(createAdminClient(), [...new Set(userIds)], tipoEvento, payload)
+export async function avisar(
+  tipo: string,
+  payload: Record<string, unknown>,
+  opcoes: { empresaId?: string | null; ator?: string | null } = {},
+): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    const ids = await emitirNotificacao(admin, tipo, payload, opcoes)
+    if (ids.length) await entregarAgora(ids)
+  } catch {
+    // Ver acima.
+  }
+}
+
+/**
+ * Como `avisar`, mas devolve o que aconteceu — para quem precisa dizer à pessoa se
+ * o push chegou (o botão de teste). Lança se o aviso não pôde ser gravado.
+ */
+export async function avisarEContar(
+  tipo: string,
+  payload: Record<string, unknown>,
+  opcoes: { empresaId?: string | null; ator?: string | null } = {},
+): Promise<{ avisos: number; push: number }> {
+  const admin = createAdminClient()
+  const ids = await emitirNotificacao(admin, tipo, payload, opcoes)
+  const r = ids.length
+    ? await entregarEnvios(admin, { notificacaoIds: ids, email: emailInterno() })
+    : { push: 0 }
+  return { avisos: ids.length, push: r.push }
+}
+
+/** Entrega já o push (e o e-mail) destes avisos — sem esperar a varredura. */
+export async function entregarAgora(notificacaoIds: readonly string[]): Promise<void> {
+  if (!notificacaoIds.length) return
+  try {
+    await entregarEnvios(createAdminClient(), { notificacaoIds, email: emailInterno() })
+  } catch {
+    // A varredura de cinco minutos pega o que ficou.
+  }
+}
+
+/**
+ * Entrega o que está vencido na fila — para depois de uma RPC que emitiu evento.
+ *
+ * O aviso de um evento nasce dentro do banco, e o banco não fala HTTP: sem isto o
+ * push esperaria a varredura de cinco minutos. É o que devolve ao "pedi a análise"
+ * o push imediato que o time de Crédito tinha.
+ */
+export async function varrerAgora(): Promise<void> {
+  try {
+    await entregarEnvios(createAdminClient(), { limite: 50, email: emailInterno() })
+  } catch {
+    // A varredura de cinco minutos pega o que ficou.
+  }
 }

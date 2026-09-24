@@ -1114,6 +1114,18 @@ export async function dispararEntregarWebhooks(): Promise<DispararJobResultado> 
   return postar('/jobs/webhooks/entregar', {}, 'webhooks-entregar')
 }
 
+// ─── Avisos (0262) ──────────────────────────────────────────────────────────
+
+/** A fila de push e e-mail dos avisos: o que o banco emitiu e o que o silêncio segurou. */
+export async function dispararEnviarNotificacoes(): Promise<DispararJobResultado> {
+  return postar('/jobs/notificacoes/enviar', {}, 'notificacoes-enviar')
+}
+
+/** O resumo diário de avisos: um por pessoa. */
+export async function dispararResumoNotificacoes(): Promise<DispararJobResultado> {
+  return postar('/jobs/notificacoes/resumo', {}, 'notificacoes-resumo')
+}
+
 // ─── Campanhas (05B) ────────────────────────────────────────────────────────
 
 /**

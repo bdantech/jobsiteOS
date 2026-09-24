@@ -4,7 +4,7 @@ import { FAIXA_ORDEM, type Faixa } from '../../../../../packages/core/src/anteci
 import { formatarMoeda } from '../../../../../packages/core/src/antecipacao/economia.js'
 import type { Consultavel } from '../../db.js'
 import { logger } from '../../logger.js'
-import { notificarPerfis } from '../../radar/eventos.js'
+import { avisar } from '../../radar/eventos.js'
 import { lerConfigEconomia, lerConfigFunil } from '../../antecipacao/config.js'
 
 /**
@@ -272,18 +272,19 @@ export async function reclassificarFunil(client: pg.Client): Promise<ResultadoRe
 }
 
 /**
- * Push para o Comercial quando uma nota ENTRA na faixa alta (§7).
+ * Aviso quando uma nota ENTRA na faixa alta (§7) — para o ORIGINADOR dela.
  *
- * Por que aqui e não numa regra de `notificacao_regras`: o gatilho de fan-out casa
- * apenas o TIPO do evento, não o payload — uma regra em `nf.faixa_alterada`
- * dispararia também ao sair da faixa e ao entrar em média, e num sync 6× ao dia
- * isso é ruído suficiente para o time desligar as notificações. E o gatilho não faz
- * push: ele grava o sino e para. Push é notify(), que precisa do service role.
+ * Por que aqui e não numa regra sobre `nf.faixa_alterada`: o motor casa o TIPO do
+ * evento, não o payload — uma regra ali dispararia também ao sair da faixa e ao
+ * entrar em média. Este aviso tem tipo próprio, `nf.faixa_alta`.
  *
- * Uma notificação por RODADA, agrupada, com deep link para o funil. Uma por nota
- * transformaria um sync de 40 notas novas em 40 buzinas no bolso do vendedor.
+ * Um aviso por ORIGINADOR por rodada, agrupado: cada um recebe as notas da carteira
+ * dele (a regra `vendedor_citado`), no resumo diário — a nota continua em faixa alta
+ * amanhã, e quarenta buzinas por sync era o que fazia o time ignorar o sino. Nota
+ * sem originador vai para o Admin, pelo "se ninguém" da regra.
  */
 interface EntradasFaixaAlta {
+  vendedor_id: string | null
   total: number
   valor: number
   receita: number
@@ -295,9 +296,10 @@ interface EntradasFaixaAlta {
  * Precisa rodar ANTES do UPDATE: depois dele `notas_fiscais.faixa` já é igual a
  * `stg_faixa.faixa` e o "entrou agora" deixa de ser expressável.
  */
-async function coletarFaixaAlta(client: pg.Client): Promise<EntradasFaixaAlta | null> {
+async function coletarFaixaAlta(client: pg.Client): Promise<EntradasFaixaAlta[]> {
   const { rows } = await client.query<EntradasFaixaAlta>(
     `select
+       nf.vendedor_id,
        count(*)::int as total,
        coalesce(sum(nf.valor), 0)::numeric as valor,
        coalesce(sum(nf.receita_esperada), 0)::numeric as receita,
@@ -307,32 +309,33 @@ async function coletarFaixaAlta(client: pg.Client): Promise<EntradasFaixaAlta | 
      from notas_fiscais nf
      join stg_faixa s on s.access_key = nf.access_key
      where s.faixa = 'alta'
-       and nf.faixa is distinct from s.faixa`,
+       and nf.faixa is distinct from s.faixa
+     group by nf.vendedor_id`,
   )
-  const r = rows[0]
-  return r && r.total > 0 ? r : null
+  return rows.filter((r) => r.total > 0)
 }
 
-async function notificarFaixaAlta(r: EntradasFaixaAlta | null): Promise<number> {
-  if (!r) return 0
-
-  const titulo =
-    r.total === 1 ? 'Nova nota em faixa alta' : `${r.total} novas notas em faixa alta`
-  const corpo =
-    r.total === 1
-      ? `${r.fornecedor ?? 'Fornecedor'}: ${formatarMoeda(Number(r.valor))}, receita esperada ${formatarMoeda(Number(r.receita))}.`
-      : `${formatarMoeda(Number(r.valor))} em notas, receita esperada ${formatarMoeda(Number(r.receita))}. A maior é de ${r.fornecedor ?? '—'}.`
-
-  await notificarPerfis(['Comercial', 'Admin'], {
-    titulo,
-    corpo,
-    // Deep link: no mobile o linking resolve /antecipacao contra a aba do módulo, e
-    // `?nota=` leva ao card. Uma notificação sem destino é uma notificação que
-    // obriga a pessoa a procurar do que ela estava falando.
-    url: r.total === 1 && r.access_key ? `/antecipacao?nota=${r.access_key}` : '/antecipacao',
-  })
-
-  return r.total
+async function notificarFaixaAlta(grupos: EntradasFaixaAlta[]): Promise<number> {
+  let total = 0
+  for (const r of grupos) {
+    total += r.total
+    await avisar('nf.faixa_alta', {
+      titulo: r.total === 1 ? 'Nova nota em faixa alta' : `${r.total} novas notas em faixa alta`,
+      resumo:
+        r.total === 1
+          ? `${r.fornecedor ?? 'Fornecedor'}: ${formatarMoeda(Number(r.valor))}, receita esperada ${formatarMoeda(Number(r.receita))}.`
+          : `${formatarMoeda(Number(r.valor))} em notas, receita esperada ${formatarMoeda(Number(r.receita))}. A maior é de ${r.fornecedor ?? '—'}.`,
+      // Deep link: no mobile o linking resolve /antecipacao contra a aba do módulo, e
+      // `?nota=` leva ao card. Uma notificação sem destino obriga a pessoa a procurar
+      // do que ela estava falando.
+      url: r.total === 1 && r.access_key ? `/antecipacao?nota=${r.access_key}` : '/antecipacao',
+      vendedor_id: r.vendedor_id,
+      notas: r.total,
+      valor: Number(r.valor),
+      receita: Number(r.receita),
+    })
+  }
+  return total
 }
 
 /**

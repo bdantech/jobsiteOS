@@ -35,7 +35,7 @@ import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { limiteDoSacado } from './limite.js'
 
 /**
@@ -392,27 +392,26 @@ async function emitirEventos(
    * dois dias pode não existir depois de amanhã, e o trabalho para salvá-la é um
    * telefonema. É por isso que este aviso empurra, em vez de esperar alguém abrir
    * a tela — e é por isso que ele vale para o ORIGINADOR titular, que é quem liga.
+   *
+   * Quem entrega é o motor de avisos (0262), pelo evento abaixo: regra de papel
+   * `originador_da_nota` (o `vendedor_id` roteado da pré-autorização), com push e
+   * UMA vez por pré-autorização — a `chave` e a trava de 30 dias. Antes ia a todo
+   * Admin e Comercial a cada sync, seis vezes por dia até vencer: 1.360 avisos.
    */
   if (pre.status === 'WAITING_CONTRACTED' && pre.expira_em) {
     const faltam = Math.ceil((new Date(pre.expira_em).getTime() - Date.now()) / 86_400_000)
     if (faltam >= 0 && faltam <= cfg.aviso_expiracao_dias) {
       acc.expirando++
-      if (empresaId) {
-        await emitirEvento(empresaId, EVENTO_TIPOS.PREAUTH_EXPIRANDO, {
-          titulo: `Oferta expira em ${faltam} dia(s)`,
-          resumo: `${alvo}: ${formatarMoeda(pre.valor)} — a construtora já ofereceu e o prazo acaba.`,
-          url,
-          dias: faltam,
-          pre_autorizacao_id: pre.id_externo,
-          valor: pre.valor,
-        })
-        n++
-      }
-      await notificarPerfis(['Admin', 'Comercial'], {
+      await emitirEvento(empresaId, EVENTO_TIPOS.PREAUTH_EXPIRANDO, {
         titulo: `Pré-autorização expirando: ${formatarMoeda(pre.valor)}`,
-        corpo: `${alvo} — expira em ${faltam} dia(s). O crédito já existe; falta o fornecedor aceitar.`,
+        resumo: `${alvo} — expira em ${faltam} dia(s). O crédito já existe; falta o fornecedor aceitar.`,
         url,
+        dias: faltam,
+        pre_autorizacao_id: pre.id_externo,
+        valor: pre.valor,
+        chave: `preauth:${pre.id_externo}`,
       })
+      n++
     }
   }
 

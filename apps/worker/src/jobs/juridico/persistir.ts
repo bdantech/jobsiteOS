@@ -18,7 +18,6 @@ import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { recalcularScoresDeCnpjs } from '../credito/potencial.js'
-import { notificarAdvogado } from './notificar.js'
 
 /**
  * O caminho ÚNICO por onde um processo do Escavador vira linhas nossas.
@@ -245,17 +244,14 @@ export async function persistirProcesso(
   /*
    * Movimentação relevante notifica O ADVOGADO DAQUELE processo, com push — não um
    * perfil inteiro. Citação e penhora mudam o que ele pode fazer amanhã de manhã; as
-   * outras duzentas movimentações do mês não são dele.
+   * outras duzentas movimentações do mês não são dele. Quem entrega é o motor de
+   * avisos (0262), pela regra de papel `advogado_do_processo` — que cai para o Admin
+   * quando o advogado é o escritório externo, sem sessão na plataforma.
    *
    * Só em processo que já existia: na importação inicial, um processo com dez anos de
    * histórico dispararia dez notificações de fatos antigos.
    */
   if (relevantes > 0 && !novo) {
-    await notificarAdvogado(capa.numero_cnj, {
-      titulo: 'Movimentação relevante',
-      corpo: `${capa.numero_cnj}: ${relevantes} movimentação(ões) que mudam o andamento.`,
-      url: `/juridico/${capa.numero_cnj}`,
-    })
     await emitirEvento(empresaId, EVENTO_TIPOS.PROCESSO_MOVIMENTACAO_RELEVANTE, {
       titulo: 'Movimentação relevante',
       resumo: `${relevantes} movimentação(ões) relevante(s) em ${capa.numero_cnj}.`,

@@ -3,7 +3,6 @@ import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { lerBenchmarkFases, lerNossosCnpjs, lerRegrasFase } from '../../juridico/config.js'
 import { capaDoProcesso, movimentacoesDoProcesso } from '../../juridico/escavador.js'
-import { notificarGestores } from './notificar.js'
 import { persistirProcesso } from './persistir.js'
 
 /**
@@ -132,18 +131,13 @@ export async function processarCallbacks(limite = 50): Promise<ResultadoCallback
       })
 
       if (p?.novo && cb.evento === 'novo_processo') {
-        r.novos_processos++
         /*
-         * Novo processo detectado vai para gestores + jurídico COM push. É a única
-         * notícia deste módulo que não é sobre trabalho em andamento: alguém abriu
-         * uma ação e ninguém aqui sabia. Descobrir isso na sincronização semanal é
-         * descobrir tarde.
+         * Novo processo detectado vai para gestores + jurídico COM push — é a única
+         * notícia deste módulo que não é sobre trabalho em andamento. O aviso sai do
+         * evento `processo.novo_detectado`, que `persistirProcesso` acabou de gravar;
+         * a regra dele (Admin + Jurídico, push) está no painel de avisos.
          */
-        await notificarGestores({
-          titulo: 'Novo processo contra nós',
-          corpo: `${p.numero_cnj}${capa.processo.titulo_polo_ativo ? ` · ${capa.processo.titulo_polo_ativo}` : ''}`,
-          url: `/juridico/${p.numero_cnj}`,
-        })
+        r.novos_processos++
       } else {
         r.resyncs++
       }

@@ -24,6 +24,7 @@ import { criarProcessadorDominio, dominioEmpresa } from './radar/dominios.js'
 import { baixarDocumentoExterno } from './credito/baixar-documento.js'
 import { contatosEmpresa, criarProcessadorContatos } from './radar/contatos.js'
 import { entregarWebhooks } from './webhooks/entregar.js'
+import { entregarResumoDiario, varrerEnvios } from './notificacoes/entregar.js'
 import { apurarComissoesJob, aplicarDecisaoCreditoEmVendas } from './comercial/comissoes.js'
 import {
   alertaReclassificacaoJob,
@@ -146,6 +147,8 @@ export type TipoJob =
   | 'funil-sync-fontes'
   | 'funil-deduplicar'
   | 'webhooks-entregar'
+  | 'notificacoes-enviar'
+  | 'notificacoes-resumo'
   | 'credito-baixar-documento'
   | 'receita'
   | 'cno'
@@ -619,6 +622,16 @@ export function dispararContatosEmpresa(opts: {
 /** A fila de entrega de webhooks. Roda por cron e por cutucada da API. */
 export function dispararEntregarWebhooks(): string {
   return dispararAvulso('webhooks-entregar', async () => entregarWebhooks())
+}
+
+// ─── Avisos (0262) ──────────────────────────────────────────────────────────
+
+export function dispararEnviarNotificacoes(): string {
+  return dispararAvulso('notificacoes-enviar', async () => varrerEnvios())
+}
+
+export function dispararResumoNotificacoes(): string {
+  return dispararAvulso('notificacoes-resumo', async () => entregarResumoDiario())
 }
 
 export function dispararBaixarDocumento(docId: string): string {

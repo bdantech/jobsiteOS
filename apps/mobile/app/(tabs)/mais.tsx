@@ -15,6 +15,7 @@ import { ReportButton } from '@/components/shell/report-button'
 import { Avatar } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
+import { ConviteNotificacoes } from '@/features/auth/components/convite-notificacoes'
 import { useSession } from '@/lib/auth'
 
 /**
@@ -84,6 +85,9 @@ export default function MaisScreen() {
 
         {/* A folha branca sobe por cima do navy — a mesma dobra do login. */}
         <View className="-mt-6 gap-4 rounded-t-2xl bg-card px-5 pb-8 pt-7">
+          {/* Antes dos módulos: é o que faz o resto do app chegar sem ser aberto. */}
+          <ConviteNotificacoes />
+
           <View className="flex-row items-baseline justify-between">
             <Text className="text-lg font-bold text-foreground">Módulos</Text>
             <Text className="text-xs text-muted-foreground">{quantos} no app</Text>

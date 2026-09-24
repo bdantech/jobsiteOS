@@ -4,7 +4,7 @@ import type { Json, Tables } from '../../../../../packages/core/src/types/databa
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { lerOrcamento, lerTtl, type TtlDias } from '../../radar/config.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { estadoOrcamento } from '../../radar/orcamento.js'
 import { todasAsPaginas } from '../../paginar.js'
 import { atualizarItem, registrarEnriquecimento } from '../../radar/persist.js'
@@ -140,10 +140,10 @@ export async function executarLote(loteId: string, processar: ProcessarItem): Pr
       if (orc.estourou) {
         logger.warn({ loteId, gasto: orc.gasto, teto: orc.teto }, 'Teto de orçamento atingido; interrompendo lote.')
         const msg = `Lote interrompido: gasto do mês atingiu o teto (R$ ${orc.teto}).`
+        // Admin, com push e fora do silêncio (o tipo é crítico) — regra do tipo (0262).
         await emitirEvento(null, EVENTO_TIPOS.ORCAMENTO_ESTOURADO, {
           titulo: 'Orçamento estourado', resumo: msg, url: `/radar/lotes/${loteId}`,
         })
-        await notificarPerfis(['Admin'], { titulo: 'Orçamento estourado', corpo: msg, url: `/radar/lotes/${loteId}` })
         break
       }
       // Alerta (ex.: 80% do teto): uma vez por corrida.

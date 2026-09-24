@@ -31,8 +31,17 @@ const TROCA_SENHA_ROUTE = '/alterar-senha'
  */
 const PREFIXOS_PUBLICOS = ['/f/'] as const
 
+/**
+ * `/esqueci-senha` é para quem justamente não consegue entrar. A tela só pede um
+ * e-mail e responde sempre a mesma frase (ver a rota da API), então não abre nada.
+ */
+const ROTAS_PUBLICAS = ['/esqueci-senha'] as const
+
 function ehPublica(pathname: string): boolean {
-  return PREFIXOS_PUBLICOS.some((p) => pathname.startsWith(p))
+  return (
+    PREFIXOS_PUBLICOS.some((p) => pathname.startsWith(p)) ||
+    (ROTAS_PUBLICAS as readonly string[]).includes(pathname)
+  )
 }
 
 /**

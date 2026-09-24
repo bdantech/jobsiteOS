@@ -11,7 +11,6 @@ import {
   type FatosDoEnvio,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import type { Transporte } from '../../../../../packages/core/src/transportes/index.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import {
@@ -639,28 +638,16 @@ async function marcarFalha(linha: LinhaFila, motivo: string): Promise<void> {
 /**
  * Falha PERMANENTE avisa o dono da mensagem — não um perfil inteiro.
  *
- * Quem escreveu precisa saber que não saiu; o time comercial não precisa saber
- * que a mensagem de outra pessoa falhou. Por isso `notify()` direto e não uma
- * regra de fan-out (mesma decisão do 0143 para o advogado do processo).
+ * O evento `comunicacao.falhou` é o aviso (0262): a regra `dono_do_envio` entrega a
+ * quem escreveu ou, nas mensagens sem autor (campanha, lembrete, agente), ao
+ * vendedor da conta — que antes não sabia de nada. O Admin recebe no resumo.
+ * Gravado sempre, mesmo sem empresa: é a linha que dá ao motor o `outbox_id`.
  */
 async function avisarFalha(linha: LinhaFila, motivo: string): Promise<void> {
-  if (!linha.criada_por) return
-  try {
-    await notify(supabaseAdmin, [linha.criada_por], {
-      titulo: 'Sua mensagem não foi enviada',
-      corpo: motivo,
-      url: linha.conversa_id ? `/comunicacao/${linha.conversa_id}` : '/comunicacao',
-    })
-  } catch (erro) {
-    logger.error({ erro: String(erro) }, 'Falha ao notificar o dono da mensagem.')
-  }
-
-  if (linha.empresa_id) {
-    await emitirEvento(linha.empresa_id, EVENTO_TIPOS.COMUNICACAO_FALHOU, {
-      titulo: 'Falha ao enviar mensagem',
-      resumo: motivo,
-      url: '/comunicacao',
-      outbox_id: linha.id,
-    })
-  }
+  await emitirEvento(linha.empresa_id ?? null, EVENTO_TIPOS.COMUNICACAO_FALHOU, {
+    titulo: 'Sua mensagem não foi enviada',
+    resumo: motivo,
+    url: linha.conversa_id ? `/comunicacao/${linha.conversa_id}` : '/comunicacao',
+    outbox_id: linha.id,
+  })
 }

@@ -8,6 +8,7 @@ import { useTheme } from '@/components/color-scheme-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
+import { EsqueciSenhaSheet } from '@/features/auth/components/esqueci-senha-sheet'
 import { supabase } from '@/lib/supabase'
 
 interface FieldErrors {
@@ -31,6 +32,7 @@ export default function LoginScreen() {
   const [formError, setFormError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [mostrarSenha, setMostrarSenha] = useState(false)
+  const [esqueci, setEsqueci] = useState(false)
   const { colors } = useTheme()
 
   const senhaRef = useRef<TextInput>(null)
@@ -224,6 +226,15 @@ export default function LoginScreen() {
               <Button onPress={() => void onSubmit()} loading={loading} className="mt-1 h-[52px]">
                 <Text>Entrar</Text>
               </Button>
+
+              <Pressable
+                onPress={() => setEsqueci(true)}
+                accessibilityRole="button"
+                hitSlop={8}
+                className="items-center py-1 active:opacity-70"
+              >
+                <Text className="text-sm font-semibold text-primary">Esqueci minha senha</Text>
+              </Pressable>
             </View>
 
             <View className="mt-auto items-center gap-1 pt-2">
@@ -235,6 +246,8 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <EsqueciSenhaSheet open={esqueci} onOpenChange={setEsqueci} emailInicial={email} />
     </View>
   )
 }

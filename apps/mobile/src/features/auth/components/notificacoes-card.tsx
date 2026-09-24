@@ -147,6 +147,16 @@ export function NotificacoesCard() {
               onValueChange={(push_web) => salvar.mutate({ push_web })}
             />
 
+            <Separator />
+
+            <LinhaSwitch
+              titulo="Resumo diário por e-mail"
+              descricao="Às 8h, a lista dos avisos de rotina também no seu e-mail."
+              value={prefs.resumo_email}
+              loading={salvar.isPending && salvar.variables?.resumo_email !== undefined}
+              onValueChange={(resumo_email) => salvar.mutate({ resumo_email })}
+            />
+
             {/* The one state that silently swallows notifications: the phone is
                 registered but the account channel is off. Say it out loud. */}
             {push.ativo && !prefs.push_mobile ? (

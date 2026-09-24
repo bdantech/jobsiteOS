@@ -74,7 +74,7 @@ const envSchema = z.object({
   // in the UI would still watch the next ingestion auto-promote at whatever this
   // said. The one the admin could see was the one that lost.
 
-  /** notify() needs these for Web Push. Expo push needs no key. */
+  /** The push delivery (`entregarEnvios`) needs these for Web Push. Expo push needs no key. */
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
@@ -259,6 +259,12 @@ const envSchema = z.object({
    * funcionar.
    */
   RESEND_REMETENTE_INTERNO: z.string().optional(),
+  /**
+   * O endereço da web, para os avisos por e-mail (0262) levarem um link que abre
+   * no JobsiteOS. Opcional: sem ela o e-mail sai sem o link, e o aviso continua
+   * no sino.
+   */
+  WEB_URL: z.string().url().optional(),
   /**
    * O remetente da IA, em SUBDOMÍNIO DEDICADO. A persona nunca escreve do domínio
    * principal: volume de máquina e e-mail escrito à mão não podem dividir

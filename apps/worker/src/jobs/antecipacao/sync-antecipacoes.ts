@@ -25,7 +25,7 @@ import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 
 /**
  * Sync de antecipações + conversão automática de NFs (04e).
@@ -598,12 +598,8 @@ async function registrarRegressao(
   })
 
   // Push além do sino: uma conversão que talvez não exista é o tipo de coisa que
-  // não pode depender de alguém estar olhando a timeline.
-  await notificarPerfis(['Admin', 'Comercial'], {
-    titulo: 'Conversão em disputa',
-    corpo: resumo,
-    url: `/antecipacao/antecipacoes?id=${a.id_externo}`,
-  })
+  // não pode depender de alguém estar olhando a timeline. Sai do evento acima,
+  // pelas regras do tipo (Admin, Comercial e o originador da nota — 0262).
 
   /*
    * §1 — este é um dos DOIS únicos casos que estornam comissão: a cessão deixou de

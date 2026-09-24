@@ -9,10 +9,9 @@ import {
   type MetricasSacado,
   type NotaDoSacado,
 } from '../../../../../packages/core/src/prospeccao/index.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 import {
   lerChanceSemScore,
   lerCorteVolume,
@@ -614,25 +613,19 @@ export async function atualizarSacadosProspeccao(): Promise<ResultadoAtualizarSa
      * 2 milhões que a esteira não vai aprovar não é notícia.
      */
     if (!card?.originador_id || p.valorEsperado < limiar) continue
-    const { data: vendedor } = await supabaseAdmin
-      .from('vendedores')
-      .select('usuario_id')
-      .eq('id', card.originador_id)
-      .maybeSingle()
-    if (!vendedor?.usuario_id) continue
-    try {
-      await notify(supabaseAdmin, [vendedor.usuario_id], {
-        titulo: `Novo sacado: ${p.cand.nome ?? p.cand.cnpj}`,
-        corpo:
-          `${brl(p.m.volume_30d)} em ${janelas.janela_emissao_dias} dias · ` +
-          `${brl(p.m.valor_operavel)} operável · ${p.m.meses_com_emissao_6m} dos últimos ` +
-          `${janelas.janela_recorrencia_meses} meses.`,
-        url: '/antecipacao/sacados-por-nf',
-      })
-    } catch (e) {
-      // Push é best-effort: uma falha de notificação não pode derrubar a rodada inteira.
-      logger.warn({ cnpj: p.cand.cnpj, erro: String(e) }, 'Push de novo sacado falhou.')
-    }
+    // Ao originador do card (regra `vendedor_citado`, 0262). O limiar fica aqui porque
+    // é regra de negócio sobre o dado, não sobre o aviso.
+    await avisar('sacado_prospeccao.novo_relevante', {
+      titulo: `Novo sacado: ${p.cand.nome ?? p.cand.cnpj}`,
+      resumo:
+        `${brl(p.m.volume_30d)} em ${janelas.janela_emissao_dias} dias · ` +
+        `${brl(p.m.valor_operavel)} operável · ${p.m.meses_com_emissao_6m} dos últimos ` +
+        `${janelas.janela_recorrencia_meses} meses.`,
+      url: '/antecipacao/sacados-por-nf',
+      vendedor_id: card.originador_id,
+      cnpj_sacado: p.cand.cnpj,
+      valor_esperado_mensal: p.valorEsperado,
+    })
   }
 
   const r: ResultadoAtualizarSacados = {

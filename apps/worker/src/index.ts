@@ -45,6 +45,8 @@ import {
   dispararBaixarDocumento,
   dispararContatosEmpresa,
   dispararEntregarWebhooks,
+  dispararEnviarNotificacoes,
+  dispararResumoNotificacoes,
   dispararSyncNfs,
   dispararSyncAntecipacoes,
   dispararPerfilRecalcular,
@@ -857,6 +859,26 @@ app.post('/jobs/radar/contatos-empresa', (req: Request, res: Response, next: Nex
 app.post('/jobs/webhooks/entregar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararEntregarWebhooks(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * Os avisos (0262). A fila de push/e-mail a cada cinco minutos — o que o banco
+ * emitiu e o que o horário de silêncio segurou — e o resumo diário às 8h.
+ */
+app.post('/jobs/notificacoes/enviar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararEnviarNotificacoes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/notificacoes/resumo', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararResumoNotificacoes(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -16,7 +16,7 @@ const { Pool, Client } = pg
  *
  *   supabase-js   — the service-role client, for the places where PostgREST is
  *                   plenty (reading `camada_regras`, writing `mercado_ingestoes`)
- *                   and, above all, for notify(), which is written against it.
+ *                   and, above all, for the notification engine helpers, written against it.
  *
  * numeric/int8 come back as strings by default (node-pg refuses to silently lose
  * precision). We only ever aggregate them into counters, so the parsers below

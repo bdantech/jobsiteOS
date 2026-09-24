@@ -11,13 +11,12 @@ import {
   type Triagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { AI_MODEL, EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { requisitarJson } from '../../net/http.js'
-import { emitirEvento } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 
 /**
  * O AGENTE DE PRÓXIMO PASSO (§7). Um decisor, não um chatbot.
@@ -619,10 +618,12 @@ async function registrarDecisao(
 }
 
 async function avisarSugestao(conversa: ConversaParaDecidir, d: DecisaoAgente): Promise<void> {
-  await avisarVendedor(conversa.responsavel_vendedor_id, {
+  // Ao responsável da conversa, pela regra `responsavel_da_conversa` do tipo (0262).
+  await avisar('agente.sugestao', {
     titulo: 'Próximo passo sugerido',
-    corpo: d.conteudo_sugerido?.slice(0, 140) ?? d.justificativa.slice(0, 140),
+    resumo: d.conteudo_sugerido?.slice(0, 140) ?? d.justificativa.slice(0, 140),
     url: `/comunicacao/${conversa.id}`,
+    conversa_id: conversa.id,
   })
 }
 
@@ -633,29 +634,7 @@ async function avisarEscalacao(conversa: ConversaParaDecidir, motivo: string): P
     url: `/comunicacao/${conversa.id}`,
     conversa_id: conversa.id,
   })
-  await avisarVendedor(conversa.responsavel_vendedor_id, {
-    titulo: 'Uma conversa precisa de você',
-    corpo: motivo,
-    url: `/comunicacao/${conversa.id}`,
-  })
-}
-
-async function avisarVendedor(
-  vendedorId: string | null,
-  payload: { titulo: string; corpo: string; url: string },
-): Promise<void> {
-  if (!vendedorId) return
-  const { data } = await supabaseAdmin
-    .from('vendedores')
-    .select('usuario_id')
-    .eq('id', vendedorId)
-    .maybeSingle()
-  if (!data?.usuario_id) return
-  try {
-    await notify(supabaseAdmin, [data.usuario_id], payload)
-  } catch (erro) {
-    logger.error({ erro: String(erro) }, 'Falha ao notificar o vendedor.')
-  }
+  // O responsável recebe com push pelo próprio evento (regra `responsavel_da_conversa`).
 }
 
 // ─── Utilitários ────────────────────────────────────────────────────────────

@@ -249,5 +249,9 @@ export async function enfileirarNaoVinculada(args: {
     url: '/comunicacao/nao-vinculadas',
     canal: args.canal,
     identificador: ident,
+    // Quem recebe: o dono do número que recebeu, ou o vendedor sugerido — regra
+    // `dono_do_numero` (0262). Antes ia a todo Admin e Comercial.
+    conta_recebedora: args.contaRecebedora,
+    vendedor_id: args.vendedorSugeridoId ?? null,
   })
 }

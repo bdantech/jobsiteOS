@@ -12,7 +12,7 @@ import {
 import { getSessionContext, isAdmin } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { notificar } from '@/lib/notificacoes.server'
+import { avisar } from '@/lib/notificacoes.server'
 import type { ActionResult } from './empresas'
 
 /**
@@ -84,10 +84,13 @@ export async function atualizarReportAction(
      * o próprio report receberia um push contando o que acabou de fazer.
      */
     if (r.mudou_status && r.autor_id !== context.usuario.id) {
-      await notificar([r.autor_id], {
+      await avisar('report.status_alterado', {
         titulo: `Seu report #${r.numero} mudou para "${STATUS_REPORT_LABELS[r.status as StatusReport] ?? r.status}"`,
-        corpo: 'Toque para ver o que mudou.',
+        resumo: 'Toque para ver o que mudou.',
         url: `/reports/${r.report_id}`,
+        destinatarios: [r.autor_id],
+        numero: r.numero,
+        status: STATUS_REPORT_LABELS[r.status as StatusReport] ?? r.status,
       })
     }
 
@@ -117,13 +120,17 @@ export async function comentarReportAction(input: unknown): Promise<ActionResult
           // dele fica parada num painel que ninguém reabre sem motivo.
           await idsDeAdmins()
 
-      await notificar(
-        destinatarios.filter((id) => id !== context.usuario.id),
+      await avisar(
+        'report.comentado',
         {
           titulo: `Novo comentário no report #${c.numero}`,
-          corpo: c.ator_e_admin ? 'A administração respondeu.' : `${context.usuario.nome} respondeu.`,
+          resumo: c.ator_e_admin ? 'A administração respondeu.' : `${context.usuario.nome} respondeu.`,
           url: c.ator_e_admin ? `/reports/${c.report_id}` : `${ROTA_ADMIN}?r=${c.report_id}`,
+          destinatarios,
+          numero: c.numero,
         },
+        // Quem comentou não é avisado do próprio comentário.
+        { ator: context.usuario.id },
       )
     }
 

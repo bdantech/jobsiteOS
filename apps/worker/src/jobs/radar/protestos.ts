@@ -8,7 +8,7 @@ import { env } from '../../env.js'
 import { logger } from '../../logger.js'
 import { lerCustos } from '../../radar/config.js'
 import { provedorProtestos } from '../../radar/directd.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 import { executarLote } from './lote.js'
 import type { ProcessarItem, ResultadoItem } from './lote.js'
 
@@ -85,8 +85,8 @@ export function criarProcessadorProtestos(_lote: Tables<'lotes_enriquecimento'>)
     if (r.tem_protesto && !antesTinha) {
       const url = empresaId ? `/empresas/${empresaId}` : `/mercado/universo/${cnpj}`
       const resumo = `${cnpj}: ${r.qtd_protestos} protesto(s), R$ ${r.valor_total.toFixed(2)} (${prov.fonte}).`
+      // Admin e Crédito com push, pela regra do tipo (0262).
       await emitirEvento(empresaId, EVENTO_TIPOS.PROTESTO_DETECTADO, { titulo: 'Protesto detectado', resumo, url, cnpj })
-      await notificarPerfis(['Admin', 'Crédito'], { titulo: 'Protesto detectado', corpo: resumo, url })
     } else if (r.tem_protesto && antesTinha && antesValor > 0 && r.valor_total > antesValor * LIMIAR_AGRAVAMENTO) {
       await emitirEvento(empresaId, EVENTO_TIPOS.PROTESTO_AGRAVADO, {
         titulo: 'Protesto agravado',
@@ -330,10 +330,12 @@ export async function avisarCustoProtestos(hoje: Date = new Date()): Promise<Res
     `a ${formatarMoeda(Number(c.custo_unitario ?? 0))} cada: ${formatarMoeda(custo)}. ` +
     'Confira o saldo na plataforma de consulta antes do dia 5.'
 
-  await notificarPerfis(['Admin', 'Crédito'], {
+  await avisar('protestos.custo_mensal', {
     titulo: 'Protestos do mês: custo estimado',
-    corpo,
+    resumo: corpo,
     url: '/empresas?tab=analise',
+    consultas,
+    custo,
   })
 
   logger.info({ consultas, custo }, 'Aviso de custo dos protestos enviado.')
@@ -432,7 +434,6 @@ export async function protestosClientesMensal(): Promise<{ lote_id: string; iten
         url,
         grupo_id: g,
       })
-      await notificarPerfis(['Admin', 'Crédito'], { titulo: 'Protesto do grupo agravado', corpo, url })
     }
   }
 

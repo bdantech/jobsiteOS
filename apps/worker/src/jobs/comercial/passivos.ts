@@ -1,7 +1,7 @@
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import { pool } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { emitirEvento } from '../../radar/eventos.js'
 import { lerPassivos } from '../../comercial/config.js'
 
 /**
@@ -75,13 +75,9 @@ export async function sugerirPassivosJob(): Promise<ResultadoSugestaoPassivos> {
     })
   }
 
-  if (rows.length > 0) {
-    await notificarPerfis(['Admin', 'Comercial'], {
-      titulo: 'Candidatas a conta passiva',
-      corpo: `${rows.length} cliente(s) antecipam sozinhos há ${cfg.janela_meses} meses. Revise e decida.`,
-      url: '/empresas?tab=clientes',
-    })
-  }
+  // Cada candidata é um evento acima; a gestão as recebe juntas no resumo diário
+  // (regra de `cliente.gestao_alterada`, 0262). O aviso agregado que saía aqui era
+  // o mesmo fato pela segunda vez.
 
   logger.info({ candidatos: rows.length }, 'Sugestão de contas passivas concluída.')
   return { candidatos: rows.length, ja_passivos: 0 }

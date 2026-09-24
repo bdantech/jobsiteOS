@@ -8,10 +8,9 @@ import {
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { todasAsPaginas } from '../../paginar.js'
-import { emitirEvento } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 import { lerBenchmarkFases, lerMonitoramento } from '../../juridico/config.js'
 import { recalcularScoresDeCnpjs } from '../credito/potencial.js'
-import { notificarAdvogado } from './notificar.js'
 
 /**
  * Alertas diários do Jurídico (08 §5 e §9): fase lenta, processo parado, prazo a vencer.
@@ -99,11 +98,7 @@ export async function alertasJuridico(): Promise<ResultadoAlertas> {
         dias: p.dias_na_fase,
         benchmark: limite,
       })
-      await notificarAdvogado(p.numero_cnj, {
-        titulo: 'Processo lento',
-        corpo: `${p.numero_cnj}: ${p.dias_na_fase} dias em "${label}" (esperado ${limite}).`,
-        url: `/juridico/${p.numero_cnj}`,
-      })
+      // O push ao advogado sai do próprio evento: regra `advogado_do_processo` (0262).
     }
 
     if (
@@ -143,10 +138,13 @@ export async function alertasJuridico(): Promise<ResultadoAlertas> {
      */
     if (faltamDias <= 1 && !prazo.avisado_d1_em) {
       r.prazos_d1++
-      await notificarAdvogado(prazo.numero_cnj, {
+      await avisar('processo.prazo_proximo', {
         titulo: `${rotulo} amanhã`,
-        corpo: `${prazo.descricao} — processo ${prazo.numero_cnj}.`,
+        resumo: `${prazo.descricao} — processo ${prazo.numero_cnj}.`,
         url: `/juridico/${prazo.numero_cnj}`,
+        numero_cnj: prazo.numero_cnj,
+        prazo: rotulo,
+        dias: 1,
       })
       await supabaseAdmin
         .from('processo_prazos')
@@ -157,10 +155,13 @@ export async function alertasJuridico(): Promise<ResultadoAlertas> {
 
     if (faltamDias <= 3 && !prazo.avisado_d3_em) {
       r.prazos_d3++
-      await notificarAdvogado(prazo.numero_cnj, {
+      await avisar('processo.prazo_proximo', {
         titulo: `${rotulo} em 3 dias`,
-        corpo: `${prazo.descricao} — processo ${prazo.numero_cnj}.`,
+        resumo: `${prazo.descricao} — processo ${prazo.numero_cnj}.`,
         url: `/juridico/${prazo.numero_cnj}`,
+        numero_cnj: prazo.numero_cnj,
+        prazo: rotulo,
+        dias: 3,
       })
       await supabaseAdmin
         .from('processo_prazos')

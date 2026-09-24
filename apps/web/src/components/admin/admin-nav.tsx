@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Clock, MessageSquareWarning, Settings, Shield, Users } from 'lucide-react'
+import { BellRing, Clock, MessageSquareWarning, Settings, Shield, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ABAS = [
@@ -11,6 +11,8 @@ const ABAS = [
   // Reports vem antes de Crons: é trabalho diário (alguém está esperando resposta),
   // e Crons é consulta. A ordem das abas é a ordem em que se abre o dia.
   { href: '/admin/reports', label: 'Reports', icon: MessageSquareWarning },
+  // Os avisos da plataforma (0262): quem recebe cada um, o texto e o canal.
+  { href: '/admin/notificacoes', label: 'Notificações', icon: BellRing },
   { href: '/admin/crons', label: 'Crons', icon: Clock },
   { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ] as const

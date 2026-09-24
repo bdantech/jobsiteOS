@@ -1,19 +1,19 @@
 import type { EventoTipo } from '../../../../packages/core/src/constants.js'
 import {
-  notificarNomeados,
-  notify,
-  type NotifyPayload,
+  emitirNotificacao,
+  entregarEnvios,
+  type ConfigEmailInterno,
 } from '../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../db.js'
+import { env } from '../env.js'
 import { logger } from '../logger.js'
 
 /**
- * Emite um evento em empresa_eventos. O trigger de fan-out (migração 0003/0014)
- * transforma cada linha em notificações para quem casar uma notificacao_regras.
+ * Emite um evento em empresa_eventos. O trigger passa cada linha pelo motor de
+ * avisos (0262): as regras do tipo, no painel de Admin, decidem quem recebe.
  *
  * - empresaId != null → evento DE empresa (aparece na timeline da Company 360).
- * - empresaId == null → evento de SISTEMA; usa payload.titulo/url (o trigger os
- *   prefere ao título derivado da empresa).
+ * - empresaId == null → evento de SISTEMA; usa payload.titulo/url.
  */
 export async function emitirEvento(
   empresaId: string | null,
@@ -26,49 +26,39 @@ export async function emitirEvento(
   if (error) logger.error({ tipo, erro: error.message }, 'Falha ao emitir evento do Radar.')
 }
 
-/**
- * Notificação COM push (sino + web/expo) para os usuários de certos perfis. Usado
- * nos eventos críticos ("aja agora"). Best-effort: uma falha de push nunca derruba o
- * job. Esses eventos NÃO têm regra de fan-out (senão o sino duplicaria) — o sino vem
- * daqui, do notify().
- */
-export async function notificarPerfis(perfis: string[], payload: NotifyPayload): Promise<void> {
-  try {
-    const { data: ps } = await supabaseAdmin.from('perfis').select('id').in('nome', perfis)
-    if (!ps?.length) return
-    const { data: us } = await supabaseAdmin
-      .from('usuarios')
-      .select('id')
-      .in('perfil_id', ps.map((p) => p.id))
-      .eq('ativo', true)
-    const ids = (us ?? []).map((u) => u.id)
-    if (ids.length) await notify(supabaseAdmin, ids, payload)
-  } catch (e) {
-    logger.error({ perfis, erro: String(e) }, 'Falha ao notificar perfis (push).')
-  }
+/** O remetente interno, se configurado. Sem ele o canal e-mail é ignorado. */
+export function emailInterno(): ConfigEmailInterno | null {
+  const remetente = env.RESEND_REMETENTE_INTERNO ?? env.RESEND_REMETENTE
+  if (!env.RESEND_API_KEY || !remetente) return null
+  return { apiKey: env.RESEND_API_KEY, remetente, urlBase: env.WEB_URL ?? null }
 }
 
 /**
- * Notifica UMA PESSOA nomeada pelo dado — quem pediu a análise, o dono do card — em vez
- * de um papel.
+ * UM AVISO que não é fato de uma empresa — o resumo da manhã, o prazo do processo,
+ * o webhook que não entregou. Passa pelo mesmo motor dos eventos: quem recebe, o
+ * texto e o canal são das regras do tipo no painel; o `payload` leva o texto
+ * padrão e os dados de que os papéis precisam (`destinatarios`, `vendedor_id`…).
  *
- * `tipo` é o evento que o chamador acabou de emitir, e existe para não tocar o sino duas
- * vezes: se essa pessoa já é alcançada pelo fan-out daquele evento (porque o perfil dela
- * tem regra), só o push sai daqui. Duas linhas idênticas no sino para o mesmo fato é como
- * se ensina alguém a parar de olhar o sino.
- *
- * Best-effort de ponta a ponta: um push morto ou um id nulo nunca derruba o job que
- * acabou de gravar a decisão.
+ * O push dos avisos criados sai em seguida, sem esperar a varredura de cinco
+ * minutos. Best-effort de ponta a ponta: um aviso que falha nunca derruba o job
+ * que acabou de gravar o fato.
  */
-export async function notificarPessoa(
-  usuarioId: string | null | undefined,
-  tipo: EventoTipo | null,
-  payload: NotifyPayload,
+export async function avisar(
+  tipo: string,
+  payload: Record<string, unknown>,
+  opcoes: { empresaId?: string | null } = {},
 ): Promise<void> {
-  if (!usuarioId) return
   try {
-    await notificarNomeados(supabaseAdmin, [usuarioId], tipo, payload)
+    const ids = await emitirNotificacao(supabaseAdmin, tipo, payload, { empresaId: opcoes.empresaId ?? null })
+    if (ids.length) await entregarEnvios(supabaseAdmin, { notificacaoIds: ids, email: emailInterno() })
   } catch (e) {
-    logger.error({ usuarioId, tipo, erro: String(e) }, 'Falha ao notificar a pessoa nomeada.')
+    logger.error({ tipo, erro: String(e) }, 'Falha ao emitir aviso.')
   }
+}
+
+/** O usuário de um vendedor — os avisos nominais falam de pessoa, a carteira fala de vendedor. */
+export async function usuarioDoVendedor(vendedorId: string | null | undefined): Promise<string | null> {
+  if (!vendedorId) return null
+  const { data } = await supabaseAdmin.from('vendedores').select('usuario_id').eq('id', vendedorId).maybeSingle()
+  return data?.usuario_id ?? null
 }

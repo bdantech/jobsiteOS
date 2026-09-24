@@ -7,9 +7,9 @@ import {
   assinarWebhook,
   montarPayloadCredito,
 } from '../../../../../packages/core/src/server/credito-api.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
+import { avisar } from '../../radar/eventos.js'
 
 /**
  * A FILA DE WEBHOOKS (04n §3.4).
@@ -211,21 +211,13 @@ async function montarCorpo(linha: LinhaEntrega): Promise<Record<string, unknown>
  * olhando um log que só se abre quando já se desconfia.
  */
 async function avisarFalha(nome: string, evento: string, tentativas: number): Promise<void> {
-  try {
-    const { data } = await supabaseAdmin
-      .from('usuarios')
-      .select('id, perfis!inner(nome)')
-      .eq('ativo', true)
-      .eq('perfis.nome', 'Admin')
-      .limit(20)
-    const ids = (data ?? []).map((u) => u.id)
-    if (ids.length === 0) return
-    await notify(supabaseAdmin, ids, {
-      titulo: 'Webhook não entregue',
-      corpo: `${tentativas} tentativas para "${nome}" (${evento}) e nenhuma resposta 2xx. Reenvie pela tela de Integrações.`,
-      url: '/credito/integracoes',
-    })
-  } catch (erro) {
-    logger.error({ erro: String(erro) }, 'Falha ao avisar admins sobre webhook.')
-  }
+  // Admin, com push — a regra do tipo no painel de avisos (0262).
+  await avisar('webhook.nao_entregue', {
+    titulo: 'Webhook não entregue',
+    resumo: `${tentativas} tentativas para "${nome}" (${evento}) e nenhuma resposta 2xx. Reenvie pela tela de Integrações.`,
+    url: '/credito/integracoes',
+    integracao: nome,
+    evento,
+    tentativas,
+  })
 }

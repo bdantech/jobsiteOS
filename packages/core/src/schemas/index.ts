@@ -337,5 +337,12 @@ export const prefsNotificacoesSchema = z.object({
    * dessa pessoa é desligar o push inteiro.
    */
   resumo_meu_dia: z.boolean().default(true),
+  /**
+   * O resumo diário de avisos também por E-MAIL (0262). Desligado por padrão: o
+   * resumo já chega no sino e no push, e e-mail é para quem não usa push — hoje,
+   * ninguém registrou aparelho, e é este interruptor que cobre o que é urgente
+   * para quem só lê a caixa de entrada.
+   */
+  resumo_email: z.boolean().default(false),
 })
 export type PrefsNotificacoes = z.infer<typeof prefsNotificacoesSchema>

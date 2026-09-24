@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { Logo } from '@/components/brand/logo'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { entrar } from '@/actions/auth'
@@ -99,7 +100,10 @@ export function LoginForm({ erroInicial }: { erroInicial?: string }) {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            Acesso restrito a colaboradores. Esqueceu a senha? Fale com um administrador.
+            Acesso restrito a colaboradores.{' '}
+            <Link href="/esqueci-senha" className="font-medium text-foreground underline-offset-4 hover:underline">
+              Esqueci minha senha
+            </Link>
           </p>
         </form>
       </CardContent>

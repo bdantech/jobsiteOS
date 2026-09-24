@@ -2,8 +2,8 @@ import {
   blocoCatalogado,
   resolverConfig,
 } from '../../../../../packages/core/src/comercial/meu-dia.js'
-import { notify } from '../../../../../packages/core/src/server/notify.js'
 import { pool, supabaseAdmin } from '../../db.js'
+import { avisar } from '../../radar/eventos.js'
 import { logger } from '../../logger.js'
 
 /**
@@ -136,10 +136,14 @@ export async function resumoMeuDiaJob(): Promise<ResultadoResumoMeuDia> {
       if (urgentes > 0) partes.push(`${urgentes} ${urgentes === 1 ? 'urgente' : 'urgentes'}`)
       if (emJogo > 0) partes.push(`${brl(emJogo)} em jogo`)
 
-      await notify(supabaseAdmin, [v.usuario_id], {
+      await avisar('comercial.bom_dia', {
         titulo: 'Bom dia',
-        corpo: partes.join(', '),
+        resumo: partes.join(', '),
         url: '/comercial/meu-dia',
+        destinatarios: [v.usuario_id],
+        itens,
+        urgentes,
+        em_jogo: emJogo,
       })
       out.notificados += 1
     } catch (e) {

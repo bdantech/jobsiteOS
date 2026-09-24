@@ -2,7 +2,7 @@ import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import { rotearNota, type OriginadorRoteavel } from '../../../../../packages/core/src/comercial/roteamento.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { emitirEvento, notificarPerfis } from '../../radar/eventos.js'
+import { avisar, emitirEvento } from '../../radar/eventos.js'
 import { lerPainel } from '../../comercial/config.js'
 
 /**
@@ -150,11 +150,18 @@ export async function rotearNotasJob(): Promise<ResultadoRoteamento> {
   }
 
   if (acc.sem_dono > 0) {
-    // A fila sem dono é trabalho do gestor, e trabalho que ninguém vê não é feito.
-    await notificarPerfis(['Admin', 'Comercial'], {
+    /*
+     * A fila sem dono é trabalho do gestor, e trabalho que ninguém vê não é feito.
+     * Mas o MESMO número todo dia às 2h não é notícia: a `chave` é a contagem, e a
+     * regra do tipo segura a repetição por uma semana — o aviso volta quando a fila
+     * cresce ou encolhe.
+     */
+    await avisar('nf.sem_originador', {
       titulo: 'NFs sem originador',
-      corpo: `${acc.sem_dono} nota(s) viva(s) sem dono — nenhuma carteira de originador as cobre.`,
+      resumo: `${acc.sem_dono} nota(s) viva(s) sem dono — nenhuma carteira de originador as cobre.`,
       url: '/comercial/fila',
+      quantidade: acc.sem_dono,
+      chave: `nf.sem_originador:${acc.sem_dono}`,
     })
   }
 
@@ -198,6 +205,11 @@ export async function vendedoresSemAtividadeJob(): Promise<{ avisados: number }>
     [cfg.sem_atividade_dias_uteis],
   )
 
+  /*
+   * Um aviso por vendedor, e a regra do tipo segura a repetição por uma semana pela
+   * `chave` — antes o mesmo nome voltava todo dia, e ainda saía um resumo agregado
+   * por cima. O resumo agregado saiu: era o mesmo fato pela segunda vez.
+   */
   for (const v of rows) {
     await emitirEvento(null, EVENTO_TIPOS.VENDEDOR_SEM_ATIVIDADE, {
       titulo: 'Vendedor sem atividade',
@@ -206,14 +218,7 @@ export async function vendedoresSemAtividadeJob(): Promise<{ avisados: number }>
         : `${v.nome} ainda não registrou nenhum movimento.`,
       url: '/comercial',
       vendedor_id: v.id,
-    })
-  }
-
-  if (rows.length > 0) {
-    await notificarPerfis(['Admin', 'Comercial'], {
-      titulo: 'Vendedores sem atividade',
-      corpo: `${rows.length} vendedor(es) sem movimento há ${cfg.sem_atividade_dias_uteis} dias úteis.`,
-      url: '/comercial',
+      chave: `sem_atividade:${v.id}`,
     })
   }
 

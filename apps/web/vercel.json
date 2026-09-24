@@ -172,6 +172,14 @@
     {
       "path": "/api/cron/voz-enviar",
       "schedule": "0,30 12-20 * * 1-5"
+    },
+    {
+      "path": "/api/cron/notificacoes-enviar",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/notificacoes-resumo",
+      "schedule": "0 11 * * 1-5"
     }
   ]
 }
