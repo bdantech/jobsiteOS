@@ -9913,6 +9913,7 @@ export type Database = {
       vendedor_carteira: {
         Row: {
           ate: string | null
+          comissiona_como_cedente: boolean
           desde: string
           empresa_id: string
           id: string
@@ -9923,6 +9924,7 @@ export type Database = {
         }
         Insert: {
           ate?: string | null
+          comissiona_como_cedente?: boolean
           desde?: string
           empresa_id: string
           id?: string
@@ -9933,6 +9935,7 @@ export type Database = {
         }
         Update: {
           ate?: string | null
+          comissiona_como_cedente?: boolean
           desde?: string
           empresa_id?: string
           id?: string

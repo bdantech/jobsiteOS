@@ -148,14 +148,27 @@ const REGUA_PASSIVAS: ReguaCarteira = {
   aviso: (e) => (e.estagio === 'ex_cliente' ? 'ex-cliente — volume tende a zero' : null),
 }
 
+/**
+ * Uma marca por empresa da lista. Hoje só a carteira de originação usa: "comissão como
+ * cedente" (0263) — a régua de passivas não tem o que marcar.
+ */
+interface MarcaPorEmpresa {
+  rotulo: string
+  titulo: string
+  marcadas: ReadonlySet<string>
+  onMarcar: (empresaId: string, marcada: boolean) => void
+}
+
 function SeletorEmpresas({
   regua,
   escolhidas,
   onChange,
+  marca,
 }: {
   regua: ReguaCarteira
   escolhidas: EmpresaEscolhida[]
   onChange: (e: EmpresaEscolhida[]) => void
+  marca?: MarcaPorEmpresa
 }) {
   const [termo, setTermo] = React.useState('')
   const [buscando, setBuscando] = React.useState(false)
@@ -250,6 +263,17 @@ function SeletorEmpresas({
                     {aviso ? ` · ${aviso}` : ''}
                   </span>
                 </span>
+                {marca ? (
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs" title={marca.titulo}>
+                    <input
+                      type="checkbox"
+                      className="shrink-0"
+                      checked={marca.marcadas.has(e.id)}
+                      onChange={(ev) => marca.onMarcar(e.id, ev.target.checked)}
+                    />
+                    {marca.rotulo}
+                  </label>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -360,6 +384,8 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
   const [usuarioId, setUsuarioId] = React.useState<string>(vendedor?.usuario_id ?? '')
   const [ehIa, setEhIa] = React.useState(vendedor?.is_ia ?? false)
   const [escolhidas, setEscolhidas] = React.useState<EmpresaEscolhida[]>([])
+  // Empresas da carteira de originação em que ele também ganha quando ELA é a cedente.
+  const [comoCedente, setComoCedente] = React.useState<Set<string>>(new Set())
   const [passivas, setPassivas] = React.useState<EmpresaEscolhida[]>([])
   const [acessos, setAcessos] = React.useState<Set<string>>(new Set())
   // O estado inicial guardado para o diff: `app_salvar_acesso_vendedor` concede ou revoga
@@ -385,11 +411,23 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
     }
 
     if (!vendedor) {
+      setComoCedente(new Set())
       setPassivas([])
       setAcessos(new Set())
       acessosIniciais.current = new Set()
       return
     }
+
+    // A flag "como cedente" é lida da CARTEIRA, que é o que o motor de comissão lê — as
+    // settings são só o pedido; a linha vigente é o que está valendo.
+    void createClient()
+      .from('vendedor_carteira')
+      .select('empresa_id')
+      .eq('vendedor_id', vendedor.id)
+      .eq('papel', 'originacao')
+      .eq('comissiona_como_cedente', true)
+      .is('ate', null)
+      .then(({ data }) => setComoCedente(new Set((data ?? []).map((l) => l.empresa_id))))
 
     // A carteira de passivas mora em `vendedor_carteira` — temporal, porque é ela que a
     // comissão consulta na data do evento. Ler das settings daria a foto de hoje.
@@ -426,10 +464,13 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
     const novasSettings: Record<string, unknown> = { ...(vendedor?.settings as object) }
     if (tipo === 'originador') {
       novasSettings.empresas_escolhidas = escolhidas.map((e) => e.id)
+      // Só as que continuam na lista: marcar e depois remover não deixa flag órfã.
+      novasSettings.empresas_cedente = escolhidas.filter((e) => comoCedente.has(e.id)).map((e) => e.id)
     } else {
       // Trocar de tipo apaga a carteira: um SDR com `empresas_escolhidas` pendurado é
       // um campo invisível que volta a valer se ele virar originador de novo.
       delete novasSettings.empresas_escolhidas
+      delete novasSettings.empresas_cedente
     }
     if (tipo === 'sdr') {
       novasSettings.direcao = String(fd.get('direcao') ?? 'both')
@@ -739,7 +780,25 @@ export function VendedorForm({ aberto, onOpenChange, vendedor, territorio, vende
             )}
 
             {tipo === 'originador' && (
-              <SeletorEmpresas regua={REGUA_ORIGINACAO} escolhidas={escolhidas} onChange={setEscolhidas} />
+              <SeletorEmpresas
+                regua={REGUA_ORIGINACAO}
+                escolhidas={escolhidas}
+                onChange={setEscolhidas}
+                marca={{
+                  rotulo: 'Comissão como cedente',
+                  titulo:
+                    'Ele também ganha (régua de originador) quando esta construtora antecipa como ' +
+                    'CEDENTE — a nota que ela emitiu contra um cliente dela. Vale a partir de quando ' +
+                    'for marcado.',
+                  marcadas: comoCedente,
+                  onMarcar: (id, marcada) => {
+                    const s = new Set(comoCedente)
+                    if (marcada) s.add(id)
+                    else s.delete(id)
+                    setComoCedente(s)
+                  },
+                }}
+              />
             )}
 
             {tipo === 'vendedor' && (

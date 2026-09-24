@@ -945,3 +945,97 @@ test('sem penalidade publicada não há desconto, e SDR de IA nunca é penalizad
   assert.equal(lancamentoPenalidadeSemFit(base, PARAMS), null)
   assert.equal(lancamentoPenalidadeSemFit({ ...base, sdrIsIa: true }, PARAMS_POR_ORIGEM), null)
 })
+
+// ─── A construtora da carteira de originação como CEDENTE (0263) ────────────
+
+/**
+ * O caso que originou a regra: a Ribeiro Caram (carteira de originação do Rodrigo)
+ * antecipou como cedente uma nota contra a Hitachi Energy, que não é conta nossa.
+ * Sacado sem classificação = o caminho normal não tem taxa e devolve zero linhas.
+ */
+const CESSAO_DA_CONSTRUTORA: CessaoConvertida = {
+  ...CESSAO,
+  origemId: 'antecipacao:56684',
+  antecipacaoId: 56684,
+  convertidaEm: '2026-09-18T15:00:00Z',
+  valorCedido: 1_752_338.8,
+  anticipationDays: 16,
+  empresaId: null,
+  sacadoNome: null,
+  cedenteCnpj: '01869256000100',
+  cedenteNome: 'RIBEIRO CARAM',
+  gestaoOperacao: null,
+  marcoAtivacao: null,
+}
+
+const COMO_CEDENTE = {
+  empresaId: 'ribeiro-caram',
+  gestaoOperacao: 'prospeccao_ativa' as const,
+  titulares: [{ vendedorId: 'rodrigo', sharePct: 100, isIa: false }],
+}
+
+test('construtora da carteira cedendo: o originador ganha pela régua de originador', () => {
+  const ls = lancamentosDaCessao(
+    CESSAO_DA_CONSTRUTORA,
+    { vendedor: [], originador: [], originadorComoCedente: COMO_CEDENTE },
+    PARAMS,
+  )
+  assert.equal(ls.length, 1)
+  const l = ls[0]!
+  assert.equal(l.papel, 'ORIGINADOR')
+  assert.equal(l.vendedor_id, 'rodrigo')
+  // A linha é da CONSTRUTORA: é ela que o recálculo da conta encontra.
+  assert.equal(l.empresa_id, 'ribeiro-caram')
+  assert.equal(l.taxa_brl_por_mm, 600)
+  // 1.752.338,80 × 16/30 = 934.580,69 de VOP × R$ 600/MM
+  assert.equal(l.valor, 560.75)
+  assert.equal(l.params_snapshot.via, 'originacao_como_cedente')
+  assert.match(explicarCalculo(l), /como cedente/)
+})
+
+test('sem a flag, a mesma cessão continua não pagando ninguém', () => {
+  const ls = lancamentosDaCessao(CESSAO_DA_CONSTRUTORA, { vendedor: [], originador: [] }, PARAMS)
+  assert.deepEqual(ls, [])
+})
+
+test('vendedor não ganha pela flag — só o originador', () => {
+  const ls = lancamentosDaCessao(
+    CESSAO_DA_CONSTRUTORA,
+    {
+      vendedor: [{ vendedorId: 'fabio', sharePct: 100, isIa: false }],
+      originador: [],
+      originadorComoCedente: COMO_CEDENTE,
+    },
+    PARAMS,
+  )
+  assert.deepEqual(ls.map((l) => l.papel), ['ORIGINADOR'])
+})
+
+test('um originador por cessão: se o caminho normal já pagou, a flag não paga outro', () => {
+  const ls = lancamentosDaCessao(CESSAO, { ...TITULARES, originadorComoCedente: COMO_CEDENTE }, PARAMS)
+  const orig = ls.filter((l) => l.papel === 'ORIGINADOR')
+  assert.equal(orig.length, 1)
+  assert.equal(orig[0]!.vendedor_id, 'orig-1')
+})
+
+test('construtora sem classificação na data não tem taxa, e não gera linha', () => {
+  const ls = lancamentosDaCessao(
+    CESSAO_DA_CONSTRUTORA,
+    { vendedor: [], originador: [], originadorComoCedente: { ...COMO_CEDENTE, gestaoOperacao: null } },
+    PARAMS,
+  )
+  assert.deepEqual(ls, [])
+})
+
+test('originador de IA não recebe pela flag', () => {
+  const ls = lancamentosDaCessao(
+    CESSAO_DA_CONSTRUTORA,
+    {
+      vendedor: [],
+      originador: [],
+      originadorComoCedente: { ...COMO_CEDENTE, titulares: [{ vendedorId: 'ia', sharePct: 100, isIa: true }] },
+    },
+    PARAMS,
+  )
+  assert.deepEqual(ls, [])
+})

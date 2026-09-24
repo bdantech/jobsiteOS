@@ -22,6 +22,7 @@ import {
   type LancamentoOriginal,
   type LancamentoV2,
   type MudancaGestao,
+  type OriginadorComoCedente,
   type Titular,
 } from '../../../../../packages/core/src/comercial/comissao-v2.js'
 import type { GestaoOperacao } from '../../../../../packages/core/src/comercial/schemas.js'
@@ -123,6 +124,60 @@ async function historicoGestao(empresaId: string | null): Promise<MudancaGestao[
     .select('valor_anterior, valor_novo, alterado_em')
     .eq('empresa_id', empresaId)
   return (data ?? []) as MudancaGestao[]
+}
+
+/**
+ * A construtora da carteira de originação cedendo a própria nota (0263).
+ *
+ * Procura, pela RAIZ do CNPJ do cedente, uma linha `originacao` com a flag
+ * `comissiona_como_cedente` vigente NA DATA da cessão. Pela raiz porque a construtora
+ * cede pelo CNPJ da filial tanto quanto pelo da matriz, e a carteira guarda a matriz.
+ *
+ * A classificação que vai junto é a da CONSTRUTORA na data — é ela que dá a taxa, porque
+ * o sacado aqui é cliente dela e quase nunca é conta nossa.
+ */
+async function originadorComoCedenteNaData(
+  cedenteCnpj: string | null,
+  quando: string,
+): Promise<OriginadorComoCedente | null> {
+  if (!cedenteCnpj || cedenteCnpj.length < 8) return null
+  const { rows } = await pool.query<{
+    empresa_id: string
+    gestao_operacao: string | null
+    vendedor_id: string
+    share_pct: string
+    is_ia: boolean
+  }>(
+    `select c.empresa_id, e.gestao_operacao, c.vendedor_id, c.share_pct, v.is_ia
+     from vendedor_carteira c
+     join empresas e on e.id = c.empresa_id
+     join vendedores v on v.id = c.vendedor_id
+     where c.papel = 'originacao' and c.comissiona_como_cedente
+       and left(e.cnpj, 8) = left($1, 8)
+       and c.desde <= $2::timestamptz
+       and (c.ate is null or c.ate > $2::timestamptz)
+     order by c.desde desc`,
+    [cedenteCnpj, quando],
+  )
+  const primeira = rows[0]
+  if (!primeira) return null
+  // Uma construtora só tem um originador por vez (o sincronizador recusa o segundo), mas
+  // duas empresas da mesma raiz podem estar na carteira. Fica a mais recente.
+  const daConta = rows.filter((r) => r.empresa_id === primeira.empresa_id)
+
+  return {
+    empresaId: primeira.empresa_id,
+    gestaoOperacao: gestaoNaData(
+      (primeira.gestao_operacao ?? null) as GestaoOperacao | null,
+      await historicoGestao(primeira.empresa_id),
+      quando,
+    ),
+    titulares: daConta.map((r) => ({
+      vendedorId: r.vendedor_id,
+      sharePct: Number(r.share_pct),
+      isIa: r.is_ia,
+    })),
+  }
 }
 
 // ─── Gravação ───────────────────────────────────────────────────────────────
@@ -384,15 +439,16 @@ export async function lancarCessaoConvertida(
     faseManual: (c.sacado_fase_manual ?? null) as FaseConta | null,
   }
 
-  const [tVendedor, tOriginador, auxiliares] = await Promise.all([
+  const [tVendedor, tOriginador, auxiliares, comoCedente] = await Promise.all([
     titularesNaData(c.sacado_empresa_id, 'vendedor', quando),
     titularesNaData(c.cedente_empresa_id, 'originador', quando),
     auxiliaresAtivos(),
+    originadorComoCedenteNaData(c.fornecedor_cnpj, quando),
   ])
 
   const lancamentos = lancamentosDaCessao(
     cessao,
-    { vendedor: tVendedor, originador: tOriginador, auxiliares },
+    { vendedor: tVendedor, originador: tOriginador, auxiliares, originadorComoCedente: comoCedente },
     params,
   )
 
@@ -405,7 +461,9 @@ export async function lancarCessaoConvertida(
   const gravados = await gravar(lancamentos)
 
   if (gravados > 0) {
-    await emitirEvento(c.sacado_empresa_id, EVENTO_TIPOS.COMISSAO_LANCADA, {
+    // Cessão da construtora como cedente (0263): o sacado não é conta nossa, e o evento
+    // vai para a timeline da construtora, que é de quem a linha é.
+    await emitirEvento(c.sacado_empresa_id ?? comoCedente?.empresaId ?? null, EVENTO_TIPOS.COMISSAO_LANCADA, {
       resumo:
         `Cessão de ${moeda(cessao.valorCedido)} em ${cessao.anticipationDays} dias: ` +
         `${gravados} lançamento(s) de comissão provisionados.`,
@@ -538,7 +596,17 @@ export async function recalcularContaJob(empresaId: string): Promise<ResultadoRe
     `select a.id_externo
      from antecipacoes a
      where a.convertida_em is not null and a.regrediu_em is null
-       and public.app_holding_do_sacado(a.sacado_cnpj) = $1
+       and (
+         public.app_holding_do_sacado(a.sacado_cnpj) = $1
+         -- A conta como CEDENTE (0263): as linhas da flag levam o id dela, e o
+         -- recálculo apaga todas as linhas da conta — tem de refazer estas também.
+         or exists (
+           select 1 from empresas e
+           join vendedor_carteira c on c.empresa_id = e.id
+             and c.papel = 'originacao' and c.comissiona_como_cedente
+           where e.id = $1 and left(e.cnpj, 8) = left(a.fornecedor_cnpj, 8)
+         )
+       )
        and (a.convertida_em at time zone 'America/Sao_Paulo')::date >= $2::date
        and (a.convertida_em at time zone 'America/Sao_Paulo')::date
              < ($2::date + interval '1 month')
@@ -1393,15 +1461,16 @@ async function preverCessao(
    * o que o "aplicar" vai fazer. Omiti-los aqui faria a deriva acusar toda linha de
    * auxiliar como excedente e sugerir apagá-las.
    */
-  const [tVendedor, tOriginador, auxiliares] = await Promise.all([
+  const [tVendedor, tOriginador, auxiliares, comoCedente] = await Promise.all([
     titularesNaData(c.sacado_empresa_id, 'vendedor', quando),
     titularesNaData(c.cedente_empresa_id, 'originador', quando),
     auxiliaresAtivos(),
+    originadorComoCedenteNaData(c.fornecedor_cnpj, quando),
   ])
 
   return lancamentosDaCessao(
     cessao,
-    { vendedor: tVendedor, originador: tOriginador, auxiliares },
+    { vendedor: tVendedor, originador: tOriginador, auxiliares, originadorComoCedente: comoCedente },
     params,
   )
 }

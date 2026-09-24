@@ -739,6 +739,27 @@ export interface TitularesDaCessao {
   originador: readonly Titular[]
   /** Auxiliares ATIVOS na data da cessão. Ausente ou vazio = ninguém tem auxiliar. */
   auxiliares?: readonly AuxiliarDoCloser[]
+  /**
+   * O originador que tem a construtora-CEDENTE na carteira de originação com a flag
+   * "comissão como cedente" ligada na data da cessão (0263). Ausente = não há.
+   */
+  originadorComoCedente?: OriginadorComoCedente | null
+}
+
+/**
+ * A construtora da carteira de originação cedendo a nota dela — o originador vendeu
+ * antecipação à própria construtora, e ela antecipou contra um cliente dela.
+ *
+ * A taxa sai da classificação DESTA conta, e não da do sacado: o sacado aqui é cliente
+ * da construtora, quase nunca conta nossa, e sem classificação o caminho normal não
+ * tem taxa nenhuma.
+ */
+export interface OriginadorComoCedente {
+  /** A construtora-cedente como conta. Vai em `empresa_id` da linha. */
+  empresaId: string
+  /** A classificação dela NA DATA da cessão. Sem ela não há taxa — e não há linha. */
+  gestaoOperacao: GestaoOperacao | null
+  titulares: readonly Titular[]
 }
 
 /**
@@ -750,6 +771,95 @@ export interface TitularesDaCessao {
  * (§4). Redistribuir seria pagar alguém pelo trabalho de ninguém.
  */
 export function lancamentosDaCessao(
+  cessao: CessaoConvertida,
+  titulares: TitularesDaCessao,
+  params: readonly CommissionParam[],
+): LancamentoV2[] {
+  const out = lancamentosPelaConta(cessao, titulares, params)
+
+  /*
+   * UM ORIGINADOR POR CESSÃO. Se o caminho normal já pagou o titular do cedente, a flag
+   * não paga um segundo pelo mesmo dinheiro — os dois estariam sendo pagos por ter
+   * trazido a mesma cedente.
+   */
+  const comoCedente = titulares.originadorComoCedente
+  if (comoCedente && !out.some((l) => l.papel === 'ORIGINADOR')) {
+    out.push(...lancamentosDoOriginadorComoCedente(cessao, comoCedente, params))
+  }
+  return out
+}
+
+/**
+ * A parcela do originador quando a construtora da carteira dele é a CEDENTE (0263).
+ *
+ * Só ORIGINADOR, pela régua de originador (`orig_*`) da classificação da construtora.
+ * Vendedor não ganha: a parcela dele é sobre o sacado, e o sacado aqui é cliente da
+ * construtora. Não há fase (a régua de originador não tem) nem sunset — o parâmetro
+ * `sunset_originador_meses` conta a idade da conta SACADA, que aqui não existe.
+ */
+export function lancamentosDoOriginadorComoCedente(
+  cessao: CessaoConvertida,
+  comoCedente: OriginadorComoCedente,
+  params: readonly CommissionParam[],
+): LancamentoV2[] {
+  const out: LancamentoV2[] = []
+  const gestao = comoCedente.gestaoOperacao
+  if (!gestao) return out
+
+  const quando = cessao.convertidaEm
+  const diasRef = valorParametro(params, 'dias_referencia_vop', null, quando)
+  if (diasRef === null || diasRef <= 0) return out
+  const prazoMax = valorParametro(params, 'prazo_maximo_vop', null, quando)
+  const vop = calcularVOP(cessao.valorCedido, cessao.anticipationDays, diasRef, prazoMax)
+  if (vop <= 0) return out
+
+  const chaveTaxa = CHAVE_TAXA_ORIGINADOR[gestao]
+  for (const t of comoCedente.titulares) {
+    if (t.isIa) continue
+    const taxa = valorParametro(params, chaveTaxa, t.vendedorId, quando)
+    if (taxa === null || taxa <= 0) continue
+    const valor = comissaoDoVop(vop, taxa, t.sharePct)
+    if (valor <= 0) continue
+    out.push({
+      vendedor_id: t.vendedorId,
+      papel: 'ORIGINADOR',
+      competencia: competenciaSp(quando),
+      origem_tipo: 'nf_convertida',
+      origem_id: cessao.origemId,
+      evento_em: quando,
+      empresa_id: comoCedente.empresaId,
+      cedente_cnpj: cessao.cedenteCnpj,
+      cedente_nome: cessao.cedenteNome,
+      nf_numero: cessao.nfNumero,
+      descricao:
+        `NF ${cessao.nfNumero ?? cessao.origemId} — ${cessao.cedenteNome ?? cessao.cedenteCnpj ?? 'cedente'}` +
+        ` como cedente (contra ${cessao.sacadoNome ?? 'cliente dela'})`,
+      gestao_operacao: gestao,
+      fase: null,
+      valor_cedido: arredondar(cessao.valorCedido),
+      anticipation_days: cessao.anticipationDays,
+      vop,
+      taxa_brl_por_mm: taxa,
+      share_pct: t.sharePct,
+      valor,
+      params_snapshot: {
+        dias_referencia_vop: diasRef,
+        prazo_maximo_vop: prazoMax,
+        gestao_operacao: gestao,
+        antecipacao_id: cessao.antecipacaoId,
+        taxa_chave: chaveTaxa,
+        taxa_valor: taxa,
+        papel: 'ORIGINADOR',
+        via: 'originacao_como_cedente',
+        conta_cedente_id: comoCedente.empresaId,
+      },
+    })
+  }
+  return out
+}
+
+/** O caminho de sempre: taxa e fase pela conta SACADA. */
+function lancamentosPelaConta(
   cessao: CessaoConvertida,
   titulares: TitularesDaCessao,
   params: readonly CommissionParam[],
@@ -1329,7 +1439,14 @@ export function explicarCalculo(l: {
   const conta =
     `${brl(cedido)} × ${diasUsados}/${ref}${limite} = ${num(vop)} VOP → ` +
     `${num(mm, 2)} × ${brl(taxa)} = ${brl(arredondar(mm * taxa))}`
-  return share >= 100 ? `${conta}.` : `${conta}, × ${num(share, 1)}% de share = ${brl(l.valor)}.`
+  // A parcela da construtora-cedente (0263) diz de onde veio: sem isso ela parece uma
+  // linha de originador comum sem titular no cedente, e a contestação começa daí.
+  const via = snap.via === 'originacao_como_cedente'
+    ? ' Construtora da carteira de originação antecipando como cedente.'
+    : ''
+  return share >= 100
+    ? `${conta}.${via}`
+    : `${conta}, × ${num(share, 1)}% de share = ${brl(l.valor)}.${via}`
 }
 
 // ─── Simulador (§7.4) ───────────────────────────────────────────────────────
