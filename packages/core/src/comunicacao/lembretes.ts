@@ -1,29 +1,20 @@
 import { partesNoFuso } from './janela.js'
 
 /**
- * QUAL lembrete de reunião cabe — e a pergunta é feita contra a hora da ENTREGA,
- * nunca contra a hora da geração.
+ * QUANDO os lembretes de reunião saem.
  *
- * ─── A CICATRIZ ─────────────────────────────────────────────────────────────
- * A janela de envio é seg–sex, 9h–18h, então o fim de semana nunca recebeu nada.
- * Isso sempre esteve certo. O que faltava era o CORPO da mensagem saber disso.
+ * Vive no core, e não no job, para poder ser testado sem banco: o job importa
+ * `db.js` e `env.js`, e uma regra de calendário não devia precisar de credencial
+ * para ser conferida.
  *
- * Um D-1 gerado num domingo de manhã dizia "nossa conversa AMANHÃ, 21/09" e ficava
- * na fila até segunda às 9h — quando "amanhã" já era hoje e a reunião estava a uma
- * hora, não a vinte e oito. O cliente recebeu um lembrete que mentia duas vezes, e
- * nada disso aparece em typecheck, em lint ou num teste de envio: a mensagem saiu,
- * com sucesso, dizendo a coisa errada.
+ * São dois lembretes, e cada um tem a sua régua:
  *
- * Vive no core, e não no job, exatamente para poder ser testada sem banco: o job
- * importa `db.js` e `env.js`, e uma regra de calendário não devia precisar de
- * credencial para ser conferida.
- *
- * ─── POR QUE O DIA LOCAL, E NÃO "MENOS DE 24H" ──────────────────────────────
- * Uma reunião às 9h de terça está a 20 horas de uma entrega às 13h de segunda —
- * dentro de qualquer régua de "menos de um dia", e ainda assim "hoje" ali é
- * mentira. Quem decide é a virada do dia no fuso de quem lê.
+ *   confirmação (D-0) ... HORA MARCADA: 9h do dia da reunião, ou uma hora antes
+ *                         quando a reunião é às 9h ou mais cedo. Decisão de
+ *                         25/09/2026 — a de véspera (D-1) saiu da régua.
+ *   H-1 ................. a uma hora e meia da reunião, e só dentro da janela.
  */
-export type TipoLembrete = 'd0' | 'h1'
+export type TipoLembrete = 'h1'
 
 /** Uma hora e meia: a régua do H-1, que fala em "daqui a pouco". */
 const JANELA_H1_MS = 90 * 60_000
@@ -31,49 +22,85 @@ const JANELA_H1_MS = 90 * 60_000
 /** Folga para "a entrega é agora": o job roda de hora em hora, não no minuto exato. */
 const ENTREGA_IMEDIATA_MS = 60_000
 
-function mesmoDia(a: Date, b: Date, timezone: string): boolean {
-  const x = partesNoFuso(a, timezone)
-  const y = partesNoFuso(b, timezone)
-  return x.ano === y.ano && x.mes === y.mes && x.dia === y.dia
+/** A confirmação sai às 9h locais… */
+const HORA_CONFIRMACAO = 9
+/** …e uma hora antes quando a reunião é às 9h ou antes. */
+const ANTECEDENCIA_REUNIAO_CEDO_MS = 60 * 60_000
+
+/**
+ * Quanto antes do horário a confirmação entra na fila. O job roda no minuto 10 de
+ * cada hora: com 70 minutos, a rodada das 8:10 enfileira a das 9h, e a das 7:10 a
+ * das 8h. Enfileirar tarde de propósito — uma reunião cancelada ou remarcada na
+ * véspera não deixa uma confirmação velha esperando na fila.
+ */
+const ANTECEDENCIA_FILA_MS = 70 * 60_000
+
+/** Rodada perdida: a seguinte ainda manda, com até uma hora de atraso. */
+const TOLERANCIA_ATRASO_MS = 60 * 60_000
+
+/** 9h do dia da reunião, no fuso de quem lê — ou uma hora antes, se a reunião é às 9h ou antes. */
+export function horarioDaConfirmacao(reuniao: Date, timezone: string): Date {
+  const l = partesNoFuso(reuniao, timezone)
+  if (l.hora < HORA_CONFIRMACAO || (l.hora === HORA_CONFIRMACAO && l.minuto === 0)) {
+    return new Date(reuniao.getTime() - ANTECEDENCIA_REUNIAO_CEDO_MS)
+  }
+  // Recua da própria reunião até as 9h locais do MESMO dia: não depende do offset do
+  // fuso, só da distância entre os dois horários no relógio de quem lê.
+  const minutosDesde9h = (l.hora - HORA_CONFIRMACAO) * 60 + l.minuto
+  const alvo = new Date(reuniao.getTime() - minutosDesde9h * 60_000)
+  alvo.setUTCSeconds(0, 0)
+  return alvo
 }
 
 /**
- * ─── A CONFIRMAÇÃO É NO DIA, NÃO NA VÉSPERA (25/09/2026) ────────────────────
- * O D-1 ("nossa conversa amanhã, 25/09. Segue de pé?") saiu da régua. A
- * confirmação agora é o D-0, entregue na ABERTURA da janela do dia da reunião
- * ("Bom dia… confirmar nossa reunião de hoje às 14:00"): gerado na véspera, fora
- * da janela, e agendado para as 9h. Reunião marcada no próprio dia não recebe —
- * quem acabou de marcar não precisa de confirmação, e o "bom dia" chegaria à tarde.
+ * Enfileirar a confirmação agora? Devolve o instante de envio, ou `null`.
  *
- * ─── O H-1 SÓ QUANDO A ENTREGA É AGORA ─────────────────────────────────────
- * O H-1 fura a janela e sai na hora. Classificá-lo pela distância até a ENTREGA
- * fazia a véspera à noite, para uma reunião às 9:30 (entrega às 9h, faltam 30
- * minutos), mandar "é daqui a pouco" na mesma noite. Fora da janela, o que chega na
- * abertura é o D-0 — que é exatamente a mensagem certa para aquela hora.
+ * Reunião marcada DEPOIS do horário da confirmação (às 10h, para as 15h do mesmo
+ * dia) não recebe: quem acabou de marcar não precisa confirmar, e o "bom dia"
+ * chegaria à tarde.
+ */
+export function quandoConfirmar(input: {
+  reuniao: Date
+  agora: Date
+  criadaEm: Date
+  timezone: string
+}): Date | null {
+  const { reuniao, agora, criadaEm, timezone } = input
+  if (reuniao.getTime() <= agora.getTime()) return null
+
+  const alvo = horarioDaConfirmacao(reuniao, timezone)
+  if (criadaEm.getTime() >= alvo.getTime()) return null
+
+  const faltam = alvo.getTime() - agora.getTime()
+  if (faltam > ANTECEDENCIA_FILA_MS) return null
+  if (faltam > 0) return alvo
+  // Passou do horário: só manda se a rodada perdida foi há pouco — e agora.
+  return -faltam <= TOLERANCIA_ATRASO_MS ? agora : null
+}
+
+/**
+ * O H-1: a uma hora e meia ou menos da reunião, e só quando a ENTREGA é agora.
+ *
+ * Fora da janela a fila segura a mensagem até a abertura. Classificar o H-1 pela
+ * distância até a entrega fazia a véspera à noite, para uma reunião às 9:30
+ * (entrega às 9h, faltam 30 minutos), gerar um "é daqui a pouco" — medido em
+ * 25/09/2026: o Ibraheem recebeu às 9h um "daqui a pouco, às 10:00" gerado às 18h
+ * do dia anterior.
  */
 export function tipoDeLembrete(
   /** Reunião menos entrega. Negativo ou zero = a conversa já começou. */
   faltamMs: number,
-  reuniao: Date,
+  _reuniao: Date,
   entrega: Date,
-  timezone: string,
+  _timezone: string,
   opcoes: {
     /** Agora. Ausente = a entrega é agora (dentro da janela). */
     agora?: Date
-    /** Quando a reunião foi marcada. Marcada no próprio dia não tem D-0. */
-    criadaEm?: Date
   } = {},
 ): TipoLembrete | null {
-  // Lembrete depois da hora é pior que lembrete nenhum — e agora que a conta é
-  // contra a entrega, o passado entra: uma reunião de sexta 17h cujo lembrete só
-  // abriria na segunda cai exatamente aqui.
   if (faltamMs <= 0) return null
-
   const entregaEAgora =
     !opcoes.agora || entrega.getTime() - opcoes.agora.getTime() < ENTREGA_IMEDIATA_MS
   if (faltamMs <= JANELA_H1_MS && entregaEAgora) return 'h1'
-
-  if (!mesmoDia(entrega, reuniao, timezone)) return null
-  if (opcoes.criadaEm && mesmoDia(opcoes.criadaEm, reuniao, timezone)) return null
-  return 'd0'
+  return null
 }

@@ -4,16 +4,16 @@ import {
   renderizarMensagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { proximaAbertura } from '../../../../../packages/core/src/comunicacao/janela.js'
-import { tipoDeLembrete } from '../../../../../packages/core/src/comunicacao/lembretes.js'
+import { quandoConfirmar, tipoDeLembrete } from '../../../../../packages/core/src/comunicacao/lembretes.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import { contaDoUsuario } from '../../comunicacao/transportes.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 
 /**
- * Reuniões: confirmação, lembrete D-0 (a confirmação da manhã do dia), lembrete H-1
- * e reagendamento pós no-show (§5). O D-1 da véspera saiu em 25/09/2026 — ver
- * `tipoDeLembrete`, no core.
+ * Reuniões: confirmação, lembrete D-0 (a confirmação do dia, às 9h — ou 8h para a
+ * reunião das 9h), lembrete H-1 e reagendamento pós no-show (§5). O D-1 da véspera
+ * saiu em 25/09/2026 — ver `quandoConfirmar`, no core.
  *
  * Entrou neste prompt por ROI imediato: os dados já existem em `vendedor_eventos`
  * desde o 04g, e um lembrete de véspera é a diferença entre uma agenda cheia e
@@ -30,7 +30,7 @@ import { logger } from '../../logger.js'
 export interface ResultadoLembretes {
   reunioes: number
   confirmacoes: number
-  /** A confirmação do dia, entregue na abertura da janela ("Bom dia… hoje às 14:00"). */
+  /** A confirmação do dia, às 9h ("Bom dia… hoje às 14:00"); 8h para a reunião das 9h. */
   d0: number
   h1: number
   reagendamentos: number
@@ -113,15 +113,30 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
    * "amanhã" já era hoje e a reunião estava a uma hora, não a vinte e oito.
    *
    * `proximaAbertura` responde "se eu enfileirar agora, quando isso chega?", e é
-   * essa distância — e não a distância até agora — que escolhe o template. Domingo
-   * de manhã, para uma reunião segunda ao meio-dia, a resposta passa a ser o D-0
-   * ("é hoje, às 13:00"), enfileirado no domingo e entregue na segunda.
+   * essa distância que decide o H-1 e o reagendamento. A confirmação (D-0) não
+   * passa por aqui desde 25/09/2026: ela tem hora marcada — ver `quandoConfirmar`.
    */
   const entrega = proximaAbertura(agora, cfg.janela)
 
   for (const ev of eventos) {
     const inicio = new Date(ev.inicio_em)
     const faltamNaEntrega = inicio.getTime() - entrega.getTime()
+
+    /*
+     * A CONFIRMAÇÃO TEM HORA MARCADA (25/09/2026), e por isso vem ANTES da guarda
+     * abaixo: às 7:10, para uma reunião às 9h, a próxima abertura da janela é 9h e
+     * `faltamNaEntrega` dá zero — a guarda a descartaria, e é justamente ela que
+     * sai às 8h. A janela não vale para esta mensagem: o horário foi escolhido.
+     */
+    const confirmarEm = quandoConfirmar({
+      reuniao: inicio,
+      agora,
+      criadaEm: new Date(ev.criado_em),
+      timezone: cfg.janela.timezone,
+    })
+    if (confirmarEm && (await enfileirarLembrete(ev, 'd0', inicio, confirmarEm, { forcarJanela: true }))) {
+      acc.d0 += 1
+    }
 
     /*
      * Nada que só chegue DEPOIS da conversa — nem lembrete, nem confirmação.
@@ -140,10 +155,7 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
       }
     }
 
-    const tipo = tipoDeLembrete(faltamNaEntrega, inicio, entrega, cfg.janela.timezone, {
-      agora,
-      criadaEm: new Date(ev.criado_em),
-    })
+    const tipo = tipoDeLembrete(faltamNaEntrega, inicio, entrega, cfg.janela.timezone, { agora })
     if (!tipo) continue
     // A confirmação das 9h já disse "hoje às 10:00": um "daqui a pouco" na mesma hora
     // é a mesma mensagem duas vezes.
@@ -197,6 +209,7 @@ async function enfileirarLembrete(
   tipo: Tipo,
   inicio: Date,
   entrega: Date,
+  opcoes: { forcarJanela?: boolean } = {},
 ): Promise<boolean> {
   if (!ev.empresa_id) return false
 
@@ -316,6 +329,12 @@ async function enfileirarLembrete(
      * é um obituário.
      */
     agendada_para: tipo === 'h1' ? new Date().toISOString() : entrega.toISOString(),
+    /*
+     * Só a confirmação: ela sai às 8h para a reunião das 9h e no sábado de uma
+     * reunião de sábado, fora da janela de seg–sex 9h–18h. A licença é de uma
+     * mensagem cujo horário foi escolhido por uma regra de negócio, não por teto.
+     */
+    forcar_janela: opcoes.forcarJanela ?? false,
   })
   if (error) {
     logger.error({ erro: error.message, tipo }, 'Falha ao enfileirar lembrete.')
