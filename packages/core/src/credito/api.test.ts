@@ -34,13 +34,14 @@ test('sem external_id não há idempotência possível', () => {
 })
 
 test('o checklist diz o que falta, e é ele que decide o estágio de nascimento', () => {
-  const essenciais = ['balanco_patrimonial', 'dre', 'faturamento_declarado']
-  assert.deepEqual(documentosFaltantes(['balanco_patrimonial'], essenciais), [
+  // Os OBRIGATÓRIOS do catálogo (0266). Faturamento declarado é só essencial: não
+  // segura a análise em docs_pendentes.
+  const obrigatorios = ['balanco_patrimonial', 'dre']
+  assert.deepEqual(documentosFaltantes(['balanco_patrimonial', 'faturamento_declarado'], obrigatorios), [
     'dre',
-    'faturamento_declarado',
   ])
   assert.equal(estagioInicial(['dre']), 'docs_pendentes')
-  assert.deepEqual(documentosFaltantes(essenciais, essenciais), [])
+  assert.deepEqual(documentosFaltantes(obrigatorios, obrigatorios), [])
   assert.equal(estagioInicial([]), 'docs_recebidos')
 })
 

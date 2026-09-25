@@ -148,9 +148,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     )
   }
 
-  const essenciais = await essenciaisDoChecklist(admin)
+  const obrigatorios = await obrigatoriosDoChecklist(admin)
   const tiposEnviados = dados.documentos.map((d) => d.tipo)
-  const faltantes = documentosFaltantes(tiposEnviados, essenciais)
+  const faltantes = documentosFaltantes(tiposEnviados, obrigatorios)
 
   const { data: analise, error: erroAnalise } = await admin
     .from('analises_credito')
@@ -253,10 +253,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   return NextResponse.json(payload)
 }
 
-async function essenciaisDoChecklist(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+async function obrigatoriosDoChecklist(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
   const { data } = await admin.from('credito_config').select('valor').eq('chave', 'docs').maybeSingle()
-  const tipos = ((data?.valor as { tipos?: { id: string; essencial?: boolean }[] } | null)?.tipos ?? [])
-  return tipos.filter((t) => t.essencial).map((t) => t.id)
+  const tipos = ((data?.valor as { tipos?: { id: string; obrigatorio?: boolean }[] } | null)?.tipos ?? [])
+  return tipos.filter((t) => t.obrigatorio).map((t) => t.id)
 }
 
 function resumo(p: Awaited<ReturnType<typeof montarPayloadCredito>>): unknown {

@@ -97,16 +97,18 @@ export type CriarAnaliseExterna = z.infer<typeof criarAnaliseExternaSchema>
 /**
  * O que falta para a análise sair de `docs_pendentes`.
  *
- * A lista de essenciais vem de `credito_config.docs` — a MESMA que a esteira usa
- * na tela. Ter uma constante aqui faria a API prometer um checklist e o Crédito
- * cobrar outro.
+ * Os OBRIGATÓRIOS de `credito_config.docs` — a MESMA lista que o gatilho da esteira
+ * usa (0266). Eram os essenciais até 25/09/2026; a régua do estágio passou a ser o
+ * que a seguradora cobra, e os essenciais (o que a NOSSA análise precisa) seguem
+ * como aviso na tela. Ter uma constante aqui faria a API prometer um checklist e o
+ * Crédito cobrar outro.
  */
 export function documentosFaltantes(
   recebidos: readonly string[],
-  essenciais: readonly string[],
+  obrigatorios: readonly string[],
 ): string[] {
   const tem = new Set(recebidos)
-  return essenciais.filter((e) => !tem.has(e))
+  return obrigatorios.filter((e) => !tem.has(e))
 }
 
 /**
@@ -114,7 +116,7 @@ export function documentosFaltantes(
  * manda é a esteira, e o payload da integração é insumo, não decisão (§1).
  *
  * Dossiê completo nasce em `docs_recebidos`, e não mais em `solicitada`: é o mesmo
- * destino a que o gatilho do checklist leva quando o último essencial chega depois.
+ * destino a que o gatilho do checklist leva quando o último obrigatório chega depois.
  * O fato observado é um só — "temos os documentos" — e ele não pode produzir dois
  * estágios diferentes conforme a hora em que o arquivo chegou.
  */

@@ -168,8 +168,8 @@ async function checklist(
     admin.from('analise_docs').select('tipo').eq('analise_id', analiseId),
     admin.from('credito_config').select('valor').eq('chave', 'docs').maybeSingle(),
   ])
-  const tipos = ((cfg.data?.valor as { tipos?: { id: string; essencial?: boolean }[] } | null)?.tipos ?? [])
-  const essenciais = tipos.filter((t) => t.essencial).map((t) => t.id)
+  const tipos = ((cfg.data?.valor as { tipos?: { id: string; obrigatorio?: boolean }[] } | null)?.tipos ?? [])
+  const obrigatorios = tipos.filter((t) => t.obrigatorio).map((t) => t.id)
   const recebidos = (docs.data ?? []).map((d) => d.tipo as string)
-  return { documentos_faltantes: documentosFaltantes(recebidos, essenciais) }
+  return { documentos_faltantes: documentosFaltantes(recebidos, obrigatorios) }
 }

@@ -132,9 +132,9 @@ export async function montarPayloadCredito(
   const cond = (condRes.data ?? null) as Record<string, unknown> | null
 
   const recebidos = [...new Set((docsRes.data ?? []).map((d) => d.tipo as string))].sort()
-  const tipos = ((cfgRes.data?.valor as { tipos?: { id: string; essencial?: boolean }[] } | null)
-    ?.tipos ?? []) as { id: string; essencial?: boolean }[]
-  const essenciais = tipos.filter((t) => t.essencial).map((t) => t.id)
+  const tipos = ((cfgRes.data?.valor as { tipos?: { id: string; obrigatorio?: boolean }[] } | null)
+    ?.tipos ?? []) as { id: string; obrigatorio?: boolean }[]
+  const obrigatorios = tipos.filter((t) => t.obrigatorio).map((t) => t.id)
 
   return {
     evento: ctx.evento,
@@ -186,7 +186,7 @@ export async function montarPayloadCredito(
         expira_em: analise.expira_em ?? null,
       },
     },
-    documentos: { recebidos, faltantes: documentosFaltantes(recebidos, essenciais) },
+    documentos: { recebidos, faltantes: documentosFaltantes(recebidos, obrigatorios) },
     /*
      * O bloco ACIONÁVEL (04o §7). Vai em TODOS os eventos, não só no
      * `credito.condicoes_definidas`: quem recebe um `estagio_alterado` precisa poder
