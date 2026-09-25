@@ -109,7 +109,7 @@ async function meuResumo(_input: unknown, ctx: ToolContext) {
         + 'não é pago. O lançamento nasce na conversão da NF, não na liquidação.',
     },
     // A única pendência do módulo com PRAZO, e ela decide a comissão de OUTRA pessoa:
-    // passado o SLA, a reunião conta como aceita sozinha.
+    // sem o closer ela não anda (o aceite por prazo está desligado desde 25/09/2026).
     reunioes_aguardando_seu_aceite: r.aceites_pendentes,
     route: '/comercial',
   }

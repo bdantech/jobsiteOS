@@ -164,8 +164,8 @@ export default function PainelComercialScreen() {
       ) : null}
 
       {/*
-        A fila de aceite fica ACIMA dos funis quando tem gente esperando: passado o SLA a
-        reunião conta como aceita sozinha, e o que decide é a comissão de outra pessoa.
+        A fila de aceite fica ACIMA dos funis quando tem gente esperando: o que ela decide é
+        a comissão de outra pessoa, e sem o closer ela não anda.
       */}
       {data.aceites_pendentes > 0 ? (
         <Pressable onPress={() => router.push('/comercial/comissoes')}>

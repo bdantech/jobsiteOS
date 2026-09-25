@@ -44,7 +44,7 @@ import {
  * nada a ninguém, inclusive de pé, no celular.
  *
  * A fila de aceite fica no topo quando há algo esperando, e não numa aba: ela tem PRAZO,
- * e passado o prazo a reunião conta como aceita sozinha. Um badge que só aparece quando
+ * e é o closer quem destrava a comissão do SDR. Um badge que só aparece quando
  * a pessoa abre a aba certa é um badge que não avisa.
  */
 
@@ -54,7 +54,7 @@ const mes = (c: string) =>
 
 function horasRestantes(prazo: string): string {
   const ms = new Date(prazo).getTime() - Date.now()
-  if (ms <= 0) return 'prazo vencido — conta como aceita'
+  if (ms <= 0) return 'prazo vencido — aguardando decisão'
   const h = Math.floor(ms / 3_600_000)
   return h >= 1 ? `${h}h para decidir` : `${Math.floor(ms / 60_000)} min para decidir`
 }

@@ -226,7 +226,7 @@ function VereditoDoVendedor({ a }: { a: AceiteDaReuniao | null }) {
         <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         <span>
           Esperando a confirmação de <strong>{quem}</strong> — é ela que libera a comissão do
-          SDR. Sem resposta até {quando(a.prazo_em)}, a reunião conta como realizada.
+          SDR. O prazo para responder é {quando(a.prazo_em)}.
         </span>
       </p>
     )

@@ -22,15 +22,16 @@ import { dataHora } from './format'
  *
  * O contador de SLA é o elemento central da tela, e ele conta para BAIXO até um aceite,
  * não até uma recusa. É a única forma honesta de mostrar a regra: o silêncio do vendedor
- * não é evidência de que a reunião não aconteceu, então passado o prazo ela conta como
- * aceita. Transferir esse risco ao SDR o faria pagar pela agenda do outro.
+ * não é evidência de que a reunião não aconteceu. Passado o prazo ela contava como aceita;
+ * desde 25/09/2026 isso é o parâmetro "Aceite da reunião por prazo", desligado — o closer
+ * aprova todas à mão.
  *
  * Recusar exige motivo. Aceitar não exige nada — é a recusa que precisa ser explicada.
  */
 
 function restante(prazo: string): { texto: string; urgente: boolean; vencido: boolean } {
   const ms = new Date(prazo).getTime() - Date.now()
-  if (ms <= 0) return { texto: 'prazo vencido — conta como aceita', urgente: true, vencido: true }
+  if (ms <= 0) return { texto: 'prazo vencido — aguardando decisão', urgente: true, vencido: true }
   const horas = Math.floor(ms / 3_600_000)
   const minutos = Math.floor((ms % 3_600_000) / 60_000)
   return {

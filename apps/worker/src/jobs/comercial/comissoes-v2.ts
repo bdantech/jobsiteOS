@@ -747,6 +747,8 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
   const acc: ResultadoAceitesSdr = { abertos: 0, expirados: 0, lancados: 0, penalidades: 0 }
 
   const slaHoras = valorParametro(params, 'sdr_sla_recusa_horas', null, new Date()) ?? 48
+  // Desligado = o closer aprova todas à mão (25/09/2026). Ausente conta como desligado.
+  const aceitePorPrazo = valorParametro(params, 'sdr_aceite_por_prazo', null, new Date()) === 1
 
   /*
    * ── 1. Abrir a fila para reuniões realizadas que ainda não têm aceite ──
@@ -787,21 +789,25 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
     await emitirEvento(n.empresa_id, EVENTO_TIPOS.SDR_ACEITE_PENDENTE, {
       resumo:
         `Reunião com ${n.empresa ?? 'a empresa'} aguarda confirmação do vendedor. ` +
-        `Sem resposta em ${Math.round(slaHoras)}h, conta como aceita.`,
+        (aceitePorPrazo
+          ? `Sem resposta em ${Math.round(slaHoras)}h, conta como aceita.`
+          : `Prazo para responder: ${Math.round(slaHoras)}h.`),
       url: '/comercial/comissoes',
       aceite_id: criado[0]!.id,
       lead_id: n.lead_id,
     })
   }
 
-  // ── 2. Expirar COMO ACEITA o que passou do prazo ──
-  const { rows: expirados } = await pool.query<{ id: string }>(
-    `update sdr_aceites
-        set status = 'aceita', aceite_automatico = true, decidido_em = now()
-      where status = 'pendente' and prazo_em <= now()
-      returning id`,
-  )
-  acc.expirados = expirados.length
+  // ── 2. Expirar COMO ACEITA o que passou do prazo — só com o parâmetro ligado ──
+  if (aceitePorPrazo) {
+    const { rows: expirados } = await pool.query<{ id: string }>(
+      `update sdr_aceites
+          set status = 'aceita', aceite_automatico = true, decidido_em = now()
+        where status = 'pendente' and prazo_em <= now()
+        returning id`,
+    )
+    acc.expirados = expirados.length
+  }
 
   // ── 3. Lançar o que foi aceito e ainda não virou dinheiro ──
   const { rows: aLancar } = await pool.query<{

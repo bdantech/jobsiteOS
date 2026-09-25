@@ -316,7 +316,24 @@ export const PARAMETROS_COMISSAO: readonly ParametroCatalogado[] = [
     unidade: 'HOURS',
     grupo: 'sdr',
     aceitaOverride: false,
-    descricao: 'Sem ação nesse prazo, a reunião conta como aceita.',
+    descricao:
+      'Prazo para o closer aceitar ou recusar. Só vira aceite sozinho se o "Aceite por prazo" ' +
+      'estiver ligado.',
+  },
+  {
+    /*
+     * Desligado desde 25/09/2026: o closer aprova todas à mão. AUSENTE = desligado —
+     * o aceite por prazo paga o SDR por uma reunião que ninguém confirmou, então é a
+     * ausência que tem de ser a opção segura.
+     */
+    chave: 'sdr_aceite_por_prazo',
+    rotulo: 'Aceite da reunião por prazo',
+    unidade: 'BOOL',
+    grupo: 'sdr',
+    aceitaOverride: false,
+    descricao:
+      '1 = passado o SLA sem resposta, a reunião conta como aceita. 0 ou sem valor = fica ' +
+      'pendente até o closer decidir.',
   },
   {
     chave: 'janela_atribuicao_sdr_dias',
