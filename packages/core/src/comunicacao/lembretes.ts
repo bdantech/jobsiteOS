@@ -7,20 +7,10 @@ import { partesNoFuso } from './janela.js'
  * `db.js` e `env.js`, e uma regra de calendário não devia precisar de credencial
  * para ser conferida.
  *
- * São dois lembretes, e cada um tem a sua régua:
- *
- *   confirmação (D-0) ... HORA MARCADA: 9h do dia da reunião, ou uma hora antes
- *                         quando a reunião é às 9h ou mais cedo. Decisão de
- *                         25/09/2026 — a de véspera (D-1) saiu da régua.
- *   H-1 ................. a uma hora e meia da reunião, e só dentro da janela.
+ * O lembrete é UM só, a confirmação do dia (D-0), com HORA MARCADA: 9h do dia da
+ * reunião, ou uma hora antes quando a reunião é às 9h ou mais cedo. Decisão de
+ * 25/09/2026 — a de véspera (D-1) e a de uma hora antes (H-1) saíram da régua.
  */
-export type TipoLembrete = 'h1'
-
-/** Uma hora e meia: a régua do H-1, que fala em "daqui a pouco". */
-const JANELA_H1_MS = 90 * 60_000
-
-/** Folga para "a entrega é agora": o job roda de hora em hora, não no minuto exato. */
-const ENTREGA_IMEDIATA_MS = 60_000
 
 /** A confirmação sai às 9h locais… */
 const HORA_CONFIRMACAO = 9
@@ -76,31 +66,4 @@ export function quandoConfirmar(input: {
   if (faltam > 0) return alvo
   // Passou do horário: só manda se a rodada perdida foi há pouco — e agora.
   return -faltam <= TOLERANCIA_ATRASO_MS ? agora : null
-}
-
-/**
- * O H-1: a uma hora e meia ou menos da reunião, e só quando a ENTREGA é agora.
- *
- * Fora da janela a fila segura a mensagem até a abertura. Classificar o H-1 pela
- * distância até a entrega fazia a véspera à noite, para uma reunião às 9:30
- * (entrega às 9h, faltam 30 minutos), gerar um "é daqui a pouco" — medido em
- * 25/09/2026: o Ibraheem recebeu às 9h um "daqui a pouco, às 10:00" gerado às 18h
- * do dia anterior.
- */
-export function tipoDeLembrete(
-  /** Reunião menos entrega. Negativo ou zero = a conversa já começou. */
-  faltamMs: number,
-  _reuniao: Date,
-  entrega: Date,
-  _timezone: string,
-  opcoes: {
-    /** Agora. Ausente = a entrega é agora (dentro da janela). */
-    agora?: Date
-  } = {},
-): TipoLembrete | null {
-  if (faltamMs <= 0) return null
-  const entregaEAgora =
-    !opcoes.agora || entrega.getTime() - opcoes.agora.getTime() < ENTREGA_IMEDIATA_MS
-  if (faltamMs <= JANELA_H1_MS && entregaEAgora) return 'h1'
-  return null
 }

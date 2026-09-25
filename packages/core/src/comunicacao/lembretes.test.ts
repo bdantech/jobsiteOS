@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { horarioDaConfirmacao, quandoConfirmar, tipoDeLembrete } from './lembretes.ts'
+import { horarioDaConfirmacao, quandoConfirmar } from './lembretes.ts'
 
 /**
  * A confirmação tem HORA MARCADA (25/09/2026): 9h do dia da reunião, ou uma hora
- * antes quando a reunião é às 9h ou mais cedo. O H-1 é outra régua.
+ * antes quando a reunião é às 9h ou mais cedo. É o único lembrete.
  */
 
 const SP = 'America/Sao_Paulo'
@@ -83,33 +83,4 @@ test('marcada cedo no próprio dia, antes das 9h: recebe às 9h', () => {
 test('reunião que já começou não recebe confirmação', () => {
   const r = quandoConfirmar({ reuniao: REUNIAO, agora: brt('2026-09-23T14:05:00'), criadaEm: MARCADA_ONTEM, timezone: SP })
   assert.equal(r, null)
-})
-
-// ─── H-1 ────────────────────────────────────────────────────────────────────
-
-const h = (n: number): number => n * 3_600_000
-
-test('a uma hora e meia ou menos, com a entrega agora, é H-1', () => {
-  const entrega = brt('2026-09-21T12:00:00')
-  const reuniao = brt('2026-09-21T13:00:00')
-  assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP), 'h1')
-  assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP, { agora: entrega }), 'h1')
-})
-
-test('véspera à noite NÃO gera "daqui a pouco" para a reunião cedo', () => {
-  // Entrega às 9h (janela fechada), reunião às 9:30: 30 minutos na entrega.
-  const agora = brt('2026-09-22T18:10:00')
-  const entrega = brt('2026-09-23T09:00:00')
-  const reuniao = brt('2026-09-23T09:30:00')
-  assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP, { agora }), null)
-})
-
-test('longe da reunião não há H-1', () => {
-  const entrega = brt('2026-09-21T09:00:00')
-  assert.equal(tipoDeLembrete(h(3), brt('2026-09-21T12:00:00'), entrega, SP), null)
-})
-
-test('reunião que já começou não gera H-1', () => {
-  const entrega = brt('2026-09-21T09:00:00')
-  assert.equal(tipoDeLembrete(-h(1), brt('2026-09-21T08:00:00'), entrega, SP), null)
 })
