@@ -21,25 +21,62 @@ test('domingo: o D-1 que só chega na segunda vira D-0, e não diz "amanhã"', (
   assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP), 'd0')
 })
 
-test('véspera de dia útil segue sendo D-1', () => {
+test('véspera, dentro da janela: nada ainda — a confirmação é no dia (25/09/2026)', () => {
   const entrega = new Date('2026-09-22T12:00:00Z') // terça, 09:00 BRT
   const reuniao = new Date('2026-09-23T16:00:00Z') // quarta, 13:00 BRT
-  assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP), 'd1')
+  assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP), null)
 })
 
-test('menos de 24h mas em OUTRO dia local continua D-1', () => {
+test('menos de 24h mas em OUTRO dia local: ainda não é hora', () => {
   // Vinte horas de distância, e ainda assim "hoje" seria mentira.
   const entrega = new Date('2026-09-21T16:00:00Z') // segunda, 13:00 BRT
   const reuniao = new Date('2026-09-22T12:00:00Z') // terça, 09:00 BRT
   const faltam = reuniao.getTime() - entrega.getTime()
   assert.ok(faltam < h(24) && faltam > h(19))
-  assert.equal(tipoDeLembrete(faltam, reuniao, entrega, SP), 'd1')
+  assert.equal(tipoDeLembrete(faltam, reuniao, entrega, SP), null)
 })
 
-test('a uma hora e meia ou menos, é H-1', () => {
+test('véspera à noite: a entrega é na abertura do dia da reunião, e é o D-0', () => {
+  const agora = new Date('2026-09-22T21:10:00Z') // terça, 18:10 BRT — janela fechada
+  const entrega = new Date('2026-09-23T12:00:00Z') // quarta, 09:00 BRT
+  const reuniao = new Date('2026-09-23T17:00:00Z') // quarta, 14:00 BRT
+  const criadaEm = new Date('2026-09-20T15:00:00Z')
+  assert.equal(
+    tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP, { agora, criadaEm }),
+    'd0',
+  )
+})
+
+test('reunião cedo: a véspera à noite NÃO manda "daqui a pouco" — manda o D-0 das 9h', () => {
+  // Entrega às 9h, reunião às 9:30: 30 minutos na entrega. Era H-1, enviado NA HORA
+  // (o H-1 fura a janela) — ou seja, na véspera à noite dizendo "é daqui a pouco".
+  const agora = new Date('2026-09-22T21:10:00Z') // terça, 18:10 BRT
+  const entrega = new Date('2026-09-23T12:00:00Z') // quarta, 09:00 BRT
+  const reuniao = new Date('2026-09-23T12:30:00Z') // quarta, 09:30 BRT
+  assert.equal(
+    tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP, { agora }),
+    'd0',
+  )
+})
+
+test('reunião marcada no próprio dia não recebe a confirmação de bom dia', () => {
+  const agora = new Date('2026-09-23T13:00:00Z') // quarta, 10:00 BRT
+  const reuniao = new Date('2026-09-23T19:00:00Z') // quarta, 16:00 BRT
+  const criadaEm = new Date('2026-09-23T12:40:00Z') // quarta, 09:40 BRT
+  assert.equal(
+    tipoDeLembrete(reuniao.getTime() - agora.getTime(), reuniao, agora, SP, { agora, criadaEm }),
+    null,
+  )
+})
+
+test('a uma hora e meia ou menos, com a entrega agora, é H-1', () => {
   const entrega = new Date('2026-09-21T15:00:00Z')
   const reuniao = new Date('2026-09-21T16:00:00Z')
   assert.equal(tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP), 'h1')
+  assert.equal(
+    tipoDeLembrete(reuniao.getTime() - entrega.getTime(), reuniao, entrega, SP, { agora: entrega }),
+    'h1',
+  )
 })
 
 test('reunião distante ainda não tem lembrete', () => {

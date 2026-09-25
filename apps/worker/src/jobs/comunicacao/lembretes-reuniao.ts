@@ -11,8 +11,9 @@ import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 
 /**
- * Reuniões: confirmação, lembrete D-1, lembrete H-1 e reagendamento pós no-show
- * (§5).
+ * Reuniões: confirmação, lembrete D-0 (a confirmação da manhã do dia), lembrete H-1
+ * e reagendamento pós no-show (§5). O D-1 da véspera saiu em 25/09/2026 — ver
+ * `tipoDeLembrete`, no core.
  *
  * Entrou neste prompt por ROI imediato: os dados já existem em `vendedor_eventos`
  * desde o 04g, e um lembrete de véspera é a diferença entre uma agenda cheia e
@@ -29,18 +30,16 @@ import { logger } from '../../logger.js'
 export interface ResultadoLembretes {
   reunioes: number
   confirmacoes: number
-  d1: number
-  /** Entrega cai no MESMO dia da reunião — o D-1 que atrasou vira "é hoje". */
+  /** A confirmação do dia, entregue na abertura da janela ("Bom dia… hoje às 14:00"). */
   d0: number
   h1: number
   reagendamentos: number
 }
 
-type Tipo = 'confirmacao' | 'd1' | 'd0' | 'h1' | 'reagendamento'
+type Tipo = 'confirmacao' | 'd0' | 'h1' | 'reagendamento'
 
 const TEMPLATE_POR_TIPO: Record<Tipo, string> = {
   confirmacao: 'Confirmação de reunião',
-  d1: 'Lembrete D-1',
   d0: 'Lembrete D-0',
   h1: 'Lembrete H-1',
   reagendamento: 'Reagendamento pós no-show',
@@ -82,7 +81,6 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
   const acc: ResultadoLembretes = {
     reunioes: 0,
     confirmacoes: 0,
-    d1: 0,
     d0: 0,
     h1: 0,
     reagendamentos: 0,
@@ -142,8 +140,14 @@ export async function lembretesDeReuniao(agora = new Date()): Promise<ResultadoL
       }
     }
 
-    const tipo = tipoDeLembrete(faltamNaEntrega, inicio, entrega, cfg.janela.timezone)
+    const tipo = tipoDeLembrete(faltamNaEntrega, inicio, entrega, cfg.janela.timezone, {
+      agora,
+      criadaEm: new Date(ev.criado_em),
+    })
     if (!tipo) continue
+    // A confirmação das 9h já disse "hoje às 10:00": um "daqui a pouco" na mesma hora
+    // é a mesma mensagem duas vezes.
+    if (tipo === 'h1' && (await d0Recente(ev, agora))) continue
     if (await enfileirarLembrete(ev, tipo, inicio, entrega)) {
       acc[tipo] += 1
     }
@@ -322,7 +326,7 @@ async function enfileirarLembrete(
 
 /**
  * Já mandamos este lembrete? Pergunta feita ao LEDGER, com a janela certa por
- * tipo: um D-1 só existe uma vez por reunião, mas um reagendamento pode
+ * tipo: um D-0 só existe uma vez por reunião, mas um reagendamento pode
  * acontecer de novo meses depois com a mesma pessoa.
  */
 async function jaEnviado(ev: Evento, tipo: Tipo, templateId: string): Promise<boolean> {
@@ -346,6 +350,38 @@ async function jaEnviado(ev: Evento, tipo: Tipo, templateId: string): Promise<bo
     .select('id', { count: 'exact', head: true })
     .eq('empresa_id', ev.empresa_id!)
     .eq('template_id', templateId)
+    .in('status', ['aprovada', 'pendente_envio'])
+  return (naFila ?? 0) > 0
+}
+
+/**
+ * O D-0 desta empresa saiu (ou está saindo) há menos de duas horas? É o que faz o H-1
+ * calar: numa reunião às 10h a confirmação das 9h e o H-1 cairiam juntos.
+ */
+async function d0Recente(ev: Evento, agora: Date): Promise<boolean> {
+  if (!ev.empresa_id) return false
+  const { data: template } = await supabaseAdmin
+    .from('templates_mensagem')
+    .select('id')
+    .eq('nome', TEMPLATE_POR_TIPO.d0)
+    .limit(1)
+    .maybeSingle()
+  if (!template) return false
+
+  const { count: noLedger } = await supabaseAdmin
+    .from('comunicacoes')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', ev.empresa_id)
+    .eq('template_id', template.id)
+    .eq('direcao', 'saida')
+    .gte('criado_em', new Date(agora.getTime() - 2 * 3_600_000).toISOString())
+  if ((noLedger ?? 0) > 0) return true
+
+  const { count: naFila } = await supabaseAdmin
+    .from('mensagens_outbox')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', ev.empresa_id)
+    .eq('template_id', template.id)
     .in('status', ['aprovada', 'pendente_envio'])
   return (naFila ?? 0) > 0
 }
