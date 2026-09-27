@@ -398,10 +398,12 @@ function clienteDaVoz(): SupabaseClient {
 }
 
 export interface LigacaoDeVoz {
-  access_key: string
+  /** PK desde a 0270a — a ligação de mandato pode não ter nota (09 §4.3). */
+  id: string
+  access_key: string | null
   tentativa: number
   id_externo: string
-  fornecedor_cnpj: string
+  fornecedor_cnpj: string | null
   telefone: string | null
   status: string
   motivo_recusa: string | null
@@ -411,14 +413,19 @@ export interface LigacaoDeVoz {
   resumo: string | null
   erro: string | null
   origem: string
+  objetivo: string
+  mandato_id: string | null
   criada_em: string
   encerrada_em: string | null
+  /** §1.6: gravados em coluna própria (o zod os descartava antes). */
+  links: { painel?: string | null; gravacao?: string | null } | null
+  custo_centavos: number | null
+  duracao_s: number | null
   resultado: { links?: { painel?: string | null; gravacao?: string | null } | null } | null
 }
 
 const COLUNAS_VOZ =
-  'access_key, tentativa, id_externo, fornecedor_cnpj, telefone, status, motivo_recusa, ' +
-  'ligacao_id, chamada_id, outcome, resumo, erro, origem, criada_em, encerrada_em, resultado'
+  'id, access_key, tentativa, id_externo, fornecedor_cnpj, telefone, status, motivo_recusa, ligacao_id, chamada_id, outcome, resumo, erro, origem, objetivo, mandato_id, criada_em, encerrada_em, links, custo_centavos, duracao_s, resultado'
 
 /** A fila e o que ela já produziu, do mais recente para trás. */
 export async function buscarLigacoesDeVoz(): Promise<LigacaoDeVoz[]> {
@@ -581,6 +588,20 @@ export async function buscarCandidatasDeVoz(): Promise<CandidataDeVoz[]> {
  * `kill_switch` valia só no servidor: a tela mostrava o card verde e o clique
  * falhava com "Disparos desligados", que é a tela mentindo por omissão.
  */
+/**
+ * O estado da voz para o aviso no topo da tela. A fila aceita pedido com a voz desligada
+ * (a RPC não sabe da config), e sem o aviso a tela deixava enfileirar para uma Ana que
+ * não ia ligar — e ninguém entendia por que nada saía.
+ */
+export async function buscarEstadoDaVoz(): Promise<{ ligada: boolean; kill_switch: boolean; versao: string }> {
+  const [cfg, { data: status }] = await Promise.all([
+    lerConfigDaVoz(),
+    createClient().from('agentes_config').select('valor').eq('chave', 'voz_status').maybeSingle(),
+  ])
+  const v = status?.valor as { versao?: string } | null
+  return { ligada: cfg.ligada, kill_switch: cfg.kill_switch, versao: v?.versao ?? 'desconhecida' }
+}
+
 async function lerConfigDaVoz(): Promise<ConfigVoz> {
   const { data } = await createClient()
     .from('antecipacao_config')

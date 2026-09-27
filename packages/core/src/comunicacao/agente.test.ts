@@ -77,14 +77,14 @@ test('a decisão válida passa', () => {
   assert.deepEqual(validarDecisao(d, PLAYBOOK, cfg), { valida: true })
 })
 
-test('"você é um robô?" impede o agente de decidir e escala', () => {
+test('"você é um robô?" não escala: o agente decide e responde (09 §1.10)', () => {
   const r = aplicarGuardrails(
     { modo: 'autonomo', triagemDaUltima: triagem({}), corpoDaUltima: 'isso é um robô?', enviadasNaThreadHoje: 0, tentativas: 0 },
     PLAYBOOK,
     cfg,
   )
-  assert.equal(r.podeDecidir, false)
-  assert.equal(r.escalar, true)
+  assert.equal(r.podeDecidir, true)
+  assert.equal(r.escalar, false)
 })
 
 test('menção a taxa escala antes de qualquer decisão', () => {

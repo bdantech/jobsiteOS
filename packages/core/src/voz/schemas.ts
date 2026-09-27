@@ -166,41 +166,70 @@ export const DESFECHO_QUE_SUPRIME: DesfechoLigacao = 'pediu_para_nao_contatar'
  * O corpo do webhook. Campos desconhecidos passam de propósito: a Ana evolui e
  * um campo novo não pode derrubar a nossa ponta — quem precisa dele mapeia
  * depois, e enquanto isso o resultado continua entrando.
+ *
+ * ── ISTO NÃO ERA VERDADE ATÉ O PROMPT 09 (§1.5 e §1.6) ─────────────────────
+ * O comentário acima já existia, e o código fazia o contrário: `z.object` do zod 3
+ * DESCARTA chaves não declaradas, e o webhook mandava à RPC o objeto validado. Os
+ * `links` (painel e gravação) nunca chegavam ao banco e o botão "Ouvir" nunca aparecia.
+ * E um `outcome` fora do enum reprovava o corpo inteiro: a resposta era 200 e o
+ * resultado ia para o lixo, com a ligação presa em `enviada` para sempre.
+ *
+ * Agora: `passthrough` em todos os níveis, `status` e `outcome` aceitam qualquer texto
+ * (a RPC mapeia o desconhecido para `desconhecido` e guarda o cru), e o webhook passa
+ * o CORPO CRU à RPC — o schema serve para autorizar a leitura, não para podar.
  */
-export const resultadoLigacaoSchema = z.object({
-  evento: z.literal('ligacao.encerrada'),
-  ligacao_id: z.string(),
-  id_externo: z.string(),
-  status: z.enum(STATUS_LIGACAO),
-  telefone: z.string(),
-  oferta_id: z.string().nullable().optional(),
-  criada_em: z.string().nullable().optional(),
-  iniciada_em: z.string().nullable().optional(),
-  encerrada_em: z.string().nullable().optional(),
-  outcome: z.enum(DESFECHOS_LIGACAO).nullable().optional(),
-  erro: z.string().nullable().optional(),
-  chamada: z
-    .object({
-      call_id: z.string().optional(),
-      resumo: z.string().nullable().optional(),
-      proximo_passo: z.string().nullable().optional(),
-      duracao_s: z.number().nullable().optional(),
-      atendida: z.boolean().optional(),
-      identidade_verificada: z.boolean().optional(),
-      falou_com_decisor: z.boolean().optional(),
-      valor_negociado: z.number().nullable().optional(),
-      objecoes: z.array(z.record(z.string(), z.unknown())).optional(),
-      decisor: z.record(z.string(), z.unknown()).nullable().optional(),
-      nao_contatar: z
-        .object({ escopo: z.string().optional(), literal: z.string().optional() })
-        .nullable()
-        .optional(),
-      transcricao: z.array(z.record(z.string(), z.unknown())).optional(),
-      roteiro: z.record(z.string(), z.unknown()).optional(),
-    })
-    .nullable()
-    .optional(),
-})
+export const resultadoLigacaoSchema = z
+  .object({
+    evento: z.string(),
+    ligacao_id: z.string(),
+    id_externo: z.string(),
+    status: z.string(),
+    telefone: z.string().nullable().optional(),
+    oferta_id: z.string().nullable().optional(),
+    criada_em: z.string().nullable().optional(),
+    iniciada_em: z.string().nullable().optional(),
+    encerrada_em: z.string().nullable().optional(),
+    outcome: z.string().nullable().optional(),
+    erro: z.string().nullable().optional(),
+    links: z
+      .object({ painel: z.string().nullable().optional(), gravacao: z.string().nullable().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    custo: z
+      .object({ valor_brl: z.number().nullable().optional(), minutos: z.number().nullable().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    custo_centavos: z.number().nullable().optional(),
+    desfecho: z.record(z.string(), z.unknown()).nullable().optional(),
+    chamada: z
+      .object({
+        call_id: z.string().optional(),
+        resumo: z.string().nullable().optional(),
+        proximo_passo: z.string().nullable().optional(),
+        duracao_s: z.number().nullable().optional(),
+        atendida: z.boolean().optional(),
+        identidade_verificada: z.boolean().optional(),
+        falou_com_decisor: z.boolean().optional(),
+        valor_negociado: z.number().nullable().optional(),
+        objecoes: z.array(z.record(z.string(), z.unknown())).optional(),
+        decisor: z.record(z.string(), z.unknown()).nullable().optional(),
+        nao_contatar: z
+          .object({ escopo: z.string().optional(), literal: z.string().optional() })
+          .passthrough()
+          .nullable()
+          .optional(),
+        transcricao: z.array(z.record(z.string(), z.unknown())).optional(),
+        roteiro: z.record(z.string(), z.unknown()).optional(),
+        links: z.record(z.string(), z.unknown()).nullable().optional(),
+        desfecho: z.record(z.string(), z.unknown()).nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
 export type ResultadoLigacao = z.infer<typeof resultadoLigacaoSchema>
 
 /**

@@ -595,3 +595,14 @@ test('Wasender: o anexo vai como documentUrl com o nome do arquivo', async () =>
   await t.enviar({ destino: '11999998888', corpo: 'oi' })
   assert.equal('documentUrl' in body, false)
 })
+
+test('mídia do WhatsApp: imagem vai como imagem, PDF como documento com nome (09 §4.1)', async () => {
+  const { midiaWasender } = await import('./wasender.ts')
+  assert.deepEqual(midiaWasender([{ nome: 'obra.jpg', url: 'https://x/obra.jpg', mime: 'image/jpeg' }]), { imageUrl: 'https://x/obra.jpg' })
+  assert.deepEqual(midiaWasender([{ nome: 'apresentacao.pdf', url: 'https://x/a.pdf', mime: 'application/pdf' }]), {
+    documentUrl: 'https://x/a.pdf',
+    fileName: 'apresentacao.pdf',
+  })
+  assert.deepEqual(midiaWasender([{ nome: 'audio.ogg', url: 'https://x/a.ogg', mime: 'audio/ogg' }]), { audioUrl: 'https://x/a.ogg' })
+  assert.deepEqual(midiaWasender([]), {})
+})

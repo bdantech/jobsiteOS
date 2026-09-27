@@ -1,0 +1,13 @@
+// Agentes comerciais de IA (Prompt 09): mandatos, personas e o loop autônomo.
+export * from './schemas.js'
+export * from './identificacao.js'
+export * from './escopo.js'
+export * from './voz-adapter.js'
+export * from './ferramentas.js'
+export * from './trancas.js'
+export * from './orcamento.js'
+export * from './disjuntor.js'
+export * from './agenda.js'
+export * from './prompt.js'
+export * from './loop.js'
+export * from './mutations.js'

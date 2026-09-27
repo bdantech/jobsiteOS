@@ -10,7 +10,10 @@ import {
   type Playbook,
   type Triagem,
 } from '../../../../../packages/core/src/comunicacao/index.js'
+import { regraDeIdentificacao } from '../../../../../packages/core/src/agentes/identificacao.js'
+import type { ConfigAgentes } from '../../../../../packages/core/src/agentes/schemas.js'
 import { AI_MODEL, EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
+import { lerConfigAgentes } from '../../agentes/config.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
@@ -87,6 +90,7 @@ const COLUNAS =
  */
 export async function decidirProximosPassos(limite = 50): Promise<ResultadoAgente> {
   const cfg = await lerConfigComunicacao(true)
+  const cfgAgentes = await lerConfigAgentes()
   const agora = new Date()
 
   const acc: ResultadoAgente = {
@@ -99,20 +103,36 @@ export async function decidirProximosPassos(limite = 50): Promise<ResultadoAgent
     puladas: 0,
   }
 
+  /*
+   * ── A FILA ANDA PELA PRÓXIMA AVALIAÇÃO, NÃO PELA IDADE (09 §1.1) ─────────
+   * Ordenava por `ultima_mensagem_em` e a conversa sem playbook voltava sem reagendar:
+   * as mesmas 50 mais antigas ocupavam a fila para sempre, e nenhuma conversa com
+   * playbook era alcançada. Agora toda passagem grava `proxima_acao_em` antes de sair
+   * (inclusive quando não há nada a fazer), e a seleção pega a que venceu há mais tempo.
+   * `aguardando_humano` fica de fora pelo filtro de status: é de uma pessoa até alguém
+   * tocá-la.
+   */
   const { data, error } = await supabaseAdmin
     .from('conversas')
     .select(COLUNAS)
     .in('status', ['ativa', 'aguardando_resposta'])
     .neq('modo_agente', 'desligado')
     .or(`proxima_acao_em.is.null,proxima_acao_em.lte.${agora.toISOString()}`)
-    .order('ultima_mensagem_em', { ascending: true, nullsFirst: true })
+    .order('proxima_acao_em', { ascending: true, nullsFirst: true })
     .limit(limite)
   if (error) {
     logger.error({ erro: error.message }, 'Falha ao listar conversas para o agente.')
     return acc
   }
 
-  const conversas = (data ?? []) as ConversaParaDecidir[]
+  /*
+   * A conversa que pertence a um mandato ATIVO é do ciclo de agentes (09 §6): lá o
+   * agente enxerga todas as conversas do mandato de uma vez e decide por ele. Decidir
+   * aqui também seria o mesmo cliente recebendo duas cadências.
+   */
+  const todas = (data ?? []) as ConversaParaDecidir[]
+  const doMandato = await conversasEmMandatoAtivo(todas.map((c) => c.id))
+  const conversas = todas.filter((c) => !doMandato.has(c.id))
   acc.conversas = conversas.length
 
   for (const c of conversas) {
@@ -123,7 +143,7 @@ export async function decidirProximosPassos(limite = 50): Promise<ResultadoAgent
           : c.proxima_acao_em
             ? 'agendado'
             : 'silencio'
-      const r = await decidirParaConversa(c, gatilho, cfg, agora)
+      const r = await decidirParaConversa(c, gatilho, cfg, agora, cfgAgentes)
       acc.decisoes += r.decidiu ? 1 : 0
       acc.executadas += r.executou ? 1 : 0
       acc.sugeridas += r.sugeriu ? 1 : 0
@@ -163,9 +183,15 @@ export async function decidirParaConversa(
   gatilho: Gatilho,
   cfg: ConfigComunicacao,
   agora: Date,
+  cfgAgentes: ConfigAgentes,
 ): Promise<DesfechoDecisao> {
   const playbook = await playbookDa(conversa)
-  if (!playbook) return NADA
+  if (!playbook) {
+    // §1.1(c): sem mandato nem playbook não há o que decidir — mas a conversa precisa
+    // sair da frente da fila. Um intervalo longo (config, 24h), e não zero.
+    await reagendarEm(conversa.id, agora, cfgAgentes.geral.intervalo_sem_mandato_horas * 3_600_000)
+    return NADA
+  }
 
   const historico = await ultimasMensagens(conversa.id)
   const ultima = historico[0]
@@ -193,6 +219,8 @@ export async function decidirParaConversa(
       justificativa: guard.motivo ?? 'Guardrail acionado.',
     })
     await avisarEscalacao(conversa, guard.motivo ?? 'A conversa precisa de uma pessoa.')
+    // §1.4: sem isto a mesma conversa escalava — e notificava — a cada hora.
+    await aguardarHumano(conversa.id, agora, cfgAgentes)
     return { ...NADA, pulou: false, decidiu: true, escalou: true }
   }
   if (!guard.podeDecidir) {
@@ -202,7 +230,7 @@ export async function decidirParaConversa(
     return NADA
   }
 
-  const bruta = await consultarModelo(conversa, playbook, historico, cfg)
+  const bruta = await consultarModelo(conversa, playbook, historico, cfg, cfgAgentes)
   const validacao = bruta ? validarDecisao(bruta, playbook, cfg) : null
 
   if (!bruta || !validacao?.valida) {
@@ -250,7 +278,7 @@ export async function decidirParaConversa(
     return { ...NADA, pulou: false, decidiu: true, sugeriu: true }
   }
 
-  const executou = await executar(conversa, bruta, decisaoId, agora, playbook)
+  const executou = await executar(conversa, bruta, decisaoId, agora, playbook, cfgAgentes, historico)
   return { ...NADA, pulou: false, decidiu: true, executou }
 }
 
@@ -280,10 +308,14 @@ async function consultarModelo(
   playbook: Playbook,
   historico: MensagemHistorico[],
   cfg: ConfigComunicacao,
+  cfgAgentes: ConfigAgentes,
 ): Promise<DecisaoAgente | null> {
   if (!env.ANTHROPIC_API_KEY) return null
 
-  const contexto = await montarContexto(conversa, playbook, historico, cfg)
+  const { contexto, persona } = await montarContexto(conversa, playbook, historico, cfg)
+  // A regra de identificação é CONFIG (09 §10) e vale por cima do playbook: entra no
+  // system prompt depois das instruções dele, para nenhum playbook poder desdizê-la.
+  const identificacao = regraDeIdentificacao(cfgAgentes.geral.identificacao, persona)
 
   try {
     const resposta = await requisitarJson<{ content?: Array<{ type: string; text?: string }> }>(
@@ -294,7 +326,7 @@ async function consultarModelo(
         body: {
           model: AI_MODEL,
           max_tokens: 2048,
-          system: `${PROMPT_AGENTE}\n\n── PLAYBOOK: ${playbook.nome} ──\n${playbook.instrucoes}\n\nAções permitidas nesta conversa: ${playbook.acoes_permitidas.join(', ')}.`,
+          system: `${PROMPT_AGENTE}\n\n── PLAYBOOK: ${playbook.nome} ──\n${playbook.instrucoes}\n\nAções permitidas nesta conversa: ${playbook.acoes_permitidas.join(', ')}.\n\n── ${identificacao}`,
           messages: [{ role: 'user', content: contexto }],
         },
         tentativas: 2,
@@ -330,7 +362,7 @@ async function montarContexto(
   playbook: Playbook,
   historico: MensagemHistorico[],
   cfg: ConfigComunicacao,
-): Promise<string> {
+): Promise<{ contexto: string; persona: string }> {
   const { data: empresa } = conversa.empresa_id
     ? await supabaseAdmin
         .from('empresas')
@@ -365,11 +397,21 @@ async function montarContexto(
     })
     .join('\n')
 
-  return [
+  /*
+   * A persona que fala é SEMPRE uma assistente de IA, mesmo quando o responsável da
+   * conversa é humano: o texto sai por um número `ia` e com `por_ia = true`. Dizer
+   * "Você é: Fulano" com o nome de um vendedor humano fazia o modelo assinar como ele
+   * (09 §1.10). O nome humano vira CONTEXTO ("o vendedor da conta"), nunca identidade.
+   */
+  const nomePersona = persona?.is_ia ? persona.nome : 'a assistente da ONE OS'
+  const contexto = [
     `Empresa: ${empresa?.razao_social ?? empresa?.nome_fantasia ?? 'não identificada'}${empresa?.uf ? ` (${empresa.municipio ?? ''}/${empresa.uf})` : ''}`,
     `Relação: ${empresa?.estagio ?? 'desconhecida'}`,
     `Contato: ${contato?.nome ?? 'não identificado'}${contato?.cargo ? ` — ${contato.cargo}` : ''}`,
-    `Você é: ${persona?.nome ?? 'a ONE OS'}${persona?.is_ia ? ' (persona de IA — assuma isso se perguntarem)' : ''}`,
+    `Você é: ${nomePersona}`,
+    ...(persona && !persona.is_ia ? [`Vendedor responsável pela conta: ${persona.nome} (você NÃO é essa pessoa)`] : []),
+    // Sem a hora de agora, o `quando` que o modelo devolve não tem âncora nenhuma.
+    `Agora: ${new Date().toLocaleString('pt-BR', { timeZone: cfg.janela.timezone })} (${cfg.janela.timezone})`,
     `Canal: ${conversa.canal}`,
     `Objetivo desta conversa: ${conversa.objetivo ?? playbook.objetivo}`,
     `Status: ${conversa.status}`,
@@ -380,6 +422,7 @@ async function montarContexto(
     '',
     'Qual é o próximo passo? Responda apenas com o JSON.',
   ].join('\n')
+  return { contexto, persona: nomePersona }
 }
 
 // ─── Execução ───────────────────────────────────────────────────────────────
@@ -398,6 +441,8 @@ async function executar(
   decisaoId: string | null,
   agora: Date,
   playbook: Playbook,
+  cfgAgentes: ConfigAgentes,
+  historico: MensagemHistorico[],
 ): Promise<boolean> {
   const acao = d.acao as AcaoAgente
 
@@ -427,12 +472,19 @@ async function executar(
         logger.error({ erro: error.message }, 'Falha ao enfileirar mensagem do agente.')
         return false
       }
+      // Sem reagendar, a conversa continuava vencida e voltava na hora seguinte para
+      // "responder" de novo o que já tinha respondido — só o teto diário a segurava.
+      await adiar(conversa.id, agora, playbook)
       break
     }
 
     case 'agendar_toque':
     case 'aguardar': {
-      const quando = d.quando ? new Date(d.quando) : proximaJanelaSimples(agora, playbook)
+      // Data inválida do modelo não pode derrubar a execução DEPOIS de a decisão estar
+      // gravada: cai no prazo do playbook, que é o mesmo que ela cairia sem `quando`.
+      const pedida = d.quando ? new Date(d.quando) : null
+      const quando =
+        pedida && !Number.isNaN(pedida.getTime()) ? pedida : proximaJanelaSimples(agora, playbook)
       await supabaseAdmin
         .from('conversas')
         .update({ proxima_acao_em: quando.toISOString() })
@@ -443,6 +495,7 @@ async function executar(
     case 'escalar_humano':
       await avisarEscalacao(conversa, d.justificativa)
       await supabaseAdmin.from('conversas').update({ modo_agente: 'sugestao' }).eq('id', conversa.id)
+      await aguardarHumano(conversa.id, agora, cfgAgentes)
       break
 
     case 'marcar_sem_interesse':
@@ -452,24 +505,30 @@ async function executar(
         .eq('id', conversa.id)
       break
 
-    case 'trocar_contato_da_conversa':
-      // A troca cria contato e abre thread nova: é o §7.4, e tem função própria.
-      await trocarContato(conversa, d)
+    case 'trocar_contato_da_conversa': {
+      // A troca cria contato e abre thread nova: é o §7.4, e tem função própria. Os dados
+      // da indicação vêm da TRIAGEM da última mensagem recebida — o schema da decisão não
+      // tem esse campo, e lê-lo de lá (como antes) devolvia sempre vazio: a ação contava
+      // como executada sem ter feito nada (09 §6.1).
+      const trocou = await trocarContato(conversa, d, historico)
+      if (!trocou) {
+        await adiar(conversa.id, agora, playbook)
+        return false
+      }
       break
+    }
 
     case 'mudar_estagio_funil':
     case 'pedir_enriquecimento_contato':
-      // Efeitos de card e de descoberta são pedidos ao módulo dono, e nenhum deles
-      // é uma escrita direta daqui. Por enquanto a decisão fica registrada e a
-      // conversa é reavaliada — o que o log mostra é quantas vezes isso seria útil.
-      await adiar(conversa.id, agora, playbook)
-      break
-
     case 'ligar':
-      logger.info(
-        { conversa: conversa.id },
-        'Agente escolheu ligar; a ferramenta está declarada e DESLIGADA (agente.ligacao_habilitada = false).',
-      )
+      /*
+       * NÃO EXECUTADAS, e agora sem fingir (09 §6.1). O agente de conversa não sabe qual
+       * card mover nem tem orçamento para enriquecer ou ligar — isso é trabalho de
+       * MANDATO, onde essas ferramentas existem de verdade. Antes estas ações marcavam
+       * `executada = true` e emitiam "executou" sem efeito nenhum: um agente que acha que
+       * agiu e não agiu é pior que um que não age.
+       */
+      logger.info({ conversa: conversa.id, acao }, 'Ação sem efeito no agente de conversa; só com mandato.')
       await adiar(conversa.id, agora, playbook)
       return false
   }
@@ -500,12 +559,18 @@ async function executar(
  * não decide, não que ela não possa ser abordada: suprimir queimaria um contato
  * que volta a ser útil no dia em que o Marcelo sair.
  */
-async function trocarContato(conversa: ConversaParaDecidir, d: DecisaoAgente): Promise<void> {
-  const dados = (d as unknown as { dados_extraidos?: Record<string, string | null> }).dados_extraidos ?? {}
+async function trocarContato(
+  conversa: ConversaParaDecidir,
+  d: DecisaoAgente,
+  historico: MensagemHistorico[],
+): Promise<boolean> {
+  const ultimaEntrada = historico.find((m) => m.direcao === 'entrada')
+  const triagem = (ultimaEntrada?.triagem ?? null) as { dados_extraidos?: Record<string, string | null> } | null
+  const dados = triagem?.dados_extraidos ?? {}
   const nome = dados.nome_de_outra_pessoa
   const telefone = dados.telefone_de_outra_pessoa
   const email = dados.email_de_outra_pessoa
-  if (!conversa.empresa_id || !nome || (!telefone && !email)) return
+  if (!conversa.empresa_id || !nome || (!telefone && !email)) return false
 
   const { data: novo, error } = await supabaseAdmin
     .from('contatos')
@@ -524,7 +589,7 @@ async function trocarContato(conversa: ConversaParaDecidir, d: DecisaoAgente): P
     .maybeSingle()
   if (error || !novo) {
     logger.error({ erro: error?.message }, 'Falha ao criar o contato indicado.')
-    return
+    return false
   }
 
   if (conversa.contato_id) {
@@ -570,6 +635,7 @@ async function trocarContato(conversa: ConversaParaDecidir, d: DecisaoAgente): P
     url: conversaNova ? `/comunicacao/${conversaNova as string}` : '/comunicacao',
     contato_id: novo.id,
   })
+  return true
 }
 
 // ─── Persistência e avisos ──────────────────────────────────────────────────
@@ -655,6 +721,9 @@ async function playbookDa(conversa: ConversaParaDecidir): Promise<Playbook | nul
     .select('id, nome, funil, objetivo, instrucoes, acoes_permitidas, prazos')
     .eq('objetivo', conversa.objetivo)
     .eq('ativo', true)
+    // Os playbooks de MANDATO (0270e) listam ferramentas do loop de agentes, não ações
+    // deste decisor — e escolher um deles aqui validaria a decisão contra a lista errada.
+    .is('tipo_mandato', null)
     .order('versao', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -678,6 +747,42 @@ async function identificadorDaConversa(conversaId: string): Promise<string | nul
     .eq('id', conversaId)
     .maybeSingle()
   return data?.identificador_externo ?? null
+}
+
+async function reagendarEm(conversaId: string, agora: Date, ms: number): Promise<void> {
+  await supabaseAdmin
+    .from('conversas')
+    .update({ proxima_acao_em: new Date(agora.getTime() + ms).toISOString() })
+    .eq('id', conversaId)
+}
+
+/**
+ * §1.4: a conversa passa a ser de uma PESSOA. Sai da varredura pelo status, e o trigger
+ * de `comunicacoes` a devolve a `aguardando_resposta` na primeira saída humana. O
+ * `proxima_acao_em` é o relógio de segurança: se ninguém tocar, ela não fica invisível
+ * para sempre.
+ */
+async function aguardarHumano(conversaId: string, agora: Date, cfgAgentes: ConfigAgentes): Promise<void> {
+  await supabaseAdmin
+    .from('conversas')
+    .update({
+      status: 'aguardando_humano',
+      proxima_acao_em: new Date(agora.getTime() + cfgAgentes.geral.intervalo_sem_mandato_horas * 3_600_000).toISOString(),
+    })
+    .eq('id', conversaId)
+}
+
+/** As conversas destas que estão presas a um mandato ativo (do ciclo de agentes). */
+export async function conversasEmMandatoAtivo(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const { data, error } = await supabaseAdmin
+    .from('mandato_conversas')
+    .select('conversa_id, mandatos!inner(estado)')
+    .in('conversa_id', ids)
+    .in('mandatos.estado', ['aberto', 'em_andamento', 'aguardando_externo'])
+  // Sem a tabela (migração não aplicada), nenhuma conversa é de mandato.
+  if (error) return new Set()
+  return new Set((data ?? []).map((r) => r.conversa_id as string))
 }
 
 async function adiar(conversaId: string, agora: Date, playbook: Playbook): Promise<void> {

@@ -649,6 +649,34 @@ export async function dispararVozEnviar(): Promise<DispararJobResultado> {
   return postar('/jobs/voz/enviar', {}, 'voz-enviar')
 }
 
+/** §1.5(b): ligação sem resultado há mais de `voz_timeout_minutos` vira falha e libera a nota. */
+export async function dispararVarrerOrfas(): Promise<DispararJobResultado> {
+  return postar('/jobs/voz/varrer-orfas', {}, 'voz-varrer-orfas')
+}
+
+/** §1.5(c): o DELETE na Ana depois de a tela cancelar do nosso lado. Síncrono. */
+export async function dispararCancelarNaAna(ligacaoId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/voz/cancelar', { ligacao_id: ligacaoId }, 'voz-cancelar', 30_000)
+}
+
+// ─── Agentes (Prompt 09) ────────────────────────────────────────────────────
+
+export async function dispararCicloAgentes(): Promise<DispararJobResultado> {
+  return postar('/jobs/agentes/ciclo', {}, 'agentes-ciclo')
+}
+
+export async function dispararCriarMandatos(): Promise<DispararJobResultado> {
+  return postar('/jobs/agentes/criar-mandatos', {}, 'agentes-criar-mandatos')
+}
+
+export async function dispararDigestAgentes(): Promise<DispararJobResultado> {
+  return postar('/jobs/agentes/digest', {}, 'agentes-digest')
+}
+
+export async function dispararReconciliarCusto(): Promise<DispararJobResultado> {
+  return postar('/jobs/agentes/reconciliar-custo', {}, 'agentes-reconciliar-custo')
+}
+
 /** Lookup cadastral sob demanda, para esvaziar a fila sem esperar o diário. */
 export async function dispararLookupCadastral(): Promise<DispararJobResultado> {
   return postar('/jobs/antecipacao/lookup', {}, 'antecipacao-lookup')

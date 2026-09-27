@@ -1,5 +1,6 @@
 import { assinaturaConfere } from '../../../../packages/core/src/server/credito-api.js'
 import { resultadoLigacaoSchema } from '../../../../packages/core/src/voz/schemas.js'
+import { consumirDesfechoNoMandato } from '../agentes/voz-mandato.js'
 import { pool } from '../db.js'
 import { env } from '../env.js'
 import { logger } from '../logger.js'
@@ -40,6 +41,12 @@ export type ResultadoDoWebhook =
  * Grava o desfecho. Tudo o que acontece em seguida — ledger, estágio, supressão —
  * é da RPC `app__voz_registrar_resultado`, numa transação só: um ledger sem a
  * supressão é uma promessa quebrada com quem pediu para não ser mais ligado.
+ *
+ * Depois da RPC, e FORA da transação dela, o desfecho estruturado volta ao mandato
+ * (09 §4.3): contato indicado vira contato, retorno agendado vira próxima ação. Fora
+ * porque é trabalho de outro módulo e porque uma falha ali não pode desfazer a gravação
+ * do que foi dito ao telefone — a Ana reenviaria o webhook e a RPC, idempotente,
+ * devolveria a linha já fechada sem nunca refazer o consumo.
  */
 export async function registrarResultadoDaLigacao(corpo: unknown): Promise<ResultadoDoWebhook> {
   const lido = resultadoLigacaoSchema.safeParse(corpo)
@@ -47,15 +54,19 @@ export async function registrarResultadoDaLigacao(corpo: unknown): Promise<Resul
     // Corpo que não entendemos não vai virar retentativa eterna do outro lado.
     return { ok: false, erro: lido.error.issues.map((i) => i.message).join('; '), recusar: true }
   }
+  // Outro evento (a v2 pode avisar "ligação iniciada"): recebido, nada a gravar ainda.
+  if (lido.data.evento !== 'ligacao.encerrada') {
+    logger.info({ evento: lido.data.evento, id_externo: lido.data.id_externo }, 'Evento de voz ignorado.')
+    return { ok: true, access_key: lido.data.id_externo, status: lido.data.status }
+  }
 
   /*
-   * SQL direto, e não `supabaseAdmin.rpc`: a função nasceu na 0211 e os tipos de
-   * `database.ts` são GERADOS do banco. Enquanto o `pnpm db:types` não roda, o
-   * PostgREST tipado não conhece o nome — e o resto da fila de voz já fala por
-   * `pool` de qualquer forma.
+   * O CORPO CRU vai para a RPC, não `lido.data` (09 §1.6). O schema é `passthrough`
+   * agora, mas a regra é mais simples de manter do que de lembrar: o que a Ana mandou é
+   * evidência de uma conversa gravada, e a RPC é quem decide o que mapear.
    */
   try {
-    await pool.query('select public.app__voz_registrar_resultado($1::jsonb)', [lido.data])
+    await pool.query('select public.app__voz_registrar_resultado($1::jsonb)', [JSON.stringify(corpo)])
   } catch (erro) {
     const mensagem = erro instanceof Error ? erro.message : String(erro)
     logger.error(
@@ -65,6 +76,15 @@ export async function registrarResultadoDaLigacao(corpo: unknown): Promise<Resul
     // Ligação que não conhecemos não volta a ser tentada; o resto pode ser
     // transitório e merece o reenvio da Ana.
     return { ok: false, erro: mensagem, recusar: mensagem.includes('Ligação desconhecida') }
+  }
+
+  try {
+    await consumirDesfechoNoMandato(lido.data.id_externo, corpo)
+  } catch (erro) {
+    logger.error(
+      { id_externo: lido.data.id_externo, erro: String(erro) },
+      'Resultado gravado, mas o consumo pelo mandato falhou.',
+    )
   }
 
   logger.info(

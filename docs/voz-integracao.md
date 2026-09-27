@@ -6,6 +6,36 @@ A fila é dela: uma ligação por vez, em horário comercial, sem rediscar sozin
 
 Daqui sai o pedido; de lá volta um webhook assinado.
 
+> ### O que mudou no Prompt 09 (27/09/2026)
+>
+> - **Quem põe na fila:** uma pessoa (tela de Ligações, `origem = 'manual'`) ou um **agente de
+>   mandato** (ferramenta `ligar`, `origem = 'agente'`, `app__voz_enfileirar_mandato`). Não há
+>   régua automática escolhendo notas.
+> - **A ligação se desprendeu da nota:** `voz_ligacoes.id` é a chave; `access_key` é opcional
+>   (ligação de mandato pode ser sobre agendar reunião) e ganhou `mandato_id`, `objetivo` e
+>   `empresa_id`. Uma tentativa aberta por (mandato, contato); por nota, para as manuais.
+> - **O portão de permissão roda no banco**, dentro de toda RPC que enfileira
+>   (`app__voz_portao`): telefone E.164, supressão, cobrança, Procon, base legal — e o
+>   `pedido.telefone` tem de ser o `telefone` da linha (antes eram checados números
+>   diferentes do discado). O "sem base legal" do fallback da NF é conferido contra o
+>   `contato_fornecedor` da própria nota, não carimbado.
+> - **O envio reexecuta os dois portões** com dados de agora e **remonta a oferta** (taxa,
+>   TAC, líquido, estágio da nota). O que mudou cancela a ligação com o motivo e acorda o
+>   mandato.
+> - **Nada é descartado no webhook:** desfecho ou status fora da lista são aceitos (desfecho
+>   vira `desconhecido`, o cru fica em `resultado`), o corpo cru vai para a RPC, e `links`,
+>   `transcricao`, `custo_centavos` e `duracao_s` ganharam coluna — o botão "Ouvir" funciona.
+> - **Ligação órfã:** `enviada` sem resultado há mais de `voz_timeout_minutos` vira `falhou`
+>   (`/api/cron/voz-varrer-orfas`) e libera a nota; se o resultado chegar depois, reabre.
+> - **Cancelar:** a tela cancela do nosso lado (`app_voz_cancelar`) e o worker tenta o
+>   `DELETE` na Ana.
+> - **Versão da Ana:** o worker pergunta `GET /api/versao` (404 = v1) e grava em
+>   `agentes_config.voz_status`. Em v1, só `ofertar_antecipacao` é enviado; os demais
+>   objetivos são recusados com erro claro (`core/agentes/voz-adapter.ts`).
+> - **Desfechos estruturados** (`indicou_outro_contato`, `agendar_retorno`,
+>   `reuniao_agendada`) são consumidos pelo mandato: contato novo registrado, retorno anotado,
+>   janela confirmada vira reunião.
+
 ---
 
 ## O caminho inteiro
@@ -20,10 +50,10 @@ Comunicação → Ligações ──▶ voz_ligacoes ──▶ voz-enviar ──�
    notas_fiscais.estagio_funil
 ```
 
-**Quem escolhe é uma pessoa.** Não existe cron que decida quem recebe ligação — a régua
-automática foi deixada de fora de propósito: a ligação é o canal mais caro de errar, e neste
-sistema nem mensagem sai sem alguém aprovar. A tela mostra as notas candidatas com o veredicto
-do portão em cada uma, e o clique põe na fila (`origem = 'manual'`, `enfileirada_por`).
+**Quem escolhe é uma pessoa — ou um agente sob mandato.** Não existe cron que decida quem
+recebe ligação. Na tela, as notas candidatas aparecem com o veredicto do portão e o clique põe
+na fila (`origem = 'manual'`, `enfileirada_por`). O agente de mandato (Prompt 09) pede ligação
+pela ferramenta `ligar`, sob orçamento, cota diária e disjuntor (`origem = 'agente'`).
 
 **O envio é separado da escolha.** No dia em que a Ana estiver fora do ar, o que falha é o
 envio — o `a_enviar` continua lá, com o pedido já montado.
@@ -36,8 +66,11 @@ envio — o `a_enviar` continua lá, com o pedido já montado.
 
 ## O portão é dois
 
-O **de sempre** (`comunicacao/portao.ts`) continua valendo: supressão, base legal, cooldown,
-janela. Uma ligação é comunicação de saída como qualquer outra.
+O de **permissão** mora no banco (`app__voz_portao`, 0270a): telefone E.164, supressão,
+cobrança, Procon e base legal, conferidos na transação que enfileira e de novo no envio. O
+portão de mensagens (`comunicacao/portao.ts`) NÃO é chamado pela voz — a janela da ligação é
+o horário do cron e o horário comercial da própria Ana; o cooldown ao mesmo contato, para o
+agente, é a cota `cooldown_minutos_mesmo_contato` verificada pela ferramenta.
 
 O **segundo** é novo e mora em `packages/core/src/voz/pedido.ts`. Ele existe por um motivo
 que só a voz tem: a Ana **fala** o líquido, a taxa e o vencimento em voz alta, numa ligação
@@ -148,7 +181,9 @@ quem decide, o pedido de não-contato quando houve, e a versão do prompt que co
 `links.painel` e `links.gravacao` para abrir e **ouvir** — os dois exigem login no painel da
 Ana, porque é ligação gravada de uma pessoa real.
 
-Tudo isso fica cru em `voz_ligacoes.resultado`; o que entra no ledger é o resumo.
+Tudo isso fica cru em `voz_ligacoes.resultado` — de verdade só desde o Prompt 09: antes o zod
+podava os campos não declarados e os `links` nunca chegavam. `links`, `transcricao`,
+`custo_centavos` e `duracao_s` também têm coluna própria. O que entra no ledger é o resumo.
 
 1. fecha a linha em `voz_ligacoes`;
 2. grava a conversa em **`comunicacoes`** (`canal = 'ligacao'`, `provedor = 'voz'`,

@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowRight, Ban, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
+import { ArrowRight, Ban, Bot, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
 import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import {
   ESTAGIOS_ABERTOS,
@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { marcarSemInteresseAction, moverEstagioAction } from '@/actions/antecipacao'
+import { DelegarAoAgenteDialog, usePodeDelegar } from '@/components/agentes/delegar-ao-agente'
 import { antecipacaoKeys, type NotaFunil } from './queries'
 
 /**
@@ -339,6 +340,9 @@ export function SemInteresseDialog({
 export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
   const [destino, setDestino] = React.useState<EstagioFunil | null>(null)
   const [semInteresse, setSemInteresse] = React.useState(false)
+  const [delegar, setDelegar] = React.useState(false)
+  // Agentes §2.3: só aparece para gestor com o módulo Agentes (o hook pergunta uma vez por sessão).
+  const podeDelegar = usePodeDelegar()
 
   /*
    * "Em prospecção" não é escolha de quem olha o card: a nota entra lá sozinha quando a
@@ -419,6 +423,35 @@ export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
             </DropdownMenuItem>
           )}
 
+          {podeDelegar ? (
+            <>
+              <DropdownMenuSeparator />
+              {/*
+               * Originação de NF é um mandato sobre o FORNECEDOR (quem emitiu a nota e pode
+               * antecipá-la), e mandato exige empresa. Fornecedor sem ficha fica com o item
+               * desabilitado e o porquê à vista, como o estágio bloqueado por cobrança acima.
+               */}
+              {nota.fornecedor_empresa_id && nota.access_key ? (
+                <DropdownMenuItem onSelect={() => setDelegar(true)}>
+                  <Bot className="mr-2 h-4 w-4" />
+                  Delegar ao agente
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  disabled
+                  title="O fornecedor ainda não tem ficha de empresa. Cadastre-o (Company 360) para delegar a originação a um agente."
+                  className="flex-col items-start gap-0.5"
+                >
+                  <span className="flex items-center">
+                    <Bot className="mr-2 h-4 w-4" />
+                    Delegar ao agente
+                  </span>
+                  <span className="pl-6 text-[11px] text-muted-foreground">Fornecedor sem ficha de empresa</span>
+                </DropdownMenuItem>
+              )}
+            </>
+          ) : null}
+
           <DropdownMenuSeparator />
 
           <DropdownMenuItem onSelect={() => setSemInteresse(true)} className="text-destructive">
@@ -436,6 +469,20 @@ export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
           onOpenChange={(v) => !v && setDestino(null)}
         />
       )}
+      {podeDelegar && nota.fornecedor_empresa_id && nota.access_key ? (
+        <DelegarAoAgenteDialog
+          aberto={delegar}
+          onOpenChange={setDelegar}
+          contexto={{
+            empresaId: nota.fornecedor_empresa_id,
+            empresaNome: nota.fornecedor_nome,
+            tipos: ['originacao_nf'],
+            notaAccessKey: nota.access_key,
+            notaNumero: nota.numero,
+            notaValor: nota.valor,
+          }}
+        />
+      ) : null}
       {nota.fornecedor_cnpj && (
         <SemInteresseDialog
           cnpj={nota.fornecedor_cnpj}

@@ -1,6 +1,7 @@
 import {
   Banknote,
   Bell,
+  Bot,
   Building2,
   Handshake,
   Landmark,
@@ -24,6 +25,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   'building-2': Building2,
   shield: Shield,
   bell: Bell,
+  bot: Bot,
   map: Map,
   radar: Radar,
   banknote: Banknote,

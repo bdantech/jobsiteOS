@@ -358,3 +358,21 @@ export async function ultimoToqueEm(contatoId: string | null): Promise<Date | nu
     .maybeSingle()
   return data?.criado_em ? new Date(data.criado_em) : null
 }
+
+/**
+ * A última mensagem que ESTE contato nos mandou. Serve ao cooldown (09 §1.8): responder a
+ * quem acabou de falar com a gente não é insistir, e o intervalo mínimo existe para a
+ * segunda coisa, não para a primeira.
+ */
+export async function ultimaEntradaEm(contatoId: string | null): Promise<Date | null> {
+  if (!contatoId) return null
+  const { data } = await supabaseAdmin
+    .from('comunicacoes')
+    .select('criado_em')
+    .eq('contato_id', contatoId)
+    .eq('direcao', 'entrada')
+    .order('criado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.criado_em ? new Date(data.criado_em) : null
+}

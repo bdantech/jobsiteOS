@@ -1,7 +1,6 @@
-import type {
-  PedidoLigacao,
-  RespostaEnfileiramento,
-} from '../../../../packages/core/src/voz/schemas.js'
+import { versaoDaResposta } from '../../../../packages/core/src/agentes/voz-adapter.js'
+import type { VersaoVoz } from '../../../../packages/core/src/agentes/schemas.js'
+import type { RespostaEnfileiramento } from '../../../../packages/core/src/voz/schemas.js'
 import { respostaEnfileiramentoSchema } from '../../../../packages/core/src/voz/schemas.js'
 import { env } from '../env.js'
 import { HttpError, requisitarJson } from '../net/http.js'
@@ -45,7 +44,8 @@ export type EnvioLigacao =
  */
 export async function enfileirarLigacao(
   cfg: VozConfigurada,
-  pedido: PedidoLigacao,
+  /** v1 (`PedidoLigacao`) ou v2 (`versao: '2'`) — quem decide o formato é o adapter do core. */
+  pedido: Record<string, unknown>,
 ): Promise<EnvioLigacao> {
   try {
     const bruto = await requisitarJson<unknown>(`${cfg.url}/api/ligacoes`, {
@@ -78,5 +78,25 @@ export async function cancelarLigacao(cfg: VozConfigurada, ligacaoId: string): P
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * QUAL ANA ESTÁ DO OUTRO LADO (09 §15.4). `GET /api/versao`: 404 é a v1 (o endpoint não
+ * existe nela), `{versao: "2…"}` é a v2. Qualquer falha de rede vira `desconhecida`, e o
+ * adapter trata `desconhecida` como v1 — degradar é a direção segura do erro: recusar um
+ * objetivo que a Ana talvez suportasse custa um canal alternativo; mandar um que ela não
+ * suporta custa uma ligação errada.
+ */
+export async function versaoDaAna(cfg: VozConfigurada): Promise<VersaoVoz> {
+  try {
+    const res = await fetch(`${cfg.url}/api/versao`, {
+      headers: { authorization: `Bearer ${cfg.token}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    })
+    const corpo = await res.json().catch(() => null)
+    return versaoDaResposta(res.status, corpo)
+  } catch {
+    return 'desconhecida'
   }
 }

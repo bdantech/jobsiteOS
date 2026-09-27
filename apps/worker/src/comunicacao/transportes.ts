@@ -72,6 +72,30 @@ export async function contaDoUsuario(
 }
 
 /**
+ * A LINHA DA PERSONA (Prompt 09 §3.1). Cada agente de IA tem o seu número, e toda
+ * mensagem dele sai por ela — `vendedores.whatsapp_conta_id`, que existia desde a 0098 e
+ * nenhum código lia.
+ *
+ * Devolve três respostas distintas, porque o chamador faz coisas diferentes com cada:
+ *   { persona: false }                  o vendedor não é IA — siga o caminho de sempre
+ *   { persona: true, conta: null, ... } é IA e NÃO tem linha: falhar com o nome dele
+ *   { persona: true, conta }            é IA e a linha existe
+ */
+export async function contaDaPersona(
+  vendedorId: string | null,
+): Promise<{ persona: false } | { persona: true; nome: string; conta: ContaWhatsapp | null }> {
+  if (!vendedorId) return { persona: false }
+  const { data: v } = await supabaseAdmin
+    .from('vendedores')
+    .select('nome, is_ia, whatsapp_conta_id')
+    .eq('id', vendedorId)
+    .maybeSingle()
+  if (!v?.is_ia) return { persona: false }
+  const conta = v.whatsapp_conta_id ? await buscarConta(v.whatsapp_conta_id) : null
+  return { persona: true, nome: v.nome, conta: conta && conta.ativo ? conta : null }
+}
+
+/**
  * A conta que envia quando ninguém escolheu uma e quem escreveu não tem número.
  *
  * `tipo` decide, e é aqui que o §1.3 vira código: mensagem de IA sai por conta de
@@ -171,7 +195,14 @@ export function transporteResend(remetente: string, responderPara?: string | nul
 }
 
 export interface ContaGmail {
+  /** Vazio quando a caixa é de uma PERSONA de IA (`caixa_id`): ela não tem usuário. */
   usuario_id: string
+  /**
+   * A caixa de uma persona de IA (09 §4.2 — `ana@oneos.com.br`). Mesma Gmail API e mesmo
+   * OAuth dos vendedores humanos; muda só ONDE os tokens e o estado do sync são gravados
+   * (`email_caixas` em vez de `gmail_contas`).
+   */
+  caixa_id?: string | null
   endereco: string
   /** As permissões CONCEDIDAS. Ver a 0201 §7: a coluna vinha sendo zerada. */
   escopos: string[] | null
@@ -208,7 +239,7 @@ export async function accessTokenGmail(conta: ContaGmail): Promise<string | null
 
   const refresh = await lerSegredo(conta.refresh_token_secret_id)
   if (!refresh || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    logger.warn({ usuario: conta.usuario_id }, 'Gmail sem refresh token ou sem credencial de app.')
+    logger.warn({ usuario: conta.usuario_id, caixa: conta.caixa_id }, 'Gmail sem refresh token ou sem credencial de app.')
     return null
   }
 
@@ -228,14 +259,27 @@ export async function accessTokenGmail(conta: ContaGmail): Promise<string | null
     if (!res.ok || !corpo.access_token) {
       // Refresh revogado: a conta é marcada e a tela pede reconexão guiada. Não
       // adianta tentar de novo — o consentimento tem de ser dado de novo.
-      await supabaseAdmin
-        .from('gmail_contas')
-        .update({ ultimo_erro: corpo.error ?? `HTTP ${res.status}`, ativo: res.status !== 400 })
-        .eq('usuario_id', conta.usuario_id)
+      if (conta.caixa_id) {
+        await supabaseAdmin
+          .from('email_caixas')
+          .update({ ultimo_erro: corpo.error ?? `HTTP ${res.status}`, ativa: res.status !== 400 })
+          .eq('id', conta.caixa_id)
+      } else {
+        await supabaseAdmin
+          .from('gmail_contas')
+          .update({ ultimo_erro: corpo.error ?? `HTTP ${res.status}`, ativo: res.status !== 400 })
+          .eq('usuario_id', conta.usuario_id)
+      }
       return null
     }
 
     const expiraEm = new Date(Date.now() + (corpo.expires_in ?? 3600) * 1000)
+    if (conta.caixa_id) {
+      await supabaseAdmin.rpc('app__agentes_salvar_tokens_caixa', {
+        p: { caixa_id: conta.caixa_id, access_token: corpo.access_token, access_token_expira_em: expiraEm.toISOString() } as never,
+      })
+      return corpo.access_token
+    }
     await supabaseAdmin.rpc('app_salvar_gmail_conta', {
       p: {
         usuario_id: conta.usuario_id,
@@ -258,4 +302,37 @@ export async function transporteGmail(
   const accessToken = await accessTokenGmail(conta)
   if (!accessToken) return null
   return new TransporteGmail({ accessToken, endereco: conta.endereco, nomeExibicao })
+}
+
+/**
+ * As caixas das PERSONAS (09 §4.2) no formato de `ContaGmail`, para o sync e o envio
+ * andarem pelo mesmo caminho das caixas humanas. Só as conectadas (com refresh token).
+ */
+export async function contasDeCaixasDePersona(): Promise<ContaGmail[]> {
+  const { data } = await supabaseAdmin
+    .from('email_caixas')
+    .select('id, endereco, escopos, refresh_token_secret_id, access_token_secret_id, access_token_expira_em, history_id, ativa')
+    .eq('provedor', 'google_workspace')
+    .eq('ativa', true)
+    .not('refresh_token_secret_id', 'is', null)
+  return (data ?? []).map((c) => ({
+    usuario_id: '',
+    caixa_id: c.id,
+    endereco: c.endereco,
+    escopos: c.escopos,
+    refresh_token_secret_id: c.refresh_token_secret_id,
+    access_token_secret_id: c.access_token_secret_id,
+    access_token_expira_em: c.access_token_expira_em,
+    history_id: c.history_id,
+    ativo: c.ativa,
+  }))
+}
+
+/** A caixa Gmail de UMA persona, para o envio. Nula quando não conectada. */
+export async function contaGmailDaPersona(vendedorId: string | null): Promise<ContaGmail | null> {
+  if (!vendedorId) return null
+  const { data: v } = await supabaseAdmin.from('vendedores').select('is_ia, email_caixa_id').eq('id', vendedorId).maybeSingle()
+  if (!v?.is_ia || !v.email_caixa_id) return null
+  const caixas = await contasDeCaixasDePersona()
+  return caixas.find((c) => c.caixa_id === v.email_caixa_id) ?? null
 }

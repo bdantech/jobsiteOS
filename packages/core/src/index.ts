@@ -34,6 +34,8 @@ export * from './reports/index.js'
 export * from './crons/index.js'
 export * from './transportes/index.js'
 export * from './voz/index.js'
+// Agentes (09) depois da voz: a ferramenta `ligar` do agente fala com a fila dela.
+export * from './agentes/index.js'
 export * from './notificacoes/regras.js'
 export * from './constants.js'
 export type {

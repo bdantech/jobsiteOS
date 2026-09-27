@@ -107,6 +107,11 @@ import { calibrarEconomiaCarteira } from './antecipacao/calibrar-economia.js'
 import { reclassificarFunil } from './antecipacao/reclassificar.js'
 import { gerarOutbox } from './antecipacao/outbox.js'
 import { enviarFilaDeVoz } from './voz/enviar.js'
+import { varrerLigacoesOrfas } from './voz/varrer-orfas.js'
+import { cicloDeAgentes } from './agentes/ciclo.js'
+import { criarMandatosPorRegra } from './agentes/criar-mandatos.js'
+import { digestDosAgentes } from './agentes/digest.js'
+import { reconciliarCusto } from './agentes/reconciliar-custo.js'
 import { lookupCadastral } from './antecipacao/lookup-cadastral.js'
 import { backfillContatosNf } from './antecipacao/contatos-nf.js'
 import { limparSupressoesExpiradas } from './antecipacao/supressoes.js'
@@ -190,6 +195,11 @@ export type TipoJob =
   | 'antecipacao-reclassificar'
   | 'antecipacao-outbox'
   | 'voz-enviar'
+  | 'voz-varrer-orfas'
+  | 'agentes-ciclo'
+  | 'agentes-criar-mandatos'
+  | 'agentes-digest'
+  | 'agentes-reconciliar-custo'
   | 'antecipacao-lookup'
   | 'antecipacao-contatos'
   | 'antecipacao-protesto-fornecedor'
@@ -1236,6 +1246,33 @@ export function dispararOutbox(): string {
  */
 export function dispararVozEnviar(): string {
   return dispararAvulso('voz-enviar', async () => enviarFilaDeVoz())
+}
+
+/** §1.5(b): ligação `enviada` sem resultado há mais de `voz_timeout_minutos` vira falha. */
+export function dispararVarrerOrfas(): string {
+  return dispararAvulso('voz-varrer-orfas', async () => varrerLigacoesOrfas())
+}
+
+// ─── Agentes (Prompt 09) ────────────────────────────────────────────────────
+
+/** O ciclo dos agentes, a cada 5 minutos (§6). Single-flight: dois ciclos nunca se cruzam. */
+export function dispararCicloAgentes(): string {
+  return dispararAvulso('agentes-ciclo', async () => cicloDeAgentes())
+}
+
+/** As regras ativas criam mandatos (§2.3), uma vez por dia. */
+export function dispararCriarMandatos(): string {
+  return dispararAvulso('agentes-criar-mandatos', async () => criarMandatosPorRegra())
+}
+
+/** O digest diário de cada agente (§13), 18h de São Paulo. */
+export function dispararDigestAgentes(): string {
+  return dispararAvulso('agentes-digest', async () => digestDosAgentes())
+}
+
+/** Reservas órfãs, custo real das ligações e deriva dos totais (§8, §13). */
+export function dispararReconciliarCusto(): string {
+  return dispararAvulso('agentes-reconciliar-custo', async () => reconciliarCusto())
 }
 
 /** Lookup cadastral sob demanda — para esvaziar a fila sem esperar o diário. */

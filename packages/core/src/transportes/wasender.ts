@@ -67,9 +67,10 @@ export class TransporteWasender implements Transporte {
         body: JSON.stringify({
           to: destino,
           text: msg.corpo,
-          // O Wasender só aceita documento por URL: o primeiro anexo com link vai, com o
+          // O Wasender só aceita mídia por URL: o primeiro anexo com link vai — como
+          // imagem, vídeo ou áudio quando o tipo diz, e como documento no resto, com o
           // nome do arquivo (sem ele o WhatsApp mostra o nome do objeto no Storage).
-          ...documentoWasender(msg.anexos),
+          ...midiaWasender(msg.anexos),
         }),
         signal: AbortSignal.timeout(this.cfg.timeoutMs ?? 20_000),
       })
@@ -95,9 +96,21 @@ export class TransporteWasender implements Transporte {
   }
 }
 
-function documentoWasender(anexos: MensagemParaEnviar['anexos']): { documentUrl?: string; fileName?: string } {
+/**
+ * A mídia do envio. Imagem da biblioteca de materiais (09 §4.1) chegava ao cliente como
+ * "documento.png" para baixar; como `imageUrl` ela aparece na conversa, que é como uma
+ * foto de obra ou um card institucional precisa aparecer.
+ */
+export function midiaWasender(
+  anexos: MensagemParaEnviar['anexos'],
+): { documentUrl?: string; fileName?: string; imageUrl?: string; videoUrl?: string; audioUrl?: string } {
   const a = (anexos ?? []).find((x) => x.url)
-  return a ? { documentUrl: a.url!, fileName: a.nome } : {}
+  if (!a) return {}
+  const mime = (a.mime ?? '').toLowerCase()
+  if (mime.startsWith('image/')) return { imageUrl: a.url! }
+  if (mime.startsWith('video/')) return { videoUrl: a.url! }
+  if (mime.startsWith('audio/')) return { audioUrl: a.url! }
+  return { documentUrl: a.url!, fileName: a.nome }
 }
 
 function safeJson(texto: string): unknown {

@@ -89,8 +89,13 @@ O trigger distingue dois casos que seria fácil confundir:
 - **ainda não enviamos e a pessoa escreveu** → `excluida` por conversa aberta. Contar isso
   como resposta inflaria a taxa com gente que respondeu a outra coisa.
 
-Depois disso quem conduz é o Agente (05A), no modo que a campanha configurou
-(`sugestao` por padrão). A campanha existe para **começar** conversas, não para conduzi-las.
+Depois disso quem conduz é uma pessoa, com as sugestões do Agente (05A) quando a conversa
+tem objetivo. A campanha existe para **começar** conversas, não para conduzi-las.
+
+> **Corrigido no Prompt 09 (27/09/2026).** `campanhas.modo_agente_ao_responder` e o
+> `objetivo` da campanha nunca foram gravados na conversa, e toda conversa nasce em
+> `sugestao`. Conduzir uma resposta de campanha sozinho é trabalho de MANDATO: delegar ao
+> agente a empresa que respondeu (`docs/agentes.md`).
 
 ## Sequência leve: até 3 toques, e para no primeiro sinal
 

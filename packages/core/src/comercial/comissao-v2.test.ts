@@ -1039,3 +1039,16 @@ test('originador de IA não recebe pela flag', () => {
   )
   assert.deepEqual(ls, [])
 })
+
+test('titular de IA no caminho normal: a flag NÃO paga o humano no lugar dela (09 §1.11)', () => {
+  const ls = lancamentosDaCessao(
+    CESSAO,
+    {
+      vendedor: [],
+      originador: [{ vendedorId: 'ia-originadora', sharePct: 100, isIa: true }],
+      originadorComoCedente: COMO_CEDENTE,
+    },
+    PARAMS,
+  )
+  assert.deepEqual(ls.filter((l) => l.papel === 'ORIGINADOR'), [])
+})

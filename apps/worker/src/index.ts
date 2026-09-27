@@ -55,6 +55,11 @@ import {
   dispararReclassificacaoFunil,
   dispararOutbox,
   dispararVozEnviar,
+  dispararVarrerOrfas,
+  dispararCicloAgentes,
+  dispararCriarMandatos,
+  dispararDigestAgentes,
+  dispararReconciliarCusto,
   dispararContatosNf,
   dispararBackfillFuncionarios,
   dispararEstimadorMensal,
@@ -127,6 +132,7 @@ import {
   processarWebhookWasender,
 } from './jobs/comunicacao/webhooks.js'
 import { autorizarWebhookWasender, segredoResendValido } from './comunicacao/webhook-auth.js'
+import { cancelarNaAna } from './jobs/voz/varrer-orfas.js'
 import { assinaturaDaVozConfere, registrarResultadoDaLigacao } from './voz/webhook.js'
 
 /**
@@ -1020,6 +1026,65 @@ app.post('/jobs/antecipacao/reclassificar', (_req: Request, res: Response, next:
 app.post('/jobs/voz/enviar', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararVozEnviar(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/voz/varrer-orfas', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararVarrerOrfas(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * SÍNCRONO: quem clicou "Cancelar" na tela de Ligações espera saber se a Ana aceitou. O
+ * cancelamento do NOSSO lado já aconteceu na RPC; isto é só o DELETE lá.
+ */
+app.post('/jobs/voz/cancelar', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ligacaoId = typeof req.body?.ligacao_id === 'string' ? req.body.ligacao_id : null
+    if (!ligacaoId) {
+      res.status(400).json({ erro: 'ligacao_id é obrigatório.' })
+      return
+    }
+    res.status(200).json(await cancelarNaAna(ligacaoId))
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Agentes (Prompt 09) ────────────────────────────────────────────────────
+
+app.post('/jobs/agentes/ciclo', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCicloAgentes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/agentes/criar-mandatos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararCriarMandatos(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/agentes/digest', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararDigestAgentes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/agentes/reconciliar-custo', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararReconciliarCusto(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

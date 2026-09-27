@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { adminModule } from './modules/admin.js'
+import { agentesModule } from './modules/agentes.js'
 import { antecipacaoModule } from './modules/antecipacao.js'
 import { cobrancaModule } from './modules/cobranca.js'
 import { comercialModule } from './modules/comercial.js'
@@ -34,6 +35,9 @@ export const MODULES: readonly AppModule[] = [
   // Comercial fecha a sequência de Operações: Mercado acha a empresa, Antecipação
   // encontra a nota, Crédito diz quanto ela sustenta — e é aqui que alguém vende.
   comercialModule,
+  // Agentes logo depois do Comercial: é a mesma venda, feita por um agente de IA sob
+  // mandato — e quem acompanha os agentes é a gestão comercial e o closer designado.
+  agentesModule,
   // Jurídico fecha Operações: quando o crédito não volta, é aqui que se persegue o
   // dinheiro. Depois de Comercial porque é a última etapa do mesmo funil — Mercado
   // acha a empresa, Antecipação encontra a nota, Crédito diz quanto ela sustenta,

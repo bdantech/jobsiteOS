@@ -1,3 +1,11 @@
+> **ARQUIVADO EM 27/09/2026 — NUNCA IMPLEMENTADO (Prompt 09 §1.12).**
+>
+> As decisões abaixo (serviço `apps/voz` em Python + Telnyx + OpenAI Realtime, fila por
+> `for update skip locked`, `voz_contas`, `voz_roteiros`, persona Ana como vendedor
+> `is_ia`) nunca viraram código, e os documentos que ela cita (`voz-fase0.md`,
+> `voz-encaixe.md`) não existem no repositório. A voz real é a integração com a Ana da
+> OnePay (`docs/voz-integracao.md`); o agente que liga é o de mandato (`docs/agentes.md`).
+
 # Voz (05C): as decisões, depois das três leituras
 
 > **Status: resposta ao `voz-fase0.md` e ao `voz-encaixe.md`.** Fecha o que estava aberto e

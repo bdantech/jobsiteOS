@@ -31,7 +31,7 @@ import {
 import { getSessionContext } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { dispararEnviarFilaComunicacao } from '@/lib/mercado/worker'
+import { dispararCancelarNaAna, dispararEnviarFilaComunicacao } from '@/lib/mercado/worker'
 import type { ActionResult } from './empresas'
 
 /**
@@ -388,6 +388,33 @@ export async function enfileirarLigacaoAction(input: {
         tentativa: data?.tentativa ?? 1,
       },
     }
+  } catch (e) {
+    return falha(e)
+  }
+}
+
+/**
+ * Cancela uma ligação da fila (09 §1.5c). Do NOSSO lado é imediato, pela RPC; se ela já
+ * estava com a Ana, o worker tenta o DELETE lá — e se a Ana já discou, o resultado que
+ * chegar é aceito do mesmo jeito (o que foi dito ao telefone não deixa de ter sido dito).
+ */
+export async function cancelarLigacaoAction(input: { id: string }): Promise<ActionResult<{ aviso: string | null }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro as ActionResult<never>
+  try {
+    const { data, error } = await supabase.rpc('app_voz_cancelar', { p: { id: input.id } })
+    if (error) return { ok: false, message: error.message, code: 'rpc' }
+    const r = data as { ligacao_id: string | null; cancelar_na_ana: boolean }
+    let aviso: string | null = null
+    if (r.cancelar_na_ana && r.ligacao_id) {
+      const lado = await dispararCancelarNaAna(r.ligacao_id)
+      const corpo = lado.ok ? (lado as { corpo?: { ok?: boolean; motivo?: string } }).corpo : null
+      if (!lado.ok || corpo?.ok === false) {
+        aviso = `Cancelada aqui. ${corpo?.motivo ?? 'A Ana pode já ter começado a ligação — se acontecer, o resultado é registrado.'}`
+      }
+    }
+    revalidatePath('/comunicacao/ligacoes')
+    return { ok: true, data: { aviso } }
   } catch (e) {
     return falha(e)
   }

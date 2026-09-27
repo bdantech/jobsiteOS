@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md, comunicacao.md, cobranca.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md, comunicacao.md, cobranca.md, agentes.md.
 prompts/         The build specs.
 ```
 
@@ -861,6 +861,37 @@ aprovasse tornaria essa coluna uma ficção.
 **A atribuição do funil é por JANELA**: a empresa recebeu e depois avançou. Correlação temporal,
 não prova de causa. Sem grupo de controle não dá para afirmar mais que isso, e a tela diz isso
 em voz alta em vez de mostrar um número que parece maior do que é.
+
+## Agentes comerciais de IA (Prompt 09)
+
+Mandatos, personas e o loop autônomo. Detalhes em [`docs/agentes.md`](docs/agentes.md); aqui
+o que muda o comportamento do resto da casa.
+
+### A unidade de trabalho é o mandato, não a conversa
+
+A conversa é presa a um número; o mandato não é. Um objetivo delegado a um agente de IA
+(`mandatos`), com prazo, orçamento e plano explícito, atravessa contatos, canais e dias —
+e a resposta de qualquer conversa dele o acorda (trigger em `comunicacoes`).
+
+### O controle é estrutural, não por aprovação
+
+O agente não pede licença mensagem a mensagem. Ele roda sob **orçamento** (teto do mês +
+teto do mandato, reserva/consumo/estorno atômicos), **cotas** diárias, **escopo** (filtro do
+motor do 02 + piloto) e um **disjuntor** que o pausa sozinho e só reabre à mão. Kill switch
+único em `agentes_config.geral.kill_switch`. O padrão é orçamento zero: nada pago roda até um
+gestor definir o teto.
+
+### Nenhum caminho próprio para falar com o cliente
+
+"Enviar" enfileira na `mensagens_outbox` e passa pelo portão do 05A; "ligar" enfileira na
+fila da Ana com o portão de permissão NA TRANSAÇÃO (`app__voz_portao`) e de novo no envio;
+"marcar reunião" passa por `sdr_leads` (fila de aceite do closer, IA não titulariza, IA não
+comissiona). Cada persona tem a sua linha de WhatsApp e a sua caixa de e-mail.
+
+### A IA nunca se diz humana
+
+Política de identificação é config (`se_perguntada` por padrão); o piso não é: nunca afirma
+ser humana, nunca nega ser IA quando perguntada — conferido também no texto que vai sair.
 
 ## API de Crédito (04n)
 

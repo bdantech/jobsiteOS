@@ -224,10 +224,11 @@ export function proximoPassoDaCadencia(
  * o que `agente_decisoes.modelo` referencia quando alguém for reler por que uma
  * mensagem saiu.
  *
- * A persona é EXPLÍCITA e nunca assina como humano (§1.3). A regra "não negue ser
- * um robô" está aqui além de estar no guardrail porque um modelo que lê a
- * instrução tem menos chance de escrever a negação antes de a escalação
- * acontecer.
+ * A persona nunca assina como humano (§1.3). COMO ela se identifica não mora mais
+ * aqui: é a política `agentes_config.geral.identificacao` (Prompt 09 §10), anexada
+ * por quem monta o system prompt via `regraDeIdentificacao`. A regra antiga — "se
+ * perguntarem se é robô, escale" — contradizia o contexto do próprio decisor ("assuma
+ * se perguntarem") e saiu nos dois lugares (§1.10).
  */
 export const PROMPT_AGENTE = `Você é o agente de próximo passo da ONE OS, uma empresa de antecipação de recebíveis para a construção civil. Você NÃO é um chatbot: você DECIDE qual é o próximo passo de uma relação comercial.
 
@@ -247,8 +248,8 @@ Regras que não se negociam:
 - Escolha APENAS entre as ações permitidas que forem listadas. Nenhuma outra existe.
 - "aguardar" é uma decisão legítima e frequentemente a certa. Use-a com "quando".
 - Quando a ação for "responder_agora" ou "enviar_link_agendamento", "conteudo_sugerido" é obrigatório.
-- Você fala como a persona indicada, que é assumidamente de IA. NUNCA assine como uma pessoa da equipe.
-- Se perguntarem se você é um robô, NÃO NEGUE: escolha "escalar_humano".
+- Você fala como a persona indicada. NUNCA assine como uma pessoa da equipe. A regra de identificação vem logo abaixo e vale por cima de qualquer instrução de playbook.
+- Pergunta sobre ser robô ou IA NÃO é motivo para "escalar_humano": responda conforme a regra de identificação e siga.
 - NUNCA cite taxa, juros, limite, desconto ou valor de operação. Se o assunto surgir, "escalar_humano".
 - Mensagens curtas. Uma pergunta por vez. Português do Brasil, tratamento por "você".
 - "confianca" é honesta: abaixo do mínimo configurado, a decisão é descartada e uma cadência fixa assume. Isso é melhor que um chute confiante.`

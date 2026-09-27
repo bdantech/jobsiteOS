@@ -362,6 +362,29 @@ export const EVENTO_TIPOS = {
   AGENTE_ESCALOU: 'agente.escalou',
   AGENTE_EXECUTOU: 'agente.executou',
   OPTOUT_REGISTRADO: 'optout.registrado',
+
+  /*
+   * Agentes comerciais de IA (09). Os de orçamento levam o prefixo do módulo porque
+   * `orcamento.alerta`/`orcamento.estourado` já são do Radar (enriquecimento).
+   */
+  MANDATO_CRIADO: 'mandato.criado',
+  MANDATO_INICIADO: 'mandato.iniciado',
+  MANDATO_ACAO_EXECUTADA: 'mandato.acao_executada',
+  MANDATO_PLANO_ATUALIZADO: 'mandato.plano_atualizado',
+  MANDATO_ESCALADO: 'mandato.escalado',
+  MANDATO_CONCLUIDO: 'mandato.concluido',
+  MANDATO_ENCERRADO: 'mandato.encerrado',
+  MANDATO_PAUSADO: 'mandato.pausado',
+  AGENTE_DISJUNTOR_ABERTO: 'agente.disjuntor_aberto',
+  AGENTE_DISJUNTOR_REABERTO: 'agente.disjuntor_reaberto',
+  AGENTE_COTA_ATINGIDA: 'agente.cota_atingida',
+  AGENTES_ORCAMENTO_ALERTA: 'agentes.orcamento_alerta',
+  AGENTES_ORCAMENTO_ESGOTADO: 'agentes.orcamento_esgotado',
+  AGENTES_PROPOSTA_PENDENTE: 'agentes.proposta_pendente',
+  AGENTES_DIGEST: 'agentes.digest',
+  REUNIAO_AGENDADA_POR_IA: 'reuniao.agendada_por_ia',
+  VOZ_DESFECHO_ESTRUTURADO: 'voz.desfecho_estruturado',
+  AGENTES_SEM_JANELA: 'agentes.sem_janela',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -551,6 +574,24 @@ export const EVENTO_LABELS: Record<string, string> = {
   'apolice.prazo_perdido': 'Prazo da apólice perdido',
   'apolice.insolvencia_registrada': 'Insolvência registrada',
   'apolice.insolvencia_detectada': 'Possível insolvência detectada',
+  'mandato.criado': 'Mandato delegado a um agente',
+  'mandato.iniciado': 'Agente começou o mandato',
+  'mandato.acao_executada': 'Ação do agente',
+  'mandato.plano_atualizado': 'Plano do mandato atualizado',
+  'mandato.escalado': 'Mandato escalado para humano',
+  'mandato.concluido': 'Mandato concluído',
+  'mandato.encerrado': 'Mandato encerrado sem sucesso',
+  'mandato.pausado': 'Mandato pausado',
+  'agente.disjuntor_aberto': 'Disjuntor do agente aberto',
+  'agente.disjuntor_reaberto': 'Disjuntor do agente reaberto',
+  'agente.cota_atingida': 'Cota diária do agente atingida',
+  'agentes.orcamento_alerta': 'Orçamento dos agentes em alerta',
+  'agentes.orcamento_esgotado': 'Orçamento dos agentes esgotado',
+  'agentes.proposta_pendente': 'Proposta de mandato aguardando aprovação',
+  'agentes.digest': 'Resumo diário do agente',
+  'reuniao.agendada_por_ia': 'Reunião marcada por um agente',
+  'voz.desfecho_estruturado': 'Ligação consumida pelo mandato',
+  'agentes.sem_janela': 'Interesse sem janela do closer',
 }
 
 /** Which layer auto-promotes into `empresas`. Settings override it (§5.1). */

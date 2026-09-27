@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { PhoneOutgoing, Headphones } from 'lucide-react'
+import { PhoneOutgoing, Headphones, PhoneOff, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { MOTIVO_NAO_LIGAR_LABELS, type MotivoNaoLigar } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
@@ -17,18 +17,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { enfileirarLigacaoAction } from '@/actions/comunicacao'
+import { cancelarLigacaoAction, enfileirarLigacaoAction } from '@/actions/comunicacao'
 import { formatarMoeda, formatarData } from '@/components/antecipacao/format'
-import { buscarCandidatasDeVoz, buscarLigacoesDeVoz, type LigacaoDeVoz } from './queries'
+import { buscarCandidatasDeVoz, buscarEstadoDaVoz, buscarLigacoesDeVoz, type LigacaoDeVoz } from './queries'
 import { dataHora, telefoneLegivel } from './format'
 
 /**
  * A fila da Ana, feita à mão.
  *
- * ── POR QUE UMA TELA, SE EXISTE O CRON ─────────────────────────────────────
- * O cron decide por régua e roda de manhã. Esta tela é para quando alguém
- * DECIDE: "essa nota aqui, hoje, agora". Mesma fila, mesmo portão, mesma Ana —
- * muda só quem apertou o botão, e isso fica gravado.
+ * ── QUEM PÕE NA FILA ───────────────────────────────────────────────────────
+ * Uma PESSOA, aqui ("essa nota, hoje, agora"), ou um AGENTE de IA dentro de um
+ * mandato (Prompt 09). Não há régua automática escolhendo notas. Mesma fila, mesmo
+ * portão, mesma Ana — muda quem pediu, e isso fica gravado em `origem`.
  *
  * ── A METADE QUE PARECE INÚTIL É A MAIS IMPORTANTE ─────────────────────────
  * A lista de recusadas, com o motivo. Sem ela, "a Ana não ligou para ninguém"
@@ -81,7 +81,16 @@ const DESFECHO_LABEL: Record<string, string> = {
   caixa_postal: 'Caixa postal',
   nao_atendeu: 'Não atendeu',
   indefinido: 'Indefinido',
+  agendar_retorno: 'Pediu retorno',
+  indicou_outro_contato: 'Indicou outro contato',
+  reuniao_agendada: 'Reunião marcada',
+  interesse: 'Interesse',
+  nao_e_o_decisor: 'Não é quem decide',
+  // Desfecho que a Ana mandou e ainda não mapeamos (09 §1.5): aceito, não descartado.
+  desconhecido: 'Desfecho novo (ver detalhe)',
 }
+
+const ORIGEM_LABEL: Record<string, string> = { manual: 'manual', agente: 'agente de IA', cron: 'régua' }
 
 /**
  * O link do painel vem do corpo do webhook — texto de um serviço de fora. Só
@@ -92,12 +101,14 @@ function linkSeguro(url: string | null | undefined): string | null {
   return typeof url === 'string' && url.startsWith('https://') ? url : null
 }
 
-function LinhaDaFila({ l }: { l: LigacaoDeVoz }) {
-  const painel = linkSeguro(l.resultado?.links?.painel)
+function LinhaDaFila({ l, onCancelar, cancelando }: { l: LigacaoDeVoz; onCancelar?: (id: string) => void; cancelando?: boolean }) {
+  const painel = linkSeguro(l.links?.painel ?? l.resultado?.links?.painel)
+  const gravacao = linkSeguro(l.links?.gravacao ?? l.resultado?.links?.gravacao)
+  const aberta = l.status === 'a_enviar' || l.status === 'enviada'
   return (
     <TableRow>
       <TableCell className="font-medium">
-        {l.fornecedor_cnpj}
+        {l.fornecedor_cnpj ?? (l.mandato_id ? 'Ligação de mandato' : '—')}
         {l.tentativa > 1 ? (
           <span className="ml-2 text-xs text-muted-foreground">{l.tentativa}ª tentativa</span>
         ) : null}
@@ -115,17 +126,22 @@ function LinhaDaFila({ l }: { l: LigacaoDeVoz }) {
       </TableCell>
       <TableCell>{l.outcome ? (DESFECHO_LABEL[l.outcome] ?? l.outcome) : '—'}</TableCell>
       <TableCell className="whitespace-nowrap text-muted-foreground">
-        {l.origem === 'manual' ? 'manual' : 'régua'}
+        {ORIGEM_LABEL[l.origem] ?? l.origem}
       </TableCell>
       <TableCell className="whitespace-nowrap text-muted-foreground">
         {dataHora(l.criada_em)}
       </TableCell>
-      <TableCell className="text-right">
-        {painel ? (
+      <TableCell className="whitespace-nowrap text-right">
+        {gravacao ?? painel ? (
           <Button asChild size="sm" variant="ghost">
-            <a href={painel} target="_blank" rel="noreferrer noopener">
+            <a href={(gravacao ?? painel)!} target="_blank" rel="noreferrer noopener">
               <Headphones className="h-4 w-4" aria-hidden /> Ouvir
             </a>
+          </Button>
+        ) : null}
+        {aberta && onCancelar ? (
+          <Button size="sm" variant="ghost" disabled={cancelando} onClick={() => onCancelar(l.id)}>
+            <PhoneOff className="h-4 w-4" aria-hidden /> Cancelar
           </Button>
         ) : null}
       </TableCell>
@@ -139,6 +155,19 @@ export function VozLigacoes() {
   const candidatas = useQuery({
     queryKey: ['comunicacao', 'voz', 'candidatas'],
     queryFn: buscarCandidatasDeVoz,
+  })
+  const estado = useQuery({ queryKey: ['comunicacao', 'voz', 'estado'], queryFn: buscarEstadoDaVoz })
+
+  const cancelar = useMutation({
+    mutationFn: async (id: string) => cancelarLigacaoAction({ id }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        toast.error(r.message)
+        return
+      }
+      toast.success(r.data.aviso ?? 'Ligação cancelada.')
+      void qc.invalidateQueries({ queryKey: ['comunicacao', 'voz'] })
+    },
   })
 
   const enfileirar = useMutation({
@@ -168,6 +197,21 @@ export function VozLigacoes() {
 
   return (
     <div className="space-y-8">
+      {estado.data && (!estado.data.ligada || estado.data.kill_switch) ? (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <p>
+            {estado.data.kill_switch
+              ? 'O kill switch está ligado: nada sai para a Ana até ele ser desligado.'
+              : 'A voz está desligada na configuração: dá para pôr na fila, mas a Ana só recebe quando ela for ligada.'}
+          </p>
+        </div>
+      ) : null}
+      {estado.data ? (
+        <p className="text-xs text-muted-foreground">
+          Contrato da Ana: {estado.data.versao === 'v2' ? 'v2' : `${estado.data.versao} — por telefone, só a oferta de antecipação de NF`}.
+        </p>
+      ) : null}
       <section className="space-y-2">
         <h2 className="text-sm font-medium">
           Prontas para ligar <span className="text-muted-foreground">({podem.length})</span>
@@ -286,7 +330,9 @@ export function VozLigacoes() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  naFila.map((l) => <LinhaDaFila key={l.id_externo} l={l} />)
+                  naFila.map((l) => (
+                    <LinhaDaFila key={l.id} l={l} onCancelar={(id) => cancelar.mutate(id)} cancelando={cancelar.isPending} />
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -355,7 +401,7 @@ export function VozLigacoes() {
                   </TableCell>
                 </TableRow>
               ) : (
-                encerradas.slice(0, 50).map((l) => <LinhaDaFila key={l.id_externo} l={l} />)
+                encerradas.slice(0, 50).map((l) => <LinhaDaFila key={l.id} l={l} />)
               )}
             </TableBody>
           </Table>

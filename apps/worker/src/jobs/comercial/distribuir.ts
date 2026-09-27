@@ -4,6 +4,8 @@ import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento } from '../../radar/eventos.js'
 import { lerDistribuicao } from '../../comercial/config.js'
+import { entraNaDistribuicao } from '../../../../../packages/core/src/agentes/escopo.js'
+import { lerConfigAgentes } from '../../agentes/config.js'
 import { enriquecerLeadsDistribuidos } from './enriquecer-distribuidos.js'
 
 /**
@@ -58,12 +60,16 @@ export interface ResultadoDistribuicao {
 }
 
 async function sdrsDisponiveis(cotaPadrao: number): Promise<SdrDisponivel[]> {
-  const { data } = await supabaseAdmin
+  const { data: todos } = await supabaseAdmin
     .from('vendedores')
-    .select('id, nome, settings, ativo, tipo')
+    .select('id, nome, settings, ativo, tipo, is_ia, escopo')
     .eq('tipo', 'sdr')
     .eq('ativo', true)
-  if (!data?.length) return []
+  // A IA não recebe distribuição padrão (09 §1.9): ela trabalha o próprio escopo. O modo
+  // `carteira` — IA no rodízio como um humano — existe e está desligado em config.
+  const { geral } = await lerConfigAgentes()
+  const data = (todos ?? []).filter((v) => entraNaDistribuicao(v, geral.modo_carteira_habilitado))
+  if (!data.length) return []
 
   const ids = data.map((v) => v.id)
   const { data: terrs } = await supabaseAdmin

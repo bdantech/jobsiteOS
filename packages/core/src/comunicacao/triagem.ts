@@ -184,9 +184,11 @@ export function ehOptOut(triagem: Triagem, corpo: string | null): boolean {
  * As três situações que NÃO admitem agente (§7.5). Escalação imediata: quem
  * responde é gente.
  *
- * "Você é um robô?" está aqui, e a resposta é escalar sem negar. Um agente que
- * responde "sou humano sim" é uma decisão de produto que ninguém tomou, tomada
- * por um modelo no meio de uma conversa comercial.
+ * "Você é um robô?" SAIU daqui (Prompt 09 §1.10 e §10). Escalar nessa pergunta era
+ * abandonar a conversa justamente no momento mais sensível dela — e a política
+ * vigente é outra: a IA confirma com naturalidade e segue, sem nunca afirmar ser
+ * humana (`agentes_config.identificacao`). O que continua escalando é o pedido
+ * EXPRESSO de falar com uma pessoa, a reclamação, a negociação e o advogado.
  */
 const GATILHOS_ESCALACAO = [
   'taxa',
@@ -202,10 +204,7 @@ const GATILHOS_ESCALACAO = [
   'processar',
   'procon',
   'reclame aqui',
-  'e um robo',
-  'e um bot',
-  'e uma ia',
-  'falando com uma maquina',
+  'cobranca',
   'quero falar com uma pessoa',
   'quero falar com alguem',
   'me passa um humano',
@@ -261,5 +260,5 @@ Regras:
 - "recusa" é NÃO DEFINITIVO. "me chama em março", "agora não dá" e "depois eu vejo" são "adiar".
 - "indicacao_de_contato" quando a pessoa aponta OUTRA pessoa ("fala com o Marcelo do financeiro"). Extraia nome e telefone/e-mail quando houver.
 - "negociacao" quando a mensagem discute taxa, preço, prazo ou condição comercial.
-- "pedido_de_humano" é true quando a pessoa pede para falar com alguém, ou pergunta se está falando com um robô.
+- "pedido_de_humano" é true quando a pessoa pede EXPRESSAMENTE para falar com alguém. Perguntar se está falando com um robô NÃO é pedido de humano.
 - "resumo_curto" tem no máximo 280 caracteres e é escrito para um vendedor ler de relance.`

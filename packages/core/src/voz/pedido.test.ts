@@ -205,19 +205,37 @@ test('o resultado da Ana é lido mesmo com campo novo que ainda não mapeamos', 
   const r = resultadoLigacaoSchema.parse(corpo)
   assert.equal(r.outcome, 'cadastro_iniciado')
   assert.equal(r.chamada?.call_id, 'call_f8f04cfbd5de')
+  // O campo novo SOBREVIVE à validação (09 §1.6): o teste antigo não conferia isto, e
+  // era exatamente o que o zod jogava fora.
+  assert.equal((r as Record<string, unknown>).campo_que_ainda_nao_existe, true)
 })
 
-test('resultado com desfecho fora da lista é recusado, não adivinhado', () => {
-  assert.throws(() =>
-    resultadoLigacaoSchema.parse({
-      evento: 'ligacao.encerrada',
-      ligacao_id: 'lig_1',
-      id_externo: 'x',
-      status: 'concluida',
-      telefone: '+5531988776655',
-      outcome: 'inventado',
-    }),
-  )
+test('links da gravação e do painel atravessam a validação (09 §1.6)', () => {
+  const r = resultadoLigacaoSchema.parse({
+    evento: 'ligacao.encerrada',
+    ligacao_id: 'lig_2',
+    id_externo: 'x',
+    status: 'concluida',
+    outcome: 'interesse_futuro',
+    links: { painel: 'https://ana.onepay/lig_2', gravacao: 'https://ana.onepay/lig_2.mp3', extra: 1 },
+    chamada: { call_id: 'c', transcricao: [{ quem: 'ana', texto: 'oi' }] },
+  })
+  assert.equal(r.links?.gravacao, 'https://ana.onepay/lig_2.mp3')
+  assert.equal((r.links as Record<string, unknown>).extra, 1)
+  assert.equal(r.chamada?.transcricao?.length, 1)
+})
+
+test('desfecho fora da lista é ACEITO e segue para a RPC registrar como desconhecido (09 §1.5)', () => {
+  const r = resultadoLigacaoSchema.parse({
+    evento: 'ligacao.encerrada',
+    ligacao_id: 'lig_1',
+    id_externo: 'x',
+    status: 'status_que_nao_conhecemos',
+    telefone: '+5531988776655',
+    outcome: 'inventado',
+  })
+  assert.equal(r.outcome, 'inventado')
+  assert.equal(r.status, 'status_que_nao_conhecemos')
 })
 
 test('a taxa e o deságio que a Ana fala saem da mesma conta', () => {

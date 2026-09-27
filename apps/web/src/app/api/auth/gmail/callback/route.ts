@@ -41,6 +41,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const usuarioId = usuarioDoState(url.searchParams.get('state'))
   const codigo = url.searchParams.get('code')
+  // A caixa de uma persona de IA (09 §4.2): o `state` assinado carrega `caixa:<id>`.
+  if (usuarioId?.startsWith('caixa:') && codigo) {
+    return conectarCaixaDePersona(url, usuarioId.slice('caixa:'.length), codigo)
+  }
   if (!usuarioId || !codigo) {
     destino.searchParams.set('gmail', 'erro')
     return NextResponse.redirect(destino)
@@ -150,5 +154,72 @@ async function reenfileirarReunioes(
     // o cron de dez em dez minutos não pega estas linhas, mas editar a reunião
     // pega, e a próxima reunião marcada já nasce sincronizando.
     console.error('[comunicacao] falha ao reenfileirar reuniões após conectar o Google', String(erro))
+  }
+}
+
+/**
+ * O consentimento da caixa de uma persona. A conta autorizada TEM de ser a própria caixa:
+ * um gestor que clica logado na conta dele conectaria o próprio e-mail como se fosse o da
+ * `ana@` — e as respostas dos clientes da persona iriam para a caixa pessoal de alguém.
+ */
+async function conectarCaixaDePersona(url: URL, caixaId: string, codigo: string): Promise<NextResponse> {
+  const destino = new URL('/agentes/personas', url.origin)
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    destino.searchParams.set('gmail', 'sem_config')
+    return NextResponse.redirect(destino)
+  }
+  try {
+    const admin = createAdminClient()
+    const { data: caixa } = await admin.from('email_caixas').select('id, endereco').eq('id', caixaId).maybeSingle()
+    if (!caixa) {
+      destino.searchParams.set('gmail', 'erro')
+      return NextResponse.redirect(destino)
+    }
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: codigo,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: `${url.origin}/api/auth/gmail/callback`,
+        grant_type: 'authorization_code',
+      }),
+    })
+    const tokens = (await tokenRes.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string }
+    if (!tokenRes.ok || !tokens.access_token) {
+      destino.searchParams.set('gmail', 'erro')
+      return NextResponse.redirect(destino)
+    }
+    const perfilRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    })
+    const perfil = (await perfilRes.json()) as { emailAddress?: string }
+    if (perfil.emailAddress?.toLowerCase() !== caixa.endereco.toLowerCase()) {
+      destino.searchParams.set('gmail', 'conta_errada')
+      return NextResponse.redirect(destino)
+    }
+    const { error } = await admin.rpc('app__agentes_salvar_tokens_caixa', {
+      p: {
+        caixa_id: caixa.id,
+        refresh_token: tokens.refresh_token ?? null,
+        access_token: tokens.access_token,
+        access_token_expira_em: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString(),
+        escopos: (tokens.scope ?? '').split(' ').filter(Boolean),
+      } as never,
+    })
+    if (error) {
+      console.error('[agentes] falha ao gravar a conexão da caixa da persona', { code: error.code })
+      destino.searchParams.set('gmail', 'erro')
+      return NextResponse.redirect(destino)
+    }
+    destino.searchParams.set('gmail', 'conectado')
+    return NextResponse.redirect(destino)
+  } catch (erro) {
+    console.error('[agentes] erro no callback da caixa da persona', String(erro))
+    destino.searchParams.set('gmail', 'erro')
+    return NextResponse.redirect(destino)
   }
 }

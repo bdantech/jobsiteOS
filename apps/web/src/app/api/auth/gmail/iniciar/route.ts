@@ -1,7 +1,8 @@
 import { randomBytes, createHmac } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { ESCOPOS_GOOGLE } from '@jobsiteos/core'
+import { ESCOPOS_GMAIL, ESCOPOS_GOOGLE } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 
 /**
  * Início do consentimento OAuth do Gmail (05A §3.2).
@@ -38,10 +39,32 @@ export function assinarState(usuarioId: string, nonce: string): string {
   return `${corpo}.${assinatura}`
 }
 
+/*
+ * ── A CAIXA DE UMA PERSONA (Prompt 09 §4.2) ────────────────────────────────
+ * `?caixa=<email_caixas.id>`: o mesmo consentimento, para a caixa real de um agente de IA
+ * (`ana@oneos.com.br`). Quem clica é um GESTOR logado na conta Google da caixa. O
+ * `state` carrega `caixa:<id>` no lugar do id do usuário — assinado do mesmo jeito, e o
+ * callback confere que a conta autorizada É a caixa, e não a do gestor.
+ *
+ * Só os escopos do Gmail: a persona não tem agenda própria (a reunião vai para a agenda
+ * do closer), e pedir o que não se usa é o que faz o Workspace barrar o app.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function GET(request: Request): Promise<NextResponse> {
   const contexto = await getSessionContext()
   if (!contexto) return NextResponse.json({ erro: 'Sessão expirada.' }, { status: 401 })
-  if (!contexto.grantedModuleIds.includes('comunicacao')) {
+
+  const caixa = new URL(request.url).searchParams.get('caixa')
+  if (caixa !== null) {
+    if (!UUID.test(caixa)) return NextResponse.json({ erro: 'Caixa inválida.' }, { status: 400 })
+    if (!contexto.grantedModuleIds.includes('agentes')) {
+      return NextResponse.json({ erro: 'Sem acesso ao módulo Agentes.' }, { status: 403 })
+    }
+    const supabase = await createClient()
+    const { data: gestor } = await supabase.rpc('app_agentes_gestor')
+    if (!gestor) return NextResponse.json({ erro: 'Somente a gestão comercial conecta a caixa de um agente.' }, { status: 403 })
+  } else if (!contexto.grantedModuleIds.includes('comunicacao')) {
     return NextResponse.json({ erro: 'Sem acesso ao módulo Comunicação.' }, { status: 403 })
   }
 
@@ -58,11 +81,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     client_id: clientId,
     redirect_uri: `${origem}/api/auth/gmail/callback`,
     response_type: 'code',
-    scope: ESCOPOS_GOOGLE.join(' '),
+    scope: (caixa ? ESCOPOS_GMAIL : ESCOPOS_GOOGLE).join(' '),
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
-    state: assinarState(contexto.usuario.id, randomBytes(12).toString('hex')),
+    state: assinarState(caixa ? `caixa:${caixa}` : contexto.usuario.id, randomBytes(12).toString('hex')),
   })
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)

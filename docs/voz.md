@@ -1,3 +1,13 @@
+> **ARQUIVADO EM 27/09/2026 — NUNCA IMPLEMENTADO (Prompt 09 §1.12).**
+>
+> Este documento descreve uma arquitetura de voz que nunca foi construída: serviço próprio
+> em Python com Telnyx, tabelas `voz_config`/`voz_contas`/`voz_roteiros`/`ligacoes`, custo
+> por minuto, análise pós-chamada e áudio no nosso bucket. Ele também afirma que as
+> decisões "ligar" do agente ficavam registradas — nunca ficaram. O que existe em código é
+> a integração com a Ana, o serviço de voz da OnePay (`docs/voz-integracao.md`), e, desde o
+> Prompt 09, a ferramenta `ligar` dos agentes de mandato (`docs/agentes.md`). Fica como
+> registro de decisão, não como referência: doc que mente custa mais que doc que falta.
+
 # Voz: o discador de IA (05C) — status quo e plano de encaixe
 
 > **Status: plano, não documentação.** Nada do que está aqui existe em código ainda. Este

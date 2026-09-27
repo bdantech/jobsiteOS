@@ -4,6 +4,8 @@ import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { avisar, emitirEvento } from '../../radar/eventos.js'
 import { lerPainel } from '../../comercial/config.js'
+import { entraNaDistribuicao } from '../../../../../packages/core/src/agentes/escopo.js'
+import { lerConfigAgentes } from '../../agentes/config.js'
 
 /**
  * Aplica o roteamento (04g §3) às NFs vivas sem dono definido à mão.
@@ -25,12 +27,16 @@ export interface ResultadoRoteamento {
 }
 
 async function originadores(): Promise<OriginadorRoteavel[]> {
-  const { data } = await supabaseAdmin
+  const { data: todos } = await supabaseAdmin
     .from('vendedores')
-    .select('id, settings')
+    .select('id, settings, is_ia, escopo')
     .eq('tipo', 'originador')
     .eq('ativo', true)
-  if (!data?.length) return []
+  // Mesma regra da distribuição de leads (09 §1.9): nota roteada para um originador de
+  // IA ficava parada numa carteira que nenhum job trabalhava.
+  const { geral } = await lerConfigAgentes()
+  const data = (todos ?? []).filter((v) => entraNaDistribuicao(v, geral.modo_carteira_habilitado))
+  if (!data.length) return []
 
   const { rows } = await pool.query<{ vendedor_id: string; n: string }>(
     `select vendedor_id, count(*) as n from notas_fiscais

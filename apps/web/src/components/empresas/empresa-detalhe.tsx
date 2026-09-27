@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FichaGrade, FichaIdentidade, FichaTopo } from '@/components/ficha/ficha'
+import { DelegarAoAgente } from '@/components/agentes/delegar-ao-agente'
 import { VoltarContextual } from '@/components/shell/voltar-contextual'
 import { Skeleton } from '@/components/ui/skeleton'
 import { GrupoSecao } from '@/components/mercado/grupos/grupo-secao'
@@ -197,7 +198,23 @@ export function EmpresaDetalhe({
       <FichaTopo
         titulo="Empresa"
         descricao={formatCnpj(data.cnpj)}
-        acao={podeEditarDados ? <EmpresaAcaoEstagio empresa={data} /> : <EstagioBadge estagio={data.estagio} />}
+        acao={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/*
+             * "Delegar ao agente" (Agentes §2.3) se esconde sozinho para quem não é gestor
+             * com o módulo Agentes. Ex-cliente abre em reativação; o resto, em agendamento.
+             */}
+            <DelegarAoAgente
+              contexto={{
+                empresaId: data.id,
+                empresaNome: data.nome_fantasia || data.razao_social,
+                tipos: ['agendamento_reuniao', 'reativacao', 'qualificacao'],
+                tipoInicial: data.estagio === 'ex_cliente' ? 'reativacao' : 'agendamento_reuniao',
+              }}
+            />
+            {podeEditarDados ? <EmpresaAcaoEstagio empresa={data} /> : <EstagioBadge estagio={data.estagio} />}
+          </div>
+        }
       />
 
       {/*

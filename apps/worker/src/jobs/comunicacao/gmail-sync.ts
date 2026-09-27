@@ -8,7 +8,7 @@ import {
 } from '../../../../../packages/core/src/transportes/index.js'
 import { conversaPara, escreverNoLedger, tocarConversa } from '../../comunicacao/ledger.js'
 import { enfileirarNaoVinculada, resolverRemetente } from '../../comunicacao/resolver.js'
-import { accessTokenGmail, type ContaGmail } from '../../comunicacao/transportes.js'
+import { accessTokenGmail, contasDeCaixasDePersona, type ContaGmail } from '../../comunicacao/transportes.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 
@@ -51,7 +51,9 @@ export async function sincronizarGmail(): Promise<ResultadoGmailSync> {
     .from('gmail_contas')
     .select('usuario_id, endereco, refresh_token_secret_id, access_token_secret_id, access_token_expira_em, history_id, ativo')
     .eq('ativo', true)
-  const contas = (data ?? []) as ContaGmail[]
+  // As caixas das personas de IA (09 §4.2) entram na mesma varredura: e-mail recebido pela
+  // `ana@` entra no ledger, resolve o contato pelo endereço e acorda o mandato (trigger).
+  const contas = [...((data ?? []) as ContaGmail[]), ...(await contasDeCaixasDePersona())]
   acc.contas = contas.length
   if (contas.length === 0) return acc
 
@@ -66,10 +68,14 @@ export async function sincronizarGmail(): Promise<ResultadoGmailSync> {
     } catch (erro) {
       logger.error({ conta: conta.endereco, erro: String(erro) }, 'Falha ao sincronizar Gmail.')
       acc.falhas += 1
-      await supabaseAdmin
-        .from('gmail_contas')
-        .update({ ultimo_erro: String(erro) })
-        .eq('usuario_id', conta.usuario_id)
+      if (conta.caixa_id) {
+        await supabaseAdmin.from('email_caixas').update({ ultimo_erro: String(erro) }).eq('id', conta.caixa_id)
+      } else {
+        await supabaseAdmin
+          .from('gmail_contas')
+          .update({ ultimo_erro: String(erro) })
+          .eq('usuario_id', conta.usuario_id)
+      }
     }
   }
 
@@ -142,14 +148,13 @@ export async function sincronizarUsuario(
   }
 
   const novoHistoryId = await historyIdAtual(token)
-  await supabaseAdmin
-    .from('gmail_contas')
-    .update({
-      history_id: novoHistoryId ?? conta.history_id,
-      ultimo_sync_em: new Date().toISOString(),
-      ultimo_erro: null,
-    })
-    .eq('usuario_id', conta.usuario_id)
+  const estado = {
+    history_id: novoHistoryId ?? conta.history_id,
+    ultimo_sync_em: new Date().toISOString(),
+    ultimo_erro: null,
+  }
+  if (conta.caixa_id) await supabaseAdmin.from('email_caixas').update(estado).eq('id', conta.caixa_id)
+  else await supabaseAdmin.from('gmail_contas').update(estado).eq('usuario_id', conta.usuario_id)
 
   return { vistas: ids.length, ingeridas, descartadas }
 }
@@ -161,7 +166,12 @@ export async function sincronizarUsuario(
  * (contato não identificado), quem atendeu é quem tem a caixa. Aqui é ainda mais
  * direto que no WhatsApp — a caixa é de uma pessoa só, por construção do OAuth.
  */
-async function vendedorDaCaixa(usuarioId: string): Promise<string | null> {
+async function vendedorDaCaixa(usuarioId: string, caixaId?: string | null): Promise<string | null> {
+  if (caixaId) {
+    // A caixa da persona é do AGENTE que a tem (`vendedores.email_caixa_id`).
+    const { data } = await supabaseAdmin.from('vendedores').select('id').eq('email_caixa_id', caixaId).eq('ativo', true).maybeSingle()
+    return data?.id ?? null
+  }
   const { data } = await supabaseAdmin
     .from('vendedores')
     .select('id')
@@ -177,7 +187,7 @@ async function ingerir(email: EmailRecebido, conta: ContaGmail): Promise<void> {
   const corpo = semCitacao(email.corpo)
 
   const r = await resolverRemetente({ canal: 'email', identificador: email.de, corpo })
-  const donoDaCaixa = await vendedorDaCaixa(conta.usuario_id)
+  const donoDaCaixa = await vendedorDaCaixa(conta.usuario_id, conta.caixa_id)
   const conversaId = await conversaPara({
     canal: 'email',
     identificador: email.de,

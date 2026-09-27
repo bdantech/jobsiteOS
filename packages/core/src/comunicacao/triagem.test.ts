@@ -73,10 +73,18 @@ test('taxa, preço e prazo escalam para humano', () => {
   assert.equal(precisaEscalar(neutra, 'qual o prazo do contrato?').escalar, true)
 })
 
-test('"você é um robô?" escala — e a resposta não é negar', () => {
+test('"você é um robô?" NÃO escala mais: a IA confirma e segue (09 §1.10)', () => {
   const r = precisaEscalar(doModelo({ intencao: 'duvida' }), 'isso aí é um robô falando comigo?')
+  assert.equal(r.escalar, false)
+})
+
+test('pedir expressamente uma pessoa continua escalando', () => {
+  const r = precisaEscalar(doModelo({ intencao: 'duvida' }), 'quero falar com uma pessoa, por favor')
   assert.equal(r.escalar, true)
-  assert.ok(r.motivo?.includes('robo'))
+})
+
+test('menção a cobrança escala', () => {
+  assert.equal(precisaEscalar(doModelo({ intencao: 'duvida' }), 'isso é sobre a cobrança?').escalar, true)
 })
 
 test('reclamação, negociação e pedido de humano escalam', () => {

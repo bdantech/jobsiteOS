@@ -338,9 +338,16 @@ irreversível na prática; um token gasto não é.
 
 ## O agente de próximo passo
 
-Um **decisor**, não um chatbot. Acorda por evento (resposta recebida, silêncio de N dias,
-no-show, NF nova em faixa, certificado vencendo, lead distribuído) e responde a uma
-pergunta: qual é o próximo passo desta relação?
+Um **decisor**, não um chatbot. Responde a uma pergunta: qual é o próximo passo desta
+relação?
+
+> **Corrigido no Prompt 09 (27/09/2026).** O que acorda o agente, de fato: os dois crons de
+> hora em hora e, desde a 0270a, o **trigger** `comunicacoes_acorda_quem_espera` — toda
+> mensagem RECEBIDA zera o `proxima_acao_em` da conversa. Os gatilhos "no-show", "NF nova em
+> faixa", "certificado vencendo" e "lead distribuído" nunca foram produzidos por código. E o
+> agente só decide em conversas com `objetivo` ou `playbook_id` — trabalho com objetivo,
+> através de vários contatos e canais, é o **mandato** do Prompt 09 (`docs/agentes.md`), e a
+> conversa presa a um mandato ativo é decidida pelo ciclo dos agentes, não aqui.
 
 ### O espaço de ações é fechado, e é isso que o torna seguro
 
@@ -358,18 +365,22 @@ trocar_contato_da_conversa · ligar (DESLIGADA) · aguardar
 **`aguardar` é ação de primeira classe**, e não a ausência de decisão. Sem ela, um modelo
 perguntado "qual o próximo passo?" sempre encontra um passo, e a cadência vira perseguição.
 
-**`ligar` é declarada e desligada** (`agente.ligacao_habilitada = false`). Está no espaço
-para que ligar o discador de IA externo seja uma linha de config — e, mais útil agora, para
-que as decisões em que o agente teria ligado apareçam no log. Saber quantas vezes ligar era
-o passo certo é o argumento para comprar o discador, e esse número não existe se a ação não
-puder ser escolhida.
+**`ligar`, `mudar_estagio_funil` e `pedir_enriquecimento_contato` não executam aqui.** A
+promessa de que as decisões "ligar" ficariam registradas nunca se cumpriu: a validação as
+recusava por `acao_desligada` e o registro saía como `agendar_toque` da cadência. Desde o
+Prompt 09 essas três ações voltam `executada = false` (antes contavam como executadas sem
+efeito nenhum) — ligar, mover card e enriquecer são ferramentas reais do agente de MANDATO.
 
 ### Dois modos, e o default é uma decisão
 
-`sugestao` (default para humanos) mostra a decisão pronta no card e no inbox; quem envia é
-a pessoa. `autonomo` (default nas carteiras da IA) executa direto, respeitando todos os
-guardrails. Um agente que começa autônomo numa carteira humana manda a primeira mensagem
-antes de alguém ter lido uma única sugestão dele.
+`sugestao` (o default de toda conversa) mostra a decisão pronta no card e no inbox; quem
+envia é a pessoa. `autonomo` executa direto, respeitando todos os guardrails. "Autônomo por
+padrão nas carteiras da IA" nunca foi implementado: a autonomia de verdade é a do agente de
+mandato (`vendedores.autonomo`, Prompt 09), sob orçamento, cotas e disjuntor.
+
+A mensagem autônoma sai pela **linha da persona** (o vendedor de IA dono da conversa) ou, sem
+persona, pelo rodízio de contas `ia` — e é gravada na conversa do PAR (número de origem,
+contato), não na thread do número humano (0270a §1.7).
 
 ### A ordem é: guardrail → modelo → validação → execução
 
@@ -394,10 +405,11 @@ a única coisa pior que um follow-up medíocre é nenhum. Quando a cadência aca
 
 ### Indicação de outro contato
 
-Quando a triagem detecta `indicacao_de_contato` ("fala com o Marcelo do financeiro,
-(11) 9xxxx"), o agente cria o novo contato com `base_legal = 'indicacao'` e a evidência (o
-trecho da mensagem), abre a thread dele herdando o objetivo, e encerra a anterior com
-agradecimento.
+Quando o agente decide `trocar_contato_da_conversa`, ele lê os dados da indicação da
+TRIAGEM da última mensagem recebida ("fala com o Marcelo do financeiro, (11) 9xxxx"), cria o
+novo contato com `base_legal = 'indicacao'` e a evidência, abre a thread dele herdando o
+objetivo, e encerra a anterior. (Até o Prompt 09 ela lia um campo que o schema da decisão
+descartava, e saía sem fazer nada — marcando-se como executada.)
 
 O contato anterior fica `nao_e_o_decisor` — **nunca suprimido**. "Fala com o Marcelo" diz
 que esta pessoa não decide, não que ela não pode ser abordada: suprimir queimaria um
@@ -411,9 +423,20 @@ mesmo nome — a forma mais silenciosa de aprender errado.
 
 ### O desfecho é o que transforma o log em painel
 
-`agente_decisoes.desfecho` (respondeu / agendou / converteu / suprimiu / sem_resposta /
-escalou) é apurado uma vez por dia. Sem ele, a tabela diria quantas vezes o agente decidiu e
-nunca quantas vezes ele acertou.
+`agente_decisoes.desfecho` (respondeu / suprimiu / sem_resposta / escalou) é apurado **de
+hora em hora**, junto com os agendados, e só para decisões executadas. `agendou` e
+`converteu` nunca foram apurados aqui: no Prompt 09 eles passam a ser FATOS do banco no
+painel de Desempenho dos agentes (`app_agentes_desempenho`, 0270f) — reunião existente,
+nota convertida.
+
+### A escalação espera uma pessoa
+
+Escalar por guardrail (reclamação, negociação, advogado, cobrança, pedido expresso de
+humano) põe a conversa em `aguardando_humano` e a tira da varredura até a primeira saída
+humana (0270a §1.4) — antes, a mesma conversa escalava e notificava a cada hora. **Perguntar
+se é robô não escala mais** (§1.10): a política de identificação é configuração
+(`agentes_config.geral.identificacao`) e o piso é duro — a IA nunca afirma ser humana e,
+perguntada, não nega ser IA.
 
 ## De qual número sai cada mensagem
 
@@ -610,10 +633,10 @@ falou hoje parecer parada há três semanas.
 | Job | Cadência | Por quê |
 | --- | --- | --- |
 | `comunicacao/enviar-fila` | 5 min | Uma mensagem aprovada não pode esperar meia hora |
-| `comunicacao/triagem` | 5 min | É ela que acorda o agente |
+| `comunicacao/triagem` | 5 min | Classifica a entrada (quem acorda o agente é o trigger de `comunicacoes`, 0270a) |
 | `comunicacao/gmail-sync` | 10 min | É o **fallback** do Pub/Sub, não o caminho principal |
 | `comunicacao/lembretes-reuniao` | 1 h | O lembrete H-1 precisa dessa granularidade |
-| `agente/decidir` | 1 h | Decisões de relação não são de minuto |
+| `agente/decidir` | 1 h | Decisões de relação não são de minuto. Ordena por `proxima_acao_em` e sempre reagenda (0270a §1.1) |
 | `agente/executar-agendados` | 1 h | O relógio que o próprio agente marcou |
 
 O lembrete **H-1 fura a janela de propósito**, e é a única automação que faz isso: um

@@ -799,8 +799,16 @@ export function lancamentosDaCessao(
    * não paga um segundo pelo mesmo dinheiro — os dois estariam sendo pagos por ter
    * trazido a mesma cedente.
    */
+  /*
+   * O TITULAR DE IA OCUPA A VAGA (Prompt 09 §1.11). Quando o originador do cedente é um
+   * vendedor de IA, o caminho normal não gera linha (IA nunca gera lançamento) — e o
+   * teste acima enxergava "ninguém pagou" e deixava a flag pagar o humano que tinha a
+   * construtora na carteira. Isso contradiz a regra de sempre: a parcela da IA não é
+   * paga NEM redistribuída. A vaga existe, só não tem dinheiro.
+   */
   const comoCedente = titulares.originadorComoCedente
-  if (comoCedente && !out.some((l) => l.papel === 'ORIGINADOR')) {
+  const vagaDaIa = titulares.originador.some((t) => t.isIa)
+  if (comoCedente && !vagaDaIa && !out.some((l) => l.papel === 'ORIGINADOR')) {
     out.push(...lancamentosDoOriginadorComoCedente(cessao, comoCedente, params))
   }
   return out

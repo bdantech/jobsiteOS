@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { after, NextResponse } from 'next/server'
 import {
   decidirDestino,
+  entraNaDistribuicao,
+  montarConfigAgentes,
   rotearInbound,
   normalizarEmail,
   normalizarTelefone,
@@ -356,11 +358,15 @@ async function escolherAtendente(
   dados: Record<string, unknown>,
   destinoDoFormulario: string | null,
 ): Promise<{ vendedorId: string | null; aviso: string | null }> {
-  const { data: vendedores } = await supabase
-    .from('vendedores')
-    .select('id, nome, tipo, settings')
-    .eq('ativo', true)
-  if (!vendedores?.length) return { vendedorId: null, aviso: 'Nenhum vendedor ativo para receber o lead.' }
+  const [{ data: todos }, { data: cfgLinhas }] = await Promise.all([
+    supabase.from('vendedores').select('id, nome, tipo, settings, is_ia, escopo').eq('ativo', true),
+    supabase.from('agentes_config').select('chave, valor'),
+  ])
+  // Lead de formulário não cai em carteira de IA (09 §1.9): a IA trabalha o próprio
+  // escopo, e só entra em rodízio no modo `carteira` — hoje desligado em config.
+  const { geral } = montarConfigAgentes((cfgLinhas ?? []) as Array<{ chave: string; valor: unknown }>)
+  const vendedores = (todos ?? []).filter((v) => entraNaDistribuicao(v, geral.modo_carteira_habilitado))
+  if (!vendedores.length) return { vendedorId: null, aviso: 'Nenhum vendedor ativo para receber o lead.' }
 
   const ids = vendedores.map((v) => v.id)
   const [{ data: terrs }, { data: leads }] = await Promise.all([

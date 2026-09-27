@@ -182,6 +182,26 @@
       "schedule": "0,30 12-20 * * 1-5"
     },
     {
+      "path": "/api/cron/voz-varrer-orfas",
+      "schedule": "5-55/10 12-21 * * 1-5"
+    },
+    {
+      "path": "/api/cron/agentes-ciclo",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/agentes-criar-mandatos",
+      "schedule": "0 10 * * 1-5"
+    },
+    {
+      "path": "/api/cron/agentes-digest",
+      "schedule": "0 21 * * 1-5"
+    },
+    {
+      "path": "/api/cron/agentes-reconciliar-custo",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/notificacoes-enviar",
       "schedule": "*/5 * * * *"
     },

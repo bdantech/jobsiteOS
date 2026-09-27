@@ -263,6 +263,53 @@ export class CalendarioGoogle {
     }
   }
 
+  /**
+   * OS HORÁRIOS OCUPADOS do calendário, para a agenda do agente (Prompt 09 §7).
+   *
+   * `events.list` e não `freeBusy`: o escopo que os vendedores já consentiram é
+   * `calendar.events`, que cobre ler eventos — pedir `calendar.freebusy` obrigaria todo
+   * mundo a reconectar o Google por causa de uma leitura que este escopo já permite.
+   *
+   * Conta como ocupado o evento que bloqueia tempo: não-transparente ("livre" no Google
+   * é `transparent`), não cancelado, e que o dono não recusou. Evento de dia inteiro
+   * bloqueia o dia (férias, feriado, viagem).
+   */
+  async ocupados(de: Date, ate: Date): Promise<{ ok: true; intervalos: Array<{ inicio: Date; fim: Date }> } | { ok: false; falha: FalhaGoogle; erro: string }> {
+    const intervalos: Array<{ inicio: Date; fim: Date }> = []
+    let pagina: string | undefined
+    try {
+      for (let i = 0; i < 10; i++) {
+        const qs = new URLSearchParams({
+          timeMin: de.toISOString(),
+          timeMax: ate.toISOString(),
+          singleEvents: 'true',
+          orderBy: 'startTime',
+          maxResults: '250',
+          ...(pagina ? { pageToken: pagina } : {}),
+        })
+        const { status, corpo } = await this.chamar(`${API}/calendars/${this.calendario}/events?${qs}`, { method: 'GET' })
+        if (status >= 400) {
+          const f = classificarFalha(status, corpo)
+          return { ok: false, falha: f.falha, erro: f.erro }
+        }
+        const c = corpo as { items?: Array<Record<string, any>>; nextPageToken?: string }
+        for (const e of c.items ?? []) {
+          if (e.status === 'cancelled' || e.transparency === 'transparent') continue
+          const eu = (e.attendees as Array<{ self?: boolean; responseStatus?: string }> | undefined)?.find((x) => x.self)
+          if (eu?.responseStatus === 'declined') continue
+          const inicio = e.start?.dateTime ?? (e.start?.date ? `${e.start.date}T00:00:00-03:00` : null)
+          const fim = e.end?.dateTime ?? (e.end?.date ? `${e.end.date}T00:00:00-03:00` : null)
+          if (inicio && fim) intervalos.push({ inicio: new Date(inicio), fim: new Date(fim) })
+        }
+        pagina = c.nextPageToken
+        if (!pagina) break
+      }
+      return { ok: true, intervalos }
+    } catch (erro) {
+      return { ok: false, falha: 'transitoria', erro: String(erro) }
+    }
+  }
+
   /** Cancelar avisa os convidados — é metade do motivo de cancelar pelo sistema. */
   async cancelar(eventoId: string): Promise<RespostaEvento> {
     const url =

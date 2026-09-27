@@ -382,8 +382,48 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Envio para a Ana (voz)',
     moduloId: 'comunicacao',
     descricao:
-      'Leva para o serviço de voz o que uma PESSOA pôs na fila em Comunicação → Ligações. Não existe cron que escolha as notas: a régua automática foi deixada de fora de propósito, porque a ligação é o canal mais caro de errar e aqui nem mensagem sai sem alguém aprovar. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez), e o intervalo dá espaço para a retentativa de envio no mesmo dia.',
+      'Leva para o serviço de voz o que está na fila — posto por uma PESSOA em Comunicação → Ligações ou por um AGENTE de IA dentro de um mandato (09). Antes de enviar, reexecuta o portão de permissão (supressão, cobrança, Procon, base legal) e remonta a oferta com dados de agora (taxa, TAC, líquido, estágio da nota): o que mudou desde o enfileiramento cancela a ligação, com o motivo à vista. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez).',
     destino: 'POST /jobs/voz/enviar',
+  },
+  {
+    path: '/api/cron/voz-varrer-orfas',
+    nome: 'Ligações sem resultado',
+    moduloId: 'comunicacao',
+    descricao:
+      'Marca como falha (motivo `timeout`) a ligação `enviada` há mais de `voz_timeout_minutos` sem webhook — ela prendia a nota para sempre. Libera a nota para nova tentativa e acorda o mandato, se houver. Se o resultado chegar depois, ele é aceito e reabre a linha.',
+    destino: 'POST /jobs/voz/varrer-orfas',
+  },
+  {
+    path: '/api/cron/agentes-ciclo',
+    nome: 'Ciclo dos agentes',
+    moduloId: 'agentes',
+    descricao:
+      'O loop dos agentes de IA: pega os mandatos vencidos, aplica as trancas (kill switch, pausa, disjuntor, orçamento, cotas, prazo, supressão, janela) sem chamar o modelo, e roda o ciclo de ferramentas com limite de passos. A cada 5 minutos porque um agente que combinou ligar às 15h30 precisa ligar às 15h30.',
+    destino: 'POST /jobs/agentes/ciclo',
+  },
+  {
+    path: '/api/cron/agentes-criar-mandatos',
+    nome: 'Mandatos por regra',
+    moduloId: 'agentes',
+    descricao:
+      'Avalia as regras de mandato ATIVAS (motor de filtros do 02, em E com o escopo e o piloto do agente) e cria os mandatos, respeitando o teto da regra, a cota do agente e um mandato ativo por empresa e tipo. Empresa em cobrança ou suprimida nunca entra. Antes do expediente, em dias úteis.',
+    destino: 'POST /jobs/agentes/criar-mandatos',
+  },
+  {
+    path: '/api/cron/agentes-digest',
+    nome: 'Resumo diário dos agentes',
+    moduloId: 'agentes',
+    descricao:
+      'Um aviso por agente, no fim do dia: o que fez, o que conseguiu, quanto custou e quantos mandatos têm ação nas próximas 24h. Agente sem ação e sem mandato ativo não gera aviso.',
+    destino: 'POST /jobs/agentes/digest',
+  },
+  {
+    path: '/api/cron/agentes-reconciliar-custo',
+    nome: 'Reconciliação do custo dos agentes',
+    moduloId: 'agentes',
+    descricao:
+      'Estorna reservas órfãs (worker que morreu entre reservar e consumir), troca o custo estimado das ligações pelo real que a Ana devolveu, e recalcula os totais do mês e de cada mandato a partir dos movimentos — que são a fonte da verdade.',
+    destino: 'POST /jobs/agentes/reconciliar-custo',
   },
   {
     path: '/api/cron/notificacoes-enviar',

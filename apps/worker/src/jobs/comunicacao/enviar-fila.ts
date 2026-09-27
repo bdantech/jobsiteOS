@@ -20,11 +20,14 @@ import {
   enviadasPelaContaHoje,
   escreverNoLedger,
   tocarConversa,
+  ultimaEntradaEm,
   ultimoToqueEm,
 } from '../../comunicacao/ledger.js'
 import {
   buscarConta,
+  contaDaPersona,
   contaDoUsuario,
+  contaGmailDaPersona,
   contaGmailDoUsuario,
   escolherConta,
   transporteGmail,
@@ -219,10 +222,30 @@ async function processar(
   let conta: ContaWhatsapp | null = null
   if (canal === 'whatsapp') {
     const tipo = linha.por_ia ? 'ia' : 'relacionamento'
+    /*
+     * ── A PERSONA TEM LINHA PRÓPRIA (09 §3.1) ────────────────────────────────
+     * Mensagem de IA assinada por um agente (vendedor `is_ia`) sai pela linha DELE,
+     * sempre. O rodízio anônimo entre contas `ia` fazia a mesma persona aparecer com
+     * três números diferentes para o mesmo cliente — e a resposta cair numa thread que
+     * ninguém da persona via. Sem linha, falha com o nome do agente: a tela de Personas
+     * já recusa ativar agente sem linha, e isto é a segunda trava, no último instante.
+     *
+     * O rodízio fica só para o que é IA SEM persona — a campanha "Casa / IA".
+     */
+    const persona = linha.por_ia && !linha.whatsapp_conta_id ? await contaDaPersona(linha.vendedor_id) : null
+    if (persona?.persona && !persona.conta) {
+      await marcarFalha(
+        linha,
+        `O agente "${persona.nome}" não tem linha de WhatsApp própria ativa — escolha uma em Agentes › Personas.`,
+      )
+      return { desfecho: 'falhas' }
+    }
     conta = linha.whatsapp_conta_id
       ? await buscarConta(linha.whatsapp_conta_id)
-      : ((!linha.por_ia ? await contaDoUsuario(linha.criada_por, tipo) : null) ??
-        (await escolherConta(tipo)))
+      : persona?.persona
+        ? persona.conta
+        : ((!linha.por_ia ? await contaDoUsuario(linha.criada_por, tipo) : null) ??
+          (await escolherConta(tipo)))
     if (!conta || !conta.ativo) {
       await marcarFalha(linha, 'Nenhuma conta de WhatsApp ativa para este tipo de envio.')
       return { desfecho: 'falhas' }
@@ -236,16 +259,14 @@ async function processar(
    */
   const escolha = await remetenteDe(linha, canal, conta)
 
-  const conversaId =
-    linha.conversa_id ??
-    (await conversaPara({
-      canal,
-      identificador: linha.destinatario,
-      conta: escolha.remetente,
-      empresaId,
-      contatoId: linha.destinatario_contato_id,
-      vendedorId: linha.vendedor_id,
-    }))
+  /*
+   * ── A CONVERSA É DO PAR (NOSSA PONTA, CONTATO) (09 §1.7) ───────────────────
+   * A linha pode chegar com a `conversa_id` de OUTRA ponta: o agente de conversa
+   * enfileirava na thread do número humano, e a mensagem saía por um número `ia`. O
+   * ledger gravava na thread errada, a resposta chegava na thread certa, e o histórico
+   * se partia em dois. A thread que vale é a da ponta por onde a mensagem SAI.
+   */
+  const conversaId = await conversaDoPar(linha, canal, escolha.remetente, empresaId)
 
   // ── O portão, metade do worker ───────────────────────────────────────────
   const fatos: FatosDoEnvio = {
@@ -276,11 +297,24 @@ async function processar(
     forcarJanela: linha.forcar_janela,
   }
 
-  // O cooldown já foi decidido no enfileiramento (que é onde a pessoa viu o
-  // motivo). Reaplicá-lo aqui bloquearia a segunda mensagem de uma conversa que
-  // a própria pessoa escolheu continuar. O lembrete de reunião também fica de
-  // fora (origem `lembrete`, 0264): quem o recebe marcou a reunião.
-  const vereditoCfg = { ...cfg, cooldown_dias: linha.origem === 'outbox' ? cfg.cooldown_dias : 0 }
+  /*
+   * ── O COOLDOWN CONTA DA ÚLTIMA MENSAGEM NOSSA, QUALQUER ORIGEM (09 §1.8) ────
+   * Era zerado para toda origem que não fosse `outbox` — inclusive `agente` e
+   * `campanha`, justamente as automáticas. Agora vale para tudo que é automático ou de
+   * régua, contado da última saída para o contato (de qualquer canal e origem).
+   *
+   * Três exceções, cada uma decidida por alguém:
+   *   compositor  a pessoa viu o cooldown no enfileiramento e escolheu continuar;
+   *   lembrete    quem recebe marcou a reunião (0264);
+   *   cobranca    notificação extrajudicial tem prazo jurídico, não comercial.
+   * E uma regra de conversa: se o contato nos escreveu DEPOIS da nossa última saída,
+   * responder não é insistir — o cooldown não se aplica.
+   */
+  const isentaDeCooldown = ['compositor', 'lembrete', 'cobranca'].includes(linha.origem)
+  const respondeuDepois =
+    fatos.ultimoToqueEm !== null &&
+    ((await ultimaEntradaEm(linha.destinatario_contato_id))?.getTime() ?? 0) > fatos.ultimoToqueEm.getTime()
+  const vereditoCfg = { ...cfg, cooldown_dias: isentaDeCooldown || respondeuDepois ? 0 : cfg.cooldown_dias }
   const veredito = podeEnviar(fatos, vereditoCfg)
 
   if (!veredito.pode) {
@@ -462,6 +496,35 @@ async function processar(
   return { desfecho: 'enviadas', conta }
 }
 
+/**
+ * A thread do par (nossa ponta, contato). Usa a `conversa_id` da linha só quando ela É
+ * dessa ponta (ou ainda não tem ponta nenhuma e pode ser adotada); senão resolve a do par.
+ */
+async function conversaDoPar(
+  linha: LinhaFila,
+  canal: CanalThread,
+  remetente: string | null,
+  empresaId: string | null,
+): Promise<string | null> {
+  if (linha.conversa_id) {
+    const { data: cv } = await supabaseAdmin
+      .from('conversas')
+      .select('conta_remetente')
+      .eq('id', linha.conversa_id)
+      .maybeSingle()
+    const ponta = cv?.conta_remetente?.toLowerCase() ?? null
+    if (!remetente || !ponta || ponta === remetente.toLowerCase()) return linha.conversa_id
+  }
+  return conversaPara({
+    canal,
+    identificador: linha.destinatario!,
+    conta: remetente,
+    empresaId,
+    contatoId: linha.destinatario_contato_id,
+    vendedorId: linha.vendedor_id,
+  })
+}
+
 /** Quem assina, e por onde. O transporte em si vem depois, e só se o portão deixar. */
 interface EscolhaDeRemetente {
   /** Vai para `conversas.conta_remetente` e `comunicacoes.conta_remetente`. */
@@ -508,6 +571,22 @@ async function remetenteDe(
     if (contaGmail) return { remetente: contaGmail.endereco, gmail: contaGmail, motivo: null }
   }
 
+  /*
+   * A CAIXA DA PERSONA (09 §4.2). E-mail de agente sai pela caixa DELE (`ana@…`, Gmail
+   * conectado na tela de Personas) e, sem ela, pelo remetente próprio dele no Resend. O
+   * remetente genérico de IA fica para o que é IA sem persona.
+   */
+  if (linha.por_ia && linha.vendedor_id) {
+    const caixa = await contaGmailDaPersona(linha.vendedor_id)
+    if (caixa) return { remetente: caixa.endereco, gmail: caixa, motivo: null }
+    const { data: persona } = await supabaseAdmin
+      .from('vendedores')
+      .select('is_ia, email_remetente')
+      .eq('id', linha.vendedor_id)
+      .maybeSingle()
+    if (persona?.is_ia && persona.email_remetente) return { remetente: persona.email_remetente, gmail: null, motivo: null }
+  }
+
   const remetente = linha.por_ia
     ? (env.RESEND_REMETENTE_IA ?? env.RESEND_REMETENTE ?? null)
     : (env.RESEND_REMETENTE ?? null)
@@ -535,12 +614,11 @@ async function montarTransporte(
     return { transporte, remetente: conta.numero, motivo }
   }
 
-  if (escolha.gmail && linha.criada_por) {
-    const { data: u } = await supabaseAdmin
-      .from('usuarios')
-      .select('nome')
-      .eq('id', linha.criada_por)
-      .maybeSingle()
+  if (escolha.gmail && (linha.criada_por || escolha.gmail.caixa_id)) {
+    // O nome que aparece no "De:": a pessoa que escreveu, ou a persona dona da caixa.
+    const { data: u } = linha.criada_por && !escolha.gmail.caixa_id
+      ? await supabaseAdmin.from('usuarios').select('nome').eq('id', linha.criada_por).maybeSingle()
+      : await supabaseAdmin.from('vendedores').select('nome').eq('id', linha.vendedor_id ?? '').maybeSingle()
     const t = await transporteGmail(escolha.gmail, u?.nome ?? null)
     // Token revogado no meio do caminho: cai para o Resend em vez de não sair. A
     // thread já foi resolvida pela caixa da pessoa, e é onde ela deve continuar.

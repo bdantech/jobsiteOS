@@ -20,6 +20,7 @@ import { ProximoPasso } from '@/components/comunicacao/proximo-passo'
 import { Thread } from '@/components/comunicacao/thread'
 import { buscarContatos } from '@/components/comunicacao/queries'
 import { promoverContatoAction } from '@/actions/fornecedores'
+import { DelegarAoAgente } from '@/components/agentes/delegar-ao-agente'
 import { buscarContatosDescobertos, fornecedoresKeys } from './fornecedores/queries'
 import { exibirValor, rotuloConfianca, rotuloFonte, varianteConfianca } from './fornecedores/formato'
 import { createClient } from '@/lib/supabase/client'
@@ -265,9 +266,25 @@ export function AbaMensagens({
    */
   const semContato = Boolean(empresa) && !contatos.isPending && (contatos.data ?? []).length === 0
 
+  /*
+   * "Delegar ao agente" (Agentes §2.3) nos funis SDR e de vendas: marcar a reunião é o
+   * trabalho de um mandato de agendamento. Ele aparece também SEM contato na ficha — o
+   * agente busca contatos por conta própria (Apollo), e é justamente aí que ele mais
+   * ajuda. O componente se esconde sozinho para quem não é gestor com o módulo Agentes.
+   */
+  const delegar =
+    empresa && (funil === 'sdr' || funil === 'vendas') ? (
+      <div className="flex justify-end">
+        <DelegarAoAgente
+          contexto={{ empresaId: empresa, tipos: ['agendamento_reuniao', 'qualificacao'], tipoInicial: 'agendamento_reuniao' }}
+        />
+      </div>
+    ) : null
+
   if (!empresa || semContato) {
     return (
       <div className="space-y-3">
+        {delegar}
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           <p className="font-medium text-foreground">
             {empresa
@@ -295,6 +312,7 @@ export function AbaMensagens({
 
   return (
     <div className="space-y-4">
+      {delegar}
       <SugestaoDaEmpresa empresaId={empresa} />
       <Thread empresaId={empresa} funilCardId={funilCardId} alturaClasse="max-h-[38vh]" />
       <Compositor
