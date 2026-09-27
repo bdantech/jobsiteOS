@@ -83,6 +83,7 @@ export async function avaliarPublico(
       suprimido: fatos.suprimidos.has(contatoId),
       baseLegal: resolvido.baseLegal,
       temProcessoAtivo: fatos.comProcesso.has(empresaId),
+      emCobranca: fatos.comCobranca.has(empresaId),
       gestaoOperacao: fatos.gestaoPorEmpresa.get(empresaId) ?? null,
       empresaJaEscolhida: empresasJaEscolhidas.has(empresaId),
       emOutraCampanha: fatos.emOutraCampanha.has(contatoId),
