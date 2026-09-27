@@ -1,3 +1,4 @@
+import { traduzirErro } from '../db/shared.js'
 import type { Json } from '../types/database.js'
 import type { Supabase } from '../registry/types.js'
 import {
@@ -58,7 +59,9 @@ export async function solicitarAnaliseProspeccao(supabase: Supabase, input: unkn
   const { data, error } = await supabase.rpc('app_prospeccao_solicitar_analise', {
     p: dados as unknown as Json,
   })
-  if (error) throw new Error(error.message)
+  // 22023 é recusa de regra com explicação (o trigger da cobrança, 0269f): como
+  // MutationError ela chega também ao mobile, que só mostra mensagem desse tipo.
+  if (error) throw error.code === '22023' ? traduzirErro(error) : new Error(error.message)
   return data
 }
 

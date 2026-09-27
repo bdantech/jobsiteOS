@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { buscarEsteira, buscarScore, creditoKeys } from './queries'
 import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
+import { SelosCobrancaCredito } from './selos-cobranca'
 
 /**
  * Card "Crédito" da Company 360 (04d §3).
@@ -91,6 +92,10 @@ export interface CreditoCardProps {
   chanceConcessao: number | null
   faturamentoEstimado: number | null
   creditoCalculadoEm: string | null
+  /** `empresas.bloqueio_cobranca` (07 §11): grupo em cobrança, análises suspensas. */
+  bloqueioCobranca?: boolean | null
+  /** `empresas.credito_revisao_pos_inadimplencia` (07 §11 item 5). */
+  revisaoPosInadimplencia?: boolean | null
 }
 
 export function CreditoCard(props: CreditoCardProps) {
@@ -123,7 +128,9 @@ export function CreditoCard(props: CreditoCardProps) {
       : null
   // Cancelada também libera: o RPC só recusa análise EM CURSO, e `ehEstagioDecidido`
   // deixava o botão sumido depois de um cancelamento.
-  const podePedir = !emCurso || podeSempre.data === true
+  // Em cobrança o banco recusa QUALQUER análise nova (trigger da 0269f), inclusive para
+  // quem pede sempre: o botão sairia só para devolver o erro.
+  const podePedir = !props.bloqueioCobranca && (!emCurso || podeSempre.data === true)
   const breakdown: LinhaBreakdown[] = Array.isArray(score.data?.breakdown)
     ? (score.data.breakdown as LinhaBreakdown[])
     : []
@@ -140,6 +147,7 @@ export function CreditoCard(props: CreditoCardProps) {
               <Landmark className="h-4 w-4" aria-hidden />
               Crédito
             </CardTitle>
+            <SelosCobrancaCredito bloqueio={props.bloqueioCobranca} revisao={props.revisaoPosInadimplencia} />
             <CardDescription>
               Quanto de limite esta empresa sustentaria, qual a chance de a seguradora conceder,
               e quanto isso vale por mês. Tudo aqui é <strong>estimativa encadeada</strong>: a

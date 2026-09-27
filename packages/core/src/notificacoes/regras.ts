@@ -81,6 +81,7 @@ export type FrequenciaNotificacao = keyof typeof FREQUENCIAS_NOTIFICACAO
 
 export const MODULOS_NOTIFICACAO: Record<string, string> = {
   antecipacao: 'Antecipação',
+  cobranca: 'Cobrança',
   comercial: 'Comercial',
   comunicacao: 'Comunicação',
   credito: 'Crédito',

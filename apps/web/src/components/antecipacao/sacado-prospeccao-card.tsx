@@ -43,6 +43,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { moverSacadoAction } from '@/actions/prospeccao'
+import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import { formatarData, formatarInteiro, formatarMoeda, formatarMoedaExata } from './format'
 import {
   buscarNotasDoCard,
@@ -236,6 +237,14 @@ export function SacadoProspeccaoCard({
     return `${base}?aba=mensagens&rascunho=${encodeURIComponent(texto)}`
   }
 
+  /*
+   * 07 §11: o grupo deste sacado está em cobrança. A análise de crédito é o pedido que
+   * abre operação aqui, e o banco a recusa por trigger enquanto durar o bloqueio — o
+   * card diz isso antes do clique, em vez de devolver o erro depois dele.
+   */
+  const { emCobranca } = useEmCobranca()
+  const sacadoEmCobranca = emCobranca(sacado.cnpj_sacado)
+
   const estagio = (sacado.estagio ?? 'identificado') as EstagioProspeccao
   const local = [sacado.municipio, sacado.uf].filter(Boolean).join(' / ')
   const recorrencia = sacado.meses_com_emissao_6m ?? 0
@@ -259,9 +268,9 @@ export function SacadoProspeccaoCard({
             </DropdownMenuItem>
           ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onSolicitarAnalise(sacado)}>
+        <DropdownMenuItem disabled={sacadoEmCobranca} onSelect={() => onSolicitarAnalise(sacado)}>
           <ShieldQuestion className="mr-2 h-3.5 w-3.5" aria-hidden />
-          Solicitar análise de crédito
+          {sacadoEmCobranca ? 'Análise suspensa — em cobrança' : 'Solicitar análise de crédito'}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onEnriquecer(sacado)}>
           <Gavel className="mr-2 h-3.5 w-3.5" aria-hidden />
@@ -324,6 +333,15 @@ export function SacadoProspeccaoCard({
   ) : null
 
   const tira = (() => {
+    // A cobrança antes de tudo: nenhuma das outras tiras leva a lugar algum enquanto o
+    // grupo estiver bloqueado.
+    if (sacadoEmCobranca) {
+      return (
+        <TiraDoCard tom="ruim">
+          Em cobrança — análise e operação bloqueadas até a regularização.
+        </TiraDoCard>
+      )
+    }
     const limite = Number(sacado.analise_limite_aprovado ?? 0)
     if (estagio === 'aprovado' || (sacado.analise_estagio ?? '') === 'aprovada') {
       return (
@@ -472,6 +490,11 @@ export function SacadoProspeccaoCard({
       }
       chips={
         <>
+          {sacadoEmCobranca ? (
+            <ChipDoCard tom="ruim" forte>
+              Em cobrança
+            </ChipDoCard>
+          ) : null}
           <ChipDoCard className="font-mono tabular-nums">
             {sacado.cnpj_sacado ? formatCnpj(sacado.cnpj_sacado) : '—'}
           </ChipDoCard>

@@ -17,7 +17,7 @@ apps/worker      Node/TypeScript container → Railway. Ingestão do Mercado (Re
                  e da Antecipação (sync de NFs 4/4h, reclassificação do funil, outbox, lookup cadastral).
 packages/core    SHARED: Tool Registry, zod schemas, generated Supabase types, write helpers, notify().
 supabase/        Numbered SQL migrations. The repo is the source of truth for the schema.
-docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md, comunicacao.md.
+docs/            Notas por módulo: radar.md, antecipacao.md, comercial.md, fornecedores.md, credito.md, leads.md, reports.md, juridico.md, comunicacao.md, cobranca.md.
 prompts/         The build specs.
 ```
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowRight, Ban, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
+import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import {
   ESTAGIOS_ABERTOS,
   ESTAGIOS_ENCERRADOS,
@@ -345,6 +346,9 @@ export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
    * conversa do celular é vinculada à empresa. O banco recusa a transição manual — deixar
    * a opção no menu só entregaria um erro a quem clicasse.
    */
+  const { emCobranca } = useEmCobranca()
+  const sacadoBloqueado = emCobranca(nota.sacado_cnpj)
+
   const estagios: readonly EstagioFunil[] = [...ESTAGIOS_ABERTOS, ...ESTAGIOS_ENCERRADOS].filter(
     (e) =>
       e !== nota.estagio_funil &&
@@ -362,12 +366,32 @@ export function MenuAcoesNota({ nota }: { nota: NotaFunil }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Mover para</DropdownMenuLabel>
-          {estagios.map((e) => (
-            <DropdownMenuItem key={e} onSelect={() => setDestino(e)}>
-              <ArrowRight className="mr-2 h-4 w-4" />
-              {ESTAGIO_FUNIL_LABELS[e]}
-            </DropdownMenuItem>
-          ))}
+          {estagios.map((e) =>
+            e === 'antecipacao_andamento' && sacadoBloqueado ? (
+              /*
+               * 07 §11: sacado em cobrança não vai para "antecipação em andamento" — o
+               * trigger da 0269f recusa. O item fica, desabilitado e com o porquê à vista,
+               * em vez de sumir: um estágio que desaparece do menu parece defeito.
+               */
+              <DropdownMenuItem
+                key={e}
+                disabled
+                title="O sacado está em cobrança extrajudicial: a solicitação de operação fica bloqueada até a regularização."
+                className="flex-col items-start gap-0.5"
+              >
+                <span className="flex items-center">
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  {ESTAGIO_FUNIL_LABELS[e]}
+                </span>
+                <span className="pl-6 text-[11px] text-destructive">Sacado em cobrança</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem key={e} onSelect={() => setDestino(e)}>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                {ESTAGIO_FUNIL_LABELS[e]}
+              </DropdownMenuItem>
+            ),
+          )}
 
           <DropdownMenuSeparator />
 

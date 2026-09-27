@@ -49,6 +49,7 @@ export class TransporteResend implements Transporte {
           ...(msg.emRespostaA
             ? { headers: { 'In-Reply-To': msg.emRespostaA, References: msg.emRespostaA } }
             : {}),
+          ...(anexosResend(msg.anexos).length ? { attachments: anexosResend(msg.anexos) } : {}),
         }),
         signal: AbortSignal.timeout(this.cfg.timeoutMs ?? 20_000),
       })
@@ -62,6 +63,20 @@ export class TransporteResend implements Transporte {
       return { ok: false, erro: String(erro), retryavel: true }
     }
   }
+}
+
+/**
+ * Os anexos no formato do Resend: bytes em `content`, ou `path` (URL que o próprio
+ * Resend baixa) quando só há link. Sem nenhum dos dois, o anexo não vai — e não vira
+ * um arquivo vazio com o nome certo.
+ */
+export function anexosResend(anexos: MensagemParaEnviar['anexos']): { filename: string; content?: string; path?: string }[] {
+  const out: { filename: string; content?: string; path?: string }[] = []
+  for (const a of anexos ?? []) {
+    if (a.conteudoBase64) out.push({ filename: a.nome, content: a.conteudoBase64 })
+    else if (a.url) out.push({ filename: a.nome, path: a.url })
+  }
+  return out
 }
 
 // ─── Webhook de eventos ─────────────────────────────────────────────────────

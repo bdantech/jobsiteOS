@@ -39,3 +39,18 @@ export function isValidCnpj(input: string): boolean {
   const second = checkDigit(cnpj.slice(0, 13), SECOND_WEIGHTS)
   return second === Number(cnpj[13])
 }
+
+/**
+ * O CNPJ da matriz de um estabelecimento: a mesma raiz (8 dígitos), ordem 0001 e os
+ * dígitos verificadores recalculados. Filial e matriz dividem a raiz por definição —
+ * SPE não: é outra pessoa jurídica, outra raiz, e o grupo dela só o banco sabe.
+ * Devolve null para entrada que não tem 14 dígitos.
+ */
+export function cnpjMatrizDe(input: string): string | null {
+  const cnpj = normalizeCnpj(input)
+  if (cnpj.length !== 14) return null
+  const doze = `${cnpj.slice(0, 8)}0001`
+  const primeiro = checkDigit(doze, FIRST_WEIGHTS)
+  const segundo = checkDigit(`${doze}${primeiro}`, SECOND_WEIGHTS)
+  return `${doze}${primeiro}${segundo}`
+}

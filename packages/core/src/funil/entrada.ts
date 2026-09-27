@@ -28,6 +28,7 @@ export type ForaDoFunil =
   | 'removido_no_erp'
   | 'guard_reason_nao_recuperavel'
   | 'credor_pessoa_fisica'
+  | 'sacado_em_cobranca'
   | 'estado_desconhecido'
 
 export type VereditoEntrada = { entra: true } | { entra: false; motivo: ForaDoFunil }
@@ -51,10 +52,33 @@ export function preAutorizacaoEntraNoFunil(
     status: string
     expira_em: string | null
     criada_em: string | null
+    /**
+     * O grupo do sacado está em cobrança extrajudicial (07 §11). Quem chama resolve —
+     * esta função não vê o banco. Ausente = "não se sabe", e aí nada muda.
+     */
+    sacado_em_cobranca?: boolean
   },
   cfg: Pick<ConfigFunilOportunidades, 'recuperacao_dias'>,
   hoje: Date = new Date(),
 ): VereditoEntrada {
+  /*
+   * SACADO EM COBRANÇA É RECUSADO COM MOTIVO PRÓPRIO (07 §11), e a guarda vem depois só
+   * dos dois FATOS consumados: a oferta que já converteu continua convertida, e a que
+   * a construtora revogou continua perdida por ela — nenhum dos dois é decisão nossa
+   * para reescrever. Todo o resto (a oferta viva, a expirada ainda recuperável, o
+   * estado desconhecido) seria trabalho de originador sobre um grupo que não pode ser
+   * operado até a regularização, e o motivo explícito é o que responde "por que esta
+   * oferta sumiu?" sem ninguém ter de cruzar com a Cobrança.
+   */
+  if (
+    pre.sacado_em_cobranca === true &&
+    pre.status !== 'ANTICIPATION_REQUESTED' &&
+    pre.status !== 'REVOKED' &&
+    pre.status !== 'AUTOMATICALLY_REVOKED'
+  ) {
+    return NAO('sacado_em_cobranca')
+  }
+
   switch (pre.status) {
     /*
      * Prioridade máxima, e sem condição nenhuma: a construtora já ofereceu, o

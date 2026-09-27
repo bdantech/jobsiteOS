@@ -270,11 +270,12 @@ function Documento({ doc }: { doc: DocumentoFiscal }) {
 function LinkDeAntecipacao({ accessKey, open }: { accessKey: string; open: boolean }) {
   const { colors } = useTheme()
   const [copiado, setCopiado] = useState(false)
-  const { data: link, isPending } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: antecipacaoKeys.link(accessKey),
     queryFn: () => fetchLinkDaNota(accessKey),
     enabled: open,
   })
+  const link = data?.link ?? null
 
   return (
     <View className="gap-2 rounded-lg border border-border bg-card p-3">
@@ -321,6 +322,11 @@ function LinkDeAntecipacao({ accessKey, open }: { accessKey: string; open: boole
             </Button>
           </View>
         </>
+      ) : data?.emCobranca ? (
+        // 07 §11: o link é o pedido de operação, e o grupo do sacado está bloqueado.
+        <Text className="text-[11px] text-destructive">
+          Sacado em cobrança — link suspenso até a regularização.
+        </Text>
       ) : (
         <Text variant="muted" className="text-[11px]">
           Esta nota não tem link ativo.

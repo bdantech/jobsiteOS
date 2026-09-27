@@ -1149,3 +1149,79 @@ export async function dispararSequenciaCampanhas(): Promise<DispararJobResultado
 export async function dispararMetricasCampanhas(): Promise<DispararJobResultado> {
   return postar('/jobs/campanhas/metricas', {}, 'campanhas-metricas')
 }
+
+// ─── Cobrança (Prompt 07) ───────────────────────────────────────────────────
+
+/** O corpo de `POST /jobs/cobranca/documentos`. */
+export interface ResultadoDocumentosCobranca {
+  gerados: { id: string; caminho: string; sha256: string }[]
+  /** Erro de modelo (placeholder sem valor) vem aqui, com a mensagem pt-BR do core. */
+  erros: { id: string; mensagem: string }[]
+}
+
+/** O corpo de `POST /jobs/cobranca/dossie`. */
+export interface ResultadoDossieSinistro {
+  dossie_path: string
+  dossie_hash: string
+  pendencias: string[]
+  itens_gerados: string[]
+}
+
+/** O corpo de `POST /jobs/cobranca/seguradora`. `ok: false` vem com 200 e a `mensagem`. */
+export interface ResultadoEnvioSeguradora {
+  ok: boolean
+  modo: 'manual' | 'api'
+  protocolo?: string
+  mensagem: string
+}
+
+/**
+ * O PDF da notificação extrajudicial (grava `documento_path/hash`, status `pronta`) ou o
+ * da minuta de confissão (grava `minuta_path/hash`, status `minuta_gerada`).
+ *
+ * SÍNCRONO, como o parecer do Jurídico: quem clicou "Gerar PDF" está esperando para
+ * revisar o documento. O corpo (`ResultadoDocumentosCobranca`) vem em `corpo`.
+ */
+export async function dispararDocumentosCobranca(
+  input: { tipo: 'notificacoes'; notificacao_ids: string[] } | { tipo: 'minuta'; acordo_id: string },
+): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/documentos', input, 'cobranca-documentos', 120_000)
+}
+
+/**
+ * Monta o ZIP do dossiê de sinistro (índice com hashes, sumário executivo, itens do
+ * checklist). Síncrono; o corpo (`ResultadoDossieSinistro`) vem em `corpo`. O teto é
+ * largo porque baixa do bucket cada notificação, comprovante e XML de NF.
+ */
+export async function dispararDossieSinistro(sinistroId: string): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/dossie', { sinistro_id: sinistroId }, 'cobranca-dossie', 180_000)
+}
+
+/**
+ * Notifica a seguradora do inadimplemento (`notificar`, o D+90) ou envia o sinistro
+ * (`enviar`, com o ZIP). NÃO move o estágio: a action chama `moverSinistro` depois do
+ * `corpo.ok`, com o protocolo. `modo: 'manual'` força o e-mail quando a API falhou —
+ * o prazo nunca depende dela.
+ */
+export async function dispararEnvioSeguradora(input: {
+  sinistro_id: string
+  acao: 'notificar' | 'enviar'
+  modo?: 'manual' | 'api'
+}): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/seguradora', input, 'cobranca-seguradora', 300_000)
+}
+
+/** O relógio da apólice (§6.3). Cron diário; nada vai à seguradora. */
+export async function dispararRelogioCobranca(): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/relogio-apolice', {}, 'cobranca-relogio')
+}
+
+/** Reiteração devida, documento complementar perto do prazo, protesto a retirar. */
+export async function dispararLembretesCobranca(): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/lembretes', {}, 'cobranca-lembretes')
+}
+
+/** A projeção de títulos sob demanda (no ciclo normal ela vem encadeada aos syncs). */
+export async function dispararAtualizarTitulosCobranca(): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/atualizar-titulos', {}, 'cobranca-atualizar-titulos')
+}

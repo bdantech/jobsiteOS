@@ -68,6 +68,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
     <EmpresaDetalhe
       empresaId={id}
       podeAbrirJuridico={grantedModuleIds.includes('juridico')}
+      podeVerCobranca={grantedModuleIds.includes('cobranca')}
       podeEditarDados={restrito !== true}
     />
   )

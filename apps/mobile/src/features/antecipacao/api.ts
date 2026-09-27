@@ -3,10 +3,12 @@ import {
   ESTAGIOS_ENCERRADOS,
   TIPOS_OPORTUNIDADE,
   VIEW_DA_FONTE,
+  buscarLinkDaNota,
   juntarPaginas,
   renderizarTemplate,
   formatarMoeda as moedaCore,
   type Faixa,
+  type LinkDaNota,
   type TipoOportunidade,
 } from '@jobsiteos/core'
 
@@ -333,14 +335,9 @@ export async function fetchXmlDaNota(
  * fim de uma rolagem longa. É o que o vendedor na rua precisa MANDAR ao
  * fornecedor; tem de estar no topo e na hora.
  */
-export async function fetchLinkDaNota(accessKey: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('notas_fiscais')
-    .select('link_antecipacao')
-    .eq('access_key', accessKey)
-    .maybeSingle<{ link_antecipacao: string | null }>()
-  if (error) throw error
-  return data?.link_antecipacao ?? null
+export async function fetchLinkDaNota(accessKey: string): Promise<LinkDaNota> {
+  // 07 §11: com o sacado em cobrança o link é retido — ele É o pedido de operação.
+  return buscarLinkDaNota(supabase, accessKey)
 }
 
 /** O mínimo operável, que define os cortes de urgência do card. */

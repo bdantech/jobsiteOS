@@ -27,6 +27,9 @@ export * from './prospeccao/index.js'
 export * from './funil/index.js'
 export * from './perfil/index.js'
 export * from './juridico/index.js'
+// Cobrança (07) depois do Jurídico (08): ela importa o motor de cálculo dele, e a
+// conversão em processo é a ponte entre os dois.
+export * from './cobranca/index.js'
 export * from './reports/index.js'
 export * from './crons/index.js'
 export * from './transportes/index.js'

@@ -51,7 +51,40 @@ export function montarRfc822(de: string, msg: MensagemParaEnviar): string {
     linhas.push(`In-Reply-To: ${msg.emRespostaA}`, `References: ${msg.emRespostaA}`)
   }
   const corpo = Buffer.from(msg.corpo, 'utf8').toString('base64')
-  return `${linhas.join('\r\n')}\r\n\r\n${corpo}`
+
+  /*
+   * Com anexo, a mensagem vira `multipart/mixed`: a primeira parte é o texto, as outras
+   * são os arquivos em base64. Sem anexo, o formato é EXATAMENTE o de sempre — uma
+   * mensagem de texto simples, byte a byte igual à que o Gmail já vinha recebendo.
+   * Só entra o anexo com bytes: o Gmail não busca URL, e um link no lugar do PDF da
+   * notificação não é anexo.
+   */
+  const comBytes = (msg.anexos ?? []).filter((a) => a.conteudoBase64)
+  if (comBytes.length === 0) return `${linhas.join('\r\n')}\r\n\r\n${corpo}`
+
+  const fronteira = `=_jobsiteos_${Buffer.from(`${msg.destino}|${msg.assunto ?? ''}|${comBytes.length}`).toString('hex').slice(0, 24)}`
+  const cabecalho = linhas.filter((l) => !l.startsWith('Content-Type:') && !l.startsWith('Content-Transfer-Encoding:'))
+  cabecalho.push(`Content-Type: multipart/mixed; boundary="${fronteira}"`)
+  const partes = [
+    [`--${fronteira}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', quebrar76(corpo)].join('\r\n'),
+    ...comBytes.map((a) => {
+      const nome = codificarAssunto(a.nome).replace(/"/g, '')
+      return [
+        `--${fronteira}`,
+        `Content-Type: ${a.mime ?? 'application/octet-stream'}; name="${nome}"`,
+        `Content-Disposition: attachment; filename="${nome}"`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        quebrar76(a.conteudoBase64!),
+      ].join('\r\n')
+    }),
+  ]
+  return `${cabecalho.join('\r\n')}\r\n\r\n${partes.join('\r\n')}\r\n--${fronteira}--`
+}
+
+/** Base64 em linhas de 76 (RFC 2045): linha única de megabytes é recusada por servidor de e-mail. */
+function quebrar76(b64: string): string {
+  return b64.replace(/\s+/g, '').replace(/(.{76})/g, '$1\r\n').replace(/\r\n$/, '')
 }
 
 /**

@@ -150,17 +150,30 @@ export async function montarValoresVariaveis(
     ctx.notaAccessKey && ctx.empresaId
       ? supabase
           .from('notas_fiscais')
-          .select('link_antecipacao')
+          .select('link_antecipacao, sacado_cnpj')
           .eq('access_key', ctx.notaAccessKey)
           .eq('fornecedor_empresa_id', ctx.empresaId)
-          /*
-           * O genérico é o mesmo remendo de `taxa_analise_*` no `sync-nfs`:
-           * `database.ts` é GERADO do banco, e a coluna nasceu na 0251. Ele some
-           * no dia em que `pnpm db:types` rodar.
-           */
-          .maybeSingle<{ link_antecipacao: string | null }>()
-      : nada<{ link_antecipacao: string | null }>(),
+          .maybeSingle()
+      : nada<{ link_antecipacao: string | null; sacado_cnpj: string | null }>(),
   ])
+
+  /*
+   * SACADO EM COBRANÇA NÃO RECEBE LINK (07 §11). O link é a solicitação de operação
+   * em forma de mensagem, e o grupo bloqueado não pode ser operado — o banco recusaria
+   * o card em "antecipação em andamento" logo depois. Deixar a chave de fora faz o que
+   * todo o resto deste arquivo faz com o que não se pode afirmar: `{link_antecipacao}`
+   * sobrevive no texto e o compositor trava o envio.
+   *
+   * A pergunta vai à função do banco, e não à lista de CNPJs: ela resolve a holding na
+   * hora e pega a SPE que a cobrança ainda não tinha visto. É uma ida a mais só quando
+   * há link a mandar.
+   */
+  const link = nota.data?.link_antecipacao ?? null
+  const sacadoDaNota = nota.data?.sacado_cnpj ?? null
+  const linkLiberado =
+    link && sacadoDaNota
+      ? !(await supabase.rpc('app_cobranca_sacado_bloqueado', { p_cnpj: sacadoDaNota })).data
+      : Boolean(link)
 
   por('contato_nome', primeiroNome(contato.data?.nome))
   por('contato_cargo', contato.data?.cargo)
@@ -202,7 +215,7 @@ export async function montarValoresVariaveis(
   }
 
   // Cru, como veio: o token é opaco e a URL não se remonta a partir da chave.
-  por('link_antecipacao', nota.data?.link_antecipacao)
+  if (linkLiberado) por('link_antecipacao', link)
 
   return valores as ValoresVariaveis
 }

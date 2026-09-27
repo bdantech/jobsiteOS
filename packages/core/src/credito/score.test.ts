@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { calcularScore, chanceDaFaixa, pontosDaFaixa, type DefinicaoScorecard, type ParametrosScore } from './score.ts'
+import { calcularScore, chanceDaFaixa, KNOCKOUT_LABELS, pontosDaFaixa, type DefinicaoScorecard, type ParametrosScore } from './score.ts'
 
 const DEF: DefinicaoScorecard = {
   fatores: {
@@ -409,4 +409,45 @@ test('sem registro de processo NÃO é knockout — false e ausente são o mesmo
   )
   assert.equal(semRegistro.knockout, null)
   assert.equal(explicitoFalso.knockout, null)
+})
+
+// ─── Knockout de cobrança (07 §11) ──────────────────────────────────────────
+
+test('grupo em cobrança zera a chance e vence os demais fatores', () => {
+  const r = calcularScore(
+    {
+      protesto_consultado: true,
+      protesto_valor_total: 0,
+      faturamento_estimado: 80_000_000,
+      situacao_cadastral: 'ativa',
+      capital_social: 10_000_000,
+      data_inicio_atividade: '2005-01-01',
+      grupo_conhecido: true,
+      grupo_spes_24m: 4,
+      obras_ativas: 5,
+      funcionarios_crescimento_12m: 0.3,
+      certificado: 'ativo',
+      bloqueio_cobranca: true,
+    },
+    DEF,
+    PARAMS,
+  )
+  assert.equal(r.knockout, 'em_cobranca')
+  assert.equal(r.faixa, 'improvavel')
+  assert.equal(r.score, 0)
+})
+
+test('cobrança vence o processo nosso — é o fato mais recente, e o que explica o bloqueio', () => {
+  const r = calcularScore(
+    { situacao_cadastral: 'baixada', tem_processo_nosso_ativo: true, bloqueio_cobranca: true },
+    DEF,
+    PARAMS,
+  )
+  assert.equal(r.knockout, 'em_cobranca')
+})
+
+test('sem bloqueio de cobrança NÃO é knockout — false e ausente são o mesmo "não sei"', () => {
+  const r = calcularScore({ situacao_cadastral: 'ativa', bloqueio_cobranca: false }, DEF, PARAMS)
+  assert.equal(r.knockout, null)
+  assert.equal(KNOCKOUT_LABELS.em_cobranca, 'Grupo em cobrança extrajudicial')
 })

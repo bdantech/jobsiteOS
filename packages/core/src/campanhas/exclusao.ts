@@ -15,6 +15,7 @@ import type { MotivoExclusao, TipoCampanha } from './schemas.js'
  *
  *   suprimido        pediu para não ser abordado. É a única que nunca se fura.
  *   processo         estamos processando essa empresa. Nada de marketing.
+ *   em_cobranca      o grupo está em cobrança extrajudicial (07 §11). Idem.
  *   passivo          decisão comercial explícita de não prospectar.
  *   sem_contato      não há como falar com ela. É enriquecimento faltando.
  *   sem_base_legal   há canal, mas não há permissão de usá-lo.
@@ -38,6 +39,12 @@ export interface FatosDoDestinatario {
   baseLegal: BaseLegal | null
   /** A empresa tem processo jurídico NOSSO ativo (04j). */
   temProcessoAtivo: boolean
+  /**
+   * O grupo da empresa está bloqueado por cobrança (07 §11): `empresas.bloqueio_cobranca`,
+   * que a cobrança propaga da matriz às SPEs. Opcional para não quebrar coletor antigo;
+   * ausente = sem registro.
+   */
+  emCobranca?: boolean
   /** `empresas.gestao_operacao`. `passivo` não recebe prospecção. */
   gestaoOperacao: string | null
   /** Outra pessoa da MESMA empresa já foi escolhida nesta campanha. */
@@ -68,6 +75,15 @@ export function avaliarDestinatario(f: FatosDoDestinatario): VeredictoExclusao {
 
   // Cobrar por campanha quem estamos processando é o tipo de erro que vira print.
   if (f.temProcessoAtivo) return { incluir: false, motivo: 'processo_juridico' }
+
+  /*
+   * Depois do processo, e pela mesma razão: a notificação extrajudicial é a casa dizendo,
+   * por escrito, que o grupo não pagou. Uma campanha de prospecção no dia seguinte
+   * desmente a carta — e vale para campanha de relacionamento também, porque a conversa
+   * com esse grupo agora é da Cobrança. O processo vem antes porque, quando os dois
+   * existem, é ele o fato mais grave e permanente.
+   */
+  if (f.emCobranca === true) return { incluir: false, motivo: 'em_cobranca' }
 
   /*
    * Passivo barra PROSPECÇÃO, não tudo. Uma conta passiva continua precisando

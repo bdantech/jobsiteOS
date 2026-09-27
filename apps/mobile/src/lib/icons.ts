@@ -10,6 +10,7 @@ import {
   Gavel,
   Radar,
   Shield,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react-native'
 
@@ -30,6 +31,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   handshake: Handshake,
   gavel: Gavel,
   'message-circle': MessageCircle,
+  wallet: Wallet,
 }
 
 export function moduleIcon(token: string): LucideIcon {

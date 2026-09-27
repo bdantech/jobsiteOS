@@ -21,6 +21,7 @@ import {
   type ModoSyncFunil,
 } from '../../../../../packages/core/src/funil/sync-plano.js'
 import { preAutorizacaoEntraNoFunil } from '../../../../../packages/core/src/funil/entrada.js'
+import { buscarCnpjsEmCobranca, sacadoEmCobranca } from '../../../../../packages/core/src/cobranca/bloqueio.js'
 import type { ConfigEconomia } from '../../../../../packages/core/src/antecipacao/schemas.js'
 import { lerConfigEconomia } from '../../antecipacao/config.js'
 import {
@@ -105,6 +106,18 @@ export async function sincronizarPreAutorizacoes(
 
   const [cfg, cfgEconomia] = await Promise.all([lerConfigFunilOportunidades(), lerConfigEconomia()])
   /*
+   * Grupo em cobrança não entra no funil (07 §11). Uma leitura por rodada, não por
+   * oferta. Falhar aqui não derruba o sync: o trigger do banco continua recusando a
+   * solicitação de operação, e perder uma rodada de ofertas custaria mais que deixar
+   * passar o card de um grupo bloqueado até a próxima.
+   */
+  const bloqueados = new Set(
+    await buscarCnpjsEmCobranca(supabaseAdmin).catch((e: unknown) => {
+      logger.warn({ erro: e instanceof Error ? e.message : String(e) }, 'Lista de sacados em cobrança indisponível.')
+      return [] as string[]
+    }),
+  )
+  /*
    * A janela de ESTADO desta fonte é a curta. `montarJanelaFunil` não sabe de qual
    * fonte se trata — e não deve saber: quem conhece o ciclo de vida de uma oferta é
    * quem a sincroniza. Aqui a decisão fica explícita, ao lado do motivo.
@@ -145,7 +158,7 @@ export async function sincronizarPreAutorizacoes(
     acc.paginas++
 
     for (const item of itens) {
-      await processar(item, cfg, cfgEconomia, acc)
+      await processar(item, cfg, cfgEconomia, bloqueados, acc)
       acc.lidas++
     }
 
@@ -168,6 +181,7 @@ async function processar(
   item: PreAuthPayload,
   cfg: CfgFunil,
   cfgEconomia: ConfigEconomia,
+  bloqueados: ReadonlySet<string>,
   acc: ResultadoSyncPreAuth,
 ): Promise<void> {
   const r = normalizarPreAuthPayload(item)
@@ -189,7 +203,10 @@ async function processar(
    * relatório sem denominador — saberíamos quantas ofertas ganhamos e nunca
    * quantas existiram.
    */
-  const veredito = preAutorizacaoEntraNoFunil(pre, cfg)
+  const veredito = preAutorizacaoEntraNoFunil(
+    { ...pre, sacado_em_cobranca: sacadoEmCobranca(bloqueados, pre.sacado_cnpj, pre.sacado_matriz_cnpj) },
+    cfg,
+  )
   if (!veredito.entra) {
     acc.fora_do_funil[veredito.motivo] = (acc.fora_do_funil[veredito.motivo] ?? 0) + 1
   } else {

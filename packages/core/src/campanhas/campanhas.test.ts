@@ -52,6 +52,33 @@ describe('motor de exclusão', () => {
     assert.equal(r.motivo, 'processo_juridico')
   })
 
+  it('grupo em cobrança extrajudicial (07 §11)', () => {
+    const r = avaliarDestinatario({ ...BASE, emCobranca: true })
+    assert.equal(r.incluir, false)
+    assert.equal(r.motivo, 'em_cobranca')
+  })
+
+  it('cobrança vale também para campanha operacional', () => {
+    const r = avaliarDestinatario({ ...BASE, tipoCampanha: 'operacional', emCobranca: true })
+    assert.equal(r.motivo, 'em_cobranca')
+  })
+
+  it('processo vem antes da cobrança; a cobrança vem antes de passivo e sem contato', () => {
+    assert.equal(
+      avaliarDestinatario({ ...BASE, temProcessoAtivo: true, emCobranca: true }).motivo,
+      'processo_juridico',
+    )
+    assert.equal(
+      avaliarDestinatario({ ...BASE, emCobranca: true, gestaoOperacao: 'passivo', identificador: null }).motivo,
+      'em_cobranca',
+    )
+  })
+
+  it('em_cobranca está no catálogo logo depois de processo_juridico', () => {
+    const i = MOTIVOS_EXCLUSAO.indexOf('processo_juridico')
+    assert.equal(MOTIVOS_EXCLUSAO[i + 1], 'em_cobranca')
+  })
+
   it('conta passiva sai da PROSPECÇÃO', () => {
     const r = avaliarDestinatario({ ...BASE, gestaoOperacao: 'passivo' })
     assert.equal(r.motivo, 'passivo')

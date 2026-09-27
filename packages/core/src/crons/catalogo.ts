@@ -92,6 +92,7 @@ export const CRONS: readonly CronCatalogado[] = [
       'Pré-autorizações e títulos Sienge (04s), janela curta de 7 dias — as duas fontes novas do MESMO funil. Encadeadas e não em cron próprio porque a faixa é o que ordena o Kanban, e um card que chega sem faixa fica no fim da fila até o diário; para uma pré-autorização isso é pior que para uma NF, porque ela tem RELÓGIO e passaria invisível o primeiro dos poucos dias que tem',
       'Deduplicação do funil (04s §5) — quem esconde quem, recomposto do zero depois de cada sync',
       'Sync de antecipações (conversão de nota em operação)',
+      'Projeção de títulos da Cobrança (07 §14) logo atrás das antecipações — é a leitura delas: quitação vinda da produção, título que regrediu, vencimento prorrogado. Num cron próprio a tela de cobrança mostraria "em aberto" um título que a produção já concluiu horas antes',
       'Funil de cadastro de fornecedores (04l) — a munição dele vem exatamente das notas que acabaram de chegar; num relógio próprio, o card mostraria o volume de até quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban como lead',
       'Funil de Sacados por NF (04r) — mesma razão pelo outro lado da nota, e aqui a defasagem seria pior: `valor_operavel` mede quanto de vida a nota AINDA tem, e num relógio próprio o card mostraria por horas um número que já encolheu',
     ],
@@ -117,6 +118,7 @@ export const CRONS: readonly CronCatalogado[] = [
     encadeia: [
       'Varredura de ESTADO das pré-autorizações e títulos Sienge (04s §3), 92 dias — e ela NÃO é opcional. Os dois endpoints filtram por data de ENTRADA, nunca de atualização: uma oferta criada há vinte dias que expirou hoje, ou um título que saiu de `ready_to_create` para `offer_created`, jamais apareceriam na janela curta de 7 dias do ciclo de 4h. Sem esta passada o funil congela no estado do dia em que cada item entrou e segue oferecendo o que já morreu',
       'Roteamento das fontes novas — e não é cosmético: a RLS das duas tabelas recorta por `vendedor_id`, então um item sem dono não é um item na fila do gestor, é um item que o originador LITERALMENTE não consegue ver',
+      'Projeção de títulos da Cobrança (07 §14), depois da janela longa de antecipações: o status que muda sozinho pela data só chega por esta varredura',
     ],
   },
   {
@@ -235,6 +237,22 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Fase lenta, processo parado e prazo a vencer (D-3 e D-1). Roda TODO DIA, inclusive nos que não sincronizam: uma audiência de terça precisa do aviso de segunda mesmo que segunda não seja dia de sincronizar — o prazo corre pelo calendário do fórum, não pelo nosso. Uma hora DEPOIS do sync, para contar dias parados sobre o que acabou de chegar. Reconcilia também o knockout de crédito: marcar um processo como "ganho" na tela roda um RPC em SQL que não tem como chamar o worker, e sem esta passagem a empresa continuaria bloqueada depois de a ação ter acabado.',
     destino: 'POST /jobs/juridico/alertas',
+  },
+  {
+    path: '/api/cron/cobranca-relogio',
+    nome: 'Relógio da apólice',
+    moduloId: 'cobranca',
+    descricao:
+      'Recalcula os prazos da apólice Atradius de todo título aberto, coberto e vencido (D+60 parada de cobertura, D+90 notificação à seguradora, Data da Perda, D+360 envio do sinistro), detecta insolvência pelos processos de falência/RJ do Jurídico, fecha o prazo do título pago (gravando se a cobertura volta com efeito retroativo) e emite os alertas — UM por grupo do sacado e marco, porque a produção não informa a liquidação e há centenas de títulos vencidos em aberto. 06:00 de São Paulo, todo dia: a apólice conta dias corridos, e o crítico de D+85 precisa chegar antes do expediente. Nunca envia nada à seguradora — o alerta é a ação.',
+    destino: 'POST /jobs/cobranca/relogio-apolice',
+  },
+  {
+    path: '/api/cron/cobranca-lembretes',
+    nome: 'Lembretes da Cobrança',
+    moduloId: 'cobranca',
+    descricao:
+      'Reiteração devida (a última rodada enviada passou de `dias_para_reiteracao` sem uma nova), documento complementar pedido pela seguradora a 5 dias do prazo (o vencido vira `vencida`) e protesto de título já quitado sem instrução de cancelamento — dano moral contra nós. Duas horas depois do relógio, no começo do expediente. Só lembra: reiterar, responder e retirar são atos de gente.',
+    destino: 'POST /jobs/cobranca/lembretes',
   },
   {
     path: '/api/cron/comercial-reclassificacao',

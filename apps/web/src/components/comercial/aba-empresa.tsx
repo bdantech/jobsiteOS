@@ -4,7 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Copy, ExternalLink, Mail, MessageCircle } from 'lucide-react'
-import { formatCnpj } from '@jobsiteos/core'
+import { buscarLinkDaNota, formatCnpj } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -114,21 +114,27 @@ function LinhaLinkAntecipacao({ accessKey }: { accessKey: string }) {
 
   const q = useQuery({
     queryKey: ['antecipacao', 'link-da-nota', accessKey],
-    queryFn: async () => {
-      const { data } = await createClient()
-        .from('notas_fiscais')
-        .select('link_antecipacao')
-        .eq('access_key', accessKey)
-        .maybeSingle<{ link_antecipacao: string | null }>()
-      return data?.link_antecipacao ?? null
-    },
+    // 07 §11: com o sacado em cobrança o link é retido — ele É o pedido de operação.
+    queryFn: () => buscarLinkDaNota(createClient(), accessKey),
   })
 
   if (q.isPending) {
     return <Linha rotulo="Link de antecipação" valor={<Skeleton className="h-4 w-40" />} />
   }
 
-  const link = q.data
+  const link = q.data?.link ?? null
+  if (q.data?.emCobranca) {
+    return (
+      <Linha
+        rotulo="Link de antecipação"
+        valor={
+          <span className="text-xs text-destructive">
+            Sacado em cobrança — link suspenso até a regularização.
+          </span>
+        }
+      />
+    )
+  }
   if (!link) {
     return (
       <Linha

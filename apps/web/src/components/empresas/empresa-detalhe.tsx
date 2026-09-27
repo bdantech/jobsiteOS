@@ -38,6 +38,7 @@ import { FaturamentoEquipe } from './faturamento-equipe'
 import { CreditoCard } from '@/components/credito/credito-card'
 import { SecaoComercial } from '@/components/comercial/secao-comercial'
 import { SecaoJuridico } from '@/components/juridico/secao-juridico'
+import { SecaoCobranca } from './secao-cobranca'
 import { QuadroSocietario } from '@/components/mercado/socios/quadro-societario'
 import { EmpresaNotas } from './empresa-notas'
 import { AbaConversas } from './aba-conversas'
@@ -126,11 +127,14 @@ function EstadoVazio({
 export function EmpresaDetalhe({
   empresaId,
   podeAbrirJuridico = false,
+  podeVerCobranca = false,
   podeEditarDados = true,
 }: {
   empresaId: string
   /** Se o usuário tem o módulo `juridico` — decide se a seção Jurídico linka (08 §8). */
   podeAbrirJuridico?: boolean
+  /** Se o usuário tem o módulo `cobranca` — só então a seção Cobrança existe (07 §11). */
+  podeVerCobranca?: boolean
   /**
    * Falso para vendedor não gestor: ele altera o domínio e os contatos, e mais nada.
    * Quem recusa de verdade é `app_atualizar_empresa` (0188); isto só evita oferecer.
@@ -343,6 +347,8 @@ export function EmpresaDetalhe({
                   chanceConcessao={data.chance_concessao}
                   faturamentoEstimado={data.faturamento_anual}
                   creditoCalculadoEm={data.credito_calculado_em}
+                  bloqueioCobranca={data.bloqueio_cobranca}
+                  revisaoPosInadimplencia={data.credito_revisao_pos_inadimplencia}
                 />
                 {/*
                  * Comercial depois do Crédito, e pelo mesmo motivo da ordem acima: a
@@ -358,6 +364,23 @@ export function EmpresaDetalhe({
                  * a contradição antes do número contradito.
                  */}
                 <SecaoJuridico empresaId={data.id} podeAbrirProcesso={podeAbrirJuridico} />
+                {/*
+                 * A Cobrança logo depois do Jurídico, pelo mesmo motivo: é ato nosso contra
+                 * o grupo, knockout de crédito, e contradiz o limite lá de cima. É também a
+                 * esteira que desemboca no processo (07 §10) — as duas lidas juntas contam
+                 * a história inteira.
+                 */}
+                {podeVerCobranca ? (
+                  <SecaoCobranca
+                    empresaId={data.id}
+                    cnpj={data.cnpj}
+                    bloqueio={data.bloqueio_cobranca}
+                    bloqueioMotivo={data.bloqueio_cobranca_motivo}
+                    bloqueioEm={data.bloqueio_cobranca_em}
+                    bloqueioCobrancaId={data.bloqueio_cobranca_cobranca_id}
+                    revisaoPosInadimplencia={data.credito_revisao_pos_inadimplencia}
+                  />
+                ) : null}
                 <EmpresaForm empresa={data} somenteDominio={!podeEditarDados} />
               </TabsContent>
 

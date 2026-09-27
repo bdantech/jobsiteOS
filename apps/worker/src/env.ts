@@ -165,6 +165,15 @@ const envSchema = z.object({
   ATRADIUS_SANDBOX_APP_KEY: z.string().optional(),
   ATRADIUS_SANDBOX_POLICY_ID: z.string().optional(),
 
+  /**
+   * Non-Payments API (Cobrança, Prompt 07 §7.4). Desligada até o entitlement por apólice
+   * sair: só `'true'` liga, e ainda assim só quando `cobranca_config.apolice.modo_envio`
+   * for `api`. As credenciais são as mesmas ATRADIUS_* acima.
+   */
+  ATRADIUS_NON_PAYMENTS_ENABLED: z.string().optional(),
+  /** Caminho base da API no gateway. NÃO confirmado — ver jobs/cobranca/non-payments.ts. */
+  ATRADIUS_NON_PAYMENTS_PATH: z.string().optional(),
+
   // ─── Jurídico (Prompt 08): Escavador ──────────────────────────────────────
   // Opcional pelo mesmo desenho do resto: sem o token, os jobs do Jurídico param
   // com "ESCAVADOR_TOKEN não configurado" em vez de falharem com erro de rede — a

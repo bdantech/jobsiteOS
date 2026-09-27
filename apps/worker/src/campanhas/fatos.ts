@@ -20,6 +20,8 @@ export interface FatosDoPublico {
   suprimidos: Set<string>
   /** Empresas com processo jurídico nosso ativo. */
   comProcesso: Set<string>
+  /** Empresas cujo grupo está bloqueado por cobrança extrajudicial (07 §11). */
+  comCobranca: Set<string>
   gestaoPorEmpresa: Map<string, string | null>
   /** Contatos com conversa viva. */
   comConversaAberta: Set<string>
@@ -44,6 +46,7 @@ export async function coletarFatos(args: {
       contatosPorEmpresa: new Map(),
       suprimidos: new Set(),
       comProcesso: new Set(),
+      comCobranca: new Set(),
       gestaoPorEmpresa: new Map(),
       comConversaAberta: new Set(),
       ultimoToquePorContato: new Map(),
@@ -65,10 +68,20 @@ export async function coletarFatos(args: {
      * construtor de filtros. Recalculá-la aqui a partir dos processos daria uma
      * segunda definição de "processo ativo", e as duas divergiriam no primeiro
      * dia em que o Jurídico mudasse a régua dele.
+     *
+     * `bloqueio_cobranca` pelo mesmo motivo (07 §11): a Cobrança grava e propaga o
+     * bloqueio da matriz a todas as SPEs do grupo; aqui só se lê.
      */
-    pool.query<{ id: string; cnpj: string; gestao_operacao: string | null; tem_processo: boolean }>(
+    pool.query<{
+      id: string
+      cnpj: string
+      gestao_operacao: string | null
+      tem_processo: boolean
+      em_cobranca: boolean
+    }>(
       `select e.id, e.cnpj, e.gestao_operacao,
-              coalesce(e.tem_processo_nosso_ativo, false) as tem_processo
+              coalesce(e.tem_processo_nosso_ativo, false) as tem_processo,
+              coalesce(e.bloqueio_cobranca, false) as em_cobranca
        from empresas e where e.id = any($1)`,
       [ids],
     ),
@@ -163,6 +176,7 @@ export async function coletarFatos(args: {
     contatosPorEmpresa,
     suprimidos,
     comProcesso: new Set(empresas.rows.filter((e) => e.tem_processo).map((e) => e.id)),
+    comCobranca: new Set(empresas.rows.filter((e) => e.em_cobranca).map((e) => e.id)),
     gestaoPorEmpresa: new Map(empresas.rows.map((e) => [e.id, e.gestao_operacao])),
     comConversaAberta: new Set(conversas.rows.map((r) => r.contato_id)),
     ultimoToquePorContato: new Map(

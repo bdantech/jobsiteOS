@@ -142,6 +142,8 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
 const BUCKET_MIDIA = 'comunicacao-midia'
 
 interface AnexoLido {
+  /** Ausente nas mídias do WhatsApp; presente nos anexos que saem de outro bucket (a notificação da Cobrança). */
+  bucket?: string
   tipo?: string
   caminho?: string
   mimetype?: string | null
@@ -167,7 +169,7 @@ function Anexos({ m }: { m: MensagemThread }) {
       const saida: Record<string, string> = {}
       for (const a of lista) {
         const { data } = await supabase.storage
-          .from(BUCKET_MIDIA)
+          .from(a.bucket ?? BUCKET_MIDIA)
           .createSignedUrl(a.caminho!, 3600)
         if (data?.signedUrl) saida[a.caminho!] = data.signedUrl
       }

@@ -177,6 +177,19 @@ function c(n: number): number {
 }
 
 /**
+ * O que a Cobrança (Prompt 07 §9.1) pede a mais, sem mudar nada para o Jurídico:
+ *   • `corrigir: false` — índice "nenhum". Sem correção, e SEM lista de faltantes: não
+ *     há tabela a consultar, e acusar buraco numa tabela que não foi usada seria ruído.
+ *   • `jurosProRata: false` — meses de mora INTEIROS (30 dias completos). O padrão da
+ *     casa é pro rata die; a opção existe porque o acordo às vezes é negociado assim.
+ * Os dois defaults reproduzem exatamente o comportamento anterior.
+ */
+export interface OpcoesCalculo {
+  corrigir?: boolean
+  jurosProRata?: boolean
+}
+
+/**
  * O cálculo. `custas` já vem somado pelo chamador (as `processo_custos` do período), e
  * entra POR FORA do percentual de honorários — reembolso não é proveito econômico.
  */
@@ -186,7 +199,10 @@ export function calcularDivida(
   tabela: TabelaIndices,
   dataBase: string,
   custas = 0,
+  opcoes: OpcoesCalculo = {},
 ): ResultadoCalculo {
+  const corrigir = opcoes.corrigir ?? true
+  const proRata = opcoes.jurosProRata ?? true
   const memoria: LinhaMemoria[] = []
   const faltantes = new Set<string>()
 
@@ -201,9 +217,11 @@ export function calcularDivida(
     // Meses de mora contados em 30 dias, como manda a praxe forense — não em meses de
     // calendário. A fração conta: 45 dias de atraso são 1,5 mês de juros, e truncar para
     // 1 subtrai meio mês de mora de toda operação da carteira.
-    const meses = dias / 30
+    const meses = proRata ? dias / 30 : Math.floor(dias / 30)
 
-    const fc = fatorCorrecao(op.vencimento, dataBase, tabela)
+    const fc = corrigir
+      ? fatorCorrecao(op.vencimento, dataBase, tabela)
+      : { fator: 1, faltantes: [], competencias: 0 }
     for (const f of fc.faltantes) faltantes.add(f)
 
     const corrigido = c(valor * fc.fator)

@@ -61,6 +61,8 @@ export const STATUS_ENVIO_LABELS: Record<StatusEnvio, string> = {
  * precisa ser distinguível de `compositor` numa auditoria de supressão.
  * `lembrete` é o de reunião (0264): saía como `outbox` e herdava o cooldown da
  * régua, que o descartava porque o SDR tinha acabado de falar com a pessoa.
+ * `cobranca` é a notificação extrajudicial e o e-mail formal à seguradora (0269):
+ * passa pelo mesmo portão, e precisa ser achável como prova do dossiê de sinistro.
  */
 export const ORIGENS = [
   'compositor',
@@ -72,6 +74,7 @@ export const ORIGENS = [
   'campanha',
   'celular',
   'lembrete',
+  'cobranca',
 ] as const
 export type OrigemComunicacao = (typeof ORIGENS)[number]
 

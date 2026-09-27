@@ -25,6 +25,7 @@ import {
   TiraDoCard,
   type TomDoScore,
 } from '@/components/comercial/card-funil'
+import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import { MenuAcoesOportunidade } from './acoes-oportunidade'
 import { NotaModal } from './documento/nota-modal'
 import { OportunidadeModal } from './oportunidade-modal'
@@ -124,6 +125,15 @@ export function OportunidadeCard({
   const nomePrincipal = conta?.nome ?? nomeSacado
   const spe = speDoSacado(conta, item.sacado_cnpj, nomeSacado)
 
+  /*
+   * 07 §11: o grupo do sacado está em cobrança. A lista é uma leitura por tela (o React
+   * Query deduplica os cards), casada pelo CNPJ da nota, pela matriz que a view resolveu
+   * e pela conta. O selo e a tira dizem por que o card não anda para "antecipação em
+   * andamento" — quem recusa de fato é o trigger do banco.
+   */
+  const { emCobranca } = useEmCobranca()
+  const sacadoEmCobranca = emCobranca(item.sacado_cnpj, item.sacado_matriz_cnpj) || emCobranca(conta?.cnpj)
+
   const expiraEm = diasParaExpirar(item.relogio)
   const relogioCurto = expiraEm !== null && expiraEm <= 2
 
@@ -216,6 +226,14 @@ export function OportunidadeCard({
                   <ChipDoCard forte tom={TOM_DO_SELO[tipo]}>
                     {TIPO_OPORTUNIDADE_LABELS[tipo]}
                   </ChipDoCard>
+
+                  {/* O selo da cobrança logo depois do tipo: muda o que se pode FAZER
+                      com o card, e por isso vem antes de qualquer descrição. */}
+                  {sacadoEmCobranca ? (
+                    <ChipDoCard tom="ruim" forte>
+                      Em cobrança
+                    </ChipDoCard>
+                  ) : null}
 
                   {/*
                    * A ÚNICA linha que varia por tipo, no mesmo lugar do card — e
@@ -312,8 +330,16 @@ export function OportunidadeCard({
                  * suprimido porque ele muda o que a pessoa vai FAZER: não é mais
                  * "convença o fornecedor a antecipar", é "a construtora já
                  * ofereceu, lembre-o de aceitar". É outra conversa.
+                 *
+                 * A COBRANÇA vem antes de todas (07 §11): nenhuma das outras conversas
+                 * pode acontecer enquanto o grupo do sacado estiver em cobrança — a
+                 * solicitação de operação fica bloqueada até a regularização.
                  */
-                !compacto && item.conversao_antecipacao_id ? (
+                !compacto && sacadoEmCobranca ? (
+                  <TiraDoCard tom="ruim">
+                    Sacado em cobrança — solicitação de operação bloqueada até a regularização.
+                  </TiraDoCard>
+                ) : !compacto && item.conversao_antecipacao_id ? (
                   <TiraDoCard tom={item.conversao_em_disputa ? 'ruim' : 'bom'}>
                     Convertida via antecipação #{item.conversao_antecipacao_id}
                     {item.conversao_valor ? ` · ${formatarMoedaExata(item.conversao_valor)}` : ''}

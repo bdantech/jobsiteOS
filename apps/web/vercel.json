@@ -114,6 +114,14 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/cron/cobranca-relogio",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/cobranca-lembretes",
+      "schedule": "0 11 * * *"
+    },
+    {
       "path": "/api/cron/comercial-reunioes",
       "schedule": "*/10 * * * *"
     },

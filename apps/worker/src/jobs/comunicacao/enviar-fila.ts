@@ -12,7 +12,7 @@ import {
   type OrigemComunicacao,
 } from '../../../../../packages/core/src/comunicacao/index.js'
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
-import type { Transporte } from '../../../../../packages/core/src/transportes/index.js'
+import type { Anexo, Transporte } from '../../../../../packages/core/src/transportes/index.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import {
   conversaPara,
@@ -91,10 +91,12 @@ interface LinhaFila {
   forcar_janela: boolean
   fornecedor_empresa_id: string | null
   campanha_id: string | null
+  /** `[{nome, bucket, caminho, mime, sha256?}]` — hoje só a Cobrança preenche (0269). */
+  anexos: unknown
 }
 
 const COLUNAS =
-  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, forcar_janela, fornecedor_empresa_id, campanha_id'
+  'id, canal, destinatario, destinatario_contato_id, whatsapp_conta_id, assunto, corpo, conversa_id, empresa_id, vendedor_id, criada_por, template_id, origem, por_ia, funil, funil_card_id, tentativas, agendada_para, forcar_janela, fornecedor_empresa_id, campanha_id, anexos'
 
 export async function enviarFila(limite = 100): Promise<ResultadoEnvioFila> {
   const cfg = await lerConfigComunicacao(true)
@@ -330,12 +332,24 @@ async function processar(
   const corpo = comDescadastro(linha, canal, fatos.baseLegal)
   const emRespostaA = await ultimaThreadExterna(conversaId)
 
-  const r = await transporte.enviar({
-    destino: linha.destinatario,
-    assunto: linha.assunto,
-    corpo,
-    emRespostaA,
-  })
+  /*
+   * Os anexos são resolvidos AQUI, depois do portão: baixar um PDF para uma mensagem que
+   * a janela vai adiar é trabalho jogado fora. Um anexo que não se lê não deixa a
+   * mensagem sair sem ele — a notificação extrajudicial SEM o PDF é outra mensagem — e
+   * entra no mesmo retry de uma falha de rede.
+   */
+  const daFila = anexosDaFila(linha.anexos)
+  const anexos = daFila.length ? await resolverAnexos(daFila, canal) : { ok: true as const, anexos: [] as Anexo[] }
+
+  const r = anexos.ok
+    ? await transporte.enviar({
+        destino: linha.destinatario,
+        assunto: linha.assunto,
+        corpo,
+        emRespostaA,
+        ...(anexos.anexos.length ? { anexos: anexos.anexos } : {}),
+      })
+    : { ok: false, erro: anexos.erro, retryavel: true }
 
   if (!r.ok) {
     const tentativas = (linha.tentativas ?? 0) + 1
@@ -369,6 +383,8 @@ async function processar(
     porIa: linha.por_ia,
     assunto: linha.assunto,
     corpo,
+    // A referência ao arquivo, sem os bytes: o ledger aponta para o Storage.
+    ...(daFila.length ? { anexos: daFila.map((a) => ({ ...a, tipo: 'document', mimetype: a.mime ?? null })) } : {}),
     provedor: transporte.nome,
     idExterno: r.idExterno,
     threadExterna: r.threadExterna,
@@ -564,6 +580,49 @@ function comDescadastro(linha: LinhaFila, canal: CanalThread, base: BaseLegal | 
     : null
   if (!url) return corpo
   return `${corpo}\n\n—\nNão quer mais receber e-mails nossos? ${url}`
+}
+
+interface AnexoDaFila {
+  nome: string
+  bucket: string
+  caminho: string
+  mime?: string
+  sha256?: string
+}
+
+/** O `mensagens_outbox.anexos` validado. Entrada malformada é ignorada, nunca inventada. */
+function anexosDaFila(bruto: unknown): AnexoDaFila[] {
+  if (!Array.isArray(bruto)) return []
+  return bruto.filter(
+    (a): a is AnexoDaFila =>
+      !!a && typeof a === 'object' && typeof a.nome === 'string' && typeof a.bucket === 'string' && typeof a.caminho === 'string',
+  )
+}
+
+/** Sete dias: o WhatsApp baixa o documento quando o destinatário abre a conversa. */
+const VALIDADE_URL_ANEXO_S = 7 * 24 * 3600
+
+/**
+ * E-mail leva os bytes; WhatsApp leva uma URL assinada do primeiro anexo (o Wasender só
+ * aceita documento por link).
+ */
+async function resolverAnexos(
+  anexos: AnexoDaFila[],
+  canal: CanalThread,
+): Promise<{ ok: true; anexos: Anexo[] } | { ok: false; erro: string }> {
+  if (canal === 'whatsapp') {
+    const a = anexos[0]!
+    const { data, error } = await supabaseAdmin.storage.from(a.bucket).createSignedUrl(a.caminho, VALIDADE_URL_ANEXO_S)
+    if (error || !data?.signedUrl) return { ok: false, erro: `Não foi possível gerar o link do anexo "${a.nome}": ${error?.message ?? 'sem URL'}.` }
+    return { ok: true, anexos: [{ nome: a.nome, url: data.signedUrl, mime: a.mime }] }
+  }
+  const out: Anexo[] = []
+  for (const a of anexos) {
+    const { data, error } = await supabaseAdmin.storage.from(a.bucket).download(a.caminho)
+    if (error || !data) return { ok: false, erro: `O anexo "${a.nome}" não pôde ser lido do Storage: ${error?.message ?? 'sem corpo'}.` }
+    out.push({ nome: a.nome, conteudoBase64: Buffer.from(await data.arrayBuffer()).toString('base64'), mime: a.mime })
+  }
+  return { ok: true, anexos: out }
 }
 
 /** O `Message-ID` da última mensagem da thread, para o `In-Reply-To`. */

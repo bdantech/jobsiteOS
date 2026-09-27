@@ -64,12 +64,13 @@ export const FAIXA_SCORE_LABELS: Record<FaixaScore, string> = {
   dados_insuficientes: 'Dados insuficientes',
 }
 
-export type Knockout = 'situacao_irregular' | 'negada_recente' | 'processo_nosso_ativo'
+export type Knockout = 'situacao_irregular' | 'negada_recente' | 'processo_nosso_ativo' | 'em_cobranca'
 
 export const KNOCKOUT_LABELS: Record<Knockout, string> = {
   situacao_irregular: 'Situação cadastral irregular',
   negada_recente: 'Análise negada recentemente',
   processo_nosso_ativo: 'Temos ação judicial em curso contra ela',
+  em_cobranca: 'Grupo em cobrança extrajudicial',
 }
 
 // ─── A definição versionada ─────────────────────────────────────────────────
@@ -140,6 +141,12 @@ export interface SinaisScore {
    * estado de toda empresa antes de o módulo Jurídico existir.
    */
   tem_processo_nosso_ativo?: boolean | null
+  /**
+   * O grupo está bloqueado por cobrança extrajudicial (07 §11): `empresas.bloqueio_cobranca`,
+   * que a cobrança propaga da matriz a todas as SPEs. Mesma semântica do processo: só
+   * `true` afirma; ausente é "não há registro".
+   */
+  bloqueio_cobranca?: boolean | null
   /** Estado da análise mais recente, quando existe. */
   analise_estagio?: string | null
   analise_vigente?: boolean
@@ -414,6 +421,24 @@ export function calcularScore(
    * resposta errada — é uma pergunta que não deveria ter sido feita, e um score de 58
    * na tela a faria parecer respondida.
    */
+  /*
+   * COBRANÇA VEM ANTES DO PROCESSO, pelo mesmo motivo que o processo vem antes do resto:
+   * também é ato nosso — uma notificação extrajudicial assinada pela casa dizendo que o
+   * grupo não pagou. E é o fato mais recente dos dois: a cobrança é a esteira que
+   * DESEMBOCA no processo (07 §10), e quando ambos existem o knockout de cobrança é o que
+   * explica o bloqueio que o resto do sistema aplica (a esteira de crédito recusa a
+   * análise por trigger; o score dizendo "processo" apontaria para outra tela).
+   */
+  if (sinais.bloqueio_cobranca === true) {
+    return {
+      score: 0,
+      completude,
+      faixa: 'improvavel',
+      knockout: 'em_cobranca',
+      breakdown,
+    }
+  }
+
   if (sinais.tem_processo_nosso_ativo === true) {
     return {
       score: 0,

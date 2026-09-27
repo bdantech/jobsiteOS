@@ -133,6 +133,9 @@ import { simularCampanha } from './campanhas/simular.js'
 import { decidirProximosPassos } from './agente/decidir.js'
 import { apurarDesfechos, executarAgendados } from './agente/executar-agendados.js'
 import { plantaoDeEventos } from '../comunicacao/plantao.js'
+import { atualizarTitulosCobranca } from './cobranca/atualizar-titulos.js'
+import { lembretesCobranca } from './cobranca/lembretes.js'
+import { relogioApolice } from './cobranca/relogio.js'
 
 /**
  * Jobs are ASYNC, always. A Receita run downloads several gigabytes from a server
@@ -233,6 +236,9 @@ export type TipoJob =
   | 'campanhas-executar'
   | 'campanhas-sequencia'
   | 'campanhas-metricas'
+  | 'cobranca-atualizar-titulos'
+  | 'cobranca-relogio'
+  | 'cobranca-lembretes'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -838,6 +844,9 @@ export async function dispararSyncNfs(): Promise<string> {
       // ordem, a conversão é a última palavra — como deve ser, já que é a única
       // das duas que descreve um fato consumado.
       const antecipacoes = await sincronizarAntecipacoesComIngestao()
+      // A projeção de títulos da Cobrança logo atrás: ela É a leitura das antecipações
+      // que acabaram de chegar (quitação, status, vencimento prorrogado).
+      const cobrancaTitulos = await atualizarTitulosCobrancaComFolga()
       // A outbox por último: mensagens para notas que acabaram de converter são
       // exatamente o disparo que faz o comercial perder credibilidade.
       const outbox = await gerarOutbox()
@@ -883,6 +892,7 @@ export async function dispararSyncNfs(): Promise<string> {
 
       await anotarMeta(id, {
         sync, promocao, lookup, reclassificacao: reclass, antecipacoes, outbox,
+        cobranca_titulos: cobrancaTitulos,
         fontes_do_funil: fontesDoFunil,
         reclassificacao_oportunidades: reclassOportunidades,
         funil_fornecedores: funilFornecedores,
@@ -1011,6 +1021,7 @@ export function dispararAntecipacaoDiario(): string {
      */
     const cfgConversao = await lerConfigConversao()
     const antecipacoes = await sincronizarAntecipacoesComIngestao(cfgConversao.janela_diaria_dias)
+    const cobrancaTitulos = await atualizarTitulosCobrancaComFolga()
     const outbox = await gerarOutbox()
     // Roteamento DEPOIS da reclassificação: a faixa muda com o calendário, e uma nota
     // que entrou em faixa hoje precisa de dono hoje — não na segunda que vem.
@@ -1023,6 +1034,7 @@ export function dispararAntecipacaoDiario(): string {
     const roteamentoOportunidades = await rotearOportunidadesJob()
     return {
       varredura, supressoes, lookup, contatos, reclassificacao, antecipacoes, outbox, roteamento,
+      cobranca_titulos: cobrancaTitulos,
       fontes_do_funil: fontesDoFunil,
       reclassificacao_oportunidades: reclassificacaoOportunidades,
       roteamento_oportunidades: roteamentoOportunidades,
@@ -1066,6 +1078,20 @@ async function sincronizarAntecipacoesComIngestao(diasJanela?: number): Promise<
   }
 }
 
+/**
+ * `cobranca/atualizar-titulos` encadeado (Prompt 07 §14). Best-effort como os irmãos: a
+ * projeção falhar não pode marcar como falho um sync de antecipações que deu certo — e
+ * ela se recompõe inteira na próxima corrida, porque é um upsert sobre tudo.
+ */
+async function atualizarTitulosCobrancaComFolga(): Promise<unknown> {
+  try {
+    return await atualizarTitulosCobranca()
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Projeção de títulos da Cobrança falhou; o sync segue.')
+    return { erro: String(erro) }
+  }
+}
+
 /** Sync de antecipações sob demanda — o botão "sincronizar agora" da tela. */
 export async function dispararSyncAntecipacoes(): Promise<string> {
   const id = await abrirIngestao('onepay_antecipacoes', { origem: 'worker' })
@@ -1075,6 +1101,7 @@ export async function dispararSyncAntecipacoes(): Promise<string> {
     try {
       const sync = await sincronizarAntecipacoes()
       const rematch = await rematchPendentes()
+      const cobrancaTitulos = await atualizarTitulosCobrancaComFolga()
       await concluirIngestao(
         id,
         'onepay_antecipacoes',
@@ -1083,7 +1110,7 @@ export async function dispararSyncAntecipacoes(): Promise<string> {
           linhas_novas: sync.novas,
           linhas_atualizadas: sync.atualizadas,
         },
-        { sync, rematch },
+        { sync, rematch, cobranca_titulos: cobrancaTitulos },
       )
     } catch (erro) {
       logger.error({ id, erro: String(erro) }, 'Sync de antecipações falhou.')
@@ -1990,4 +2017,21 @@ export function dispararCampanhasSequencia(): string {
 
 export function dispararCampanhasMetricas(): string {
   return dispararAvulso('campanhas-metricas', async () => varrerSaudeDasCampanhas())
+}
+
+// ─── Cobrança (Prompt 07) ───────────────────────────────────────────────────
+
+/** A projeção de títulos sob demanda. No ciclo normal ela roda encadeada aos syncs. */
+export function dispararAtualizarTitulosCobranca(): string {
+  return dispararAvulso('cobranca-atualizar-titulos', async () => atualizarTitulosCobranca())
+}
+
+/** O relógio da apólice (§6.3): diário às 06:00 de São Paulo. Nunca fala com a seguradora. */
+export function dispararRelogioCobranca(): string {
+  return dispararAvulso('cobranca-relogio', async () => relogioApolice())
+}
+
+/** Reiteração devida, documento complementar perto do prazo, protesto a retirar. */
+export function dispararLembretesCobranca(): string {
+  return dispararAvulso('cobranca-lembretes', async () => lembretesCobranca())
 }

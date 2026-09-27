@@ -139,6 +139,8 @@ interface LinhaSacado {
   valor_esperado_mensal: number | null
   /** 08 §9: existe ação NOSSA em curso contra ela. É knockout do scorecard. */
   tem_processo_nosso_ativo: boolean | null
+  /** 07 §11: o grupo está bloqueado por cobrança extrajudicial. Knockout que vem antes do processo. */
+  bloqueio_cobranca: boolean | null
 }
 
 /** Lê os sacados em páginas: 8 mil linhas × várias laterais não cabem numa consulta só. */
@@ -153,7 +155,7 @@ async function paginarSacados(
   for (;;) {
     let q = supabaseAdmin
       .from('empresas')
-      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo')
+      .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo, bloqueio_cobranca')
       .in('tipo', SACADOS)
     if (cnpjs && cnpjs.length > 0) q = q.in('cnpj', [...cnpjs])
     const { data, error } = await q
@@ -281,6 +283,8 @@ function montarSinais(e: LinhaSacado, ctx: ContextoSinais): SinaisScore {
      * para responder uma pergunta que quase sempre é "não".
      */
     tem_processo_nosso_ativo: e.tem_processo_nosso_ativo ?? false,
+    // 07 §11. Mesma razão: coluna em `empresas`, que a cobrança já propaga da matriz às SPEs.
+    bloqueio_cobranca: e.bloqueio_cobranca ?? false,
   }
 }
 
@@ -444,7 +448,7 @@ export async function recalcularScoresDeCnpjs(cnpjs: readonly string[]): Promise
 
   const { data } = await supabaseAdmin
     .from('empresas')
-    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo')
+    .select('id, cnpj, tipo, faturamento_anual, faturamento_confianca, funcionarios_crescimento_12m, score_faixa, limite_potencial, receita_mensal_prevista, valor_esperado_mensal, tem_processo_nosso_ativo, bloqueio_cobranca')
     .in('cnpj', unicos)
     .in('tipo', SACADOS)
   if (!data?.length) return acc

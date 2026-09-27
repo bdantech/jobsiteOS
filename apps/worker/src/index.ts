@@ -115,7 +115,13 @@ import {
   dispararPromocaoResumos,
   dispararSyncFontesDoFunil,
   dispararDedupFunil,
+  dispararAtualizarTitulosCobranca,
+  dispararRelogioCobranca,
+  dispararLembretesCobranca,
 } from './jobs/index.js'
+import { documentosCobrancaSchema, gerarDocumentosCobranca } from './jobs/cobranca/documentos.js'
+import { gerarDossieSinistro } from './jobs/cobranca/dossie.js'
+import { envioSeguradora, seguradoraSchema } from './jobs/cobranca/seguradora.js'
 import {
   processarWebhookResend,
   processarWebhookWasender,
@@ -1669,6 +1675,70 @@ app.post('/jobs/campanhas/avancar-sequencia', (_req: Request, res: Response, nex
 app.post('/jobs/campanhas/metricas', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararCampanhasMetricas(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Cobrança (Prompt 07) ───────────────────────────────────────────────────
+
+/** A projeção de títulos sob demanda. No ciclo normal ela vem encadeada aos syncs. */
+app.post('/jobs/cobranca/atualizar-titulos', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararAtualizarTitulosCobranca(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** Cron diário 09:00 UTC (06:00 BRT). Só calcula e avisa: nada vai à seguradora. */
+app.post('/jobs/cobranca/relogio-apolice', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararRelogioCobranca(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/cobranca/lembretes', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararLembretesCobranca(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/*
+ * Os três abaixo são SÍNCRONOS, como o parecer do Jurídico: quem clicou "Gerar PDF",
+ * "Gerar dossiê" ou "Notificar seguradora" está com a tela aberta esperando o documento
+ * ou o desfecho do envio — e o envio à seguradora é o ato que a action registra depois
+ * do `ok`. Um 202 obrigaria a tela a adivinhar quando o prazo foi cumprido.
+ *
+ * Corpo de `documentos`: `{ gerados: {id, caminho, sha256}[], erros: {id, mensagem}[] }`
+ * — erro de modelo (placeholder sem valor) vem em `erros`, com 200.
+ */
+app.post('/jobs/cobranca/documentos', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = documentosCobrancaSchema.parse(req.body ?? {})
+    res.json(await gerarDocumentosCobranca(input))
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/cobranca/dossie', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { sinistro_id } = z.object({ sinistro_id: z.string().uuid() }).parse(req.body ?? {})
+    res.json(await gerarDossieSinistro(sinistro_id))
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+/** `{ ok, modo, protocolo?, mensagem }` — `ok: false` é resposta 200, não erro HTTP. */
+app.post('/jobs/cobranca/seguradora', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await envioSeguradora(seguradoraSchema.parse(req.body ?? {})))
   } catch (erro) {
     next(erro)
   }

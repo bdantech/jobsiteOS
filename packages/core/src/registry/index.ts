@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { adminModule } from './modules/admin.js'
 import { antecipacaoModule } from './modules/antecipacao.js'
+import { cobrancaModule } from './modules/cobranca.js'
 import { comercialModule } from './modules/comercial.js'
 import { comunicacaoModule } from './modules/comunicacao.js'
 import { creditoModule } from './modules/credito.js'
@@ -38,6 +39,10 @@ export const MODULES: readonly AppModule[] = [
   // acha a empresa, Antecipação encontra a nota, Crédito diz quanto ela sustenta,
   // Comercial vende, e o Jurídico cobra o que não foi pago.
   juridicoModule,
+  // Cobrança depois do Jurídico no menu, embora venha antes no tempo (D+15 × ação
+  // judicial): quem abre o Jurídico já conhece a Cobrança, e a conversão em processo é
+  // a ponte entre os dois. É também onde o sinistro da apólice é montado.
+  cobrancaModule,
   // Comunicação fecha Operações do lado do relacionamento: os cinco funis
   // encontram a mesma pessoa aqui. Depois do Jurídico porque é transversal a
   // todos eles — a thread é por pessoa, não por card.

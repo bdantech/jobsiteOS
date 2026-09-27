@@ -67,7 +67,9 @@ export class TransporteWasender implements Transporte {
         body: JSON.stringify({
           to: destino,
           text: msg.corpo,
-          ...(msg.anexos?.length ? { documentUrl: msg.anexos[0]!.url } : {}),
+          // O Wasender só aceita documento por URL: o primeiro anexo com link vai, com o
+          // nome do arquivo (sem ele o WhatsApp mostra o nome do objeto no Storage).
+          ...documentoWasender(msg.anexos),
         }),
         signal: AbortSignal.timeout(this.cfg.timeoutMs ?? 20_000),
       })
@@ -91,6 +93,11 @@ export class TransporteWasender implements Transporte {
       return { ok: false, erro: String(erro), retryavel: true }
     }
   }
+}
+
+function documentoWasender(anexos: MensagemParaEnviar['anexos']): { documentUrl?: string; fileName?: string } {
+  const a = (anexos ?? []).find((x) => x.url)
+  return a ? { documentUrl: a.url!, fileName: a.nome } : {}
 }
 
 function safeJson(texto: string): unknown {

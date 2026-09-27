@@ -9,7 +9,7 @@ import {
   semCitacao,
   type EmailRecebido,
 } from './gmail.ts'
-import { lerWebhookResend } from './resend.ts'
+import { TransporteResend, lerWebhookResend } from './resend.ts'
 import {
   TransporteWasender,
   lerEntradasWasender,
@@ -533,4 +533,65 @@ test('a extensão vem do mimetype, porque a nota de voz não tem nome', () => {
   // navegador recusa tocar o que não sabe nomear.
   assert.equal(extensaoDaMidia(null, 'audio'), 'ogg')
   assert.equal(extensaoDaMidia('application/x-esquisito', 'document'), 'bin')
+})
+
+// ─── Anexos (Cobrança, 0269) ────────────────────────────────────────────────
+
+/*
+ * A notificação extrajudicial sai com o PDF ANEXADO, e o formato de quem não tem anexo
+ * não pode mudar: a fila inteira do 05A passa pelos mesmos três transportes.
+ */
+const PDF_B64 = Buffer.from('%PDF-1.3 teste').toString('base64')
+
+test('Resend: anexo com bytes vai em attachments; sem anexo, o corpo é o de sempre', async () => {
+  const corpos: any[] = []
+  const t = new TransporteResend({
+    apiKey: 'k',
+    remetente: 'ONE OS <a@b.com>',
+    fetchImpl: (async (_url: string, init: any) => {
+      corpos.push(JSON.parse(init.body))
+      return new Response(JSON.stringify({ id: 'r1' }), { status: 200 })
+    }) as unknown as typeof fetch,
+  })
+  await t.enviar({ destino: 'x@y.com', assunto: 'a', corpo: 'b', anexos: [{ nome: 'n.pdf', conteudoBase64: PDF_B64, mime: 'application/pdf' }] })
+  await t.enviar({ destino: 'x@y.com', assunto: 'a', corpo: 'b' })
+  assert.deepEqual(corpos[0].attachments, [{ filename: 'n.pdf', content: PDF_B64 }])
+  assert.equal('attachments' in corpos[1], false)
+})
+
+test('Gmail: com anexo vira multipart/mixed; sem anexo continua text/plain', () => {
+  const raw = montarRfc822('Ana <ana@oneos.com.br>', {
+    destino: 'cliente@x.com',
+    assunto: 'Notificação',
+    corpo: 'segue',
+    anexos: [{ nome: 'notificacao.pdf', conteudoBase64: PDF_B64, mime: 'application/pdf' }],
+  })
+  const fronteira = raw.match(/boundary="([^"]+)"/)![1]!
+  assert.ok(raw.includes('Content-Type: multipart/mixed'))
+  assert.ok(!/^Content-Type: text\/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n/m.test(raw.split(`--${fronteira}`)[0]!))
+  assert.ok(raw.includes('Content-Disposition: attachment; filename="notificacao.pdf"'))
+  assert.ok(raw.includes(PDF_B64))
+  assert.ok(raw.trimEnd().endsWith(`--${fronteira}--`))
+
+  const simples = montarRfc822('Ana <ana@oneos.com.br>', { destino: 'c@x.com', assunto: 'a', corpo: 'oi' })
+  assert.ok(simples.includes('Content-Type: text/plain; charset="UTF-8"'))
+  assert.ok(!simples.includes('multipart'))
+})
+
+test('Wasender: o anexo vai como documentUrl com o nome do arquivo', async () => {
+  let body: any = null
+  const t = new TransporteWasender({
+    baseUrl: 'https://wasender.test',
+    token: 'segredo',
+    numero: '5511999990000',
+    fetchImpl: (async (_url: string, init: any) => {
+      body = JSON.parse(init.body)
+      return new Response(JSON.stringify({ success: true, data: { msgId: 1 } }), { status: 200 })
+    }) as unknown as typeof fetch,
+  })
+  await t.enviar({ destino: '11999998888', corpo: 'oi', anexos: [{ nome: 'n.pdf', url: 'https://s/assinada' }] })
+  assert.equal(body.documentUrl, 'https://s/assinada')
+  assert.equal(body.fileName, 'n.pdf')
+  await t.enviar({ destino: '11999998888', corpo: 'oi' })
+  assert.equal('documentUrl' in body, false)
 })

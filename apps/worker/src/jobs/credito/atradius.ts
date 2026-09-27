@@ -319,7 +319,12 @@ async function obterToken(cred: Credenciais): Promise<ResultadoSeguradora<string
   }
 }
 
-async function chamar<T>(
+/**
+ * Exportada para a Non-Payments API da Cobrança (`jobs/cobranca/non-payments.ts`): a
+ * mesma família OAuth, o mesmo gateway, as mesmas credenciais por ambiente. Uma segunda
+ * cópia do token e do tratamento de erro divergiria desta no primeiro ajuste.
+ */
+export async function chamar<T>(
   caminho: string,
   opcoes: { method?: 'GET' | 'POST'; body?: unknown } = {},
 ): Promise<ResultadoSeguradora<T>> {
@@ -523,7 +528,7 @@ function extrairApolices(corpo: unknown): ApoliceBruta[] {
  * isso até um sinistro. Então: uma vigente, usa; nenhuma ou várias, para e diz o que
  * viu, nomeando a variável que resolve.
  */
-async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
+export async function apoliceVigente(): Promise<ResultadoSeguradora<Apolice>> {
   const c = await credenciais()
   if (!c.ok) return c
   const cred = c.dados

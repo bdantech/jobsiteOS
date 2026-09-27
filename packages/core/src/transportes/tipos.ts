@@ -11,10 +11,19 @@
  * o quarto lugar onde essa regra vive.
  */
 
+/**
+ * Um anexo. O transporte usa o que sabe usar:
+ *   • e-mail (Resend, Gmail) leva os BYTES (`conteudoBase64`) — um link no lugar do PDF
+ *     de uma notificação extrajudicial não é anexo, é um convite a não abrir;
+ *   • WhatsApp (Wasender) só aceita `documentUrl`, então leva a `url` assinada.
+ * Quem monta a mensagem (a fila) resolve os dois a partir do Storage.
+ */
 export interface Anexo {
   nome: string
-  /** URL pública/assinada ou data URI. O transporte decide como entrega. */
-  url: string
+  /** URL pública/assinada ou data URI. */
+  url?: string
+  /** O conteúdo em base64 (sem prefixo `data:`). */
+  conteudoBase64?: string
   mime?: string
 }
 

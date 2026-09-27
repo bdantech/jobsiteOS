@@ -14,6 +14,104 @@ export type Database = {
   }
   public: {
     Tables: {
+      acordos: {
+        Row: {
+          cobranca_id: string
+          criado_em: string
+          criado_por: string | null
+          dados_minuta: Json
+          documento_assinado_path: string | null
+          entrada: number
+          id: string
+          juros_parcelamento_mes: number
+          memoria_calculo: Json
+          minuta_hash: string | null
+          minuta_path: string | null
+          modelo_minuta_id: string | null
+          parcelas: Json
+          periodicidade: string
+          primeira_parcela: string | null
+          qtd_parcelas: number
+          sistema: string
+          status: string
+          valor_atualizado: number
+          valor_total_projetado: number | null
+        }
+        Insert: {
+          cobranca_id: string
+          criado_em?: string
+          criado_por?: string | null
+          dados_minuta?: Json
+          documento_assinado_path?: string | null
+          entrada?: number
+          id?: string
+          juros_parcelamento_mes?: number
+          memoria_calculo: Json
+          minuta_hash?: string | null
+          minuta_path?: string | null
+          modelo_minuta_id?: string | null
+          parcelas: Json
+          periodicidade?: string
+          primeira_parcela?: string | null
+          qtd_parcelas?: number
+          sistema?: string
+          status?: string
+          valor_atualizado: number
+          valor_total_projetado?: number | null
+        }
+        Update: {
+          cobranca_id?: string
+          criado_em?: string
+          criado_por?: string | null
+          dados_minuta?: Json
+          documento_assinado_path?: string | null
+          entrada?: number
+          id?: string
+          juros_parcelamento_mes?: number
+          memoria_calculo?: Json
+          minuta_hash?: string | null
+          minuta_path?: string | null
+          modelo_minuta_id?: string | null
+          parcelas?: Json
+          periodicidade?: string
+          primeira_parcela?: string | null
+          qtd_parcelas?: number
+          sistema?: string
+          status?: string
+          valor_atualizado?: number
+          valor_total_projetado?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acordos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acordos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acordos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acordos_modelo_minuta_id_fkey"
+            columns: ["modelo_minuta_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_modelos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       advogados: {
         Row: {
           ativo: boolean
@@ -1162,6 +1260,175 @@ export type Database = {
           },
         ]
       }
+      apolice_prazos: {
+        Row: {
+          alertas_emitidos: Json
+          apolice_id: string
+          calculado_em: string
+          causa: string
+          cobertura_volta_em: string | null
+          cobranca_id: string | null
+          data_limite_notificacao: string
+          data_limite_sinistro: string
+          data_parada_cobertura: string
+          data_perda: string
+          id: string
+          notificado_seguradora_em: string | null
+          pago_em: string | null
+          restabelecimento_retroativo: boolean | null
+          sinistro_id: string | null
+          status: string
+          titulo_id: string
+          vencimento_original: string
+        }
+        Insert: {
+          alertas_emitidos?: Json
+          apolice_id: string
+          calculado_em?: string
+          causa?: string
+          cobertura_volta_em?: string | null
+          cobranca_id?: string | null
+          data_limite_notificacao: string
+          data_limite_sinistro: string
+          data_parada_cobertura: string
+          data_perda: string
+          id?: string
+          notificado_seguradora_em?: string | null
+          pago_em?: string | null
+          restabelecimento_retroativo?: boolean | null
+          sinistro_id?: string | null
+          status?: string
+          titulo_id: string
+          vencimento_original: string
+        }
+        Update: {
+          alertas_emitidos?: Json
+          apolice_id?: string
+          calculado_em?: string
+          causa?: string
+          cobertura_volta_em?: string | null
+          cobranca_id?: string | null
+          data_limite_notificacao?: string
+          data_limite_sinistro?: string
+          data_parada_cobertura?: string
+          data_perda?: string
+          id?: string
+          notificado_seguradora_em?: string | null
+          pago_em?: string | null
+          restabelecimento_retroativo?: boolean | null
+          sinistro_id?: string | null
+          status?: string
+          titulo_id?: string
+          vencimento_original?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apolice_prazos_apolice_id_fkey"
+            columns: ["apolice_id"]
+            isOneToOne: false
+            referencedRelation: "apolices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos_abertos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "titulos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      apolices: {
+        Row: {
+          ativa: boolean
+          atualizado_em: string
+          criado_em: string
+          franquia: number
+          id: string
+          numero: string
+          percentagem_segurada: number
+          periodo_espera_dias: number
+          periodo_max_prorrogacao_dias: number
+          prazo_documentos_complementares_dias: number
+          prazo_envio_sinistro_meses: number
+          prazo_maximo_credito_dias: number
+          prazo_notificacao_apos_prorrogacao_dias: number
+          responsabilidade_maxima: number | null
+          segurado_cnpj: string
+          seguradora: string
+          vigencia_fim: string
+          vigencia_inicio: string
+        }
+        Insert: {
+          ativa?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          franquia: number
+          id?: string
+          numero: string
+          percentagem_segurada: number
+          periodo_espera_dias: number
+          periodo_max_prorrogacao_dias: number
+          prazo_documentos_complementares_dias: number
+          prazo_envio_sinistro_meses: number
+          prazo_maximo_credito_dias: number
+          prazo_notificacao_apos_prorrogacao_dias: number
+          responsabilidade_maxima?: number | null
+          segurado_cnpj: string
+          seguradora?: string
+          vigencia_fim: string
+          vigencia_inicio: string
+        }
+        Update: {
+          ativa?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          franquia?: number
+          id?: string
+          numero?: string
+          percentagem_segurada?: number
+          periodo_espera_dias?: number
+          periodo_max_prorrogacao_dias?: number
+          prazo_documentos_complementares_dias?: number
+          prazo_envio_sinistro_meses?: number
+          prazo_maximo_credito_dias?: number
+          prazo_notificacao_apos_prorrogacao_dias?: number
+          responsabilidade_maxima?: number | null
+          segurado_cnpj?: string
+          seguradora?: string
+          vigencia_fim?: string
+          vigencia_inicio?: string
+        }
+        Relationships: []
+      }
       app_config: {
         Row: {
           atualizado_em: string
@@ -1936,6 +2203,734 @@ export type Database = {
           ultimo_provedor?: string | null
         }
         Relationships: []
+      }
+      cobranca_bloqueios_cnpj: {
+        Row: {
+          cnpj: string
+          cobranca_id: string | null
+          desde: string
+          sacado_matriz_cnpj: string
+        }
+        Insert: {
+          cnpj: string
+          cobranca_id?: string | null
+          desde?: string
+          sacado_matriz_cnpj: string
+        }
+        Update: {
+          cnpj?: string
+          cobranca_id?: string | null
+          desde?: string
+          sacado_matriz_cnpj?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_bloqueios_cnpj_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_bloqueios_cnpj_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_insolvencias: {
+        Row: {
+          confirmada: boolean
+          criado_em: string
+          criado_por: string | null
+          data_decisao: string
+          fonte: string
+          id: string
+          numero_cnj: string | null
+          observacao: string | null
+          sacado_matriz_cnpj: string
+          tipo: string
+        }
+        Insert: {
+          confirmada?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          data_decisao: string
+          fonte?: string
+          id?: string
+          numero_cnj?: string | null
+          observacao?: string | null
+          sacado_matriz_cnpj: string
+          tipo: string
+        }
+        Update: {
+          confirmada?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          data_decisao?: string
+          fonte?: string
+          id?: string
+          numero_cnj?: string | null
+          observacao?: string | null
+          sacado_matriz_cnpj?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_insolvencias_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_insolvencias_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "cobranca_insolvencias_numero_cnj_fkey"
+            columns: ["numero_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+        ]
+      }
+      cobranca_interacoes: {
+        Row: {
+          cobranca_id: string
+          criado_em: string
+          id: string
+          ocorrida_em: string
+          resumo: string
+          tipo: string
+          usuario_id: string | null
+        }
+        Insert: {
+          cobranca_id: string
+          criado_em?: string
+          id?: string
+          ocorrida_em?: string
+          resumo: string
+          tipo: string
+          usuario_id?: string | null
+        }
+        Update: {
+          cobranca_id?: string
+          criado_em?: string
+          id?: string
+          ocorrida_em?: string
+          resumo?: string
+          tipo?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_interacoes_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_interacoes_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_interacoes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_modelos: {
+        Row: {
+          ativo: boolean
+          corpo_markdown: string
+          criado_em: string
+          criado_por: string | null
+          familia_id: string
+          id: string
+          nome: string
+          tipo: string
+          versao: number
+        }
+        Insert: {
+          ativo?: boolean
+          corpo_markdown: string
+          criado_em?: string
+          criado_por?: string | null
+          familia_id?: string
+          id?: string
+          nome: string
+          tipo: string
+          versao?: number
+        }
+        Update: {
+          ativo?: boolean
+          corpo_markdown?: string
+          criado_em?: string
+          criado_por?: string | null
+          familia_id?: string
+          id?: string
+          nome?: string
+          tipo?: string
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_modelos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_notificacao_entregas: {
+        Row: {
+          canal: string
+          codigo_rastreio: string | null
+          comprovante_path: string | null
+          comunicacao_id: string | null
+          confirmado_em: string | null
+          contato_id: string | null
+          criado_em: string
+          criado_por: string | null
+          destino: string | null
+          enviado_em: string | null
+          id: string
+          notificacao_id: string
+          observacao: string | null
+          outbox_id: string | null
+          status: string
+        }
+        Insert: {
+          canal: string
+          codigo_rastreio?: string | null
+          comprovante_path?: string | null
+          comunicacao_id?: string | null
+          confirmado_em?: string | null
+          contato_id?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          destino?: string | null
+          enviado_em?: string | null
+          id?: string
+          notificacao_id: string
+          observacao?: string | null
+          outbox_id?: string | null
+          status?: string
+        }
+        Update: {
+          canal?: string
+          codigo_rastreio?: string | null
+          comprovante_path?: string | null
+          comunicacao_id?: string | null
+          confirmado_em?: string | null
+          contato_id?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          destino?: string | null
+          enviado_em?: string | null
+          id?: string
+          notificacao_id?: string
+          observacao?: string | null
+          outbox_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_comunicacao_id_fkey"
+            columns: ["comunicacao_id"]
+            isOneToOne: false
+            referencedRelation: "comunicacoes_thread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_notificacao_id_fkey"
+            columns: ["notificacao_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_notificacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_entregas_outbox_id_fkey"
+            columns: ["outbox_id"]
+            isOneToOne: false
+            referencedRelation: "mensagens_outbox"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_notificacao_titulos: {
+        Row: {
+          cobranca_titulo_id: string
+          notificacao_id: string
+        }
+        Insert: {
+          cobranca_titulo_id: string
+          notificacao_id: string
+        }
+        Update: {
+          cobranca_titulo_id?: string
+          notificacao_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_notificacao_titulos_cobranca_titulo_id_fkey"
+            columns: ["cobranca_titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacao_titulos_notificacao_id_fkey"
+            columns: ["notificacao_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_notificacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_notificacoes: {
+        Row: {
+          cobranca_id: string
+          destinatario_cnpj: string
+          destinatario_empresa_id: string | null
+          destinatario_endereco: Json | null
+          destinatario_razao_social: string
+          documento_hash: string | null
+          documento_path: string | null
+          enviada_em: string | null
+          gerada_em: string
+          id: string
+          memoria_calculo: Json | null
+          modelo_id: string | null
+          papel: string
+          prazo_expira_em: string | null
+          prazo_pagamento_dias: number
+          qtd_titulos: number
+          rodada: number
+          status: string
+          valor_total: number
+          valor_total_atualizado: number | null
+        }
+        Insert: {
+          cobranca_id: string
+          destinatario_cnpj: string
+          destinatario_empresa_id?: string | null
+          destinatario_endereco?: Json | null
+          destinatario_razao_social: string
+          documento_hash?: string | null
+          documento_path?: string | null
+          enviada_em?: string | null
+          gerada_em?: string
+          id?: string
+          memoria_calculo?: Json | null
+          modelo_id?: string | null
+          papel: string
+          prazo_expira_em?: string | null
+          prazo_pagamento_dias: number
+          qtd_titulos: number
+          rodada?: number
+          status?: string
+          valor_total: number
+          valor_total_atualizado?: number | null
+        }
+        Update: {
+          cobranca_id?: string
+          destinatario_cnpj?: string
+          destinatario_empresa_id?: string | null
+          destinatario_endereco?: Json | null
+          destinatario_razao_social?: string
+          documento_hash?: string | null
+          documento_path?: string | null
+          enviada_em?: string | null
+          gerada_em?: string
+          id?: string
+          memoria_calculo?: Json | null
+          modelo_id?: string | null
+          papel?: string
+          prazo_expira_em?: string | null
+          prazo_pagamento_dias?: number
+          qtd_titulos?: number
+          rodada?: number
+          status?: string
+          valor_total?: number
+          valor_total_atualizado?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_notificacoes_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_destinatario_empresa_id_fkey"
+            columns: ["destinatario_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_destinatario_empresa_id_fkey"
+            columns: ["destinatario_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_destinatario_empresa_id_fkey"
+            columns: ["destinatario_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_destinatario_empresa_id_fkey"
+            columns: ["destinatario_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_destinatario_empresa_id_fkey"
+            columns: ["destinatario_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobranca_notificacoes_modelo_id_fkey"
+            columns: ["modelo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_modelos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_sequencias: {
+        Row: {
+          ano: number
+          prefixo: string
+          ultimo: number
+        }
+        Insert: {
+          ano: number
+          prefixo: string
+          ultimo?: number
+        }
+        Update: {
+          ano?: number
+          prefixo?: string
+          ultimo?: number
+        }
+        Relationships: []
+      }
+      cobranca_titulos: {
+        Row: {
+          cedente_cnpj_snapshot: string
+          cobranca_id: string
+          dias_atraso_snapshot: number
+          id: string
+          quitado_em: string | null
+          quitado_origem: string | null
+          sacado_cnpj_snapshot: string
+          situacao: string
+          titulo_id: string
+          valor_cedido_snapshot: number | null
+          valor_face_snapshot: number
+          valor_recebido: number | null
+          vencimento_snapshot: string
+        }
+        Insert: {
+          cedente_cnpj_snapshot: string
+          cobranca_id: string
+          dias_atraso_snapshot: number
+          id?: string
+          quitado_em?: string | null
+          quitado_origem?: string | null
+          sacado_cnpj_snapshot: string
+          situacao?: string
+          titulo_id: string
+          valor_cedido_snapshot?: number | null
+          valor_face_snapshot: number
+          valor_recebido?: number | null
+          vencimento_snapshot: string
+        }
+        Update: {
+          cedente_cnpj_snapshot?: string
+          cobranca_id?: string
+          dias_atraso_snapshot?: number
+          id?: string
+          quitado_em?: string | null
+          quitado_origem?: string | null
+          sacado_cnpj_snapshot?: string
+          situacao?: string
+          titulo_id?: string
+          valor_cedido_snapshot?: number | null
+          valor_face_snapshot?: number
+          valor_recebido?: number | null
+          vencimento_snapshot?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_titulos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_titulos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_titulos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos_abertos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_titulos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "titulos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobrancas: {
+        Row: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        Insert: {
+          aceite_apolice_em?: string | null
+          aceite_apolice_por?: string | null
+          codigo?: string | null
+          convertida_em_processo_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          data_base?: string | null
+          encerrada_em?: string | null
+          escopo_notificacao?: string
+          estagio?: string
+          honorarios_pct?: number | null
+          id?: string
+          indice_correcao?: string | null
+          juros_mora_mes?: number | null
+          juros_pro_rata?: boolean
+          motivo_encerramento?: string | null
+          multa_pct?: number | null
+          notificada_em?: string | null
+          notificar_matriz_cedente?: boolean
+          observacoes?: string | null
+          processo_cnj?: string | null
+          responsavel_id?: string | null
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado?: number | null
+          valor_atualizado_em?: string | null
+        }
+        Update: {
+          aceite_apolice_em?: string | null
+          aceite_apolice_por?: string | null
+          codigo?: string | null
+          convertida_em_processo_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          data_base?: string | null
+          encerrada_em?: string | null
+          escopo_notificacao?: string
+          estagio?: string
+          honorarios_pct?: number | null
+          id?: string
+          indice_correcao?: string | null
+          juros_mora_mes?: number | null
+          juros_pro_rata?: boolean
+          motivo_encerramento?: string | null
+          multa_pct?: number | null
+          notificada_em?: string | null
+          notificar_matriz_cedente?: boolean
+          observacoes?: string | null
+          processo_cnj?: string | null
+          responsavel_id?: string | null
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj?: string
+          valor_atualizado?: number | null
+          valor_atualizado_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobrancas_aceite_apolice_por_fkey"
+            columns: ["aceite_apolice_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_processo_cnj_fkey"
+            columns: ["processo_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "cobrancas_processo_cnj_fkey"
+            columns: ["processo_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "cobrancas_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
       }
       comercial_config: {
         Row: {
@@ -3619,12 +4614,18 @@ export type Database = {
       empresas: {
         Row: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -3686,12 +4687,18 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
+          bloqueio_cobranca?: boolean
+          bloqueio_cobranca_cobranca_id?: string | null
+          bloqueio_cobranca_em?: string | null
+          bloqueio_cobranca_motivo?: string | null
           camada?: string | null
           chance_concessao?: number | null
           churn_erp_concorrente?: boolean
           cnae_principal?: string | null
           cnpj: string
           credito_calculado_em?: string | null
+          credito_revisao_desde?: string | null
+          credito_revisao_pos_inadimplencia?: boolean
           credito_versao?: number | null
           criado_em?: string
           dados_apollo?: Json | null
@@ -3753,12 +4760,18 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
+          bloqueio_cobranca?: boolean
+          bloqueio_cobranca_cobranca_id?: string | null
+          bloqueio_cobranca_em?: string | null
+          bloqueio_cobranca_motivo?: string | null
           camada?: string | null
           chance_concessao?: number | null
           churn_erp_concorrente?: boolean
           cnae_principal?: string | null
           cnpj?: string
           credito_calculado_em?: string | null
+          credito_revisao_desde?: string | null
+          credito_revisao_pos_inadimplencia?: boolean
           credito_versao?: number | null
           criado_em?: string
           dados_apollo?: Json | null
@@ -3819,6 +4832,20 @@ export type Database = {
           valor_esperado_mensal?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "empresas_bloqueio_cobranca_cobranca_id_fkey"
+            columns: ["bloqueio_cobranca_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresas_bloqueio_cobranca_cobranca_id_fkey"
+            columns: ["bloqueio_cobranca_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "empresas_ex_cliente_motivo_fkey"
             columns: ["ex_cliente_motivo"]
@@ -5258,6 +6285,7 @@ export type Database = {
         Row: {
           access_keys: string[]
           agendada_para: string | null
+          anexos: Json
           assunto: string | null
           atualizada_em: string
           campanha_destinatario_id: string | null
@@ -5297,6 +6325,7 @@ export type Database = {
         Insert: {
           access_keys?: string[]
           agendada_para?: string | null
+          anexos?: Json
           assunto?: string | null
           atualizada_em?: string
           campanha_destinatario_id?: string | null
@@ -5336,6 +6365,7 @@ export type Database = {
         Update: {
           access_keys?: string[]
           agendada_para?: string | null
+          anexos?: Json
           assunto?: string | null
           atualizada_em?: string
           campanha_destinatario_id?: string | null
@@ -6201,6 +7231,7 @@ export type Database = {
           fornecedor_nome: string | null
           limite_disponivel_sacado: number | null
           limite_sacado_origem: string | null
+          link_antecipacao: string | null
           nao_operavel_motivo: string | null
           natureza_operacao: string | null
           nf_id_externo: string | null
@@ -6265,6 +7296,7 @@ export type Database = {
           fornecedor_nome?: string | null
           limite_disponivel_sacado?: number | null
           limite_sacado_origem?: string | null
+          link_antecipacao?: string | null
           nao_operavel_motivo?: string | null
           natureza_operacao?: string | null
           nf_id_externo?: string | null
@@ -6329,6 +7361,7 @@ export type Database = {
           fornecedor_nome?: string | null
           limite_disponivel_sacado?: number | null
           limite_sacado_origem?: string | null
+          link_antecipacao?: string | null
           nao_operavel_motivo?: string | null
           natureza_operacao?: string | null
           nf_id_externo?: string | null
@@ -6512,7 +7545,15 @@ export type Database = {
           tabela?: string
           usuario_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notificacao_historico_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notificacao_regras: {
         Row: {
@@ -6626,14 +7667,22 @@ export type Database = {
           ultimo_payload?: Json | null
           url_modelo?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notificacao_tipos_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notificacoes: {
         Row: {
+          chave: string | null
           corpo: string | null
           criado_em: string
           id: string
-          chave: string | null
           lida: boolean
           tipo: string | null
           titulo: string
@@ -6641,10 +7690,10 @@ export type Database = {
           usuario_id: string
         }
         Insert: {
+          chave?: string | null
           corpo?: string | null
           criado_em?: string
           id?: string
-          chave?: string | null
           lida?: boolean
           tipo?: string | null
           titulo: string
@@ -6652,10 +7701,10 @@ export type Database = {
           usuario_id: string
         }
         Update: {
+          chave?: string | null
           corpo?: string | null
           criado_em?: string
           id?: string
-          chave?: string | null
           lida?: boolean
           tipo?: string | null
           titulo?: string
@@ -6709,7 +7758,22 @@ export type Database = {
           tentativas?: number
           usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_envios_notificacao_id_fkey"
+            columns: ["notificacao_id"]
+            isOneToOne: false
+            referencedRelation: "notificacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_envios_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notificacoes_resumo: {
         Row: {
@@ -6748,7 +7812,15 @@ export type Database = {
           url?: string | null
           usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_resumo_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pedidos_apresentacao: {
         Row: {
@@ -8050,6 +9122,20 @@ export type Database = {
             referencedRelation: "ex_clientes"
             referencedColumns: ["empresa_id"]
           },
+          {
+            foreignKeyName: "processos_vinculo_cobranca_fk"
+            columns: ["vinculo_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_vinculo_cobranca_fk"
+            columns: ["vinculo_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
         ]
       }
       prospeccao_config: {
@@ -8199,6 +9285,142 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "ex_clientes"
             referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      protesto_remessas: {
+        Row: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        Insert: {
+          arquivo_path?: string | null
+          cobranca_id?: string | null
+          cra: string
+          criado_em?: string
+          criado_por?: string | null
+          enviada_em?: string | null
+          id?: string
+          modo?: string
+          protocolo?: string | null
+          retorno_path?: string | null
+          retorno_processado_em?: string | null
+          status?: string
+          tipo?: string
+          uf: string
+        }
+        Update: {
+          arquivo_path?: string | null
+          cobranca_id?: string | null
+          cra?: string
+          criado_em?: string
+          criado_por?: string | null
+          enviada_em?: string | null
+          id?: string
+          modo?: string
+          protocolo?: string | null
+          retorno_path?: string | null
+          retorno_processado_em?: string | null
+          status?: string
+          tipo?: string
+          uf?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protesto_remessas_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protesto_remessas_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protesto_remessas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      protesto_titulos: {
+        Row: {
+          atualizado_em: string
+          cartorio: string | null
+          certidao_path: string | null
+          cobranca_titulo_id: string | null
+          custas: number | null
+          data_protesto: string | null
+          id: string
+          instrucao_cancelamento_em: string | null
+          instrucao_nao_aplicavel_motivo: string | null
+          motivo_rejeicao: string | null
+          protocolo_cartorio: string | null
+          remessa_id: string | null
+          situacao: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cartorio?: string | null
+          certidao_path?: string | null
+          cobranca_titulo_id?: string | null
+          custas?: number | null
+          data_protesto?: string | null
+          id?: string
+          instrucao_cancelamento_em?: string | null
+          instrucao_nao_aplicavel_motivo?: string | null
+          motivo_rejeicao?: string | null
+          protocolo_cartorio?: string | null
+          remessa_id?: string | null
+          situacao?: string
+        }
+        Update: {
+          atualizado_em?: string
+          cartorio?: string | null
+          certidao_path?: string | null
+          cobranca_titulo_id?: string | null
+          custas?: number | null
+          data_protesto?: string | null
+          id?: string
+          instrucao_cancelamento_em?: string | null
+          instrucao_nao_aplicavel_motivo?: string | null
+          motivo_rejeicao?: string | null
+          protocolo_cartorio?: string | null
+          remessa_id?: string | null
+          situacao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protesto_titulos_cobranca_titulo_id_fkey"
+            columns: ["cobranca_titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protesto_titulos_remessa_id_fkey"
+            columns: ["remessa_id"]
+            isOneToOne: false
+            referencedRelation: "protesto_remessas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -9630,6 +10852,388 @@ export type Database = {
           },
         ]
       }
+      sinistro_custos: {
+        Row: {
+          aprovacao_referencia: string | null
+          aprovado_pela_seguradora: boolean
+          cobranca_id: string | null
+          comprovante_path: string | null
+          criado_em: string
+          criado_por: string | null
+          data: string
+          descricao: string
+          id: string
+          sinistro_id: string | null
+          valor: number
+        }
+        Insert: {
+          aprovacao_referencia?: string | null
+          aprovado_pela_seguradora?: boolean
+          cobranca_id?: string | null
+          comprovante_path?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data: string
+          descricao: string
+          id?: string
+          sinistro_id?: string | null
+          valor: number
+        }
+        Update: {
+          aprovacao_referencia?: string | null
+          aprovado_pela_seguradora?: boolean
+          cobranca_id?: string | null
+          comprovante_path?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data?: string
+          descricao?: string
+          id?: string
+          sinistro_id?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sinistro_custos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_custos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_custos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_custos_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sinistro_documentos: {
+        Row: {
+          anexado_em: string | null
+          anexado_por: string | null
+          arquivo_hash: string | null
+          arquivo_path: string | null
+          descricao: string
+          id: string
+          item: string
+          justificativa_ausencia: string | null
+          obrigatorio: boolean
+          origem: string
+          sinistro_id: string
+          status: string
+        }
+        Insert: {
+          anexado_em?: string | null
+          anexado_por?: string | null
+          arquivo_hash?: string | null
+          arquivo_path?: string | null
+          descricao: string
+          id?: string
+          item: string
+          justificativa_ausencia?: string | null
+          obrigatorio?: boolean
+          origem?: string
+          sinistro_id: string
+          status?: string
+        }
+        Update: {
+          anexado_em?: string | null
+          anexado_por?: string | null
+          arquivo_hash?: string | null
+          arquivo_path?: string | null
+          descricao?: string
+          id?: string
+          item?: string
+          justificativa_ausencia?: string | null
+          obrigatorio?: boolean
+          origem?: string
+          sinistro_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sinistro_documentos_anexado_por_fkey"
+            columns: ["anexado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_documentos_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sinistro_solicitacoes: {
+        Row: {
+          descricao: string
+          id: string
+          prazo_em: string
+          respondida_em: string | null
+          sinistro_id: string
+          solicitada_em: string
+          status: string
+        }
+        Insert: {
+          descricao: string
+          id?: string
+          prazo_em: string
+          respondida_em?: string | null
+          sinistro_id: string
+          solicitada_em: string
+          status?: string
+        }
+        Update: {
+          descricao?: string
+          id?: string
+          prazo_em?: string
+          respondida_em?: string | null
+          sinistro_id?: string
+          solicitada_em?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sinistro_solicitacoes_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sinistro_titulos: {
+        Row: {
+          sinistro_id: string
+          titulo_id: string
+          valor_cedido: number | null
+          valor_face: number
+        }
+        Insert: {
+          sinistro_id: string
+          titulo_id: string
+          valor_cedido?: number | null
+          valor_face: number
+        }
+        Update: {
+          sinistro_id?: string
+          titulo_id?: string
+          valor_cedido?: number | null
+          valor_face?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sinistro_titulos_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_titulos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos_abertos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistro_titulos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "titulos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sinistros: {
+        Row: {
+          apolice_id: string
+          causa: string
+          cobranca_id: string | null
+          codigo: string | null
+          criado_em: string
+          criado_por: string | null
+          data_limite_envio: string | null
+          data_perda: string
+          dossie_gerado_em: string | null
+          dossie_hash: string | null
+          dossie_path: string | null
+          enviado_em: string | null
+          estagio: string
+          id: string
+          indenizacao_estimada: number | null
+          indenizacao_recebida: number | null
+          justificativa_prova_entrega: string | null
+          memoria_perda: Json | null
+          modo_envio: string
+          motivo_recusa: string | null
+          notificado_em: string | null
+          perda_segurada_estimada: number | null
+          protocolo_externo: string | null
+          respondido_em: string | null
+          responsavel_id: string | null
+          resposta_prevista_em: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_recebido_parcial: number
+          valor_total_face: number
+        }
+        Insert: {
+          apolice_id: string
+          causa: string
+          cobranca_id?: string | null
+          codigo?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data_limite_envio?: string | null
+          data_perda: string
+          dossie_gerado_em?: string | null
+          dossie_hash?: string | null
+          dossie_path?: string | null
+          enviado_em?: string | null
+          estagio?: string
+          id?: string
+          indenizacao_estimada?: number | null
+          indenizacao_recebida?: number | null
+          justificativa_prova_entrega?: string | null
+          memoria_perda?: Json | null
+          modo_envio?: string
+          motivo_recusa?: string | null
+          notificado_em?: string | null
+          perda_segurada_estimada?: number | null
+          protocolo_externo?: string | null
+          respondido_em?: string | null
+          responsavel_id?: string | null
+          resposta_prevista_em?: string | null
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj: string
+          valor_recebido_parcial?: number
+          valor_total_face: number
+        }
+        Update: {
+          apolice_id?: string
+          causa?: string
+          cobranca_id?: string | null
+          codigo?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          data_limite_envio?: string | null
+          data_perda?: string
+          dossie_gerado_em?: string | null
+          dossie_hash?: string | null
+          dossie_path?: string | null
+          enviado_em?: string | null
+          estagio?: string
+          id?: string
+          indenizacao_estimada?: number | null
+          indenizacao_recebida?: number | null
+          justificativa_prova_entrega?: string | null
+          memoria_perda?: Json | null
+          modo_envio?: string
+          motivo_recusa?: string | null
+          notificado_em?: string | null
+          perda_segurada_estimada?: number | null
+          protocolo_externo?: string | null
+          respondido_em?: string | null
+          responsavel_id?: string | null
+          resposta_prevista_em?: string | null
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj?: string
+          valor_recebido_parcial?: number
+          valor_total_face?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sinistros_apolice_id_fkey"
+            columns: ["apolice_id"]
+            isOneToOne: false
+            referencedRelation: "apolices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sinistros_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "sinistros_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "sinistros_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sinistros_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
       supressao: {
         Row: {
           contexto: string
@@ -9724,6 +11328,174 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "usuarios"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      titulos: {
+        Row: {
+          antecipacao_id_externo: number | null
+          cedente_cnpj: string
+          cedente_empresa_id: string | null
+          cedente_matriz_cnpj: string
+          cedente_nome: string | null
+          coberto_apolice: boolean
+          emissao: string | null
+          externo_id: string
+          id: string
+          limite_credito_vigente: number | null
+          nf_chave_acesso: string | null
+          numero: string | null
+          operacao_externo_id: string | null
+          pago_em: string | null
+          pago_em_origem: string | null
+          sacado_cnpj: string
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          sacado_nome: string | null
+          sincronizado_em: string
+          status: string
+          status_producao: string | null
+          valor_cedido: number | null
+          valor_face: number
+          valor_pago: number | null
+          vencimento: string
+          vencimento_prorrogado: string | null
+        }
+        Insert: {
+          antecipacao_id_externo?: number | null
+          cedente_cnpj: string
+          cedente_empresa_id?: string | null
+          cedente_matriz_cnpj: string
+          cedente_nome?: string | null
+          coberto_apolice?: boolean
+          emissao?: string | null
+          externo_id: string
+          id?: string
+          limite_credito_vigente?: number | null
+          nf_chave_acesso?: string | null
+          numero?: string | null
+          operacao_externo_id?: string | null
+          pago_em?: string | null
+          pago_em_origem?: string | null
+          sacado_cnpj: string
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj: string
+          sacado_nome?: string | null
+          sincronizado_em?: string
+          status: string
+          status_producao?: string | null
+          valor_cedido?: number | null
+          valor_face: number
+          valor_pago?: number | null
+          vencimento: string
+          vencimento_prorrogado?: string | null
+        }
+        Update: {
+          antecipacao_id_externo?: number | null
+          cedente_cnpj?: string
+          cedente_empresa_id?: string | null
+          cedente_matriz_cnpj?: string
+          cedente_nome?: string | null
+          coberto_apolice?: boolean
+          emissao?: string | null
+          externo_id?: string
+          id?: string
+          limite_credito_vigente?: number | null
+          nf_chave_acesso?: string | null
+          numero?: string | null
+          operacao_externo_id?: string | null
+          pago_em?: string | null
+          pago_em_origem?: string | null
+          sacado_cnpj?: string
+          sacado_empresa_id?: string | null
+          sacado_matriz_cnpj?: string
+          sacado_nome?: string | null
+          sincronizado_em?: string
+          status?: string
+          status_producao?: string | null
+          valor_cedido?: number | null
+          valor_face?: number
+          valor_pago?: number | null
+          vencimento?: string
+          vencimento_prorrogado?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "titulos_antecipacao_id_externo_fkey"
+            columns: ["antecipacao_id_externo"]
+            isOneToOne: true
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -10767,6 +12539,94 @@ export type Database = {
         }
         Relationships: []
       }
+      apolice_relogio: {
+        Row: {
+          apolice_id: string | null
+          calculado_em: string | null
+          causa: string | null
+          cedente_cnpj: string | null
+          cedente_nome: string | null
+          cobertura_volta_em: string | null
+          cobranca_codigo: string | null
+          cobranca_id: string | null
+          data_limite_notificacao: string | null
+          data_limite_sinistro: string | null
+          data_parada_cobertura: string | null
+          data_perda: string | null
+          dias_desde_vencimento: number | null
+          dias_restantes: number | null
+          id: string | null
+          notificado_seguradora_em: string | null
+          numero: string | null
+          pago_em: string | null
+          proximo_marco: string | null
+          proximo_marco_em: string | null
+          responsavel_id: string | null
+          restabelecimento_retroativo: boolean | null
+          sacado_cnpj: string | null
+          sacado_matriz_cnpj: string | null
+          sacado_nome: string | null
+          sinistro_codigo: string | null
+          sinistro_estagio: string | null
+          sinistro_id: string | null
+          status: string | null
+          titulo_id: string | null
+          titulo_status: string | null
+          valor_face: number | null
+          vencimento_original: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apolice_prazos_apolice_id_fkey"
+            columns: ["apolice_id"]
+            isOneToOne: false
+            referencedRelation: "apolices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_sinistro_id_fkey"
+            columns: ["sinistro_id"]
+            isOneToOne: false
+            referencedRelation: "sinistros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_titulos_abertos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apolice_prazos_titulo_id_fkey"
+            columns: ["titulo_id"]
+            isOneToOne: false
+            referencedRelation: "titulos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       atividade_comunicacao: {
         Row: {
           canal: string | null
@@ -11030,6 +12890,252 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grupos_economicos"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      cobranca_cards: {
+        Row: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string | null
+          criada_por: string | null
+          data_base: string | null
+          dias_desde_notificacao: number | null
+          dias_restantes: number | null
+          encerrada_em: string | null
+          escopo_notificacao: string | null
+          estagio: string | null
+          honorarios_pct: number | null
+          id: string | null
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean | null
+          max_dias_atraso: number | null
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean | null
+          observacoes: string | null
+          processo_cnj: string | null
+          proximo_marco: string | null
+          proximo_marco_em: string | null
+          qtd_ativos: number | null
+          qtd_spes: number | null
+          qtd_titulos: number | null
+          responsavel_id: string | null
+          responsavel_nome: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string | null
+          sacado_razao_social: string | null
+          tem_acordo: boolean | null
+          tem_processo: boolean | null
+          tem_protesto: boolean | null
+          tem_sinistro: boolean | null
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+          valor_em_aberto: number | null
+          valor_face: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobrancas_aceite_apolice_por_fkey"
+            columns: ["aceite_apolice_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_processo_cnj_fkey"
+            columns: ["processo_cnj"]
+            isOneToOne: false
+            referencedRelation: "juridico_carteira"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "cobrancas_processo_cnj_fkey"
+            columns: ["processo_cnj"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["numero_cnj"]
+          },
+          {
+            foreignKeyName: "cobrancas_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
+      cobranca_titulos_abertos: {
+        Row: {
+          antecipacao_id_externo: number | null
+          cedente_cnpj: string | null
+          cedente_empresa_id: string | null
+          cedente_matriz_cnpj: string | null
+          cedente_nome: string | null
+          coberto_apolice: boolean | null
+          cobranca_ativa_codigo: string | null
+          cobranca_ativa_id: string | null
+          dias_atraso: number | null
+          emissao: string | null
+          externo_id: string | null
+          id: string | null
+          limite_credito_vigente: number | null
+          nf_chave_acesso: string | null
+          numero: string | null
+          operacao_externo_id: string | null
+          pago_em: string | null
+          pago_em_origem: string | null
+          sacado_cnpj: string | null
+          sacado_e_matriz: boolean | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string | null
+          sacado_nome: string | null
+          sincronizado_em: string | null
+          status: string | null
+          status_producao: string | null
+          valor_cedido: number | null
+          valor_face: number | null
+          valor_pago: number | null
+          vencimento: string | null
+          vencimento_prorrogado: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_titulos_cobranca_id_fkey"
+            columns: ["cobranca_ativa_id"]
+            isOneToOne: false
+            referencedRelation: "cobranca_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_titulos_cobranca_id_fkey"
+            columns: ["cobranca_ativa_id"]
+            isOneToOne: false
+            referencedRelation: "cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_antecipacao_id_externo_fkey"
+            columns: ["antecipacao_id_externo"]
+            isOneToOne: true
+            referencedRelation: "antecipacoes"
+            referencedColumns: ["id_externo"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_cedente_empresa_id_fkey"
+            columns: ["cedente_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "titulos_sacado_empresa_id_fkey"
+            columns: ["sacado_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
           },
         ]
       }
@@ -12662,6 +14768,7 @@ export type Database = {
           p_ator: string
           p_empresa_id: string
           p_limite: number
+          p_mesmo_com_aberta?: boolean
           p_observacoes: string
           p_origem_motivo: string
         }
@@ -12710,6 +14817,90 @@ export type Database = {
         }
       }
       app__atualizar_limites_dos_sacados: { Args: never; Returns: number }
+      app__cadastro_do_cnpj: {
+        Args: { p_cnpj: string }
+        Returns: {
+          camada: string
+          capital_social: number
+          cnae_grupos: string[]
+          cnae_principal: string
+          cnpj: string
+          municipio: string
+          natureza_juridica: string
+          nome_fantasia: string
+          razao_social: string
+          situacao_cadastral: string
+          uf: string
+        }[]
+      }
+      app__cobranca_bloquear_grupo: {
+        Args: { p_ator: string; p_cobranca_id: string }
+        Returns: undefined
+      }
+      app__cobranca_cnpjs_do_grupo: {
+        Args: { p_matriz: string }
+        Returns: string[]
+      }
+      app__cobranca_codigo: { Args: { p_prefixo: string }; Returns: string }
+      app__cobranca_config: { Args: { p_chave: string }; Returns: Json }
+      app__cobranca_empresas_do_grupo: {
+        Args: { p_matriz: string }
+        Returns: string[]
+      }
+      app__cobranca_marcar_enviada: {
+        Args: { p_ator: string; p_notificacao_id: string }
+        Returns: undefined
+      }
+      app__cobranca_placeholders_validos: {
+        Args: { p_tipo: string }
+        Returns: string[]
+      }
+      app__cobranca_projetar_titulos: { Args: never; Returns: Json }
+      app__cobranca_status_cedido: {
+        Args: { p_status: string }
+        Returns: boolean
+      }
+      app__cobranca_talvez_bloquear: {
+        Args: { p_ator: string; p_cobranca_id: string }
+        Returns: undefined
+      }
+      app__cobranca_vincular_processo: {
+        Args: { p_ator: string; p_cnj: string; p_cobranca_id: string }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app__condicao_publicada: {
         Args: { p_cnpj: string }
         Returns: {
@@ -12856,12 +15047,18 @@ export type Database = {
         Args: { p_ator: string | null; p_cnpj: string; p_origem: string }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -12940,6 +15137,30 @@ export type Database = {
         Args: { p_motivo: string }
         Returns: boolean
       }
+      app__protesto_atualizar_titulo: {
+        Args: { p: Json; p_ator: string }
+        Returns: {
+          atualizado_em: string
+          cartorio: string | null
+          certidao_path: string | null
+          cobranca_titulo_id: string | null
+          custas: number | null
+          data_protesto: string | null
+          id: string
+          instrucao_cancelamento_em: string | null
+          instrucao_nao_aplicavel_motivo: string | null
+          motivo_rejeicao: string | null
+          protocolo_cartorio: string | null
+          remessa_id: string | null
+          situacao: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_titulos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app__registrar_toque: {
         Args: {
           p_ator: string
@@ -13007,6 +15228,14 @@ export type Database = {
         Returns: Json
       }
       app__segredo_vault: { Args: { p_id: string }; Returns: string }
+      app__sincronizar_originacao_como_cedente: {
+        Args: { p_ids: string[]; p_vendedor: string }
+        Returns: undefined
+      }
+      app__sinistro_semear_documentos: {
+        Args: { p_sinistro_id: string }
+        Returns: undefined
+      }
       app__suprimir_fornecedor: {
         Args: {
           p_ator: string
@@ -13086,6 +15315,7 @@ export type Database = {
         Returns: {
           access_keys: string[]
           agendada_para: string | null
+          anexos: Json
           assunto: string | null
           atualizada_em: string
           campanha_destinatario_id: string | null
@@ -13247,6 +15477,7 @@ export type Database = {
         Returns: {
           access_keys: string[]
           agendada_para: string | null
+          anexos: Json
           assunto: string | null
           atualizada_em: string
           campanha_destinatario_id: string | null
@@ -13371,12 +15602,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -13656,6 +15893,642 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_cnpjs_em_cobranca: { Args: never; Returns: string[] }
+      app_cobranca_aceitar_aviso_apolice: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_anexar_acordo_assinado: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          criado_em: string
+          criado_por: string | null
+          dados_minuta: Json
+          documento_assinado_path: string | null
+          entrada: number
+          id: string
+          juros_parcelamento_mes: number
+          memoria_calculo: Json
+          minuta_hash: string | null
+          minuta_path: string | null
+          modelo_minuta_id: string | null
+          parcelas: Json
+          periodicidade: string
+          primeira_parcela: string | null
+          qtd_parcelas: number
+          sistema: string
+          status: string
+          valor_atualizado: number
+          valor_total_projetado: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "acordos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_arquivar_modelo: { Args: { p: Json }; Returns: undefined }
+      app_cobranca_atualizar: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_cancelar_acordo: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          criado_em: string
+          criado_por: string | null
+          dados_minuta: Json
+          documento_assinado_path: string | null
+          entrada: number
+          id: string
+          juros_parcelamento_mes: number
+          memoria_calculo: Json
+          minuta_hash: string | null
+          minuta_path: string | null
+          modelo_minuta_id: string | null
+          parcelas: Json
+          periodicidade: string
+          primeira_parcela: string | null
+          qtd_parcelas: number
+          sistema: string
+          status: string
+          valor_atualizado: number
+          valor_total_projetado: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "acordos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_cadastro: {
+        Args: { p_cnpjs: string[] }
+        Returns: {
+          bairro: string | null
+          cep: string | null
+          cnpj: string
+          empresa_id: string | null
+          logradouro: string | null
+          municipio: string | null
+          numero: string | null
+          razao_social: string | null
+          uf: string | null
+        }[]
+      }
+      app_cobranca_criar: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_criar_processo: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_dados_minuta: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          criado_em: string
+          criado_por: string | null
+          dados_minuta: Json
+          documento_assinado_path: string | null
+          entrada: number
+          id: string
+          juros_parcelamento_mes: number
+          memoria_calculo: Json
+          minuta_hash: string | null
+          minuta_path: string | null
+          modelo_minuta_id: string | null
+          parcelas: Json
+          periodicidade: string
+          primeira_parcela: string | null
+          qtd_parcelas: number
+          sistema: string
+          status: string
+          valor_atualizado: number
+          valor_total_projetado: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "acordos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_definir_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_editar_notificacao: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          destinatario_cnpj: string
+          destinatario_empresa_id: string | null
+          destinatario_endereco: Json | null
+          destinatario_razao_social: string
+          documento_hash: string | null
+          documento_path: string | null
+          enviada_em: string | null
+          gerada_em: string
+          id: string
+          memoria_calculo: Json | null
+          modelo_id: string | null
+          papel: string
+          prazo_expira_em: string | null
+          prazo_pagamento_dias: number
+          qtd_titulos: number
+          rodada: number
+          status: string
+          valor_total: number
+          valor_total_atualizado: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_notificacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_enviar_notificacao: {
+        Args: { p: Json }
+        Returns: {
+          canal: string
+          codigo_rastreio: string | null
+          comprovante_path: string | null
+          comunicacao_id: string | null
+          confirmado_em: string | null
+          contato_id: string | null
+          criado_em: string
+          criado_por: string | null
+          destino: string | null
+          enviado_em: string | null
+          id: string
+          notificacao_id: string
+          observacao: string | null
+          outbox_id: string | null
+          status: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_notificacao_entregas"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      app_cobranca_exige_gestor: { Args: never; Returns: undefined }
+      app_cobranca_exige_modulo: { Args: never; Returns: undefined }
+      app_cobranca_gestor: { Args: never; Returns: boolean }
+      app_cobranca_mover_estagio: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_painel: { Args: never; Returns: Json }
+      app_cobranca_quitar_titulo: {
+        Args: { p: Json }
+        Returns: {
+          cedente_cnpj_snapshot: string
+          cobranca_id: string
+          dias_atraso_snapshot: number
+          id: string
+          quitado_em: string | null
+          quitado_origem: string | null
+          sacado_cnpj_snapshot: string
+          situacao: string
+          titulo_id: string
+          valor_cedido_snapshot: number | null
+          valor_face_snapshot: number
+          valor_recebido: number | null
+          vencimento_snapshot: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_titulos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_registrar_entrega: {
+        Args: { p: Json }
+        Returns: {
+          canal: string
+          codigo_rastreio: string | null
+          comprovante_path: string | null
+          comunicacao_id: string | null
+          confirmado_em: string | null
+          contato_id: string | null
+          criado_em: string
+          criado_por: string | null
+          destino: string | null
+          enviado_em: string | null
+          id: string
+          notificacao_id: string
+          observacao: string | null
+          outbox_id: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_notificacao_entregas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_registrar_insolvencia: {
+        Args: { p: Json }
+        Returns: {
+          confirmada: boolean
+          criado_em: string
+          criado_por: string | null
+          data_decisao: string
+          fonte: string
+          id: string
+          numero_cnj: string | null
+          observacao: string | null
+          sacado_matriz_cnpj: string
+          tipo: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_insolvencias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_registrar_interacao: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          criado_em: string
+          id: string
+          ocorrida_em: string
+          resumo: string
+          tipo: string
+          usuario_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_interacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_regularizar_sacado: { Args: { p: Json }; Returns: Json }
+      app_cobranca_retirar_titulo: {
+        Args: { p: Json }
+        Returns: {
+          cedente_cnpj_snapshot: string
+          cobranca_id: string
+          dias_atraso_snapshot: number
+          id: string
+          quitado_em: string | null
+          quitado_origem: string | null
+          sacado_cnpj_snapshot: string
+          situacao: string
+          titulo_id: string
+          valor_cedido_snapshot: number | null
+          valor_face_snapshot: number
+          valor_recebido: number | null
+          vencimento_snapshot: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_titulos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_sacado_bloqueado: {
+        Args: { p_cnpj: string }
+        Returns: boolean
+      }
+      app_cobranca_salvar_acordo: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          criado_em: string
+          criado_por: string | null
+          dados_minuta: Json
+          documento_assinado_path: string | null
+          entrada: number
+          id: string
+          juros_parcelamento_mes: number
+          memoria_calculo: Json
+          minuta_hash: string | null
+          minuta_path: string | null
+          modelo_minuta_id: string | null
+          parcelas: Json
+          periodicidade: string
+          primeira_parcela: string | null
+          qtd_parcelas: number
+          sistema: string
+          status: string
+          valor_atualizado: number
+          valor_total_projetado: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "acordos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_salvar_apolice: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          atualizado_em: string
+          criado_em: string
+          franquia: number
+          id: string
+          numero: string
+          percentagem_segurada: number
+          periodo_espera_dias: number
+          periodo_max_prorrogacao_dias: number
+          prazo_documentos_complementares_dias: number
+          prazo_envio_sinistro_meses: number
+          prazo_maximo_credito_dias: number
+          prazo_notificacao_apos_prorrogacao_dias: number
+          responsabilidade_maxima: number | null
+          segurado_cnpj: string
+          seguradora: string
+          vigencia_fim: string
+          vigencia_inicio: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "apolices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_salvar_modelo: {
+        Args: { p: Json }
+        Returns: {
+          ativo: boolean
+          corpo_markdown: string
+          criado_em: string
+          criado_por: string | null
+          familia_id: string
+          id: string
+          nome: string
+          tipo: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_modelos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_cobranca_salvar_notificacoes: {
+        Args: { p: Json }
+        Returns: {
+          cobranca_id: string
+          destinatario_cnpj: string
+          destinatario_empresa_id: string | null
+          destinatario_endereco: Json | null
+          destinatario_razao_social: string
+          documento_hash: string | null
+          documento_path: string | null
+          enviada_em: string | null
+          gerada_em: string
+          id: string
+          memoria_calculo: Json | null
+          modelo_id: string | null
+          papel: string
+          prazo_expira_em: string | null
+          prazo_pagamento_dias: number
+          qtd_titulos: number
+          rodada: number
+          status: string
+          valor_total: number
+          valor_total_atualizado: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "cobranca_notificacoes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      app_cobranca_vincular_processo: {
+        Args: { p: Json }
+        Returns: {
+          aceite_apolice_em: string | null
+          aceite_apolice_por: string | null
+          codigo: string | null
+          convertida_em_processo_em: string | null
+          criada_em: string
+          criada_por: string | null
+          data_base: string | null
+          encerrada_em: string | null
+          escopo_notificacao: string
+          estagio: string
+          honorarios_pct: number | null
+          id: string
+          indice_correcao: string | null
+          juros_mora_mes: number | null
+          juros_pro_rata: boolean
+          motivo_encerramento: string | null
+          multa_pct: number | null
+          notificada_em: string | null
+          notificar_matriz_cedente: boolean
+          observacoes: string | null
+          processo_cnj: string | null
+          responsavel_id: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_atualizado: number | null
+          valor_atualizado_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cobrancas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_competencia_fechada: { Args: { p_data: string }; Returns: boolean }
       app_comunicacao_atividade: { Args: { p: Json }; Returns: Json }
       app_comunicacao_atividade_series: { Args: { p: Json }; Returns: Json }
@@ -13664,6 +16537,7 @@ export type Database = {
         Returns: {
           access_keys: string[]
           agendada_para: string | null
+          anexos: Json
           assunto: string | null
           atualizada_em: string
           campanha_destinatario_id: string | null
@@ -13855,12 +16729,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -13928,7 +16808,6 @@ export type Database = {
         }
       }
       app_criar_lead_sdr: { Args: { p: Json }; Returns: Json }
-      app_criar_venda: { Args: { p: Json }; Returns: Json }
       app_criar_lote: {
         Args: { p: Json }
         Returns: {
@@ -14010,6 +16889,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_criar_venda: { Args: { p: Json }; Returns: Json }
       app_decidir_aceite_sdr: {
         Args: { p: Json }
         Returns: {
@@ -14060,6 +16940,7 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           ate: string | null
+          comissiona_como_cedente: boolean
           desde: string
           empresa_id: string
           id: string
@@ -14096,12 +16977,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -14172,12 +17059,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -14248,12 +17141,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -14403,6 +17302,7 @@ export type Database = {
         Returns: {
           access_keys: string[]
           agendada_para: string | null
+          anexos: Json
           assunto: string | null
           atualizada_em: string
           campanha_destinatario_id: string | null
@@ -15104,6 +18004,7 @@ export type Database = {
           fornecedor_nome: string | null
           limite_disponivel_sacado: number | null
           limite_sacado_origem: string | null
+          link_antecipacao: string | null
           nao_operavel_motivo: string | null
           natureza_operacao: string | null
           nf_id_externo: string | null
@@ -15172,22 +18073,6 @@ export type Database = {
         }
       }
       app_mover_oportunidade: { Args: { p: Json }; Returns: Json }
-      app_notificacao_numeros: {
-        Args: never
-        Returns: {
-          enviados: number
-          lidos: number
-          pessoas: number
-          resumidos: number
-          tipo: string
-          ultimo_em: string | null
-        }[]
-      }
-      app_notificacao_previa: {
-        Args: { p_corpo?: string; p_tipo: string; p_titulo?: string; p_url?: string }
-        Returns: Json
-      }
-      app_notificacao_testar: { Args: { p_tipo: string }; Returns: string }
       app_mover_venda: {
         Args: { p: Json }
         Returns: {
@@ -15215,6 +18100,27 @@ export type Database = {
       }
       app_mudar_status_comissao: { Args: { p: Json }; Returns: number }
       app_mudar_status_competencia: { Args: { p: Json }; Returns: number }
+      app_notificacao_numeros: {
+        Args: never
+        Returns: {
+          enviados: number
+          lidos: number
+          pessoas: number
+          resumidos: number
+          tipo: string
+          ultimo_em: string | null
+        }[]
+      }
+      app_notificacao_previa: {
+        Args: {
+          p_corpo?: string
+          p_tipo: string
+          p_titulo?: string
+          p_url?: string
+        }
+        Returns: Json
+      }
+      app_notificacao_testar: { Args: { p_tipo: string }; Returns: string }
       app_ocultar_ex_cliente: { Args: { p_cnpj: string }; Returns: undefined }
       app_ocultar_spe_certificado: { Args: { p_cnpj: string }; Returns: Json }
       app_pausar_campanha: {
@@ -15370,12 +18276,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -15446,12 +18358,18 @@ export type Database = {
         Args: { p: Json }
         Returns: {
           atualizado_em: string
+          bloqueio_cobranca: boolean
+          bloqueio_cobranca_cobranca_id: string | null
+          bloqueio_cobranca_em: string | null
+          bloqueio_cobranca_motivo: string | null
           camada: string | null
           chance_concessao: number | null
           churn_erp_concorrente: boolean
           cnae_principal: string | null
           cnpj: string
           credito_calculado_em: string | null
+          credito_revisao_desde: string | null
+          credito_revisao_pos_inadimplencia: boolean
           credito_versao: number | null
           criado_em: string
           dados_apollo: Json | null
@@ -15734,6 +18652,155 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "analises_credito"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_anexar_arquivo: {
+        Args: { p: Json }
+        Returns: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_remessas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_atualizar_titulo: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          cartorio: string | null
+          certidao_path: string | null
+          cobranca_titulo_id: string | null
+          custas: number | null
+          data_protesto: string | null
+          id: string
+          instrucao_cancelamento_em: string | null
+          instrucao_nao_aplicavel_motivo: string | null
+          motivo_rejeicao: string | null
+          protocolo_cartorio: string | null
+          remessa_id: string | null
+          situacao: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_titulos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_criar_remessa: {
+        Args: { p: Json }
+        Returns: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_remessas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_instrucao_cancelamento: {
+        Args: { p: Json }
+        Returns: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_remessas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_marcar_enviada: {
+        Args: { p: Json }
+        Returns: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_remessas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_protesto_processar_retorno: {
+        Args: { p: Json }
+        Returns: {
+          arquivo_path: string | null
+          cobranca_id: string | null
+          cra: string
+          criado_em: string
+          criado_por: string | null
+          enviada_em: string | null
+          id: string
+          modo: string
+          protocolo: string | null
+          retorno_path: string | null
+          retorno_processado_em: string | null
+          status: string
+          tipo: string
+          uf: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "protesto_remessas"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -16682,6 +19749,192 @@ export type Database = {
         Args: { p_ids: string[]; p_vendedor: string }
         Returns: undefined
       }
+      app_sinistro_criar: {
+        Args: { p: Json }
+        Returns: {
+          apolice_id: string
+          causa: string
+          cobranca_id: string | null
+          codigo: string | null
+          criado_em: string
+          criado_por: string | null
+          data_limite_envio: string | null
+          data_perda: string
+          dossie_gerado_em: string | null
+          dossie_hash: string | null
+          dossie_path: string | null
+          enviado_em: string | null
+          estagio: string
+          id: string
+          indenizacao_estimada: number | null
+          indenizacao_recebida: number | null
+          justificativa_prova_entrega: string | null
+          memoria_perda: Json | null
+          modo_envio: string
+          motivo_recusa: string | null
+          notificado_em: string | null
+          perda_segurada_estimada: number | null
+          protocolo_externo: string | null
+          respondido_em: string | null
+          responsavel_id: string | null
+          resposta_prevista_em: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_recebido_parcial: number
+          valor_total_face: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistros"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sinistro_custo: {
+        Args: { p: Json }
+        Returns: {
+          aprovacao_referencia: string | null
+          aprovado_pela_seguradora: boolean
+          cobranca_id: string | null
+          comprovante_path: string | null
+          criado_em: string
+          criado_por: string | null
+          data: string
+          descricao: string
+          id: string
+          sinistro_id: string | null
+          valor: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistro_custos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sinistro_documento: {
+        Args: { p: Json }
+        Returns: {
+          anexado_em: string | null
+          anexado_por: string | null
+          arquivo_hash: string | null
+          arquivo_path: string | null
+          descricao: string
+          id: string
+          item: string
+          justificativa_ausencia: string | null
+          obrigatorio: boolean
+          origem: string
+          sinistro_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistro_documentos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sinistro_estimativa: {
+        Args: { p: Json }
+        Returns: {
+          apolice_id: string
+          causa: string
+          cobranca_id: string | null
+          codigo: string | null
+          criado_em: string
+          criado_por: string | null
+          data_limite_envio: string | null
+          data_perda: string
+          dossie_gerado_em: string | null
+          dossie_hash: string | null
+          dossie_path: string | null
+          enviado_em: string | null
+          estagio: string
+          id: string
+          indenizacao_estimada: number | null
+          indenizacao_recebida: number | null
+          justificativa_prova_entrega: string | null
+          memoria_perda: Json | null
+          modo_envio: string
+          motivo_recusa: string | null
+          notificado_em: string | null
+          perda_segurada_estimada: number | null
+          protocolo_externo: string | null
+          respondido_em: string | null
+          responsavel_id: string | null
+          resposta_prevista_em: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_recebido_parcial: number
+          valor_total_face: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistros"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sinistro_mover: {
+        Args: { p: Json }
+        Returns: {
+          apolice_id: string
+          causa: string
+          cobranca_id: string | null
+          codigo: string | null
+          criado_em: string
+          criado_por: string | null
+          data_limite_envio: string | null
+          data_perda: string
+          dossie_gerado_em: string | null
+          dossie_hash: string | null
+          dossie_path: string | null
+          enviado_em: string | null
+          estagio: string
+          id: string
+          indenizacao_estimada: number | null
+          indenizacao_recebida: number | null
+          justificativa_prova_entrega: string | null
+          memoria_perda: Json | null
+          modo_envio: string
+          motivo_recusa: string | null
+          notificado_em: string | null
+          perda_segurada_estimada: number | null
+          protocolo_externo: string | null
+          respondido_em: string | null
+          responsavel_id: string | null
+          resposta_prevista_em: string | null
+          sacado_empresa_id: string | null
+          sacado_matriz_cnpj: string
+          valor_recebido_parcial: number
+          valor_total_face: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistros"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_sinistro_solicitacao: {
+        Args: { p: Json }
+        Returns: {
+          descricao: string
+          id: string
+          prazo_em: string
+          respondida_em: string | null
+          sinistro_id: string
+          solicitada_em: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sinistro_solicitacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_solicitar_analise: {
         Args: { p: Json }
         Returns: {
@@ -17049,6 +20302,52 @@ export type Database = {
         Returns: Json
       }
       natureza_juridica_codigo: { Args: { bruto: string }; Returns: string }
+      notificacao__entregar: {
+        Args: {
+          p_ator: string
+          p_empresa_id: string
+          p_payload: Json
+          p_tipo: string
+        }
+        Returns: string[]
+      }
+      notificacao__exemplo: {
+        Args: { p_tipo: string }
+        Returns: {
+          empresa_id: string
+          payload: Json
+        }[]
+      }
+      notificacao__formatar: {
+        Args: { p_filtro: string; p_valor: string }
+        Returns: string
+      }
+      notificacao__quando: {
+        Args: { p_gravidade: string; p_respeita_silencio: boolean }
+        Returns: string
+      }
+      notificacao__uuid: { Args: { p: string }; Returns: string }
+      notificacao_emitir: {
+        Args: {
+          p_ator?: string
+          p_empresa_id?: string
+          p_payload?: Json
+          p_tipo: string
+        }
+        Returns: string[]
+      }
+      notificacao_renderizar: {
+        Args: { p_modelo: string; p_vars: Json }
+        Returns: string
+      }
+      notificacao_resolver_papel: {
+        Args: { p_empresa_id: string; p_papel: string; p_payload: Json }
+        Returns: string[]
+      }
+      notificacao_texto: {
+        Args: { p_empresa_id?: string; p_payload?: Json; p_tipo: string }
+        Returns: Json
+      }
       perfil_snapshot_atual: { Args: { p: Json }; Returns: Json }
       precificacao_amostra: { Args: { p_meses?: number }; Returns: Json }
       prospeccao_notas: { Args: { p: Json }; Returns: Json }
@@ -17093,14 +20392,6 @@ export type Database = {
       reports_painel: { Args: never; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      notificacao_emitir: {
-        Args: { p_ator?: string; p_empresa_id?: string; p_payload?: Json; p_tipo: string }
-        Returns: string[]
-      }
-      notificacao_texto: {
-        Args: { p_empresa_id?: string; p_payload?: Json; p_tipo: string }
-        Returns: Json
-      }
     }
     Enums: {
       [_ in never]: never

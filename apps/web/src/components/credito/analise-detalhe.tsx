@@ -60,6 +60,7 @@ import { DialogoEnviarSeguradora } from './analise-propria/dialogo-enviar'
 import { DialogoEnvioManual } from './analise-propria/dialogo-envio-manual'
 import { DialogoVincularPedido } from './analise-propria/dialogo-vincular-pedido'
 import { SolicitarAnaliseDialog } from './solicitar-analise-dialog'
+import { SelosCobrancaDaAnalise } from './selos-cobranca'
 import { DialogoRodarAnalise } from './analise-propria/dialogo-rodar'
 import { creditoKeys } from './queries'
 import { Confronto } from './analise-propria/confronto'
@@ -767,6 +768,8 @@ export function AnaliseDetalhe({ id }: { id: string }) {
        * linha de baixo, junto do CNPJ, que é onde ela basta.
        */}
       <FichaTopo titulo={nome} descricao={`Análise de crédito · ${formatCnpj(esteira.cnpj)}`} />
+      {/* 07 §11: grupo em cobrança (limite suspenso) ou regularizado com limite em revisão. */}
+      <SelosCobrancaDaAnalise cnpj={esteira.cnpj} empresaId={empresa?.id ?? null} />
 
       {/*
        * A banda de status ANTES das abas e fora da grade: ela vale para a tela inteira,

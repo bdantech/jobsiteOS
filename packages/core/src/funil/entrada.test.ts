@@ -138,3 +138,52 @@ test('not_eligible só entra com guardReason que um originador resolve', () => {
     motivo: 'guard_reason_nao_recuperavel',
   })
 })
+
+// ─── Sacado em cobrança (07 §11) ────────────────────────────────────────────
+
+test('oferta viva de sacado em cobrança é recusada com motivo explícito', () => {
+  assert.deepEqual(
+    preAutorizacaoEntraNoFunil(
+      { status: 'WAITING_CONTRACTED', expira_em: '2026-09-25', criada_em: '2026-09-20', sacado_em_cobranca: true },
+      CFG,
+      HOJE,
+    ),
+    { entra: false, motivo: 'sacado_em_cobranca' },
+  )
+})
+
+test('expirada recuperável e estado desconhecido também são recusados em cobrança', () => {
+  for (const status of ['EXPIRED', 'ALGUM_ESTADO_NOVO']) {
+    assert.deepEqual(
+      preAutorizacaoEntraNoFunil(
+        { status, expira_em: '2026-09-21', criada_em: '2026-09-15', sacado_em_cobranca: true },
+        CFG,
+        HOJE,
+      ),
+      { entra: false, motivo: 'sacado_em_cobranca' },
+    )
+  }
+})
+
+test('cobrança não reescreve fato consumado: convertida e revogada mantêm o motivo', () => {
+  const base = { expira_em: null, criada_em: '2026-09-20', sacado_em_cobranca: true }
+  assert.deepEqual(preAutorizacaoEntraNoFunil({ ...base, status: 'ANTICIPATION_REQUESTED' }, CFG, HOJE), {
+    entra: false,
+    motivo: 'ja_converteu',
+  })
+  assert.deepEqual(preAutorizacaoEntraNoFunil({ ...base, status: 'REVOKED' }, CFG, HOJE), {
+    entra: false,
+    motivo: 'revogada',
+  })
+})
+
+test('sem a informação de cobrança nada muda', () => {
+  assert.deepEqual(
+    preAutorizacaoEntraNoFunil(
+      { status: 'WAITING_CONTRACTED', expira_em: '2026-09-25', criada_em: '2026-09-20', sacado_em_cobranca: false },
+      CFG,
+      HOJE,
+    ),
+    { entra: true },
+  )
+})

@@ -27,6 +27,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import { buscarEsteira, creditoKeys, type AnaliseNaEsteira } from './queries'
 
 /**
@@ -104,7 +105,7 @@ function nomeDe(a: AnaliseNaEsteira): string {
  * copiar o endereço e o anúncio "link para {empresa}" — em silêncio, porque para
  * o mouse esquerdo tudo continuaria igual.
  */
-function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
+function CartaoAnalise({ a, emCobranca = false }: { a: AnaliseNaEsteira; emCobranca?: boolean }) {
   const decidida = ehEstagioDecidido(a.estagio)
   const tom = TOM_DO_ESTAGIO[a.estagio as EstagioAnalise] ?? 'neutro'
 
@@ -194,6 +195,12 @@ function CartaoAnalise({ a }: { a: AnaliseNaEsteira }) {
       chips={
         <>
           <ChipDoCard className="font-mono tabular-nums">{formatCnpj(a.cnpj)}</ChipDoCard>
+          {/* 07 §11: limite suspenso enquanto o grupo estiver em cobrança. */}
+          {emCobranca ? (
+            <ChipDoCard tom="ruim" forte>
+              Em cobrança — análises suspensas
+            </ChipDoCard>
+          ) : null}
           {/* A validade era uma coluna só da vista em tabela. Um limite aprovado
               que vence em 9 dias é outra conversa que um que vence em 9 meses. */}
           {a.expira_em && decidida ? (
@@ -247,6 +254,7 @@ export function Esteira() {
     queryKey: creditoKeys.esteira(),
     queryFn: buscarEsteira,
   })
+  const { emCobranca } = useEmCobranca()
 
   /**
    * A busca é local, sobre a lista já carregada — a esteira inteira já vem numa consulta,
@@ -385,7 +393,7 @@ export function Esteira() {
                       />
                       <div className="space-y-3">
                         {itens.map((a) => (
-                          <CartaoAnalise key={a.id} a={a} />
+                          <CartaoAnalise key={a.id} a={a} emCobranca={emCobranca(a.cnpj)} />
                         ))}
                         {itens.length === 0 && <ColunaVazia>vazio</ColunaVazia>}
                       </div>

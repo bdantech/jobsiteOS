@@ -23,6 +23,7 @@ import {
   TiraDoCard,
   type TomDoScore,
 } from '@/components/comercial/card-funil'
+import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import { MenuAcoesNota } from './acoes-nota'
 import { NotaModal } from './documento/nota-modal'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
@@ -115,6 +116,9 @@ export function NotaCard({
    */
   dono?: React.ReactNode
 }) {
+  // 07 §11: selo e tira da cobrança. Uma leitura por tela; o banco é quem recusa.
+  const { emCobranca } = useEmCobranca()
+  const sacadoEmCobranca = emCobranca(nota.sacado_cnpj) || emCobranca(conta?.cnpj)
   const [notaAberta, setNotaAberta] = React.useState(false)
   /*
    * A aba e o contato escolhido, no card e não no modal: quem escolhe "mandar
@@ -239,6 +243,11 @@ export function NotaCard({
               chips={
                 <>
                   <ChipDoCard forte>{nota.tipo_nf ?? 'NFe'}</ChipDoCard>
+                  {sacadoEmCobranca ? (
+                    <ChipDoCard tom="ruim" forte>
+                      Em cobrança
+                    </ChipDoCard>
+                  ) : null}
                   <ChipDoCard className="tabular-nums">
                     nº {nota.numero ?? '—'}
                     {nota.serie ? `/${nota.serie}` : ''}
@@ -303,8 +312,14 @@ export function NotaCard({
                   UMA tira, nesta ordem. A conversão vale mais que o limite porque
                   encerra a pergunta: a nota já virou dinheiro, e o resto é história.
                   Empilhar as duas faria um card resolvido parecer indeciso.
+                  A cobrança (07 §11) vem antes de todas: enquanto o grupo do sacado
+                  estiver bloqueado, nenhuma das outras conversas leva a operação.
                 */
-                !compacto && nota.conversao_antecipacao_id ? (
+                !compacto && sacadoEmCobranca ? (
+                  <TiraDoCard tom="ruim">
+                    Sacado em cobrança — solicitação de operação bloqueada até a regularização.
+                  </TiraDoCard>
+                ) : !compacto && nota.conversao_antecipacao_id ? (
                   <TiraDoCard tom={nota.conversao_em_disputa ? 'ruim' : 'bom'}>
                     Convertida via antecipação #{nota.conversao_antecipacao_id}
                     {nota.conversao_valor ? ` · ${formatarMoedaExata(nota.conversao_valor)}` : ''}
