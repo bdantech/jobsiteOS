@@ -1,15 +1,26 @@
-import type { MotivoOcultacao, PrioridadeNfVsTitulo, TipoOportunidade } from './schemas.js'
+import type { MotivoOcultacao, TipoOportunidade } from './schemas.js'
 
 /**
  * A DEDUPLICAÇÃO (§5) — quem aparece quando o mesmo recebível chega por dois
  * caminhos.
  *
- * ── A HIERARQUIA, E ELA NÃO É A MESMA NOS DOIS PARES ────────────────────────
- * Contra a NF, o original tem precedência: a nota fica e ganha um selo "já tem
- * pré-autorização". Contra o TÍTULO, quem fica é a OFERTA.
+ * ── A HIERARQUIA: NF > PRÉ-AUTORIZAÇÃO > TÍTULO ────────────────────────────
+ * Um recebível, um card. Quando as três fontes trazem o mesmo documento, fica a NF;
+ * sem NF, a oferta; sem as duas, a parcela. Os escondidos não somem da tela: o
+ * modal de detalhe do card que ficou lista os outros (`funil_ocultacoes`), e a nota
+ * leva o selo "já tem pré-autorização".
  *
- * A diferença é de CARDINALIDADE, e é o que uma versão anterior deste arquivo
- * errou ao aplicar a mesma razão aos dois pares:
+ * Até 28/09/2026 a oferta com parcela era a RAIZ — nada a escondia — e a disputa
+ * NF × título era uma config com default `titulo`. Com as três presentes, isso
+ * punha a OFERTA na tela no lugar da nota, e com a config em `nf` punha as DUAS.
+ * A decisão de negócio passou a ser uma só, fixa: a nota é o documento mais rico
+ * (XML, emissão, natureza da operação), e é nela que o resto do funil se apoia.
+ *
+ * Como a NF nunca é escondida, ela é sempre a raiz, e o ciclo que a regra antiga
+ * precisava evitar (parcela → oferta → NF → parcela) deixou de ser possível.
+ *
+ * Os pares têm CARDINALIDADES diferentes, e é por isso que casam de jeitos
+ * diferentes:
  *
  *   pré-auth ↔ título ... 1:1. A oferta aponta `billId` + `installmentId`, então é
  *                         a MESMA unidade que a parcela. Medido em 23/09/2026: 123
@@ -18,12 +29,16 @@ import type { MotivoOcultacao, PrioridadeNfVsTitulo, TipoOportunidade } from './
  *                         ofertas, e esconder a nota atrás de uma delas diria que só
  *                         aquela existe.
  *
- * E contra o título a oferta descreve melhor o mesmo recebível: ela tem relógio
+ * Contra o título a oferta descreve melhor o mesmo recebível: ela tem relógio
  * (`expiresAt`), status e valor autorizado, e o card da parcela não tem onde
  * mostrar isso — a view do título fixa `relogio = NULL`. Medido: dos 87 títulos que
  * escondiam uma oferta aberta, TODOS tinham `situation = 'offer_created'` e nenhum
  * tinha `guard_reason`; o card na tela dizia "uma oferta foi criada" e escondia
  * exatamente essa oferta, com 9 prazos já vencidos sem ninguém ver.
+ *
+ * O preço conhecido da NF na frente: uma nota de três parcelas aparece inteira, e
+ * quem liga precisa abrir o detalhe para ver que só uma parcela tem oferta. É o
+ * que as etiquetas do modal existem para mostrar.
  *
  * ── OFERTA ENCERRADA ENCERRA A PARCELA ──────────────────────────────────────
  * Quando a oferta acaba — convertida, perdida ou expirada — a parcela NÃO volta
@@ -230,10 +245,7 @@ function pontuarProximidade(
   return { dentro: valorOk && prazoOk, distancia }
 }
 
-export function deduplicarFunil(
-  entrada: EntradaDedup,
-  prioridade: PrioridadeNfVsTitulo = 'titulo',
-): ResultadoDedup {
+export function deduplicarFunil(entrada: EntradaDedup): ResultadoDedup {
   const ocultacoes = new Map<string, Ocultacao>()
   const selos: SeloPreAutorizacao[] = []
   const ambiguidades: AmbiguidadeDedup[] = []
@@ -310,13 +322,8 @@ export function deduplicarFunil(
     }
 
     /*
-     * A OFERTA É O CARD, E A PARCELA SAI — e aqui a oferta é a RAIZ da cadeia.
-     *
-     * O `continue` não é atalho: ele garante que uma oferta com parcela nunca seja
-     * escondida por mais nada. Sem ele, o ramo da NF abaixo poderia esconder esta
-     * mesma oferta, e com a NF já escondida atrás da parcela (§3) o grafo fecharia
-     * um CICLO — parcela → oferta → NF → parcela — que `raiz()` só conteria pelo
-     * teto de saltos, devolvendo um original arbitrário.
+     * A OFERTA ESCONDE A PARCELA — e já não é a raiz: logo abaixo ela mesma pode
+     * ficar atrás da NF, e a cadeia (passo 4) leva a parcela junto até a nota.
      */
     if (parcelaDaOferta) {
       ocultacoes.set(chaveDedup('titulo', parcelaDaOferta.id_externo), {
@@ -336,23 +343,35 @@ export function deduplicarFunil(
           perda_motivo: pre.perda_motivo ?? motivoPadraoDeEncerramento(pre.estagio_funil),
         })
       }
-      continue
     }
 
-    // 2b. Sem parcela: a NF, e aí quem fica é a NOTA — é o par 1:N. Só quando há
-    // número para casar.
+    // 2b. A NF, e aí quem fica é a NOTA.
+    /*
+     * Nota encerrada só é original de oferta CONVERTIDA. É o que mantém a oferta
+     * atrás da nota depois que a conversão encerrou as duas — sem isso a oferta
+     * voltaria como card próprio e Encerradas mostraria o mesmo recebível duas
+     * vezes. E oferta aberta não se esconde atrás de nota que saiu do funil.
+     */
+    const podeSerOriginal = (n: NotaParaDedup): boolean =>
+      !ENCERRADOS.has(n.estagio_funil) || pre.estagio_funil === 'convertida'
+
     let original: { tipo: TipoOportunidade; id: string } | null = null
-    if (pre.numero_normalizado) {
+
+    /*
+     * Pela PARCELA primeiro: ela carrega a chave de acesso da nota, e aí é id contra
+     * id. É o caminho das três fontes juntas — a oferta, a parcela e a nota do
+     * mesmo recebível —, e não tem desempate nem ambiguidade.
+     */
+    const chaveDaParcela = parcelaDaOferta
+      ? (parcelaDaOferta.bill_access_key ?? parcelaDaOferta.nfe_candidate_access_key)
+      : null
+    const notaDaParcela = chaveDaParcela ? notasPorAcesso.get(chaveDaParcela) : undefined
+    if (notaDaParcela && podeSerOriginal(notaDaParcela)) {
+      original = { tipo: 'nf', id: notaDaParcela.access_key }
+    } else if (pre.numero_normalizado) {
+      // Sem chave pela parcela: por número, que é o par 1:N.
       const k = `${pre.sacado_matriz_cnpj}/${pre.fornecedor_cnpj}/${pre.numero_normalizado}`
-      /*
-       * Nota encerrada só é original de oferta CONVERTIDA. É o que mantém a oferta
-       * atrás da nota depois que a conversão encerrou as duas — sem isso a oferta
-       * voltaria como card próprio e Encerradas mostraria o mesmo recebível duas
-       * vezes. E oferta aberta não se esconde atrás de nota que saiu do funil.
-       */
-      const candidatos = (notasPorChave.get(k) ?? []).filter(
-        (n) => !ENCERRADOS.has(n.estagio_funil) || pre.estagio_funil === 'convertida',
-      )
+      const candidatos = (notasPorChave.get(k) ?? []).filter(podeSerOriginal)
       if (candidatos.length === 1) {
         original = { tipo: 'nf', id: (candidatos[0] as NotaParaDedup).access_key }
       } else if (candidatos.length > 1) {
@@ -375,11 +394,11 @@ export function deduplicarFunil(
     }
 
     /*
-     * Pré-autorização ÓRFÃ — origem manual, integration, file, lite, ou `nfe` cuja
-     * NF simplesmente não é nossa (o fornecedor não tem certificado conosco). Ela
-     * É o original, e vira card normalmente. Este é o caso mais comum nas contas
-     * novas, e tratá-lo como erro deixaria o funil vazio justamente onde há mais a
-     * ganhar.
+     * Sem NF: a oferta é o card (com ou sem parcela atrás dela). Inclui a ÓRFÃ —
+     * origem manual, integration, file, lite, ou `nfe` cuja NF simplesmente não é
+     * nossa (o fornecedor não tem certificado conosco). Ela É o original, e vira
+     * card normalmente. Este é o caso mais comum nas contas novas, e tratá-lo como
+     * erro deixaria o funil vazio justamente onde há mais a ganhar.
      */
     if (!original) continue
 
@@ -425,36 +444,22 @@ export function deduplicarFunil(
     }
   }
 
-  // ── 3. Título ↔ NF, pela chave de acesso, sob a config. ──────────────────
+  // ── 3. Título ↔ NF, pela chave de acesso: a NOTA fica. ──────────────────
 
   /*
    * Sem `accessKey` dos dois lados NÃO SE DEDUPLICA, e não há plano B por número:
    * PARCELA NÃO É NOTA. Uma NF de R$ 55 mil em três parcelas casaria por número
-   * com as três, e esconder a nota em favor de uma delas — ou as três em favor da
-   * nota — descreveria errado o que está disponível para antecipar hoje.
+   * com as três, e o casamento errado esconderia a parcela de outra nota.
    */
   /*
    * Só as notas ABERTAS, contando o encerramento desta passada: a `convertida` está
-   * na lista só para segurar a oferta que a encerrou, e não esconde nem é escondida
-   * por parcela nenhuma.
+   * na lista só para segurar a oferta que a encerrou. Nota encerrada não esconde
+   * parcela aberta — documento que saiu do funil não leva card aberto com ele (0254).
    */
   const notasPorChaveAcesso = new Map<string, NotaParaDedup>()
   for (const n of entrada.notas) {
     if (ENCERRADOS.has(n.estagio_funil) || notasEncerradas.has(n.access_key)) continue
     notasPorChaveAcesso.set(n.access_key, n)
-  }
-
-  /*
-   * O estágio EFETIVO da parcela: o dela, ou o que a oferta acabou de lhe dar.
-   *
-   * Sem isto uma parcela que a oferta encerrou agora — e cujo estágio no banco
-   * ainda diz `a_prospectar` — continuaria habilitada a esconder uma NF ABERTA.
-   * Seria a 0254 de novo: documento encerrado levando card aberto com ele, só que
-   * por um encerramento decidido nesta mesma passada.
-   */
-  const estagioEfetivo = new Map<string, string>()
-  for (const e of encerramentos) {
-    if (e.tipo === 'titulo') estagioEfetivo.set(e.referencia_id, e.estagio)
   }
 
   for (const t of entrada.titulos) {
@@ -463,40 +468,28 @@ export function deduplicarFunil(
     const nota = notasPorChaveAcesso.get(chave)
     if (!nota) continue
 
-    if (prioridade === 'titulo') {
-      // Parcela encerrada não esconde nota: a regra da 0254, agora no core, onde ela
-      // pode ser testada em vez de morar num `where` do job.
-      const estagio = estagioEfetivo.get(String(t.id_externo)) ?? t.estagio_funil
-      if (ENCERRADOS.has(estagio)) continue
+    // Já atrás da oferta: a oferta foi para trás desta mesma nota no passo 2 (pela
+    // mesma chave), e a cadeia leva a parcela até ela. Sobrescrever perderia o
+    // motivo `oferta_criada`, que é o que o detalhe mostra.
+    const k = chaveDedup('titulo', t.id_externo)
+    if (ocultacoes.has(k)) continue
 
-      // A PARCELA é a unidade que vira oferta. A nota inteira esconderia que só
-      // uma das três está disponível agora.
-      ocultacoes.set(chaveDedup('nf', nota.access_key), {
-        tipo: 'nf',
-        referencia_id: nota.access_key,
-        motivo: 'duplicado_canal',
-        original_tipo: 'titulo',
-        original_id: String(t.id_externo),
-      })
-    } else {
-      ocultacoes.set(chaveDedup('titulo', t.id_externo), {
-        tipo: 'titulo',
-        referencia_id: String(t.id_externo),
-        motivo: 'duplicado_canal',
-        original_tipo: 'nf',
-        original_id: nota.access_key,
-      })
-    }
+    ocultacoes.set(k, {
+      tipo: 'titulo',
+      referencia_id: String(t.id_externo),
+      motivo: 'duplicado_canal',
+      original_tipo: 'nf',
+      original_id: nota.access_key,
+    })
   }
 
   // ── 4. A cadeia: o selo tem de pousar em quem está VISÍVEL. ──────────────
 
   /*
-   * Uma pré-autorização pode apontar para uma NF que, por sua vez, está escondida
-   * atrás de uma parcela. Sem este passo o selo "já tem pré-autorização" ficaria
-   * pendurado num card que ninguém vê, e o card visível — a parcela — não diria
-   * que a oferta já foi feita. É exatamente a informação mais quente do funil,
-   * perdida por um elo.
+   * A parcela vai para trás da oferta, e a oferta para trás da nota: sem este
+   * passo a parcela apontaria para um card que ninguém vê, e o detalhe da nota não
+   * a listaria. Com a NF sempre na raiz a cadeia tem no máximo dois elos; o teto de
+   * saltos fica para dado torto.
    */
   const raiz = (tipo: TipoOportunidade, id: string): { tipo: TipoOportunidade; id: string } => {
     let atual = { tipo, id }

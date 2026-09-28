@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { promoverFornecedorAction } from '@/actions/antecipacao'
+import { DocumentosDoRecebivel } from './documentos-do-recebivel'
 import { antecipacaoKeys } from './queries'
 import { formatarData, formatarMoedaExata, labelCredito, textoPrazo } from './format'
 import { MenuAcoesOportunidade } from './acoes-oportunidade'
@@ -255,6 +256,7 @@ export function OportunidadeModal({
             {subtitulo ? (
               <p className="truncate text-xs text-muted-foreground">{subtitulo}</p>
             ) : null}
+            {item.id ? <DocumentosDoRecebivel tipo={tipo} id={item.id} aberto={aberto} /> : null}
           </div>
         </DialogHeader>
 

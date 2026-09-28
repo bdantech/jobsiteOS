@@ -167,23 +167,9 @@ export const GUARD_REASON_LABELS: Record<string, string> = {
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-/**
- * QUEM GANHA QUANDO O MESMO RECEBÍVEL CHEGA PELOS DOIS CAMINHOS.
- *
- * A NF vem pelo certificado do fornecedor; a parcela vem pela conexão Sienge da
- * construtora. São o mesmo dinheiro visto de dois lados, e mostrar os dois é
- * mostrar trabalho dobrado.
- *
- * O default é `titulo`, e a razão é operacional: a PARCELA é a unidade que vira
- * oferta e é antecipada. Uma NF de R$ 55 mil com três parcelas, exibida inteira,
- * esconde que só uma delas está disponível agora — e o originador liga oferecendo
- * um valor que não existe.
- */
-export const PRIORIDADES_NF_VS_TITULO = ['titulo', 'nf'] as const
-export type PrioridadeNfVsTitulo = (typeof PRIORIDADES_NF_VS_TITULO)[number]
-
 export const configFunilOportunidadesSchema = z.object({
-  prioridade_nf_vs_titulo: z.enum(PRIORIDADES_NF_VS_TITULO).default('titulo'),
+  // Não há mais `prioridade_nf_vs_titulo`: a hierarquia NF > oferta > parcela é fixa
+  // desde 28/09/2026 (ver `dedup.ts`). A chave antiga no banco é ignorada pelo zod.
   /** Janela de recuperação das pré-autorizações mortas (expirada/revogada). */
   recuperacao_dias: z.number().int().min(0).max(180).default(15),
   /** Só estes `guardReason` fazem uma parcela `not_eligible` entrar no funil. */

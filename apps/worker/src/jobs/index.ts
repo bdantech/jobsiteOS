@@ -763,9 +763,7 @@ export function dispararSyncFontesDoFunil(modo: 'novidade' | 'estado' = 'novidad
   return dispararAvulso('funil-sync-fontes', async () => sincronizarFontesDoFunil(modo))
 }
 
-/** A deduplicação sozinha. Existe para depois de trocar `prioridade_nf_vs_titulo`:
- *  a config muda quem aparece, e esperar quatro horas para ver o efeito de uma
- *  decisão que se acabou de tomar é o tipo de espera que faz ninguém tomar. */
+/** A deduplicação sozinha: recompõe o funil sem esperar o ciclo de quatro horas. */
 export function dispararDedupFunil(): string {
   return dispararAvulso('funil-deduplicar', async () => deduplicarOportunidades())
 }

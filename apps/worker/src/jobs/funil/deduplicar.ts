@@ -6,7 +6,6 @@ import {
   type PreAuthParaDedup,
   type TituloParaDedup,
 } from '../../../../../packages/core/src/funil/dedup.js'
-import { lerConfigFunilOportunidades } from '../../funil/config.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento } from '../../radar/eventos.js'
@@ -167,14 +166,13 @@ async function carregarTitulos(): Promise<TituloParaDedup[]> {
 }
 
 export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
-  const cfg = await lerConfigFunilOportunidades()
   const [notas, preAutorizacoes, titulos] = await Promise.all([
     carregarNotas(),
     carregarPreAutorizacoes(),
     carregarTitulos(),
   ])
 
-  const r = deduplicarFunil({ notas, preAutorizacoes, titulos }, cfg.prioridade_nf_vs_titulo)
+  const r = deduplicarFunil({ notas, preAutorizacoes, titulos })
 
   const acc: ResultadoDedup = {
     notas: notas.length,
@@ -186,7 +184,7 @@ export async function deduplicarOportunidades(): Promise<ResultadoDedup> {
     ambiguidades: r.ambiguidades.length,
     encerradas: 0,
     eventos: 0,
-    prioridade: cfg.prioridade_nf_vs_titulo,
+    prioridade: 'nf > pre_autorizacao > titulo',
   }
 
   const cliente = await pool.connect()

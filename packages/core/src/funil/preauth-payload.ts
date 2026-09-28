@@ -1,5 +1,6 @@
 import { normalizeCnpj } from '../schemas/cnpj.js'
 import { normalizarNumeroNf } from '../antecipacao/numero-nf.js'
+import { instanteDeBrasilia } from './instante.js'
 
 /**
  * `GET /api/v1/pre-authorizations` — a oferta que a construtora já fez.
@@ -180,9 +181,9 @@ export function normalizarPreAuthPayload(item: PreAuthPayload): ResultadoNormali
       origin: texto(item.origin) ?? 'desconhecida',
       migrated: item.migrated ?? null,
       identification: texto(item.identification),
-      criada_em: texto(item.createdAt),
-      expira_em: texto(item.expiresAt),
-      solicitada_em: texto(item.requestedAt),
+      criada_em: instanteDeBrasilia(item.createdAt),
+      expira_em: instanteDeBrasilia(item.expiresAt),
+      solicitada_em: instanteDeBrasilia(item.requestedAt),
       valor,
       invoice_number: invoiceNumber,
       /*

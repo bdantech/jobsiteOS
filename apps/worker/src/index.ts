@@ -975,11 +975,8 @@ app.post('/jobs/funil/sync-fontes', (req: Request, res: Response, next: NextFunc
 })
 
 /**
- * A deduplicação sozinha — a rota de depois de trocar `prioridade_nf_vs_titulo`.
- *
- * A config decide quem aparece (a parcela ou a nota), e esperar o próximo ciclo
- * de quatro horas para ver o efeito de uma decisão que se acabou de tomar é o tipo
- * de espera que faz ninguém tomar a decisão.
+ * A deduplicação sozinha — para recompor o funil sem esperar o próximo ciclo de
+ * quatro horas (depois de mudar a regra, ou de corrigir um dado à mão).
  */
 app.post('/jobs/funil/deduplicar', (_req: Request, res: Response, next: NextFunction) => {
   try {

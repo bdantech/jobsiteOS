@@ -66,6 +66,8 @@ export const antecipacaoKeys = {
   candidatas: (idExterno: number) => [...antecipacaoKeys.all, 'candidatas', idExterno] as const,
   calibracao: () => [...antecipacaoKeys.all, 'calibracao'] as const,
   xml: (accessKey: string) => [...antecipacaoKeys.all, 'xml', accessKey] as const,
+  documentosDoRecebivel: (tipo: TipoOportunidade, id: string) =>
+    [...antecipacaoKeys.all, 'documentos-do-recebivel', tipo, id] as const,
   filaLookup: () => [...antecipacaoKeys.all, 'fila-lookup'] as const,
 }
 
@@ -428,6 +430,95 @@ export async function buscarXmlDaNota(
     .maybeSingle()
   if (error) throw error
   return { raw_xml: data?.raw_xml ?? null, xml_parse_erro: data?.xml_parse_erro ?? null }
+}
+
+/**
+ * O mesmo recebível pelas outras fontes (NF > pré-autorização > título).
+ *
+ * O funil mostra UM card por recebível; os outros documentos dele estão em
+ * `funil_ocultacoes`, apontando para o card que ficou (a dedup já resolve a cadeia,
+ * então o original é sempre o card visível). O detalhe os lista como etiquetas
+ * para que "tem oferta?" e "a parcela já foi paga?" não exijam procurar em outra tela.
+ *
+ * O rótulo não depende de conseguir ler a linha de origem: se a RLS de uma fonte
+ * não deixar, a etiqueta sai só com o tipo e o número.
+ */
+export interface DocumentoDoRecebivel {
+  tipo: TipoOportunidade
+  id: string
+  rotulo: string
+  /** O status na fonte, cru — quem exibe traduz. */
+  estado: string | null
+}
+
+export async function buscarDocumentosDoRecebivel(
+  tipo: TipoOportunidade,
+  id: string,
+): Promise<DocumentoDoRecebivel[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('funil_ocultacoes')
+    .select('tipo, referencia_id')
+    .eq('original_tipo', tipo)
+    .eq('original_id', id)
+  if (error) throw error
+  if (!data?.length) return []
+
+  const idsPre = data
+    .filter((o) => o.tipo === 'pre_autorizacao')
+    .map((o) => Number(o.referencia_id))
+  const idsTitulo = data.filter((o) => o.tipo === 'titulo').map((o) => Number(o.referencia_id))
+
+  const [pres, titulos] = await Promise.all([
+    idsPre.length
+      ? supabase.from('pre_autorizacoes').select('id_externo, status').in('id_externo', idsPre)
+      : Promise.resolve({ data: [] as { id_externo: number; status: string | null }[] }),
+    idsTitulo.length
+      ? supabase
+          .from('sienge_titulos')
+          .select('id_externo, bill_id, installment_number, situation')
+          .in('id_externo', idsTitulo)
+      : Promise.resolve({
+          data: [] as {
+            id_externo: number
+            bill_id: number | null
+            installment_number: number | null
+            situation: string | null
+          }[],
+        }),
+  ])
+  const prePorId = new Map((pres.data ?? []).map((p) => [String(p.id_externo), p]))
+  const tituloPorId = new Map((titulos.data ?? []).map((t) => [String(t.id_externo), t]))
+
+  const ordem: Record<string, number> = { nf: 0, pre_autorizacao: 1, titulo: 2 }
+  return data
+    .map((o): DocumentoDoRecebivel => {
+      const t = o.tipo as TipoOportunidade
+      if (t === 'pre_autorizacao') {
+        return {
+          tipo: t,
+          id: o.referencia_id,
+          rotulo: `Pré-autorização #${o.referencia_id}`,
+          estado: prePorId.get(o.referencia_id)?.status ?? null,
+        }
+      }
+      if (t === 'titulo') {
+        const linha = tituloPorId.get(o.referencia_id)
+        const parcela = linha?.bill_id
+          ? `${linha.bill_id}-${linha.installment_number ?? '?'}`
+          : `#${o.referencia_id}`
+        return {
+          tipo: t,
+          id: o.referencia_id,
+          rotulo: `Título Sienge ${parcela}`,
+          estado: linha?.situation ?? null,
+        }
+      }
+      // O número da NF está dentro da chave de acesso (posições 26–34).
+      const numero = Number(o.referencia_id.slice(25, 34))
+      return { tipo: t, id: o.referencia_id, rotulo: numero ? `NF ${numero}` : 'NF', estado: null }
+    })
+    .sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9) || a.id.localeCompare(b.id))
 }
 
 export interface CelulaResumo {

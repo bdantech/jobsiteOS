@@ -1,5 +1,6 @@
 import { normalizeCnpj } from '../schemas/cnpj.js'
 import { normalizarNumeroNf } from '../antecipacao/numero-nf.js'
+import { instanteDeBrasilia } from './instante.js'
 
 /**
  * `GET /api/v1/sienge-installments` — uma linha por PARCELA de título do ERP.
@@ -239,8 +240,8 @@ export function normalizarTituloPayload(item: TituloPayload): ResultadoNormaliza
       situation,
       guard_reason: texto(item.guardReason),
       exception_code: texto(item.exceptionCode),
-      primeira_vez_visto: texto(item.firstSeenAt),
-      hidratado_em: texto(item.hydratedAt),
+      primeira_vez_visto: instanteDeBrasilia(item.firstSeenAt),
+      hidratado_em: instanteDeBrasilia(item.hydratedAt),
       installment_id: inteiro(item.installmentId),
       installment_number: inteiro(item.installmentNumber),
       valor,
@@ -249,12 +250,12 @@ export function normalizarTituloPayload(item: TituloPayload): ResultadoNormaliza
       erp_situacao: texto(item.erpSituation),
       enviado_banco: item.sentToBank ?? null,
       tipo_pagamento: texto(item.paymentType),
-      erp_pago_em: texto(item.erpPaidAt),
-      erp_removido_em: texto(item.erpRemovedAt),
+      erp_pago_em: instanteDeBrasilia(item.erpPaidAt),
+      erp_removido_em: instanteDeBrasilia(item.erpRemovedAt),
       nfe_candidate_access_key: chaveAcesso(item.nfeCandidate?.accessKey),
       nfe_candidate_count: inteiro(item.nfeCandidate?.count),
       write_back_status: texto(item.writeBack?.status),
-      write_back_repointed_em: texto(item.writeBack?.repointedAt),
+      write_back_repointed_em: instanteDeBrasilia(item.writeBack?.repointedAt),
       bill_id: billId,
       bill_document_number: documento,
       bill_document_type: texto(item.bill?.documentType),

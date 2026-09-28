@@ -144,7 +144,6 @@ test('nota encerrada nesta passada não é escondida pela parcela', () => {
       preAutorizacoes: [pre({ estagio_funil: 'convertida' })],
       titulos: [titulo({ bill_access_key: chave })],
     },
-    'titulo',
   )
   assert.equal(r.encerramentos[0]?.tipo, 'nf')
   assert.equal(r.ocultacoes.find((o) => o.tipo === 'nf'), undefined)
@@ -229,29 +228,60 @@ test('o motivo de perda da oferta descesse para a parcela quando existe', () => 
  * parcela, `raiz()` daria a volta até o teto de saltos e devolveria um original
  * arbitrário — e o card visível seria decidido por acidente.
  */
-test('oferta com parcela é a RAIZ: a NF não a esconde, e não há ciclo', () => {
+test('as três fontes juntas: a NF fica, a oferta e a parcela vão para trás dela', () => {
   const chave = '3'.repeat(44)
-  const r = deduplicarFunil(
-    {
-      notas: [nf({ access_key: chave })],
-      // A mesma oferta casa com a parcela (por id) E com a NF (por número).
-      preAutorizacoes: [pre({ sienge_bill_id: 4242, sienge_installment_id: 1 })],
-      titulos: [titulo({ bill_access_key: chave })],
-    },
-    'titulo',
-  )
+  const r = deduplicarFunil({
+    notas: [nf({ access_key: chave })],
+    // A oferta casa com a parcela (por id); a parcela casa com a NF (pela chave).
+    preAutorizacoes: [pre({ sienge_bill_id: 4242, sienge_installment_id: 1 })],
+    titulos: [titulo({ bill_access_key: chave })],
+  })
 
-  assert.equal(
-    r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao'),
-    undefined,
-    'a oferta não é escondida por ninguém',
-  )
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'nf'), undefined, 'a NF nunca é escondida')
+  const daPre = r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao')
+  assert.equal(daPre?.original_tipo, 'nf')
+  assert.equal(daPre?.original_id, chave)
+  // A parcela segue atrás da oferta — motivo preservado —, e a cadeia a leva à nota.
   const daParcela = r.ocultacoes.find((o) => o.tipo === 'titulo')
-  assert.equal(daParcela?.original_id, '501')
-  // A NF é escondida, e a cadeia a reaponta para a OFERTA, que é quem está na tela.
-  const daNota = r.ocultacoes.find((o) => o.tipo === 'nf')
-  assert.equal(daNota?.original_tipo, 'pre_autorizacao')
-  assert.equal(daNota?.original_id, '501')
+  assert.equal(daParcela?.motivo, 'oferta_criada')
+  assert.equal(daParcela?.original_tipo, 'nf')
+  assert.equal(daParcela?.original_id, chave)
+  assert.deepEqual(
+    r.selos.map((x) => [x.tipo, x.referencia_id]),
+    [['nf', chave]],
+  )
+})
+
+test('oferta com parcela casa com a NF pela chave da parcela mesmo sem número', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil({
+    notas: [nf({ access_key: chave })],
+    preAutorizacoes: [pre({ numero_normalizado: null, sienge_bill_id: 4242, sienge_installment_id: 1 })],
+    titulos: [titulo({ nfe_candidate_access_key: chave })],
+  })
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao')?.original_id, chave)
+})
+
+test('oferta com parcela, sem chave na parcela, casa com a NF por número', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil({
+    notas: [nf({ access_key: chave })],
+    preAutorizacoes: [pre({ sienge_bill_id: 4242, sienge_installment_id: 1 })],
+    titulos: [titulo()],
+  })
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao')?.original_id, chave)
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'titulo')?.original_id, chave)
+})
+
+test('NF encerrada não esconde oferta aberta: a oferta é o card, com a parcela atrás', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil({
+    notas: [nf({ access_key: chave, estagio_funil: 'expirada' })],
+    preAutorizacoes: [pre({ sienge_bill_id: 4242, sienge_installment_id: 1 })],
+    titulos: [titulo({ bill_access_key: chave })],
+  })
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao'), undefined)
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'titulo')?.original_tipo, 'pre_autorizacao')
 })
 
 /**
@@ -274,7 +304,6 @@ test('parcela encerrada pela oferta não esconde NF aberta', () => {
       ],
       titulos: [titulo({ bill_access_key: chave, estagio_funil: 'a_prospectar' })],
     },
-    'titulo',
   )
 
   assert.equal(r.encerramentos.length, 1)
@@ -291,29 +320,35 @@ test('pré-auth órfã é o próprio original — vira card, não some', () => {
   assert.deepEqual(r.selos, [])
 })
 
-test('título ↔ NF por accessKey, modo `titulo` (default): a parcela fica, a nota sai', () => {
+test('título ↔ NF por accessKey: a nota fica, a parcela sai', () => {
   const chave = '3'.repeat(44)
-  const r = deduplicarFunil(
-    { ...VAZIO, notas: [nf()], titulos: [titulo({ bill_access_key: chave })] },
-    'titulo',
-  )
+  const r = deduplicarFunil({ ...VAZIO, notas: [nf()], titulos: [titulo({ bill_access_key: chave })] })
 
   assert.deepEqual(r.ocultacoes, [
     {
-      tipo: 'nf',
-      referencia_id: chave,
+      tipo: 'titulo',
+      referencia_id: '900',
       motivo: 'duplicado_canal',
-      original_tipo: 'titulo',
-      original_id: '900',
+      original_tipo: 'nf',
+      original_id: chave,
     },
   ])
 })
 
-test('título ↔ NF por accessKey, modo `nf`: a nota fica, a parcela sai', () => {
+test('parcela encerrada também vai para trás da NF aberta — um recebível, um card', () => {
+  const chave = '3'.repeat(44)
+  const r = deduplicarFunil({
+    ...VAZIO,
+    notas: [nf()],
+    titulos: [titulo({ bill_access_key: chave, estagio_funil: 'expirada' })],
+  })
+  assert.equal(r.ocultacoes[0]?.tipo, 'titulo')
+})
+
+test('título ↔ NF pela chave CANDIDATA também: a nota fica', () => {
   const chave = '3'.repeat(44)
   const r = deduplicarFunil(
     { ...VAZIO, notas: [nf()], titulos: [titulo({ nfe_candidate_access_key: chave })] },
-    'nf',
   )
 
   assert.equal(r.ocultacoes.length, 1)
@@ -322,7 +357,7 @@ test('título ↔ NF por accessKey, modo `nf`: a nota fica, a parcela sai', () =
 })
 
 test('sem accessKey dos dois lados não se deduplica — parcela não é nota', () => {
-  const r = deduplicarFunil({ ...VAZIO, notas: [nf()], titulos: [titulo()] }, 'titulo')
+  const r = deduplicarFunil({ ...VAZIO, notas: [nf()], titulos: [titulo()] })
   assert.deepEqual(r.ocultacoes, [])
 })
 
@@ -388,23 +423,17 @@ test('título de MATRIZ casa com pré-auth de SPE — as duas normalizadas pela 
   assert.equal(r.ocultacoes[0]?.original_tipo, 'nf')
 })
 
-test('a cadeia é resolvida: o selo pousa na parcela visível, não na NF escondida', () => {
+test('oferta por número e parcela pela chave: as duas atrás da NF, o selo na NF', () => {
   const chave = '3'.repeat(44)
-  const r = deduplicarFunil(
-    {
-      notas: [nf({ access_key: chave })],
-      preAutorizacoes: [pre()],
-      titulos: [titulo({ bill_access_key: chave })],
-    },
-    'titulo',
-  )
+  const r = deduplicarFunil({
+    notas: [nf({ access_key: chave })],
+    preAutorizacoes: [pre()],
+    titulos: [titulo({ bill_access_key: chave })],
+  })
 
-  // A NF sai (a parcela venceu); a pré-auth apontava para a NF e é REAPONTADA.
-  const daPre = r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao')
-  assert.equal(daPre?.original_tipo, 'titulo')
-  assert.equal(daPre?.original_id, '900')
-
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'pre_autorizacao')?.original_id, chave)
+  assert.equal(r.ocultacoes.find((o) => o.tipo === 'titulo')?.original_id, chave)
   assert.equal(r.selos.length, 1)
-  assert.equal(r.selos[0]?.tipo, 'titulo')
-  assert.equal(r.selos[0]?.referencia_id, '900')
+  assert.equal(r.selos[0]?.tipo, 'nf')
+  assert.equal(r.selos[0]?.referencia_id, chave)
 })

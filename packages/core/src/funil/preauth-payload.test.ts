@@ -66,3 +66,22 @@ test('a referência ao Sienge é guardada inteira — é a chave do casamento po
   assert.equal(r.pre.sienge_installment_id, 55)
   assert.equal(r.pre.sienge_installment_number, 2)
 })
+
+test('datas sem fuso são hora de Brasília — o que já vem com fuso passa intacto', () => {
+  // É assim que a plataforma manda de verdade: sem fuso nenhum.
+  const r = normalizarPreAuthPayload({
+    ...BASE,
+    createdAt: '2026-09-28T14:17:00',
+    expiresAt: '2026-10-07T23:59:59',
+    requestedAt: '2026-09-28T15:02:10',
+  })
+  assert.ok(r.ok)
+  assert.equal(r.pre.criada_em, '2026-09-28T14:17:00-03:00')
+  // O fim do dia é o de Brasília: sem o fuso, a oferta vencia às 20:59 daqui.
+  assert.equal(r.pre.expira_em, '2026-10-07T23:59:59-03:00')
+  assert.equal(r.pre.solicitada_em, '2026-09-28T15:02:10-03:00')
+
+  const comFuso = normalizarPreAuthPayload(BASE)
+  assert.ok(comFuso.ok)
+  assert.equal(comFuso.pre.criada_em, '2026-09-20T12:00:00Z')
+})
