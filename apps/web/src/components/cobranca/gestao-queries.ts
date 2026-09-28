@@ -12,7 +12,6 @@ export const gestaoKeys = {
   gestor: () => [...gestaoKeys.all, 'gestor'] as const,
   painel: () => [...gestaoKeys.all, 'painel'] as const,
   relogio: () => [...gestaoKeys.all, 'relogio'] as const,
-  boletoTrocado: () => [...gestaoKeys.all, 'boleto-trocado'] as const,
   reconciliacao: () => [...gestaoKeys.all, 'reconciliacao', 'todos'] as const,
   bloqueados: () => [...gestaoKeys.all, 'bloqueados'] as const,
   insolvencias: () => [...gestaoKeys.all, 'insolvencias'] as const,
@@ -75,29 +74,6 @@ export async function buscarRelogio(): Promise<LinhaRelogio[]> {
     .limit(3000)
   if (error) throw new Error(error.message)
   return (data ?? []) as LinhaRelogio[]
-}
-
-/*
- * Os status "boleto trocado" da produção. A plataforma não reporta a liquidação
- * desses títulos pelo sacado: um título assim pode estar pago e continuar "aberto"
- * aqui. O relógio marca cada um para ninguém notificar a seguradora de um pago.
- */
-const STATUS_BOLETO_TROCADO = [
-  'BILLET_SWAPPED',
-  'EXPIRED_BILL_SWAPPED',
-  'EXTENDED_BILL_SWAPPED',
-  'IN_EXTENSION_BILL_SWAPPED',
-]
-
-export async function buscarTitulosBoletoTrocado(): Promise<Set<string>> {
-  const supabase = createClient()
-  const { data } = await supabase
-    .from('titulos')
-    .select('id')
-    .eq('status', 'aberto')
-    .in('status_producao', STATUS_BOLETO_TROCADO)
-    .limit(5000)
-  return new Set((data ?? []).map((t) => t.id))
 }
 
 // ─── Cadastro (razão social por CNPJ) ───────────────────────────────────────

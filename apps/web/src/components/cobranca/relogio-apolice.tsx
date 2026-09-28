@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { buscarRelogio, buscarTitulosBoletoTrocado, gestaoKeys, type LinhaRelogio } from './gestao-queries'
+import { buscarRelogio, gestaoKeys, type LinhaRelogio } from './gestao-queries'
 import { MARCO_APOLICE_LABELS, brl, cnpj, corDoPrazo, data, prazoTexto } from './format'
 
 /**
@@ -71,7 +71,6 @@ const GRUPOS_POR_PAGINA = 20
 
 export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gestor: boolean }) {
   const relogio = useQuery({ queryKey: gestaoKeys.relogio(), queryFn: buscarRelogio })
-  const trocados = useQuery({ queryKey: gestaoKeys.boletoTrocado(), queryFn: buscarTitulosBoletoTrocado })
   const reconciliacao = useQuery({
     queryKey: gestaoKeys.reconciliacao(),
     queryFn: () => buscarReconciliacaoCobranca(createClient()),
@@ -231,10 +230,10 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
 
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          A produção não marca a liquidação por título: o pago continua “boleto trocado” (BILLET_SWAPPED). O
-          relógio cruza com o limite consumido de cada grupo na plataforma — grupos em dia ficam ocultos por
-          padrão, e os que pagaram parte mostram quanto segue de fato em aberto. Confira antes de qualquer
-          comunicação à seguradora.
+          Os títulos e a liquidação vêm da produção, e o relógio ainda confere cada grupo contra o limite
+          consumido na plataforma: grupo cujo consumido já não cobre os vencidos fica oculto por padrão (a
+          produção pode não ter baixado o título ainda), e divergência parcial mostra quanto segue de fato em
+          aberto. Confira antes de qualquer comunicação à seguradora.
         </p>
 
         {grupos.length === 0 ? (
@@ -259,7 +258,7 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
                 </div>
                 <ul className="divide-y divide-border">
                   {g.itens.map((l) => (
-                    <LinhaPrazo key={l.id ?? `${l.titulo_id}`} l={l} boletoTrocado={!!l.titulo_id && !!trocados.data?.has(l.titulo_id)} />
+                    <LinhaPrazo key={l.id ?? `${l.titulo_id}`} l={l} />
                   ))}
                 </ul>
               </div>
@@ -276,7 +275,7 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
   )
 }
 
-function LinhaPrazo({ l, boletoTrocado }: { l: LinhaRelogio; boletoTrocado: boolean }) {
+function LinhaPrazo({ l }: { l: LinhaRelogio }) {
   const critico = ehCritico(l)
   const spe = l.sacado_cnpj && l.sacado_cnpj !== l.sacado_matriz_cnpj ? l.sacado_nome ?? cnpj(l.sacado_cnpj) : null
   return (
@@ -287,7 +286,6 @@ function LinhaPrazo({ l, boletoTrocado }: { l: LinhaRelogio; boletoTrocado: bool
           {spe ? <span className="truncate text-xs text-muted-foreground">SPE: {spe}</span> : null}
           <span className="text-xs text-muted-foreground">cedente {l.cedente_nome ?? '—'}</span>
           {l.causa === 'insolvencia' ? <Badge variant="warning">insolvência</Badge> : null}
-          {boletoTrocado ? <Badge variant="warning">boleto trocado — pode estar pago</Badge> : null}
         </div>
         <div className="text-xs text-muted-foreground">
           {MARCO_APOLICE_LABELS[l.proximo_marco ?? ''] ?? l.proximo_marco} em {data(l.proximo_marco_em)} · vencimento

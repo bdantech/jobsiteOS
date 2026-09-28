@@ -110,6 +110,11 @@ const envSchema = z.object({
    * sync de NFs.
    */
   ONEPAY_ANTECIPACOES_URL: z.string().url().optional(),
+  /**
+   * Os títulos com a liquidação (Prompt 07, 0273). Ausente, o job usa ONEPAY_BI_URL +
+   * `/api/v1/anticipation-settlements` — mesma API, mesmo token.
+   */
+  ONEPAY_TITULOS_URL: z.string().url().optional(),
   /** Etapa 5 da cascata de domínio (busca web via Anthropic). Opcional. */
   ANTHROPIC_API_KEY: z.string().optional(),
 

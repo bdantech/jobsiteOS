@@ -145,7 +145,7 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
     supabaseAdmin
       .from('titulos')
       .select('id, numero, vencimento, valor_face, sacado_cnpj, sacado_matriz_cnpj, sacado_nome, sacado_empresa_id, coberto_apolice')
-      .eq('status', 'aberto')
+      .in('status', ['aberto', 'parcial'])
       .order('id')
       .range(de, ate),
   )

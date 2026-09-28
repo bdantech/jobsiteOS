@@ -139,7 +139,7 @@ import { simularCampanha } from './campanhas/simular.js'
 import { decidirProximosPassos } from './agente/decidir.js'
 import { apurarDesfechos, executarAgendados } from './agente/executar-agendados.js'
 import { plantaoDeEventos } from '../comunicacao/plantao.js'
-import { atualizarTitulosCobranca } from './cobranca/atualizar-titulos.js'
+import { atualizarTitulosCobranca, type ModoSyncTitulos } from './cobranca/atualizar-titulos.js'
 import { lembretesCobranca } from './cobranca/lembretes.js'
 import { relogioApolice } from './cobranca/relogio.js'
 
@@ -1033,7 +1033,9 @@ export function dispararAntecipacaoDiario(): string {
      */
     const cfgConversao = await lerConfigConversao()
     const antecipacoes = await sincronizarAntecipacoesComIngestao(cfgConversao.janela_diaria_dias)
-    const cobrancaTitulos = await atualizarTitulosCobrancaComFolga()
+    // Na diária, a carga COMPLETA dos títulos (~1 min): a rede contra um `updatedAt` que
+    // a produção tenha deixado de avançar. As cadeias de 4h vão no incremental.
+    const cobrancaTitulos = await atualizarTitulosCobrancaComFolga('completo')
     const outbox = await gerarOutbox()
     // Roteamento DEPOIS da reclassificação: a faixa muda com o calendário, e uma nota
     // que entrou em faixa hoje precisa de dono hoje — não na segunda que vem.
@@ -1091,13 +1093,13 @@ async function sincronizarAntecipacoesComIngestao(diasJanela?: number): Promise<
 }
 
 /**
- * `cobranca/atualizar-titulos` encadeado (Prompt 07 §14). Best-effort como os irmãos: a
- * projeção falhar não pode marcar como falho um sync de antecipações que deu certo — e
- * ela se recompõe inteira na próxima corrida, porque é um upsert sobre tudo.
+ * `cobranca/atualizar-titulos` encadeado (Prompt 07 §14). Best-effort como os irmãos: o
+ * sync de títulos falhar não pode marcar como falho um sync de antecipações que deu
+ * certo — e o incremental seguinte retoma do último `updatedAt` gravado.
  */
-async function atualizarTitulosCobrancaComFolga(): Promise<unknown> {
+async function atualizarTitulosCobrancaComFolga(modo: ModoSyncTitulos = 'incremental'): Promise<unknown> {
   try {
-    return await atualizarTitulosCobranca()
+    return await atualizarTitulosCobranca(modo)
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Projeção de títulos da Cobrança falhou; o sync segue.')
     return { erro: String(erro) }
@@ -2060,9 +2062,9 @@ export function dispararCampanhasMetricas(): string {
 
 // ─── Cobrança (Prompt 07) ───────────────────────────────────────────────────
 
-/** A projeção de títulos sob demanda. No ciclo normal ela roda encadeada aos syncs. */
-export function dispararAtualizarTitulosCobranca(): string {
-  return dispararAvulso('cobranca-atualizar-titulos', async () => atualizarTitulosCobranca())
+/** O sync de títulos sob demanda (`completo` para recarregar o histórico). No ciclo normal ele roda encadeado. */
+export function dispararAtualizarTitulosCobranca(modo: ModoSyncTitulos = 'incremental'): string {
+  return dispararAvulso('cobranca-atualizar-titulos', async () => atualizarTitulosCobranca(modo))
 }
 
 /** O relógio da apólice (§6.3): diário às 06:00 de São Paulo. Nunca fala com a seguradora. */

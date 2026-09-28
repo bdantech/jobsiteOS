@@ -70,8 +70,12 @@ const FAIXAS = [
   { id: '180+', rotulo: 'mais de 180 dias', de: 181, ate: Number.POSITIVE_INFINITY },
 ] as const
 
-/** Status em que a produção não informa a liquidação pelo sacado (ver 0269a/0269c). */
-const STATUS_SEM_LIQUIDACAO = ['BILLET_SWAPPED', 'EXPIRED_BILL_SWAPPED', 'EXTENDED_BILL_SWAPPED', 'IN_EXTENSION_BILL_SWAPPED']
+/** O status de liquidação da produção, em português (0273). */
+const STATUS_PRODUCAO_LABELS: Record<string, string> = {
+  OPEN: 'Em aberto',
+  PARTIALLY_PAID: 'Pago em parte',
+  PAID: 'Pago',
+}
 
 const numOuNull = (v: string): number | null => {
   const n = Number(v.replace(',', '.'))
@@ -323,7 +327,7 @@ function Montagem({
     const r = atualizarDividaCobranca(
       titulos
         .filter((t) => t.id && t.vencimento)
-        .map((t) => ({ id: t.id!, valor_face: Number(t.valor_face ?? 0), vencimento: t.vencimento! })),
+        .map((t) => ({ id: t.id!, valor_face: Number(t.saldo_em_aberto ?? t.valor_face ?? 0), vencimento: t.vencimento! })),
       parametros,
       tabela.data,
       dataBase || hojeSaoPaulo(),
@@ -367,7 +371,6 @@ function Montagem({
   })
   const elegiveisFiltrados = filtrados.filter(elegivel)
   const todosMarcados = elegiveisFiltrados.length > 0 && elegiveisFiltrados.every((t) => selecionados.has(t.id!))
-  const temSemLiquidacao = titulos.some((t) => STATUS_SEM_LIQUIDACAO.includes((t.status_producao ?? '').toUpperCase()))
 
   function alternar(id: string) {
     const s = new Set(selecionados)
@@ -384,7 +387,7 @@ function Montagem({
   }
 
   const escolhidos = titulos.filter((t) => t.id && selecionados.has(t.id))
-  const totalFace = escolhidos.reduce((s, t) => s + Number(t.valor_face ?? 0), 0)
+  const totalFace = escolhidos.reduce((s, t) => s + Number(t.saldo_em_aberto ?? t.valor_face ?? 0), 0)
   const totalAtualizado = escolhidos.reduce((s, t) => s + (atualizado.get(t.id!) ?? 0), 0)
 
   // ── (d) prévia do agrupamento ──
@@ -497,16 +500,6 @@ function Montagem({
               confirmado={confirmoEmDia}
               onConfirmar={setConfirmoEmDia}
             />
-          ) : temSemLiquidacao ? (
-            <div className="flex gap-2 rounded-md border border-amber-600/30 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <p>
-                Há títulos com boleto trocado (<span className="font-mono">BILLET_SWAPPED</span>) na produção.
-                Para esses a plataforma não informa a liquidação pelo sacado — só a conclusão da antecipação —,
-                então “em aberto” pode estar desatualizado. Confira com o financeiro antes de notificar: uma
-                carta de cobrança de título pago é o pior começo de conversa.
-              </p>
-            </div>
           ) : null}
 
           <div className="grid gap-2 sm:grid-cols-3">
@@ -643,11 +636,19 @@ function Montagem({
                       <TableCell className="text-xs">{data(t.emissao)}</TableCell>
                       <TableCell className="text-xs">{data(t.vencimento)}</TableCell>
                       <TableCell className="text-right text-xs tabular-nums">{t.dias_atraso ?? 0} d</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{brl(t.valor_face)}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {brl(t.saldo_em_aberto ?? t.valor_face)}
+                        {t.status === 'parcial' ? (
+                          <span className="block text-[10px] text-muted-foreground">de {brl(t.valor_face)}</span>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="text-right text-xs tabular-nums">
                         {atualizado.has(t.id!) ? brl(atualizado.get(t.id!)) : '—'}
                       </TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground">{t.status_producao ?? '—'}</TableCell>
+                      <TableCell className="text-[11px] text-muted-foreground">
+                        {STATUS_PRODUCAO_LABELS[t.status_producao ?? ''] ?? t.status_producao ?? '—'}
+                        {t.migrado ? <span className="block">migrada</span> : null}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -797,7 +798,7 @@ function Montagem({
             <div className="grid gap-2 md:grid-cols-2">
               {previa.map((p) => {
                 const ts = escolhidos.filter((t) => p.titulo_ids.includes(t.id!))
-                const face = ts.reduce((s, t) => s + Number(t.valor_face ?? 0), 0)
+                const face = ts.reduce((s, t) => s + Number(t.saldo_em_aberto ?? t.valor_face ?? 0), 0)
                 const atual = ts.reduce((s, t) => s + (atualizado.get(t.id!) ?? 0), 0)
                 return (
                   <div key={p.destinatario_cnpj} className="rounded-md border p-3 text-sm">

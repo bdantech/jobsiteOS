@@ -1,5 +1,10 @@
 # Requisição — Títulos e liquidação: Plataforma de Produção → JobsiteOS
 
+> **Atendida em 28/09/2026** com `GET /api/v1/anticipation-settlements` (forma A). O
+> JobsiteOS passou a ler `titulos` desse endpoint na migração 0273; ver
+> [`cobranca.md`](cobranca.md#a-lacuna-de-dados-da-produção). O restante deste documento
+> é o pedido original, mantido como registro.
+
 Documento para o time que mantém a API da plataforma de produção. Não pressupõe nenhum
 conhecimento do JobsiteOS. É um **pedido**: descreve o que precisamos ler de vocês, por
 que cada campo importa e o que fazemos enquanto ele não existe.

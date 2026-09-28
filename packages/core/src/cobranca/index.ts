@@ -16,3 +16,5 @@ export * from './mutations.js'
 export * from './bloqueio.js'
 // O vencido realmente em aberto por grupo, pelo limite consumido na plataforma (0270).
 export * from './reconciliacao.js'
+// O contrato do /anticipation-settlements, a fonte de `titulos` desde 28/09/2026 (0273).
+export * from './titulo-producao.js'

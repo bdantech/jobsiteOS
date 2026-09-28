@@ -255,7 +255,7 @@ export async function gerarDossieSinistro(sinistroId: string): Promise<Resultado
         .from('titulos')
         .select('numero, externo_id, sacado_cnpj, sacado_nome, cedente_nome, cedente_cnpj, emissao, vencimento, valor_face')
         .eq('sacado_matriz_cnpj', s.sacado_matriz_cnpj)
-        .eq('status', 'aberto')
+        .in('status', ['aberto', 'parcial'])
         .order('vencimento')
         .range(de, ate),
     )

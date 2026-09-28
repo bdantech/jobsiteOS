@@ -1270,6 +1270,9 @@ export async function dispararLembretesCobranca(): Promise<DispararJobResultado>
 }
 
 /** A projeção de títulos sob demanda (no ciclo normal ela vem encadeada aos syncs). */
-export async function dispararAtualizarTitulosCobranca(): Promise<DispararJobResultado> {
-  return postar('/jobs/cobranca/atualizar-titulos', {}, 'cobranca-atualizar-titulos')
+/** `completo` recarrega o histórico inteiro dos títulos (~1 min no worker); o padrão é o incremental. */
+export async function dispararAtualizarTitulosCobranca(
+  modo: 'incremental' | 'completo' = 'incremental',
+): Promise<DispararJobResultado> {
+  return postar('/jobs/cobranca/atualizar-titulos', { modo }, 'cobranca-atualizar-titulos')
 }

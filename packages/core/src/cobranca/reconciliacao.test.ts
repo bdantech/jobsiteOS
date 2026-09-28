@@ -23,7 +23,7 @@ test('em dia: diz que os vencidos provavelmente já foram pagos, com os números
 test('parcial: dá o valor estimado e avisa que não sabemos quais títulos', () => {
   const t = explicarReconciliacao({ ...base, situacao: 'parcial', vencido_estimado: 450_000 })
   assert.match(t, /450\.000/)
-  assert.match(t, /Não sabemos quais/)
+  assert.match(t, /não diz quais/)
 })
 
 test('sem dado: não afirma nada sobre pagamento', () => {

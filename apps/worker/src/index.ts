@@ -1749,10 +1749,11 @@ app.post('/jobs/campanhas/metricas', (_req: Request, res: Response, next: NextFu
 
 // ─── Cobrança (Prompt 07) ───────────────────────────────────────────────────
 
-/** A projeção de títulos sob demanda. No ciclo normal ela vem encadeada aos syncs. */
-app.post('/jobs/cobranca/atualizar-titulos', (_req: Request, res: Response, next: NextFunction) => {
+/** O sync de títulos sob demanda; `{ "modo": "completo" }` recarrega o histórico. */
+app.post('/jobs/cobranca/atualizar-titulos', (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.status(202).json({ job_id: dispararAtualizarTitulosCobranca(), status: 'executando' })
+    const modo = (req.body as { modo?: unknown } | undefined)?.modo === 'completo' ? 'completo' : 'incremental'
+    res.status(202).json({ job_id: dispararAtualizarTitulosCobranca(modo), status: 'executando', modo })
   } catch (erro) {
     next(erro)
   }

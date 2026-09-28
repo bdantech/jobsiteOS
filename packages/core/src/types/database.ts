@@ -12800,20 +12800,30 @@ export type Database = {
       titulos: {
         Row: {
           antecipacao_id_externo: number | null
+          atualizado_producao_em: string | null
           cedente_cnpj: string
           cedente_empresa_id: string | null
           cedente_matriz_cnpj: string
           cedente_nome: string | null
           coberto_apolice: boolean
+          desembolsado_em: string | null
+          devedor_terceiro: boolean
           emissao: string | null
           externo_id: string
           id: string
+          limite_atualizado_em: string | null
           limite_credito_vigente: number | null
+          limite_documento: string | null
+          limite_expira_em: string | null
+          liquidacao_fonte: string | null
+          liquidacao_pagamentos: Json
+          migrado: boolean
           nf_chave_acesso: string | null
           numero: string | null
           operacao_externo_id: string | null
           pago_em: string | null
           pago_em_origem: string | null
+          retencao: number | null
           sacado_cnpj: string
           sacado_empresa_id: string | null
           sacado_matriz_cnpj: string
@@ -12823,26 +12833,37 @@ export type Database = {
           status_producao: string | null
           valor_cedido: number | null
           valor_face: number
+          valor_nota: number | null
           valor_pago: number | null
           vencimento: string
           vencimento_prorrogado: string | null
         }
         Insert: {
           antecipacao_id_externo?: number | null
+          atualizado_producao_em?: string | null
           cedente_cnpj: string
           cedente_empresa_id?: string | null
           cedente_matriz_cnpj: string
           cedente_nome?: string | null
           coberto_apolice?: boolean
+          desembolsado_em?: string | null
+          devedor_terceiro?: boolean
           emissao?: string | null
           externo_id: string
           id?: string
+          limite_atualizado_em?: string | null
           limite_credito_vigente?: number | null
+          limite_documento?: string | null
+          limite_expira_em?: string | null
+          liquidacao_fonte?: string | null
+          liquidacao_pagamentos?: Json
+          migrado?: boolean
           nf_chave_acesso?: string | null
           numero?: string | null
           operacao_externo_id?: string | null
           pago_em?: string | null
           pago_em_origem?: string | null
+          retencao?: number | null
           sacado_cnpj: string
           sacado_empresa_id?: string | null
           sacado_matriz_cnpj: string
@@ -12852,26 +12873,37 @@ export type Database = {
           status_producao?: string | null
           valor_cedido?: number | null
           valor_face: number
+          valor_nota?: number | null
           valor_pago?: number | null
           vencimento: string
           vencimento_prorrogado?: string | null
         }
         Update: {
           antecipacao_id_externo?: number | null
+          atualizado_producao_em?: string | null
           cedente_cnpj?: string
           cedente_empresa_id?: string | null
           cedente_matriz_cnpj?: string
           cedente_nome?: string | null
           coberto_apolice?: boolean
+          desembolsado_em?: string | null
+          devedor_terceiro?: boolean
           emissao?: string | null
           externo_id?: string
           id?: string
+          limite_atualizado_em?: string | null
           limite_credito_vigente?: number | null
+          limite_documento?: string | null
+          limite_expira_em?: string | null
+          liquidacao_fonte?: string | null
+          liquidacao_pagamentos?: Json
+          migrado?: boolean
           nf_chave_acesso?: string | null
           numero?: string | null
           operacao_externo_id?: string | null
           pago_em?: string | null
           pago_em_origem?: string | null
+          retencao?: number | null
           sacado_cnpj?: string
           sacado_empresa_id?: string | null
           sacado_matriz_cnpj?: string
@@ -12881,18 +12913,12 @@ export type Database = {
           status_producao?: string | null
           valor_cedido?: number | null
           valor_face?: number
+          valor_nota?: number | null
           valor_pago?: number | null
           vencimento?: string
           vencimento_prorrogado?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "titulos_antecipacao_id_externo_fkey"
-            columns: ["antecipacao_id_externo"]
-            isOneToOne: true
-            referencedRelation: "antecipacoes"
-            referencedColumns: ["id_externo"]
-          },
           {
             foreignKeyName: "titulos_cedente_empresa_id_fkey"
             columns: ["cedente_empresa_id"]
@@ -14784,6 +14810,7 @@ export type Database = {
       cobranca_titulos_abertos: {
         Row: {
           antecipacao_id_externo: number | null
+          atualizado_producao_em: string | null
           cedente_cnpj: string | null
           cedente_empresa_id: string | null
           cedente_matriz_cnpj: string | null
@@ -14791,26 +14818,37 @@ export type Database = {
           coberto_apolice: boolean | null
           cobranca_ativa_codigo: string | null
           cobranca_ativa_id: string | null
+          desembolsado_em: string | null
+          devedor_terceiro: boolean | null
           dias_atraso: number | null
           emissao: string | null
           externo_id: string | null
           id: string | null
+          limite_atualizado_em: string | null
           limite_credito_vigente: number | null
+          limite_documento: string | null
+          limite_expira_em: string | null
+          liquidacao_fonte: string | null
+          liquidacao_pagamentos: Json
+          migrado: boolean | null
           nf_chave_acesso: string | null
           numero: string | null
           operacao_externo_id: string | null
           pago_em: string | null
           pago_em_origem: string | null
+          retencao: number | null
           sacado_cnpj: string | null
           sacado_e_matriz: boolean | null
           sacado_empresa_id: string | null
           sacado_matriz_cnpj: string | null
           sacado_nome: string | null
+          saldo_em_aberto: number | null
           sincronizado_em: string | null
           status: string | null
           status_producao: string | null
           valor_cedido: number | null
           valor_face: number | null
+          valor_nota: number | null
           valor_pago: number | null
           vencimento: string | null
           vencimento_prorrogado: string | null
@@ -16881,6 +16919,7 @@ export type Database = {
         Args: { p_tipo: string }
         Returns: string[]
       }
+      app__cobranca_ingerir_titulos: { Args: { p: Json }; Returns: number }
       app__cobranca_projetar_titulos: { Args: never; Returns: Json }
       app__cobranca_status_cedido: {
         Args: { p_status: string }

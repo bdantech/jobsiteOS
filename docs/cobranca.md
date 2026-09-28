@@ -233,6 +233,29 @@ antes de sinistrar quase sempre compensa. A **retirada é obrigatória depois da
 
 ## A lacuna de dados da produção
 
+> **Resolvida em 28/09/2026 (0273).** A produção respondeu com
+> `GET /api/v1/anticipation-settlements`, e `titulos` passou a vir dele, não mais de
+> `antecipacoes`: um título por antecipação, com `settlement.status`
+> (`OPEN`/`PARTIALLY_PAID`/`PAID` → `aberto`/`parcial`/`pago`), `paidAt` como data do
+> pagamento pelo sacado, `source` (banco, arquivo de retorno, baixa manual ou sistema
+> anterior), a matriz resolvida por eles (`contractor.headquartersTaxId`), o valor pago
+> ao cedente e o limite vigente. O histórico inteiro vem junto, inclusive as operações
+> migradas em 12/09 (`migrated`, com o id novo) e as anteriores a 20/07, que o sync de
+> antecipações nunca trouxe.
+>
+> O que mudou na prática:
+> - `valor_face` é o **boleto** (nota − retenção), o que o sacado deve; a nota vai em
+>   `valor_nota`. Parcial entra na cobrança pelo **saldo**.
+> - Sync incremental por `updated_from` nas cadeias de 4h; carga completa (~1 min) na
+>   cadeia diária. Rota manual: `POST /jobs/cobranca/atualizar-titulos {"modo":"completo"}`.
+> - `app__cobranca_projetar_titulos` guardou o nome e ficou só com o pós-sync (quitação
+>   das cobranças, cobranças sem título ativo, SPE nova no bloqueio).
+> - A reconciliação pelo limite consumido (abaixo) deixou de estimar o pago e virou
+>   **conferência**: grupo "em dia" agora é título que a produção ainda não baixou.
+>
+> O texto abaixo descreve a situação até 28/09 e fica como registro de por que a
+> reconciliação existe.
+
 `titulos` é uma **projeção** de `antecipacoes` (o sync 04n), feita em SQL
 (`app__cobranca_projetar_titulos`, 0269c) depois de cada sync. A produção hoje **não
 expõe a liquidação do título pelo sacado** — só o ciclo da antecipação. Isso tem três
