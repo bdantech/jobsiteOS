@@ -14,7 +14,10 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * Se as rotinas RODARAM (0272) — o botão, a lista e a linha colorida embaixo dele.
+ * Se as rotinas RODARAM (0272) — o botão, a lista e a barra embaixo dele.
+ *
+ * A barra é dividida na proporção das cores: 50 verdes e 3 vermelhas mostram uma
+ * faixa vermelha fina, e não uma barra inteira vermelha que diria "tudo quebrado".
  *
  * Tudo chega formatado do servidor (ver `crons-lista.tsx`): este componente é cliente
  * só porque o diálogo abre e fecha.
@@ -43,15 +46,20 @@ const COR_TEXTO: Record<CorSaude, string> = {
   vermelha: 'text-red-700 dark:text-red-400',
 }
 
-export function CronsSaude({
-  rotinas,
-  geral,
-  resumo,
-}: {
-  rotinas: LinhaSaude[]
-  geral: CorSaude
-  resumo: string
-}) {
+const ORDEM_BARRA: CorSaude[] = ['verde', 'amarela', 'vermelha']
+
+const NOME_COR: Record<CorSaude, string> = {
+  verde: 'verdes',
+  amarela: 'amarelas',
+  vermelha: 'vermelhas',
+}
+
+export function CronsSaude({ rotinas, resumo }: { rotinas: LinhaSaude[]; resumo: string }) {
+  const contagem = ORDEM_BARRA.map((cor) => ({
+    cor,
+    n: rotinas.filter((r) => r.cor === cor).length,
+  })).filter((c) => c.n > 0)
+
   return (
     <div className="flex flex-col gap-2">
       <Dialog>
@@ -94,10 +102,19 @@ export function CronsSaude({
       </Dialog>
 
       <div
-        className={cn('h-1.5 w-full rounded-full', COR_LINHA[geral])}
+        className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
         role="img"
-        aria-label={`Status geral das rotinas: ${geral}`}
-      />
+        aria-label={`Rotinas: ${contagem.map((c) => `${c.n} ${NOME_COR[c.cor]}`).join(', ')}`}
+      >
+        {contagem.map((c) => (
+          <div
+            key={c.cor}
+            className={COR_LINHA[c.cor]}
+            style={{ flexGrow: c.n, flexBasis: 0 }}
+            title={`${c.n} ${NOME_COR[c.cor]}`}
+          />
+        ))}
+      </div>
       <p className="text-xs text-muted-foreground">{resumo}</p>
     </div>
   )

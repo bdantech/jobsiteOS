@@ -4,7 +4,6 @@ import {
   LIMITE_SEM_RETORNO_HORAS,
   getModule,
   saudeDaRotina,
-  saudeGeral,
   type CorSaude,
   type CronDaPlataforma,
   type ExecucaoCron,
@@ -112,7 +111,6 @@ export function CronsLista({
 
       <CronsSaude
         rotinas={saude}
-        geral={saudeGeral(saude.map((l) => l.cor))}
         resumo={resumoDaSaude(saude)}
       />
 
