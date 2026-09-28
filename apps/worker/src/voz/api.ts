@@ -1,5 +1,4 @@
-import { versaoDaResposta } from '../../../../packages/core/src/agentes/voz-adapter.js'
-import type { VersaoVoz } from '../../../../packages/core/src/agentes/schemas.js'
+import { statusDaResposta, type StatusVoz } from '../../../../packages/core/src/agentes/voz-adapter.js'
 import type { RespostaEnfileiramento } from '../../../../packages/core/src/voz/schemas.js'
 import { respostaEnfileiramentoSchema } from '../../../../packages/core/src/voz/schemas.js'
 import { env } from '../env.js'
@@ -87,16 +86,19 @@ export async function cancelarLigacao(cfg: VozConfigurada, ligacaoId: string): P
  * adapter trata `desconhecida` como v1 — degradar é a direção segura do erro: recusar um
  * objetivo que a Ana talvez suportasse custa um canal alternativo; mandar um que ela não
  * suporta custa uma ligação errada.
+ *
+ * A v2 pode anunciar também `objetivos`: os que ela já aceita. A Ana libera um objetivo de
+ * cada vez, e mandar um que ela ainda não conduz é o mesmo erro de mandar para a v1.
  */
-export async function versaoDaAna(cfg: VozConfigurada): Promise<VersaoVoz> {
+export async function statusDaAna(cfg: VozConfigurada): Promise<StatusVoz> {
   try {
     const res = await fetch(`${cfg.url}/api/versao`, {
       headers: { authorization: `Bearer ${cfg.token}`, accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
     })
     const corpo = await res.json().catch(() => null)
-    return versaoDaResposta(res.status, corpo)
+    return statusDaResposta(res.status, corpo)
   } catch {
-    return 'desconhecida'
+    return { versao: 'desconhecida', objetivos: null }
   }
 }

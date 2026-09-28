@@ -6798,7 +6798,7 @@ export type Database = {
           mandato_id: string
           outbox_id?: string | null
           resultado?: Json | null
-          sequencia: number
+          sequencia?: number
           sinal?: string
           sucesso?: boolean | null
           tokens_entrada?: number | null

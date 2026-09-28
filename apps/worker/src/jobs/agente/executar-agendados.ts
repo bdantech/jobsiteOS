@@ -2,7 +2,7 @@ import { lerConfigAgentes } from '../../agentes/config.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { conversasEmMandatoAtivo, decidirParaConversa, type ResultadoAgente } from './decidir.js'
+import { conversasParaDecidir, decidirParaConversa, reagendarEm, type ResultadoAgente } from './decidir.js'
 
 /**
  * A varredura de `conversas.proxima_acao_em` (§10).
@@ -34,35 +34,23 @@ export async function executarAgendados(limite = 50): Promise<ResultadoAgente> {
     puladas: 0,
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('conversas')
-    // `conta_remetente` faltava aqui e a troca de contato abria a thread nova sem a nossa
-    // ponta — fora da chave do par (0196).
-    .select('id, canal, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, conta_remetente')
-    .not('proxima_acao_em', 'is', null)
-    .lte('proxima_acao_em', agora.toISOString())
-    .in('status', ['ativa', 'aguardando_resposta'])
-    .neq('modo_agente', 'desligado')
-    .order('proxima_acao_em', { ascending: true })
-    .limit(limite)
-  if (error) {
-    logger.error({ erro: error.message }, 'Falha ao varrer conversas agendadas.')
-    return acc
-  }
-
-  // A conversa de um mandato ativo é do ciclo de agentes (09 §6), não deste relógio.
-  const doMandato = await conversasEmMandatoAtivo((data ?? []).map((c) => c.id))
-  const conversas = (data ?? []).filter((c) => !doMandato.has(c.id))
+  // A mesma seleção da varredura por silêncio: sem as conversas de mandato ativo, que são
+  // do ciclo de agentes (09 §6) e não deste relógio — e filtradas ANTES do limite, para
+  // 50 delas vencidas não ocuparem a fila inteira (09 §1.1).
+  const conversas = await conversasParaDecidir(limite, agora, cfgAgentes, { soAgendadas: true })
   acc.conversas = conversas.length
 
   for (const c of conversas) {
     // O kill switch ÚNICO (09 §9.2) vale aqui também; o do 05A é espelho dele.
     if ((cfg.agente.kill_switch || cfgAgentes.geral.kill_switch) && c.modo_agente === 'autonomo') {
+      // Pulada, mas com próximo passo: vencida e intocada, ela voltaria à frente da fila a
+      // cada passagem enquanto o switch estiver ligado, na frente das de sugestão.
+      await reagendarEm(c.id, agora, 3_600_000)
       acc.puladas += 1
       continue
     }
     try {
-      const r = await decidirParaConversa(c as never, 'agendado', cfg, agora, cfgAgentes)
+      const r = await decidirParaConversa(c, 'agendado', cfg, agora, cfgAgentes)
       acc.decisoes += r.decidiu ? 1 : 0
       acc.executadas += r.executou ? 1 : 0
       acc.sugeridas += r.sugeriu ? 1 : 0

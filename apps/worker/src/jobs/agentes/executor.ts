@@ -2,7 +2,7 @@ import { rotuloDaJanela, escolherCloser, janelasLivres, type Intervalo } from '.
 import type { IdFerramenta } from '../../../../../packages/core/src/agentes/ferramentas.js'
 import type { ResultadoFerramenta } from '../../../../../packages/core/src/agentes/loop.js'
 import { violaIdentificacao } from '../../../../../packages/core/src/agentes/prompt.js'
-import { traduzirPedido } from '../../../../../packages/core/src/agentes/voz-adapter.js'
+import { traduzirPedido, type JanelaOferecida } from '../../../../../packages/core/src/agentes/voz-adapter.js'
 import type { ConfigAgentes, ObjetivoLigacao, VersaoVoz } from '../../../../../packages/core/src/agentes/schemas.js'
 import { normalizarTelefoneBr } from '../../../../../packages/core/src/fornecedores/telefone.js'
 import type { ContatoTentado, AgenteCarregado, EmpresaCarregada, MandatoCarregado } from '../../agentes/contexto.js'
@@ -36,6 +36,8 @@ export interface ContextoExecucao {
   empresa: EmpresaCarregada | null
   cfg: ConfigAgentes
   versaoVoz: VersaoVoz
+  /** Os objetivos que a v2 anunciou; `null` = sem restrição além da versão. */
+  objetivosVoz: ObjetivoLigacao[] | null
   agora: Date
 }
 
@@ -554,15 +556,58 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
     if (!fresco.ok) return falha(`A oferta não pode ser dita ao telefone agora: ${fresco.motivo}.`)
     pedidoV1 = fresco.pedido
   }
+
+  /*
+   * ── AGENDAR POR TELEFONE: AS JANELAS SÃO NOSSAS, NÃO DO MODELO ──────────────
+   * A v2 da Ana só liga para agendar com um conjunto FECHADO de janelas: ela oferece uma
+   * delas ou devolve `agendar_retorno`. O modelo não passa janela nenhuma (o schema de
+   * `ligar` nem tem o campo) — elas saem daqui, da mesma conta de
+   * `consultar_agenda_closer` (closer, substituto, horário, buffer, reservas vivas), e
+   * ficam RESERVADAS para esta ligação. Sem isto toda ligação de agendamento morria em
+   * `falta_janelas` no adapter.
+   *
+   * A reserva dura a fila mais o tempo que esperamos a Ana (`voz_timeout_minutos`): a
+   * reserva de conversa (`reserva_janela_min`) cobre o modelo oferecer no chat, não uma
+   * ligação que ainda vai ser discada. Quando o resultado volta, as não escolhidas são
+   * devolvidas e a escolhida é reconferida antes de virar reunião (voz-mandato.ts).
+   *
+   * Na v1 nada é reservado: o adapter recusa o objetivo logo abaixo, com o erro dele.
+   */
+  let janelas: JanelaOferecida[] | undefined
+  let rotulos: string[] = []
+  let closerDaLigacao: string | null = null
+  if (objetivo === 'agendar_reuniao' && ctx.versaoVoz === 'v2') {
+    const g = ctx.cfg.geral
+    const r = await reservarJanelasDoCloser(ctx, 3, g.reserva_janela_min + g.voz_timeout_minutos)
+    if (!r.ok) return falha(`Não dá para ligar para agendar: ${r.erro}`)
+    const expiraEm = new Date(Date.now() + (g.reserva_janela_min + g.voz_timeout_minutos) * 60_000).toISOString()
+    janelas = r.janelas.map((j) => ({ id: j.reserva_id, inicio: j.inicio, fim: j.fim, expira_em: expiraEm }))
+    rotulos = r.janelas.map((j) => j.rotulo)
+    closerDaLigacao = r.closerNome
+  }
+  const devolverJanelas = async () => {
+    if (!janelas?.length) return
+    await supabaseAdmin
+      .from('agenda_reservas')
+      .update({ expira_em: new Date().toISOString() })
+      .in('id', janelas.map((j) => j.id))
+      .is('confirmada_em', null)
+  }
+
   const contexto = {
     objetivo,
     contato: { id: c.id, nome: c.nome ?? 'responsável', telefone_e164: tel.e164, email: c.email },
     empresa: { razao_social: ctx.empresa?.razao_social ?? '—', cnpj: ctx.empresa?.cnpj ?? null },
     persona: { nome: ctx.agente.persona.nome_exibicao, voz_conta_id: ctx.agente.voz_conta_id },
     motivo: String(a.motivo),
+    identificacao: ctx.cfg.geral.identificacao,
+    ...(janelas ? { janelas } : {}),
   }
-  const previa = traduzirPedido(ctx.versaoVoz, { ...contexto, id_externo: 'previa', pedido_v1: pedidoV1 })
-  if (!previa.ok) return falha(previa.erro)
+  const previa = traduzirPedido(ctx.versaoVoz, { ...contexto, id_externo: 'previa', pedido_v1: pedidoV1 }, ctx.objetivosVoz)
+  if (!previa.ok) {
+    await devolverJanelas()
+    return falha(previa.erro)
+  }
 
   const { data, error } = await supabaseAdmin.rpc('app__voz_enfileirar_mandato', {
     p: {
@@ -574,6 +619,7 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
     } as never,
   })
   if (error) {
+    await devolverJanelas()
     return { ok: false, erro: error.message, sinal: /suprim|procurado/i.test(error.message) ? 'supressao' : 'neutro' }
   }
   await marcarTentativa(ctx, c, 'ligacao', 'ligação na fila da Ana')
@@ -582,6 +628,14 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
     voz_ligacao_id: linha.id,
     id_externo: linha.id_externo,
     status: 'na fila da Ana — ela liga em horário comercial e o resultado volta sozinho, acordando o mandato.',
+    ...(janelas
+      ? {
+          closer: closerDaLigacao,
+          janelas_oferecidas: rotulos,
+          observacao:
+            'A Ana oferece SOMENTE estas janelas. Se a pessoa aceitar uma, a reunião é marcada sozinha quando o resultado voltar — não chame agendar_reuniao para esta ligação.',
+        }
+      : {}),
   })
 }
 
@@ -602,9 +656,33 @@ async function agendarLigacao(ctx: ContextoExecucao, a: Args): Promise<Resultado
 
 async function consultarAgenda(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerramenta> {
   const g = ctx.cfg.geral
-  const quantas = Number(a.quantas ?? 3)
+  const r = await reservarJanelasDoCloser(ctx, Number(a.quantas ?? 3), g.reserva_janela_min)
+  if (!r.ok) return falha(r.erro)
+  return ok({
+    closer: r.closerNome,
+    substituto: r.substituto,
+    janelas: r.janelas,
+    reservadas_por_minutos: g.reserva_janela_min,
+    instrucao: 'Ofereça SOMENTE estas janelas. Para marcar, use agendar_reuniao com o reserva_id da escolhida.',
+  })
+}
+
+type JanelaReservada = { reserva_id: string; inicio: string; fim: string; rotulo: string }
+type JanelasDoCloser =
+  | { ok: true; closerNome: string | null; substituto: boolean; janelas: JanelaReservada[] }
+  | { ok: false; erro: string }
+
+/**
+ * As janelas livres do closer designado (ou do substituto), já RESERVADAS para este
+ * mandato por `minutos`. É a mesma conta para quem oferece no chat
+ * (`consultar_agenda_closer`) e para quem oferece por telefone (`ligar` com
+ * `agendar_reuniao`): duas contas para "quando o closer está livre" divergiriam no
+ * primeiro buffer que alguém mudasse.
+ */
+async function reservarJanelasDoCloser(ctx: ContextoExecucao, quantas: number, minutos: number): Promise<JanelasDoCloser> {
+  const g = ctx.cfg.geral
   const candidatos = [ctx.agente.closer_id, ctx.agente.closer_substituto_id].filter((x): x is string => !!x)
-  if (!candidatos.length) return falha('O agente não tem closer designado.')
+  if (!candidatos.length) return { ok: false, erro: 'O agente não tem closer designado.' }
 
   const { data: closers } = await supabaseAdmin
     .from('vendedores')
@@ -652,14 +730,16 @@ async function consultarAgenda(ctx: ContextoExecucao, a: Args): Promise<Resultad
     })
   }
   if (!escolha.ok) {
-    return falha(
-      escolha.motivo === 'sem_janela'
-        ? 'Nem o closer nem o substituto têm janela no horizonte. Registre o interesse no plano como pendência e escale para o gestor.'
-        : 'O agente não tem closer designado.',
-    )
+    return {
+      ok: false,
+      erro:
+        escolha.motivo === 'sem_janela'
+          ? 'Nem o closer nem o substituto têm janela no horizonte. Registre o interesse no plano como pendência e escale para o gestor.'
+          : 'O agente não tem closer designado.',
+    }
   }
 
-  const reservadas: Array<{ reserva_id: string; inicio: string; fim: string; rotulo: string }> = []
+  const reservadas: JanelaReservada[] = []
   for (const j of escolha.janelas as Intervalo[]) {
     const { data } = await supabaseAdmin.rpc('app__agenda_reservar', {
       p: {
@@ -667,7 +747,7 @@ async function consultarAgenda(ctx: ContextoExecucao, a: Args): Promise<Resultad
         mandato_id: ctx.mandato.id,
         inicio: j.inicio.toISOString(),
         fim: j.fim.toISOString(),
-        minutos: g.reserva_janela_min,
+        minutos,
       } as never,
     })
     const r = data as { ok: boolean; reserva_id?: string } | null
@@ -675,14 +755,8 @@ async function consultarAgenda(ctx: ContextoExecucao, a: Args): Promise<Resultad
       reservadas.push({ reserva_id: r.reserva_id, inicio: j.inicio.toISOString(), fim: j.fim.toISOString(), rotulo: rotuloDaJanela(j, ctx.cfg.janela.timezone) })
     }
   }
-  if (!reservadas.length) return falha('As janelas acabaram de ser tomadas por outra conversa. Consulte de novo.')
-  return ok({
-    closer: porId.get(escolha.closerId)?.nome ?? null,
-    substituto: escolha.substituto,
-    janelas: reservadas,
-    reservadas_por_minutos: g.reserva_janela_min,
-    instrucao: 'Ofereça SOMENTE estas janelas. Para marcar, use agendar_reuniao com o reserva_id da escolhida.',
-  })
+  if (!reservadas.length) return { ok: false, erro: 'As janelas acabaram de ser tomadas por outra conversa. Consulte de novo.' }
+  return { ok: true, closerNome: porId.get(escolha.closerId)?.nome ?? null, substituto: escolha.substituto, janelas: reservadas }
 }
 
 function horarioDoCloser(settings: unknown, cfg: ConfigAgentes) {

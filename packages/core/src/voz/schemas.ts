@@ -123,7 +123,8 @@ export const respostaEnfileiramentoSchema = z.object({
   id: z.string(),
   id_externo: z.string(),
   telefone: z.string(),
-  oferta_id: z.string(),
+  /** Só existe quando houve oferta: ligação v2 de agendar, qualificar ou reativar não tem. */
+  oferta_id: z.string().nullable().optional(),
   status: z.enum(STATUS_LIGACAO),
   criada_em: z.string(),
   posicao_na_fila: z.number().int().nullable().optional(),

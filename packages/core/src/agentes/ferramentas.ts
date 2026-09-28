@@ -224,7 +224,7 @@ export const FERRAMENTAS = {
     id: 'ligar',
     rotulo: 'Pediu uma ligação',
     descricao:
-      'PAGO. Põe uma ligação da Ana na fila (ela liga em horário comercial e o resultado volta sozinho). `objetivo` diz o que a ligação quer. Hoje só `ofertar_antecipacao` com NF é garantido; os demais dependem da versão da Ana e podem voltar recusados — aí use outro canal.',
+      'PAGO. Põe uma ligação da Ana na fila (ela liga em horário comercial e o resultado volta sozinho). `objetivo` diz o que a ligação quer. Hoje só `ofertar_antecipacao` com NF é garantido; os demais dependem da versão da Ana e podem voltar recusados — aí use outro canal. Em `agendar_reuniao` as janelas do closer são calculadas e reservadas pelo sistema (você não escolhe horário); se a pessoa aceitar uma, a reunião é marcada sozinha quando o resultado voltar.',
     inputSchema: z.object({
       contato_id: contatoId,
       objetivo: z.enum(OBJETIVOS_LIGACAO),

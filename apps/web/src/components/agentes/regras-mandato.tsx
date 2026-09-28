@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from 'react'
-import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertTriangle, ArrowRight, Gauge, Pencil, Plus, ScrollText } from 'lucide-react'
@@ -98,7 +97,7 @@ function arvoreDoAgente(agente: AgenteIa | undefined, populacao: 'empresas' | 'n
   }
 }
 
-export function RegrasMandato() {
+export function RegrasMandato({ onAbrirPlaybooks }: { onAbrirPlaybooks: () => void }) {
   const qc = useQueryClient()
   const regras = useQuery({ queryKey: gestaoAgentesKeys.regras(), queryFn: buscarRegras })
   const agentes = useQuery({ queryKey: gestaoAgentesKeys.personas(), queryFn: buscarAgentesIa })
@@ -196,10 +195,8 @@ export function RegrasMandato() {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href="/comunicacao/playbooks">
-                Playbooks por tipo de mandato <ArrowRight className="ml-2 h-3.5 w-3.5" aria-hidden />
-              </Link>
+            <Button variant="outline" size="sm" onClick={onAbrirPlaybooks}>
+              Playbooks por tipo de mandato <ArrowRight className="ml-2 h-3.5 w-3.5" aria-hidden />
             </Button>
             <Button
               size="sm"
@@ -562,7 +559,7 @@ function RegraEditor({
                 </SelectContent>
               </Select>
               {playbooksDoTipo.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhum playbook marcado para este tipo em Comunicação › Playbooks.</p>
+                <p className="text-xs text-muted-foreground">Nenhum playbook para este tipo na aba Playbooks.</p>
               ) : null}
             </div>
           </div>

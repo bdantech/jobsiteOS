@@ -1,4 +1,5 @@
 import {
+  ACOES_AGENTE,
   PROMPT_AGENTE,
   aplicarGuardrails,
   decisaoAgenteSchema,
@@ -83,6 +84,16 @@ const COLUNAS =
   'id, canal, empresa_id, contato_id, objetivo, playbook_id, responsavel_vendedor_id, modo_agente, status, ultima_mensagem_em, ultima_direcao, proxima_acao_em, conta_remetente'
 
 /**
+ * Quanto uma conversa espera depois de uma passagem que FALHOU (exceção, INSERT recusado).
+ * Não é zero — voltar na hora seguinte faria a mesma conversa quebrada ocupar um lugar
+ * da fila a cada hora — e não é o dia inteiro, porque a falha costuma ser passageira.
+ */
+const ESPERA_APOS_FALHA_MS = 4 * 3_600_000
+
+/** Quantos lotes a seleção lê, no máximo, pulando conversas de mandato. */
+const LOTES_DE_SELECAO = 5
+
+/**
  * A varredura por SILÊNCIO e por agendamento. É o que roda de hora em hora.
  *
  * Conversas encerradas e pausadas ficam de fora: encerrada é opt-out ou desfecho,
@@ -108,31 +119,12 @@ export async function decidirProximosPassos(limite = 50): Promise<ResultadoAgent
    * Ordenava por `ultima_mensagem_em` e a conversa sem playbook voltava sem reagendar:
    * as mesmas 50 mais antigas ocupavam a fila para sempre, e nenhuma conversa com
    * playbook era alcançada. Agora toda passagem grava `proxima_acao_em` antes de sair
-   * (inclusive quando não há nada a fazer), e a seleção pega a que venceu há mais tempo.
+   * (inclusive quando não há nada a fazer, e inclusive quando falha — ver
+   * `decidirParaConversa`), e a seleção pega a que venceu há mais tempo.
    * `aguardando_humano` fica de fora pelo filtro de status: é de uma pessoa até alguém
    * tocá-la.
    */
-  const { data, error } = await supabaseAdmin
-    .from('conversas')
-    .select(COLUNAS)
-    .in('status', ['ativa', 'aguardando_resposta'])
-    .neq('modo_agente', 'desligado')
-    .or(`proxima_acao_em.is.null,proxima_acao_em.lte.${agora.toISOString()}`)
-    .order('proxima_acao_em', { ascending: true, nullsFirst: true })
-    .limit(limite)
-  if (error) {
-    logger.error({ erro: error.message }, 'Falha ao listar conversas para o agente.')
-    return acc
-  }
-
-  /*
-   * A conversa que pertence a um mandato ATIVO é do ciclo de agentes (09 §6): lá o
-   * agente enxerga todas as conversas do mandato de uma vez e decide por ele. Decidir
-   * aqui também seria o mesmo cliente recebendo duas cadências.
-   */
-  const todas = (data ?? []) as ConversaParaDecidir[]
-  const doMandato = await conversasEmMandatoAtivo(todas.map((c) => c.id))
-  const conversas = todas.filter((c) => !doMandato.has(c.id))
+  const conversas = await conversasParaDecidir(limite, agora, cfgAgentes, { soAgendadas: false })
   acc.conversas = conversas.length
 
   for (const c of conversas) {
@@ -178,7 +170,38 @@ const NADA: DesfechoDecisao = {
   pulou: true,
 }
 
+/**
+ * ── TODA SAÍDA REAGENDA (09 §1.1) ────────────────────────────────────────────
+ * Os `return` sem próximo passo eram o deadlock de volta por outras portas: falta de
+ * contato, INSERT recusado na fila e exceção no meio saíam deixando a conversa vencida,
+ * e ela voltava à frente da fila a cada passagem. Em vez de confiar que cada caminho
+ * lembre, a rede fica aqui: depois da passagem — com ou sem exceção — a conversa que
+ * continua na fila e continua vencida ganha um próximo passo com espera de falha.
+ *
+ * "Vencida" é ANTES do início da passagem (`agora`), de propósito: uma mensagem que chega
+ * no meio acorda a conversa com `now()` (trigger de `comunicacoes`), e isso não é uma
+ * saída esquecida — é o cliente respondendo, e a rede não pode empurrá-lo para depois.
+ */
 export async function decidirParaConversa(
+  conversa: ConversaParaDecidir,
+  gatilho: Gatilho,
+  cfg: ConfigComunicacao,
+  agora: Date,
+  cfgAgentes: ConfigAgentes,
+): Promise<DesfechoDecisao> {
+  try {
+    return await decidirSemRede(conversa, gatilho, cfg, agora, cfgAgentes)
+  } catch (erro) {
+    logger.error({ conversa: conversa.id, erro: String(erro) }, 'Falha ao decidir próximo passo.')
+    return NADA
+  } finally {
+    await garantirProximaAvaliacao(conversa.id, agora).catch((erro: unknown) =>
+      logger.error({ conversa: conversa.id, erro: String(erro) }, 'Falha ao reagendar a conversa.'),
+    )
+  }
+}
+
+async function decidirSemRede(
   conversa: ConversaParaDecidir,
   gatilho: Gatilho,
   cfg: ConfigComunicacao,
@@ -399,7 +422,8 @@ async function montarContexto(
 
   /*
    * A persona que fala é SEMPRE uma assistente de IA, mesmo quando o responsável da
-   * conversa é humano: o texto sai por um número `ia` e com `por_ia = true`. Dizer
+   * conversa é humano: ali o texto vira sugestão para ele, e só sai sozinho (com
+   * `por_ia = true`) pela linha de uma persona — ver `personaPodeEnviar`. Dizer
    * "Você é: Fulano" com o nome de um vendedor humano fazia o modelo assinar como ele
    * (09 §1.10). O nome humano vira CONTEXTO ("o vendedor da conta"), nunca identidade.
    */
@@ -449,14 +473,33 @@ async function executar(
   switch (acao) {
     case 'responder_agora':
     case 'enviar_link_agendamento': {
-      if (!conversa.contato_id || !d.conteudo_sugerido) return false
+      if (!conversa.contato_id || !d.conteudo_sugerido) {
+        await adiar(conversa.id, agora, playbook)
+        return false
+      }
+      const canal = (d.canal ?? conversa.canal) as string
+      /*
+       * ── SEM LINHA PRÓPRIA, NÃO SAI (09 §3.1) ───────────────────────────────
+       * O autônomo antigo enfileirava `por_ia` com o vendedor HUMANO da conversa, e o
+       * envio caía no rodízio anônimo de contas `ia`: a mesma "assistente" aparecia com
+       * um número diferente a cada vez, e a resposta ia para uma thread que ninguém
+       * acompanhava. O rodízio saiu da spec. Agora só fala sozinho o agente que é uma
+       * persona com a sua linha (a fila a resolve por `vendedor_id`); na conversa de
+       * uma pessoa, a decisão vira SUGESTÃO para ela — que responde do próprio número.
+       */
+      if (!(await personaPodeEnviar(conversa.responsavel_vendedor_id, canal))) {
+        logger.info({ conversa: conversa.id }, 'Autônomo sem persona com linha própria: vira sugestão.')
+        await avisarSugestao(conversa, d)
+        await adiar(conversa.id, agora, playbook)
+        return false
+      }
       /*
        * O agente NÃO envia: ele enfileira, e a fila passa pelo portão. Um caminho
        * de envio direto "porque o agente decidiu" seria o quarto lugar onde a
        * supressão precisa ser lembrada.
        */
       const { error } = await supabaseAdmin.from('mensagens_outbox').insert({
-        canal: (d.canal ?? conversa.canal) as string,
+        canal,
         destinatario_contato_id: conversa.contato_id,
         destinatario: await identificadorDaConversa(conversa.id),
         corpo: d.conteudo_sugerido,
@@ -470,6 +513,7 @@ async function executar(
       })
       if (error) {
         logger.error({ erro: error.message }, 'Falha ao enfileirar mensagem do agente.')
+        await reagendarEm(conversa.id, agora, ESPERA_APOS_FALHA_MS)
         return false
       }
       // Sem reagendar, a conversa continuava vencida e voltava na hora seguinte para
@@ -518,15 +562,13 @@ async function executar(
       break
     }
 
-    case 'mudar_estagio_funil':
-    case 'pedir_enriquecimento_contato':
     case 'ligar':
       /*
-       * NÃO EXECUTADAS, e agora sem fingir (09 §6.1). O agente de conversa não sabe qual
-       * card mover nem tem orçamento para enriquecer ou ligar — isso é trabalho de
-       * MANDATO, onde essas ferramentas existem de verdade. Antes estas ações marcavam
-       * `executada = true` e emitiam "executou" sem efeito nenhum: um agente que acha que
-       * agiu e não agiu é pior que um que não age.
+       * NÃO EXECUTADA, e sem fingir (09 §6.1). O agente de conversa não tem orçamento
+       * para ligar — isso é trabalho de MANDATO, onde a ferramenta existe de verdade.
+       * `ligar` fica no espaço de ações como ferramenta declarada e desligada (§7.2);
+       * `mudar_estagio_funil` e `pedir_enriquecimento_contato`, que também não faziam
+       * nada aqui, saíram da lista (`ACOES_APOSENTADAS`) e dos playbooks (0271b).
        */
       logger.info({ conversa: conversa.id, acao }, 'Ação sem efeito no agente de conversa; só com mandato.')
       await adiar(conversa.id, agora, playbook)
@@ -705,7 +747,19 @@ async function avisarEscalacao(conversa: ConversaParaDecidir, motivo: string): P
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
+/**
+ * O playbook, com `acoes_permitidas` reduzida ao que ESTE decisor executa. Uma versão
+ * antiga fixada na conversa (ou um playbook anterior à 0271b) ainda pode listar ação
+ * aposentada; oferecê-la ao modelo seria pedir uma escolha que o schema descarta.
+ */
 async function playbookDa(conversa: ConversaParaDecidir): Promise<Playbook | null> {
+  const bruto = await playbookBrutoDa(conversa)
+  if (!bruto) return null
+  const conhecidas: readonly string[] = ACOES_AGENTE
+  return { ...bruto, acoes_permitidas: bruto.acoes_permitidas.filter((a) => conhecidas.includes(a)) }
+}
+
+async function playbookBrutoDa(conversa: ConversaParaDecidir): Promise<Playbook | null> {
   if (conversa.playbook_id) {
     const { data } = await supabaseAdmin
       .from('agente_playbooks')
@@ -749,11 +803,103 @@ async function identificadorDaConversa(conversaId: string): Promise<string | nul
   return data?.identificador_externo ?? null
 }
 
-async function reagendarEm(conversaId: string, agora: Date, ms: number): Promise<void> {
+export async function reagendarEm(conversaId: string, agora: Date, ms: number): Promise<void> {
   await supabaseAdmin
     .from('conversas')
     .update({ proxima_acao_em: new Date(agora.getTime() + ms).toISOString() })
     .eq('id', conversaId)
+}
+
+/** A rede de `decidirParaConversa`: a conversa que ficou na fila e vencida ganha espera. */
+async function garantirProximaAvaliacao(conversaId: string, agora: Date): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('conversas')
+    .select('status, modo_agente, proxima_acao_em')
+    .eq('id', conversaId)
+    .maybeSingle()
+  if (!data) return
+  const naFila = (data.status === 'ativa' || data.status === 'aguardando_resposta') && data.modo_agente !== 'desligado'
+  // Estritamente antes de `agora`: a cadência fixa grava `agora` quando o passo já venceu,
+  // e isso é um próximo passo escolhido, não um esquecido.
+  const vencida = !data.proxima_acao_em || new Date(data.proxima_acao_em).getTime() < agora.getTime()
+  if (naFila && vencida) await reagendarEm(conversaId, agora, ESPERA_APOS_FALHA_MS)
+}
+
+/**
+ * A seleção das duas varreduras (esta e `executar-agendados`), já SEM as conversas de
+ * mandato ativo.
+ *
+ * ── O FILTRO DO MANDATO ANTES DO LIMITE, NÃO DEPOIS (09 §1.1) ────────────────
+ * Filtrava depois do `limit(50)` e nunca mexia nelas: com 50 conversas de mandato
+ * vencidas na frente, a varredura lia as mesmas 50, descartava todas e terminava sem
+ * decidir nada — o deadlock da fila de volta. O PostgREST não diz "sem linha em
+ * `mandato_conversas`" num filtro, então a seleção lê em lotes: a de mandato é empurrada
+ * para longe (o ciclo de mandatos não lê `conversas.proxima_acao_em`; se o mandato
+ * terminar, ela volta ao decisor em um intervalo, que é o que ela teria sem mandato) e o
+ * próximo lote já não a vê. O trigger de `comunicacoes` também deixou de acordá-las
+ * (0271b), então elas param de voltar à frente a cada mensagem.
+ */
+export async function conversasParaDecidir(
+  limite: number,
+  agora: Date,
+  cfgAgentes: ConfigAgentes,
+  opcoes: { soAgendadas: boolean },
+): Promise<ConversaParaDecidir[]> {
+  const escolhidas: ConversaParaDecidir[] = []
+  const vistas = new Set<string>()
+  for (let lote = 0; lote < LOTES_DE_SELECAO && escolhidas.length < limite; lote++) {
+    const base = supabaseAdmin
+      .from('conversas')
+      .select(COLUNAS)
+      .in('status', ['ativa', 'aguardando_resposta'])
+      .neq('modo_agente', 'desligado')
+    const filtrada = opcoes.soAgendadas
+      ? base.not('proxima_acao_em', 'is', null).lte('proxima_acao_em', agora.toISOString())
+      : base.or(`proxima_acao_em.is.null,proxima_acao_em.lte.${agora.toISOString()}`)
+    const { data, error } = await filtrada
+      .order('proxima_acao_em', { ascending: true, nullsFirst: true })
+      .limit(limite)
+    if (error) {
+      logger.error({ erro: error.message }, 'Falha ao listar conversas para o agente.')
+      break
+    }
+    const lidas = (data ?? []) as ConversaParaDecidir[]
+    const novas = lidas.filter((c) => !vistas.has(c.id))
+    if (novas.length === 0) break
+    for (const c of novas) vistas.add(c.id)
+
+    const doMandato = await conversasEmMandatoAtivo(novas.map((c) => c.id))
+    if (doMandato.size > 0) {
+      await supabaseAdmin
+        .from('conversas')
+        .update({
+          proxima_acao_em: new Date(
+            agora.getTime() + cfgAgentes.geral.intervalo_sem_mandato_horas * 3_600_000,
+          ).toISOString(),
+        })
+        .in('id', [...doMandato])
+    }
+    escolhidas.push(...novas.filter((c) => !doMandato.has(c.id)).slice(0, limite - escolhidas.length))
+    // Lote incompleto: não há mais nada vencido para ler.
+    if (lidas.length < limite) break
+  }
+  return escolhidas
+}
+
+/**
+ * O autônomo antigo só envia como PERSONA com linha própria (09 §3.1). WhatsApp exige a
+ * linha do agente (`whatsapp_conta_id`; a fila ainda confere se está ativa); e-mail sai
+ * pela caixa ou pelo remetente dele, que a fila resolve pelo `vendedor_id`.
+ */
+async function personaPodeEnviar(vendedorId: string | null, canal: string): Promise<boolean> {
+  if (!vendedorId) return false
+  const { data } = await supabaseAdmin
+    .from('vendedores')
+    .select('is_ia, whatsapp_conta_id')
+    .eq('id', vendedorId)
+    .maybeSingle()
+  if (!data?.is_ia) return false
+  return canal === 'whatsapp' ? Boolean(data.whatsapp_conta_id) : true
 }
 
 /**

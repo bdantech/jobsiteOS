@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { IDS_FERRAMENTAS } from '../agentes/ferramentas.js'
+import { TIPOS_MANDATO } from '../agentes/schemas.js'
+import { ACOES_AGENTE } from './agente.js'
 
 /**
  * Vocabulário do módulo de Comunicação (05A).
@@ -282,23 +285,49 @@ export const salvarTemplateSchema = z.object({
 })
 export type SalvarTemplateInput = z.infer<typeof salvarTemplateSchema>
 
-export const salvarPlaybookSchema = z.object({
-  id: z.string().uuid().optional().nullable(),
-  nome: z.string().min(1),
-  funil: z.enum(FUNIS),
-  objetivo: z.string().min(1),
-  instrucoes: z.string().min(1),
-  acoes_permitidas: z.array(z.string()).min(1, 'Um playbook sem ações não decide nada.'),
-  templates_disponiveis: z.array(z.string().uuid()).default([]),
-  prazos: z
-    .object({
-      silencio_dias: z.number().int().min(0).max(365).optional(),
-      max_tentativas: z.number().int().min(0).max(20).optional(),
-      desistir_apos_dias: z.number().int().min(0).max(365).optional(),
-    })
-    .default({}),
-  ativo: z.boolean().default(true),
-})
+/**
+ * Um playbook serve a UM de dois decisores, e cada um tem o seu catálogo:
+ *
+ *   `tipo_mandato` nulo    o agente de conversa — `acoes_permitidas` são `ACOES_AGENTE`;
+ *   `tipo_mandato` setado  o loop de mandato — `acoes_permitidas` são ferramentas
+ *                          (`IDS_FERRAMENTAS`).
+ *
+ * A tela de Comunicação mostrava as dez ações de conversa para os playbooks de mandato,
+ * e salvar gravava nomes que o loop não conhece: o filtro de ferramentas via uma lista
+ * sem nenhuma interseção e o agente ficava só com as essenciais. Validar contra o
+ * catálogo certo é o que impede isso de voltar pela API. O tipo em si não muda numa
+ * versão nova — a RPC o herda da anterior e recusa quem tentar trocá-lo.
+ */
+export const salvarPlaybookSchema = z
+  .object({
+    id: z.string().uuid().optional().nullable(),
+    nome: z.string().min(1),
+    funil: z.enum(FUNIS),
+    objetivo: z.string().min(1),
+    instrucoes: z.string().min(1),
+    acoes_permitidas: z.array(z.string()).min(1, 'Um playbook sem ações não decide nada.'),
+    templates_disponiveis: z.array(z.string().uuid()).default([]),
+    prazos: z
+      .object({
+        silencio_dias: z.number().int().min(0).max(365).optional(),
+        max_tentativas: z.number().int().min(0).max(20).optional(),
+        desistir_apos_dias: z.number().int().min(0).max(365).optional(),
+      })
+      .default({}),
+    ativo: z.boolean().default(true),
+    tipo_mandato: z.enum(TIPOS_MANDATO).nullable().default(null),
+  })
+  .superRefine((p, ctx) => {
+    const catalogo: readonly string[] = p.tipo_mandato ? IDS_FERRAMENTAS : ACOES_AGENTE
+    const fora = p.acoes_permitidas.filter((a) => !catalogo.includes(a))
+    if (fora.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['acoes_permitidas'],
+        message: `${p.tipo_mandato ? 'Ferramentas' : 'Ações'} que este playbook não conhece: ${fora.join(', ')}.`,
+      })
+    }
+  })
 export type SalvarPlaybookInput = z.infer<typeof salvarPlaybookSchema>
 
 export const atividadeSchema = z.object({

@@ -10,8 +10,8 @@ import type { EstadoDisjuntor, JanelaAgentes, MotivoEncerramento, MotivoPausa } 
  * para o registro, então a pessoa que lê "por que este mandato não andou" lê a razão mais
  * importante, e não a mais recente.
  *
- *    1. kill switch global          a casa mandou parar
- *    2. agente pausado              um gestor parou este agente
+ *    1. kill switch global          a casa mandou parar                   → PULA
+ *    2. agente pausado              um gestor parou este agente           → PULA
  *    3. disjuntor aberto            o agente se parou sozinho            → PAUSA
  *    4. orçamento global esgotado   o mês acabou                          → PAUSA (§8)
  *    5. orçamento do mandato        este mandato gastou o que podia       → ENCERRA
@@ -26,6 +26,11 @@ import type { EstadoDisjuntor, JanelaAgentes, MotivoEncerramento, MotivoPausa } 
  * do mandato. Quando o disjuntor é reaberto ou o mês vira, o mandato continua de onde
  * estava. Já o orçamento do PRÓPRIO mandato, o prazo e o máximo de ações são o contrato
  * dele — esgotados, ele termina.
+ *
+ * "Pula" não mexe no mandato, e por isso as duas primeiras são DEFESA: o ciclo nem
+ * seleciona mandato com kill switch ligado ou de agente inapto (inativo, sem autonomia,
+ * pausado). Se uma escapar por corrida, o worker reagenda o mandato um ciclo à frente —
+ * pular sem reagendar devolvia o mesmo mandato à frente da fila a cada ciclo.
  */
 
 export interface FatosDaTranca {

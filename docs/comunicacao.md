@@ -342,8 +342,9 @@ Um **decisor**, não um chatbot. Responde a uma pergunta: qual é o próximo pas
 relação?
 
 > **Corrigido no Prompt 09 (27/09/2026).** O que acorda o agente, de fato: os dois crons de
-> hora em hora e, desde a 0270a, o **trigger** `comunicacoes_acorda_quem_espera` — toda
-> mensagem RECEBIDA zera o `proxima_acao_em` da conversa. Os gatilhos "no-show", "NF nova em
+> hora em hora e, desde a 0270a, o **trigger** `comunicacoes_acorda_quem_espera` — a
+> mensagem RECEBIDA zera o `proxima_acao_em` da conversa (menos na que espera uma pessoa e na
+> que é de um mandato ativo, 0271b). Os gatilhos "no-show", "NF nova em
 > faixa", "certificado vencendo" e "lead distribuído" nunca foram produzidos por código. E o
 > agente só decide em conversas com `objetivo` ou `playbook_id` — trabalho com objetivo,
 > através de vários contatos e canais, é o **mandato** do Prompt 09 (`docs/agentes.md`), e a
@@ -351,25 +352,27 @@ relação?
 
 ### O espaço de ações é fechado, e é isso que o torna seguro
 
-O modelo não escolhe o que fazer no mundo: escolhe um item de uma lista de dez. Um agente
+O modelo não escolhe o que fazer no mundo: escolhe um item de uma lista de oito. Um agente
 com ferramentas abertas exige confiar no julgamento dele sobre **o que é possível**; um
-agente com espaço fechado só exige confiar no julgamento sobre **qual das dez cabe agora**
+agente com espaço fechado só exige confiar no julgamento sobre **qual das oito cabe agora**
 — e a segunda é uma pergunta auditável linha a linha em `agente_decisoes`.
 
 ```
-responder_agora · agendar_toque · enviar_link_agendamento · mudar_estagio_funil
-marcar_sem_interesse · escalar_humano · pedir_enriquecimento_contato
-trocar_contato_da_conversa · ligar (DESLIGADA) · aguardar
+responder_agora · agendar_toque · enviar_link_agendamento · marcar_sem_interesse
+escalar_humano · trocar_contato_da_conversa · ligar (DESLIGADA) · aguardar
 ```
 
 **`aguardar` é ação de primeira classe**, e não a ausência de decisão. Sem ela, um modelo
 perguntado "qual o próximo passo?" sempre encontra um passo, e a cadência vira perseguição.
 
-**`ligar`, `mudar_estagio_funil` e `pedir_enriquecimento_contato` não executam aqui.** A
-promessa de que as decisões "ligar" ficariam registradas nunca se cumpriu: a validação as
-recusava por `acao_desligada` e o registro saía como `agendar_toque` da cadência. Desde o
-Prompt 09 essas três ações voltam `executada = false` (antes contavam como executadas sem
-efeito nenhum) — ligar, mover card e enriquecer são ferramentas reais do agente de MANDATO.
+**`ligar` não executa aqui.** A promessa de que as decisões "ligar" ficariam registradas
+nunca se cumpriu: a validação as recusava por `acao_desligada` e o registro saía como
+`agendar_toque` da cadência. Desde o Prompt 09 ela volta `executada = false` (antes contava
+como executada sem efeito nenhum). **`mudar_estagio_funil` e `pedir_enriquecimento_contato`
+saíram da lista** (0271b): nunca tiveram efeito aqui, o modelo as escolhia e nada acontecia.
+Saíram do schema da decisão, do que o modelo vê e dos playbooks de conversa; ficam só os
+rótulos (`ACOES_APOSENTADAS`), para o histórico de `agente_decisoes` continuar legível. Mover
+card e enriquecer são ferramentas reais do agente de MANDATO.
 
 ### Dois modos, e o default é uma decisão
 
@@ -378,9 +381,13 @@ envia é a pessoa. `autonomo` executa direto, respeitando todos os guardrails. "
 padrão nas carteiras da IA" nunca foi implementado: a autonomia de verdade é a do agente de
 mandato (`vendedores.autonomo`, Prompt 09), sob orçamento, cotas e disjuntor.
 
-A mensagem autônoma sai pela **linha da persona** (o vendedor de IA dono da conversa) ou, sem
-persona, pelo rodízio de contas `ia` — e é gravada na conversa do PAR (número de origem,
-contato), não na thread do número humano (0270a §1.7).
+A mensagem autônoma sai pela **linha da persona** (o vendedor de IA dono da conversa) e é
+gravada na conversa do PAR (número de origem, contato), não na thread do número humano
+(0270a §1.7). **Sem persona com linha própria, o autônomo não envia** (09 §3.1): na conversa
+de um vendedor humano a decisão vira sugestão para ele, que responde do próprio número. O
+rodízio de contas `ia` que cobria esse caso saiu — a mesma "assistente" aparecia com um
+número diferente a cada vez — e a fila recusa, como última trava, a linha `origem = 'agente'`
+`por_ia` sem persona.
 
 ### A ordem é: guardrail → modelo → validação → execução
 
@@ -403,6 +410,13 @@ O ponto não é a cadência ser boa. É que uma conversa sem próximo passo simp
 a única coisa pior que um follow-up medíocre é nenhum. Quando a cadência acaba, a decisão é
 **parar** — e parar também é um próximo passo.
 
+**Toda passagem sai com próximo passo, inclusive a que falha** (09 §1.1). A conversa sem
+contato, o INSERT recusado na fila e a exceção no meio saíam deixando a conversa vencida, e
+ela voltava à frente da fila a cada hora. `decidirParaConversa` agora tem uma rede: depois
+da passagem, com ou sem exceção, a conversa que continua na fila e vencida ganha 4 h de
+espera. A seleção também exclui as conversas de mandato ativo ANTES do limite de 50 (em
+lotes, empurrando-as para longe) — filtrá-las depois deixava 50 delas travarem a fila.
+
 ### Indicação de outro contato
 
 Quando o agente decide `trocar_contato_da_conversa`, ele lê os dados da indicação da
@@ -421,6 +435,14 @@ A versão anterior fica inativa e as decisões que ela produziu continuam aponta
 Sobrescrever faria o painel de eficácia comparar resultados de instruções diferentes sob o
 mesmo nome — a forma mais silenciosa de aprender errado.
 
+A tela de Comunicação › Playbooks mostra só os playbooks do agente de **conversa** (admin).
+Os **de mandato** (`tipo_mandato` setado) se editam em Agentes › Configurações › Playbooks,
+pelo gestor, com o catálogo de ferramentas do loop. Antes os dois tipos se editavam aqui, com
+as ações de conversa, e a versão nova de um playbook de mandato nascia sem `tipo_mandato` — o
+worker procura o playbook pelo tipo e deixava de achá-lo. `app_salvar_playbook` (0271b) herda
+o tipo da versão anterior, recusa trocá-lo, e repassa para a versão nova as regras de mandato
+que apontavam para a antiga.
+
 ### O desfecho é o que transforma o log em painel
 
 `agente_decisoes.desfecho` (respondeu / suprimiu / sem_resposta / escalou) é apurado **de
@@ -432,8 +454,15 @@ nota convertida.
 ### A escalação espera uma pessoa
 
 Escalar por guardrail (reclamação, negociação, advogado, cobrança, pedido expresso de
-humano) põe a conversa em `aguardando_humano` e a tira da varredura até a primeira saída
-humana (0270a §1.4) — antes, a mesma conversa escalava e notificava a cada hora. **Perguntar
+humano) põe a conversa em `aguardando_humano` e a tira da varredura (0270a §1.4) — antes, a
+mesma conversa escalava e notificava a cada hora. **Só uma pessoa a devolve**: uma saída
+humana (qualquer origem que não seja `por_ia`) ou trocar o modo do agente no inbox
+(`app_conversa_definir_modo` para `sugestao` ou `autonomo` a põe em `ativa` e a reavalia no
+próximo ciclo). A mensagem **recebida** não devolve mais (0271b): até ali o webhook e o sync
+do Gmail punham a conversa em `ativa` e o trigger zerava o `proxima_acao_em`, e a resposta do
+cliente fazia o agente escalar — e notificar — de novo sem ninguém ter olhado. A mensagem
+continua contando em `nao_lidas` e aparece no inbox como qualquer outra; o mandato, se houver,
+continua sendo acordado por ela. **Perguntar
 se é robô não escala mais** (§1.10): a política de identificação é configuração
 (`agentes_config.geral.identificacao`) e o piso é duro — a IA nunca afirma ser humana e,
 perguntada, não nega ser IA.
@@ -448,7 +477,8 @@ escreveu, a resposta do cliente caía no celular do colega, e o destinatário vi
 número desconhecido assinando com outro nome.
 
 A ordem passou a ser: **a conta que a linha escolheu → o número de quem escreveu →
-o round-robin**. A IA continua no round-robin, porque a persona não é de ninguém.
+o round-robin**. A IA com persona sai pela linha dela (09 §3.1); o round-robin de contas `ia`
+ficou só para a campanha "Casa / IA", que não tem persona.
 
 **O que a pessoa digita no próprio celular não entra em duas contas.** Desde que
 `origem = 'celular'` passou a ser ingerido, o número de quem trabalha no WhatsApp

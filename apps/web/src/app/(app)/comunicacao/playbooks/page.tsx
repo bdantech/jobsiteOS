@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { requireSessionContext } from '@/lib/auth'
 import { PlaybooksLista } from '@/components/comunicacao/playbooks-lista'
 
@@ -18,6 +19,13 @@ export default async function PlaybooksPage() {
           O agente é um decisor, não um chatbot: ele escolhe uma ação de uma lista fechada. O
           playbook define quais ações existem naquela conversa, com que tom e por quanto tempo
           insistir.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Os playbooks por tipo de mandato ficam em{' '}
+          <Link href="/agentes/config" className="underline underline-offset-2">
+            Agentes › Configurações › Playbooks
+          </Link>
+          .
         </p>
       </div>
       <PlaybooksLista ehAdmin={ehAdmin} />

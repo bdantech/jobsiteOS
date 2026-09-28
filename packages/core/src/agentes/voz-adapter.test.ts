@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { desfechoEstruturado, traduzirPedido, versaoDaResposta, type ContextoLigacao } from './voz-adapter.ts'
+import {
+  desfechoEstruturado,
+  statusDaResposta,
+  traduzirPedido,
+  versaoDaResposta,
+  type ContextoLigacao,
+} from './voz-adapter.ts'
 
 const CTX: ContextoLigacao = {
   id_externo: 'MDT-2026-00001:1',
@@ -88,4 +94,53 @@ test('versão da Ana: 404 é v1, {versao: "2"} é v2, erro é desconhecida', () 
   assert.equal(versaoDaResposta(200, { versao: '2.1' }), 'v2')
   assert.equal(versaoDaResposta(200, { versao: '1' }), 'v1')
   assert.equal(versaoDaResposta(503, null), 'desconhecida')
+})
+
+test('v2 leva a política de identificação; sem ela, o padrão se_perguntada', () => {
+  const com = traduzirPedido('v2', { ...CTX, identificacao: 'sempre' })
+  assert.ok(com.ok)
+  if (com.ok) assert.equal(com.payload.identificacao, 'sempre')
+  const sem = traduzirPedido('v2', CTX)
+  assert.ok(sem.ok)
+  if (sem.ok) assert.equal(sem.payload.identificacao, 'se_perguntada')
+})
+
+test('v2 que anuncia objetivos só recebe os anunciados', () => {
+  const t = traduzirPedido('v2', CTX, ['ofertar_antecipacao'])
+  assert.equal(t.ok, false)
+  if (!t.ok) assert.equal(t.codigo, 'objetivo_nao_suportado')
+  assert.ok(traduzirPedido('v2', CTX, ['ofertar_antecipacao', 'agendar_reuniao']).ok)
+  // Sem lista: a v2 aceita os quatro.
+  assert.ok(traduzirPedido('v2', CTX, null).ok)
+})
+
+test('status da Ana: a lista de objetivos só vale na v2 e só com nomes conhecidos', () => {
+  assert.deepEqual(statusDaResposta(200, { versao: '2', objetivos: ['agendar_reuniao', 'dancar'] }), {
+    versao: 'v2',
+    objetivos: ['agendar_reuniao'],
+  })
+  assert.deepEqual(statusDaResposta(200, { versao: '2' }), { versao: 'v2', objetivos: null })
+  assert.deepEqual(statusDaResposta(200, { versao: '2', objetivos: [] }), { versao: 'v2', objetivos: null })
+  assert.deepEqual(statusDaResposta(404, null), { versao: 'v1', objetivos: null })
+})
+
+test('qualificação e reativação chegam estruturadas', () => {
+  const q = desfechoEstruturado({
+    desfecho: {
+      tipo: 'qualificacao',
+      fit: 'Não',
+      volume_mensal_brl: '250000',
+      sacados: ['MRV', '', 'Cyrela'],
+      decisor: { nome: 'Carlos', telefone: '(11) 98888-7777' },
+    },
+  })
+  assert.equal(q.tipo, 'qualificacao')
+  if (q.tipo === 'qualificacao') {
+    assert.equal(q.fit, 'nao')
+    assert.equal(q.volume_mensal_brl, 250000)
+    assert.deepEqual(q.sacados, ['MRV', 'Cyrela'])
+    assert.equal(q.decisor?.telefone_e164, '+5511988887777')
+  }
+  const r = desfechoEstruturado({ desfecho: { tipo: 'reativacao', quer_voltar: 'talvez', motivo_saida: 'taxa' } })
+  assert.deepEqual(r, { tipo: 'reativacao', motivo_saida: 'taxa', quer_voltar: 'talvez', observacao: null })
 })

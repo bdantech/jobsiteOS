@@ -8,7 +8,7 @@ import {
   validarDecisao,
   type DecisaoAgente,
 } from './agente.ts'
-import { CONFIG_COMUNICACAO_PADRAO } from './schemas.ts'
+import { CONFIG_COMUNICACAO_PADRAO, salvarPlaybookSchema } from './schemas.ts'
 import { triagemSchema, type Triagem } from './triagem.ts'
 
 const cfg = CONFIG_COMUNICACAO_PADRAO
@@ -141,4 +141,43 @@ test('o zod recusa uma ação que o modelo inventou', () => {
   assert.throws(() =>
     decisaoAgenteSchema.parse({ acao: 'mandar_flores', confianca: 1, justificativa: 'x' }),
   )
+})
+
+// ─── Playbooks: cada tipo com o seu catálogo (09 §6.1, §12) ─────────────────
+
+test('as ações sem efeito saíram do que o modelo pode escolher', () => {
+  for (const acao of ['mudar_estagio_funil', 'pedir_enriquecimento_contato']) {
+    assert.equal(decisaoAgenteSchema.safeParse({ acao, confianca: 0.9, justificativa: 'x' }).success, false)
+  }
+})
+
+const PLAYBOOK_BASE = {
+  id: null,
+  nome: 'Teste',
+  funil: 'sdr',
+  objetivo: 'agendar_reuniao',
+  instrucoes: 'Faça.',
+}
+
+test('playbook de conversa só aceita ações do agente de conversa', () => {
+  assert.equal(salvarPlaybookSchema.safeParse({ ...PLAYBOOK_BASE, acoes_permitidas: ['aguardar'] }).success, true)
+  const r = salvarPlaybookSchema.safeParse({ ...PLAYBOOK_BASE, acoes_permitidas: ['aguardar', 'mudar_estagio_funil'] })
+  assert.equal(r.success, false)
+  const ferramenta = salvarPlaybookSchema.safeParse({ ...PLAYBOOK_BASE, acoes_permitidas: ['enviar_whatsapp'] })
+  assert.equal(ferramenta.success, false)
+})
+
+test('playbook de mandato só aceita ferramentas do loop', () => {
+  const ok = salvarPlaybookSchema.safeParse({
+    ...PLAYBOOK_BASE,
+    tipo_mandato: 'agendamento_reuniao',
+    acoes_permitidas: ['enviar_whatsapp', 'agendar_reuniao', 'encerrar_mandato'],
+  })
+  assert.equal(ok.success, true)
+  const errado = salvarPlaybookSchema.safeParse({
+    ...PLAYBOOK_BASE,
+    tipo_mandato: 'agendamento_reuniao',
+    acoes_permitidas: ['responder_agora'],
+  })
+  assert.equal(errado.success, false)
 })

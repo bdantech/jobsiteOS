@@ -276,14 +276,13 @@ export async function tocarConversa(args: {
   conversaId: string
   direcao: Direcao
   em: Date
-  /** Entrada reabre a conversa; saída a põe à espera. */
+  /** Entrada reabre a conversa; saída a põe à espera. Nunca a que espera uma pessoa. */
   novoStatus?: 'ativa' | 'aguardando_resposta' | null
 }): Promise<void> {
   const patch: Record<string, unknown> = {
     ultima_mensagem_em: args.em.toISOString(),
     ultima_direcao: args.direcao,
   }
-  if (args.novoStatus) patch.status = args.novoStatus
 
   if (args.direcao === 'entrada') {
     const { data } = await supabaseAdmin
@@ -298,6 +297,25 @@ export async function tocarConversa(args: {
 
   const { error } = await supabaseAdmin.from('conversas').update(patch).eq('id', args.conversaId)
   if (error) logger.error({ erro: error.message }, 'Falha ao atualizar a conversa.')
+
+  /*
+   * ── `aguardando_humano` SÓ UMA PESSOA TIRA (09 §1.4) ──────────────────────
+   * A entrada punha a conversa escalada de volta em `ativa`, e o decisor a pegava na
+   * hora seguinte para escalar — e notificar — de novo, sem ninguém ter olhado. O status
+   * vai num UPDATE à parte, condicionado, para a troca não depender de uma leitura
+   * anterior: quem devolve a conversa é a saída humana (trigger de `comunicacoes`, que
+   * roda antes daqui) ou o modo do agente trocado no inbox. Uma saída `por_ia` — de um
+   * mandato, por exemplo — também não a devolve. As não lidas sobem do mesmo jeito,
+   * acima: a mensagem aparece no inbox como qualquer outra.
+   */
+  if (args.novoStatus) {
+    const { error: erroStatus } = await supabaseAdmin
+      .from('conversas')
+      .update({ status: args.novoStatus })
+      .eq('id', args.conversaId)
+      .neq('status', 'aguardando_humano')
+    if (erroStatus) logger.error({ erro: erroStatus.message }, 'Falha ao atualizar o status da conversa.')
+  }
 }
 
 /** Saídas para uma thread hoje. Insumo do teto por thread (§7.5). */

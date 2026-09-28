@@ -259,11 +259,17 @@ export async function buscarTodosTemplates(): Promise<TemplateMensagem[]> {
   return data ?? []
 }
 
+/**
+ * Só os do agente de CONVERSA. Os de mandato (`tipo_mandato` setado) listam ferramentas
+ * do loop de agentes e se editam em Agentes › Configurações › Playbooks — editá-los aqui,
+ * com as ações de conversa, era como a versão nova perdia o tipo (09 §12).
+ */
 export async function buscarPlaybooks(): Promise<Playbook[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('agente_playbooks')
     .select('*')
+    .is('tipo_mandato', null)
     .order('ativo', { ascending: false })
     .order('funil')
     .order('versao', { ascending: false })

@@ -103,7 +103,11 @@ export function PlaybooksLista({ ehAdmin }: { ehAdmin: boolean }) {
 
 function Editor({ pb, onFechar, onSalvo }: { pb: Playbook; onFechar: () => void; onSalvo: () => void }) {
   const [instrucoes, setInstrucoes] = React.useState(pb.instrucoes)
-  const [acoes, setAcoes] = React.useState<string[]>(pb.acoes_permitidas)
+  // Só as ações que existem hoje: uma aposentada (`mudar_estagio_funil`, 09 §6.1) não tem
+  // checkbox para ser desmarcada e seria regravada em toda versão nova.
+  const [acoes, setAcoes] = React.useState<string[]>(() =>
+    pb.acoes_permitidas.filter((a) => (ACOES_AGENTE as readonly string[]).includes(a)),
+  )
   const prazos = (pb.prazos ?? {}) as Record<string, number>
   const [silencio, setSilencio] = React.useState(String(prazos.silencio_dias ?? 3))
   const [tentativas, setTentativas] = React.useState(String(prazos.max_tentativas ?? 4))
@@ -127,6 +131,7 @@ function Editor({ pb, onFechar, onSalvo }: { pb: Playbook; onFechar: () => void;
           desistir_apos_dias: Number(desistir),
         },
         ativo: true,
+        tipo_mandato: null,
       })
       if (!r.ok) {
         toast.error(r.message)

@@ -41,6 +41,7 @@ import {
   type OrcamentoMes,
   type VozStatus,
 } from './queries-gestao'
+import { PlaybooksMandato } from './playbooks-mandato'
 import { RegrasMandato } from './regras-mandato'
 import { SomenteGestores } from './somente-gestores'
 
@@ -87,6 +88,8 @@ function useSalvar() {
 function Configuracoes() {
   const cfg = useQuery({ queryKey: gestaoAgentesKeys.config(), queryFn: buscarConfigAgentes })
   const orc = useQuery({ queryKey: gestaoAgentesKeys.orcamento(), queryFn: buscarOrcamentoMes })
+  // Controlada para o botão "Playbooks por tipo de mandato" da aba de regras trazer aqui.
+  const [aba, setAba] = React.useState('operacao')
 
   if (cfg.isPending) return <Skeleton className="h-96 w-full" />
   if (cfg.isError) {
@@ -103,12 +106,13 @@ function Configuracoes() {
       <KillSwitch ligado={c.geral.kill_switch} />
       <VersaoAna status={cfg.data.vozStatus} />
 
-      <Tabs defaultValue="operacao" className="space-y-4">
+      <Tabs value={aba} onValueChange={setAba} className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="operacao">Operação</TabsTrigger>
           <TabsTrigger value="precos">Preços</TabsTrigger>
           <TabsTrigger value="disjuntor">Disjuntor padrão</TabsTrigger>
           <TabsTrigger value="regras">Regras de mandato</TabsTrigger>
+          <TabsTrigger value="playbooks">Playbooks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="operacao" className="mt-0 space-y-4">
@@ -124,7 +128,10 @@ function Configuracoes() {
           <DisjuntorPadrao config={c} />
         </TabsContent>
         <TabsContent value="regras" className="mt-0">
-          <RegrasMandato />
+          <RegrasMandato onAbrirPlaybooks={() => setAba('playbooks')} />
+        </TabsContent>
+        <TabsContent value="playbooks" className="mt-0">
+          <PlaybooksMandato />
         </TabsContent>
       </Tabs>
 

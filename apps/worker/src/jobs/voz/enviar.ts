@@ -1,12 +1,13 @@
 import {
   traduzirPedido,
   type ContextoLigacao,
+  type StatusVoz,
 } from '../../../../../packages/core/src/agentes/voz-adapter.js'
 import type { ObjetivoLigacao, VersaoVoz } from '../../../../../packages/core/src/agentes/schemas.js'
 import type { PedidoLigacao } from '../../../../../packages/core/src/voz/schemas.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { configDaVoz, enfileirarLigacao, versaoDaAna } from '../../voz/api.js'
+import { configDaVoz, enfileirarLigacao, statusDaAna } from '../../voz/api.js'
 import { lerConfigVoz } from '../../voz/config.js'
 import { remontarPedidoDaNota } from '../../voz/pedido-fresco.js'
 
@@ -101,8 +102,9 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
   if (rows.length === 0) return zero
 
   // Uma pergunta por corrida, não por ligação. O painel mostra esta versão (§15.4).
-  const versao = await versaoDaAna(conexao)
-  await registrarVersao(versao)
+  const status = await statusDaAna(conexao)
+  const versao = status.versao
+  await registrarStatus(status)
 
   const acc: ResultadoEnvioVoz = { ...zero, candidatas: rows.length, versao }
 
@@ -144,7 +146,7 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
         objetivo,
         id_externo: linha.id_externo,
         pedido_v1: pedidoV1,
-      })
+      }, status.objetivos)
       if (!t.ok) {
         await cancelar(linha, t.codigo, t.erro)
         acc.canceladas++
@@ -203,6 +205,7 @@ export async function enviarFilaDeVoz(limite?: number): Promise<ResultadoEnvioVo
 
     if (!podeTentar) {
       logger.error({ id_externo: linha.id_externo, tentativas, erro: r.erro }, 'Ligação esgotou as tentativas de envio.')
+      await devolverJanelas(linha)
       await acordarMandato(linha.mandato_id)
     }
   }
@@ -219,7 +222,22 @@ async function cancelar(linha: LinhaFila, motivo: string, detalhe?: string): Pro
     [linha.id, motivo, detalhe ?? null],
   )
   logger.info({ id_externo: linha.id_externo, motivo }, 'Ligação cancelada no envio: o portão recusou com dados de agora.')
+  await devolverJanelas(linha)
   await acordarMandato(linha.mandato_id)
+}
+
+/**
+ * A ligação de agendamento que não chegou à Ana devolve as janelas do closer que ela
+ * segurava: ninguém vai oferecê-las, e reservadas elas sumiriam da agenda de outros
+ * mandatos até expirar.
+ */
+async function devolverJanelas(linha: LinhaFila): Promise<void> {
+  const janelas = ehPedidoDeMandato(linha.pedido) ? (linha.pedido.contexto.janelas ?? []) : []
+  if (!janelas.length) return
+  await pool.query(
+    'update agenda_reservas set expira_em = now() where id = any($1::uuid[]) and confirmada_em is null',
+    [janelas.map((j) => j.id)],
+  )
 }
 
 /**
@@ -237,9 +255,9 @@ async function acordarMandato(mandatoId: string | null): Promise<void> {
 }
 
 /** A versão vista, para o painel dizer em qual contrato a Ana está (§15.4). */
-async function registrarVersao(versao: VersaoVoz): Promise<void> {
+async function registrarStatus(status: StatusVoz): Promise<void> {
   const { error } = await supabaseAdmin
     .from('agentes_config')
-    .upsert({ chave: 'voz_status', valor: { versao, detectada_em: new Date().toISOString() } as never })
+    .upsert({ chave: 'voz_status', valor: { ...status, detectada_em: new Date().toISOString() } as never })
   if (error) logger.warn({ erro: error.message }, 'Não foi possível registrar a versão da Ana.')
 }

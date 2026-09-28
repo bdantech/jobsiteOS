@@ -1,6 +1,7 @@
 import { normalizarTelefoneBr } from '../fornecedores/telefone.js'
 import type { PedidoLigacao } from '../voz/schemas.js'
-import type { ObjetivoLigacao, VersaoVoz } from './schemas.js'
+import type { PoliticaIdentificacao } from './identificacao.js'
+import { OBJETIVOS_LIGACAO, type ObjetivoLigacao, type VersaoVoz } from './schemas.js'
 
 /**
  * O ADAPTER DE VOZ (Prompt 09 §4.3): a ferramenta `ligar` do agente fala em OBJETIVO, e
@@ -32,6 +33,8 @@ export interface JanelaOferecida {
   id: string
   inicio: string
   fim: string
+  /** Até quando a reserva segura o horário. Depois disso a Ana não pode mais oferecê-lo. */
+  expira_em?: string
 }
 
 export interface ContextoLigacao {
@@ -46,13 +49,28 @@ export interface ContextoLigacao {
   pedido_v1?: PedidoLigacao | null
   /** Só em `agendar_reuniao`: um conjunto FECHADO. A Ana confirma uma ou devolve `agendar_retorno`. */
   janelas?: JanelaOferecida[]
+  /**
+   * A política de identificação vigente (09 §10). Vai no pedido porque vale em todos os
+   * canais, voz inclusive, e muda por config sem deploy. Pedidos enfileirados antes de ela
+   * existir não a têm: a Ana segue o padrão dela, que é o mesmo `se_perguntada`.
+   */
+  identificacao?: PoliticaIdentificacao
 }
 
 export type Traducao =
   | { ok: true; versao: 'v1' | 'v2'; payload: Record<string, unknown> }
   | { ok: false; codigo: 'objetivo_nao_suportado' | 'falta_pedido' | 'falta_janelas'; erro: string }
 
-export function traduzirPedido(versao: VersaoVoz, ctx: ContextoLigacao): Traducao {
+/**
+ * `objetivos` é a lista que a v2 anuncia em `GET /api/versao`. A Ana pode liberar os
+ * objetivos um de cada vez: com a lista, só mandamos os que estão nela; sem a lista
+ * (`null`), uma v2 aceita os quatro.
+ */
+export function traduzirPedido(
+  versao: VersaoVoz,
+  ctx: ContextoLigacao,
+  objetivos: readonly ObjetivoLigacao[] | null = null,
+): Traducao {
   if (versao !== 'v2') {
     if (ctx.objetivo !== 'ofertar_antecipacao') {
       return {
@@ -73,6 +91,15 @@ export function traduzirPedido(versao: VersaoVoz, ctx: ContextoLigacao): Traduca
     return { ok: true, versao: 'v1', payload: { ...ctx.pedido_v1, id_externo: ctx.id_externo, telefone: ctx.contato.telefone_e164 } }
   }
 
+  if (objetivos && !objetivos.includes(ctx.objetivo)) {
+    return {
+      ok: false,
+      codigo: 'objetivo_nao_suportado',
+      erro:
+        `A Ana (v2) ainda não liberou o objetivo "${ctx.objetivo}" por telefone. ` +
+        'Use WhatsApp ou e-mail para isso por enquanto.',
+    }
+  }
   if (ctx.objetivo === 'ofertar_antecipacao' && !ctx.pedido_v1) {
     return {
       ok: false,
@@ -104,6 +131,7 @@ export function traduzirPedido(versao: VersaoVoz, ctx: ContextoLigacao): Traduca
       },
       empresa: ctx.empresa,
       briefing: ctx.motivo,
+      identificacao: ctx.identificacao ?? 'se_perguntada',
       ...(ctx.pedido_v1 ? { oferta: ctx.pedido_v1.oferta } : {}),
       ...(ctx.janelas?.length ? { janelas: ctx.janelas } : {}),
     },
@@ -124,9 +152,30 @@ export type DesfechoEstruturado =
   | { tipo: 'agendar_retorno'; quando: string | null; contato: ContatoRevelado | null; observacao: string | null }
   | { tipo: 'indicou_outro_contato'; contato: ContatoRevelado; observacao: string | null }
   | { tipo: 'reuniao_agendada'; janela_id: string | null; inicio: string | null; observacao: string | null }
+  | {
+      tipo: 'qualificacao'
+      fit: TalvezSimNao | null
+      decisor: ContatoRevelado | null
+      volume_mensal_brl: number | null
+      sacados: string[]
+      observacao: string | null
+    }
+  | { tipo: 'reativacao'; motivo_saida: string | null; quer_voltar: TalvezSimNao | null; observacao: string | null }
   | { tipo: 'nenhum' }
 
+export type TalvezSimNao = 'sim' | 'nao' | 'talvez'
+
 const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
+
+const talvezSimNao = (v: unknown): TalvezSimNao | null => {
+  const t = texto(v)?.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+  return t === 'sim' || t === 'nao' || t === 'talvez' ? t : null
+}
+
+const numero = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+  return Number.isFinite(n) ? n : null
+}
 
 function contatoDe(bruto: unknown): ContatoRevelado | null {
   if (!bruto || typeof bruto !== 'object') return null
@@ -179,9 +228,49 @@ export function desfechoEstruturado(corpo: unknown): DesfechoEstruturado {
         inicio: texto(d?.inicio) ?? texto(d?.quando),
         observacao,
       }
+    case 'qualificacao': {
+      const sacados: unknown = d?.sacados
+      return {
+        tipo: 'qualificacao',
+        fit: talvezSimNao(d?.fit),
+        decisor: contatoDe(d?.decisor),
+        volume_mensal_brl: numero(d?.volume_mensal_brl),
+        sacados: Array.isArray(sacados) ? sacados.map(texto).filter((s): s is string => !!s) : [],
+        observacao,
+      }
+    }
+    case 'reativacao':
+      return {
+        tipo: 'reativacao',
+        motivo_saida: texto(d?.motivo_saida),
+        quer_voltar: talvezSimNao(d?.quer_voltar),
+        observacao,
+      }
     default:
       return { tipo: 'nenhum' }
   }
+}
+
+/** O que `GET /api/versao` diz: a versão e, na v2, quais objetivos ela já aceita. */
+export interface StatusVoz {
+  versao: VersaoVoz
+  objetivos: ObjetivoLigacao[] | null
+}
+
+/**
+ * A lista `objetivos` só vale na v2 e só com nomes que conhecemos; lista ausente ou vazia
+ * vira `null` (sem restrição além da versão). Um nome desconhecido é ignorado, não erro:
+ * a Ana pode anunciar um objetivo que o JobsiteOS ainda não pede.
+ */
+export function statusDaResposta(status: number, corpo: unknown): StatusVoz {
+  const versao = versaoDaResposta(status, corpo)
+  if (versao !== 'v2') return { versao, objetivos: null }
+  const bruto = corpo && typeof corpo === 'object' ? (corpo as Record<string, unknown>).objetivos : null
+  if (!Array.isArray(bruto)) return { versao, objetivos: null }
+  const conhecidos = bruto.filter((o): o is ObjetivoLigacao =>
+    (OBJETIVOS_LIGACAO as readonly string[]).includes(String(o)),
+  )
+  return { versao, objetivos: conhecidos.length ? conhecidos : null }
 }
 
 /** Resposta de `GET /api/versao`. Qualquer coisa fora de `2` é tratada como v1. */

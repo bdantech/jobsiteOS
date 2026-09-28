@@ -13,6 +13,8 @@ import {
   salvarDisjuntor,
   salvarMaterial,
   salvarPersona,
+  salvarPlaybook,
+  salvarPlaybookSchema,
   salvarRegraMandato,
   type FieldErrors,
 } from '@jobsiteos/core'
@@ -182,6 +184,39 @@ export async function salvarRegraMandatoAction(input: unknown): Promise<ActionRe
     revalidar('/agentes/config')
     return { ok: true, data: { id: r.id } }
   } catch (e) {
+    return falhaDe(e)
+  }
+}
+
+/**
+ * Playbook POR TIPO DE MANDATO (§12). Mesma RPC dos playbooks de conversa
+ * (`app_salvar_playbook`), que cria a versão nova herdando o tipo e aceita o gestor de
+ * agentes quando o playbook é de mandato. Os de conversa continuam em Comunicação, com
+ * admin — esta action recusa antes de ir ao banco para a mensagem dizer onde ir.
+ *
+ * `salvarPlaybook` é do core de Comunicação e lança o erro do zod ou o do banco crus; a
+ * mensagem da RPC ("Somente a gestão comercial…") é a interface, então ela passa intacta.
+ */
+export async function salvarPlaybookMandatoAction(input: unknown): Promise<ActionResult<{ ok: true }>> {
+  const { erro, supabase } = await autorizar()
+  if (erro || !supabase) return erro ?? SEM_SESSAO
+  const dados = salvarPlaybookSchema.safeParse(input)
+  if (!dados.success) {
+    return { ok: false, message: dados.error.issues[0]?.message ?? 'Dados inválidos.', code: 'validation' }
+  }
+  if (!dados.data.tipo_mandato) {
+    return {
+      ok: false,
+      message: 'Este playbook é do agente de conversa — ele se edita em Comunicação › Playbooks.',
+      code: 'validation',
+    }
+  }
+  try {
+    await salvarPlaybook(supabase, dados.data)
+    revalidar('/agentes/config')
+    return { ok: true, data: { ok: true } }
+  } catch (e) {
+    if (e instanceof Error && !(e instanceof MutationError)) return { ok: false, message: e.message, code: 'unknown' }
     return falhaDe(e)
   }
 }

@@ -240,6 +240,16 @@ async function processar(
       )
       return { desfecho: 'falhas' }
     }
+    // Mensagem de AGENTE sem persona era o autônomo antigo falando pela conversa de um
+    // humano, e caía no rodízio. O decisor já não enfileira assim (vira sugestão); isto é
+    // a trava do último instante para uma linha que tenha ficado na fila de antes.
+    if (linha.por_ia && linha.origem === 'agente' && !linha.whatsapp_conta_id && !persona?.persona) {
+      await marcarFalha(
+        linha,
+        'Mensagem de agente sem persona não tem linha própria para sair — o rodízio de números de IA não existe mais.',
+      )
+      return { desfecho: 'falhas' }
+    }
     conta = linha.whatsapp_conta_id
       ? await buscarConta(linha.whatsapp_conta_id)
       : persona?.persona

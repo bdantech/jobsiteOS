@@ -45,8 +45,12 @@ export type ResultadoDoWebhook =
  * Depois da RPC, e FORA da transação dela, o desfecho estruturado volta ao mandato
  * (09 §4.3): contato indicado vira contato, retorno agendado vira próxima ação. Fora
  * porque é trabalho de outro módulo e porque uma falha ali não pode desfazer a gravação
- * do que foi dito ao telefone — a Ana reenviaria o webhook e a RPC, idempotente,
- * devolveria a linha já fechada sem nunca refazer o consumo.
+ * do que foi dito ao telefone.
+ *
+ * O consumo é chamado em TODA entrega, inclusive no reenvio — a RPC devolve a linha já
+ * fechada sem dizer se foi ela quem fechou. Quem garante o "uma vez só" é o próprio
+ * consumo: ele reivindica o recibo `desfecho_ligacao` (índice único da 0271a) antes de
+ * qualquer efeito, e o reenvio para ali sem duplicar ação, evento ou reunião.
  */
 export async function registrarResultadoDaLigacao(corpo: unknown): Promise<ResultadoDoWebhook> {
   const lido = resultadoLigacaoSchema.safeParse(corpo)

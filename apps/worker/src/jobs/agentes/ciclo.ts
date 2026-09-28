@@ -3,7 +3,8 @@ import { ferramentasDisponiveis, type IdFerramenta } from '../../../../../packag
 import { executarCiclo, type AcaoDoCiclo } from '../../../../../packages/core/src/agentes/loop.js'
 import { custoTokensCentavos } from '../../../../../packages/core/src/agentes/orcamento.js'
 import { montarSystemPrompt } from '../../../../../packages/core/src/agentes/prompt.js'
-import type { ConfigAgentes, VersaoVoz } from '../../../../../packages/core/src/agentes/schemas.js'
+import type { ConfigAgentes } from '../../../../../packages/core/src/agentes/schemas.js'
+import type { StatusVoz } from '../../../../../packages/core/src/agentes/voz-adapter.js'
 import { aplicarTrancas, TRANCA_LABELS } from '../../../../../packages/core/src/agentes/trancas.js'
 import { precisaEscalar, type Triagem } from '../../../../../packages/core/src/comunicacao/triagem.js'
 import { lerConfigAgentes } from '../../agentes/config.js'
@@ -22,7 +23,7 @@ import { modeloAnthropic } from '../../agentes/modelo.js'
 import { portaOrcamento, saldosDoCiclo } from '../../agentes/orcamento.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
-import { configDaVoz, versaoDaAna } from '../../voz/api.js'
+import { configDaVoz, statusDaAna } from '../../voz/api.js'
 import { executarFerramenta, type ContextoExecucao } from './executor.js'
 
 /**
@@ -31,8 +32,8 @@ import { executarFerramenta, type ContextoExecucao } from './executor.js'
  * Granularidade de hora não serve: um agente que combinou ligar às 15h30 precisa ligar às
  * 15h30. Por ciclo:
  *
- *   1. SELECIONA os mandatos vencidos (`proxima_acao_em <= now`), por prioridade e depois
- *      pela hora marcada, até o teto de mandatos por ciclo;
+ *   1. SELECIONA os mandatos vencidos (`proxima_acao_em <= now`) de agentes APTOS, por
+ *      prioridade e depois pela hora marcada, até o teto de mandatos por ciclo;
  *   2. aplica as TRANCAS, na ordem, sem chamar o modelo (core/agentes/trancas.ts);
  *   3. monta o CONTEXTO;
  *   4. roda o LOOP de ferramentas com orçamento de passos e de tempo;
@@ -70,6 +71,12 @@ export async function cicloDeAgentes(): Promise<ResultadoCicloAgentes> {
     retomados_por_orcamento: 0,
   }
   const cfg = await lerConfigAgentes()
+  // Kill switch ligado: nada anda, então nada é selecionado. Selecionar e depois pular
+  // (como era) deixava os mesmos mandatos vencidos na frente da fila a cada ciclo.
+  if (cfg.geral.kill_switch) {
+    logger.warn('Kill switch dos agentes ligado: o ciclo não roda.')
+    return acc
+  }
   const modelo = modeloAnthropic()
   if (!modelo) {
     logger.warn('ANTHROPIC_API_KEY ausente: o ciclo dos agentes não roda.')
@@ -78,9 +85,34 @@ export async function cicloDeAgentes(): Promise<ResultadoCicloAgentes> {
 
   acc.retomados_por_orcamento = await retomarPausadosPorOrcamento(cfg)
 
+  /*
+   * ── SÓ ENTRA NA FILA QUEM PODE AGIR ─────────────────────────────────────────
+   * Agente inativo, sem autonomia (é assim que ele nasce) ou pausado por um gestor não
+   * age. Filtrar isso DEPOIS do `limit` travava a casa: os mandatos dele venciam, voltavam
+   * todo ciclo sem reagendar e, ordenados por prioridade, ocupavam as vagas do ciclo —
+   * os outros agentes nunca rodavam. O filtro vai na seleção, antes do corte.
+   */
+  const { data: aptos, error: erroAptos } = await supabaseAdmin
+    .from('vendedores')
+    .select('id')
+    .eq('is_ia', true)
+    .eq('ativo', true)
+    .eq('autonomo', true)
+    .is('pausado_em', null)
+  if (erroAptos) {
+    logger.error({ erro: erroAptos.message }, 'Falha ao listar os agentes aptos para o ciclo.')
+    return acc
+  }
+  const idsAptos = (aptos ?? []).map((a) => a.id)
+  if (!idsAptos.length) {
+    await avisarOrcamento()
+    return acc
+  }
+
   const { data, error } = await supabaseAdmin
     .from('mandatos')
     .select('id')
+    .in('agente_id', idsAptos)
     .in('estado', ESTADOS_DO_CICLO)
     .lte('proxima_acao_em', new Date().toISOString())
     .order('prioridade', { ascending: false })
@@ -96,11 +128,11 @@ export async function cicloDeAgentes(): Promise<ResultadoCicloAgentes> {
     return acc
   }
 
-  const versaoVoz = await versaoAtualDaVoz()
+  const statusVoz = await statusAtualDaVoz()
 
   for (const { id } of data ?? []) {
     try {
-      const r = await processarMandato(id, cfg, modelo, versaoVoz)
+      const r = await processarMandato(id, cfg, modelo, statusVoz)
       if (r.tranca) acc.trancados[r.tranca] = (acc.trancados[r.tranca] ?? 0) + 1
       else acc.processados++
       acc.acoes += r.acoes
@@ -129,9 +161,11 @@ async function processarMandato(
   mandatoId: string,
   cfg: ConfigAgentes,
   modelo: NonNullable<ReturnType<typeof modeloAnthropic>>,
-  versaoVoz: VersaoVoz,
+  statusVoz: StatusVoz,
 ): Promise<{ tranca: string | null; acoes: number; custo: number }> {
   const agora = new Date()
+  const versaoVoz = statusVoz.versao
+  const objetivosVoz = statusVoz.objetivos
   const m = await carregarMandato(mandatoId)
   if (!m || !ESTADOS_DO_CICLO.includes(m.estado)) return { tranca: 'estado', acoes: 0, custo: 0 }
   const agente = await carregarAgente(m.agente_id)
@@ -183,7 +217,7 @@ async function processarMandato(
   })
 
   if (!veredito.passa) {
-    await aplicarVeredito(m, veredito)
+    await aplicarVeredito(m, veredito, cfg)
     if (veredito.tranca === 'cota_diaria_agente') await avisarCota(agente.id, agente.nome)
     return { tranca: veredito.tranca, acoes: 0, custo: 0 }
   }
@@ -198,13 +232,12 @@ async function processarMandato(
    */
   const escalar = await escalacaoPendente(m)
   if (escalar) {
-    const ctxEscala: ContextoExecucao = { mandato: m, agente, empresa, cfg, versaoVoz, agora }
+    const ctxEscala: ContextoExecucao = { mandato: m, agente, empresa, cfg, versaoVoz, objetivosVoz, agora }
     await executarFerramenta('escalar_humano', { motivo: escalar }, ctxEscala)
     await persistirAcao(
       m,
       agente.id,
       { passo: 0, ferramenta: 'escalar_humano', intencao: `Escalado antes do modelo: ${escalar}`, argumentos: { motivo: escalar }, ok: true, custoCentavos: 0, duracaoMs: 0, sinal: 'escalacao' },
-      await proximaSequencia(m.id),
       randomUUID(),
     )
     await avaliarDisjuntorDoAgente(agente.id)
@@ -240,11 +273,10 @@ async function processarMandato(
     gatilho: await gatilhoDoCiclo(m),
   })
 
-  const ctxExec: ContextoExecucao = { mandato: m, agente, empresa, cfg, versaoVoz, agora }
+  const ctxExec: ContextoExecucao = { mandato: m, agente, empresa, cfg, versaoVoz, objetivosVoz, agora }
   const cicloId = randomUUID()
   let acaoAtual: string | null = null
   let disjuntorAbriu = false
-  let sequencia = await proximaSequencia(m.id)
 
   const resultado = await executarCiclo({
     system: montarSystemPrompt({ persona: agente.persona, identificacao: cfg.geral.identificacao, tipo: m.tipo, playbook }),
@@ -262,7 +294,7 @@ async function processarMandato(
       return executarFerramenta(id, input, ctxExec)
     },
     aoExecutar: async (a: AcaoDoCiclo) => {
-      acaoAtual = await persistirAcao(m, agente.id, a, sequencia++, cicloId)
+      acaoAtual = await persistirAcao(m, agente.id, a, cicloId)
       if (a.sinal !== 'neutro') {
         const estado = await avaliarDisjuntorDoAgente(agente.id)
         if (estado === 'aberto') disjuntorAbriu = true
@@ -271,12 +303,12 @@ async function processarMandato(
   })
 
   // O custo do MODELO deste ciclo vira uma linha própria: é a auditoria de quanto custou
-  // decidir, separada de quanto custou agir. Tokens gravados SEMPRE (§6, passo 6).
-  await supabaseAdmin.from('mandato_acoes').insert({
+  // decidir, separada de quanto custou agir. Tokens gravados SEMPRE (§6, passo 6). A
+  // `sequencia` é do banco (trigger da 0271a), como em toda linha de `mandato_acoes`.
+  const { error: erroLinhaCiclo } = await supabaseAdmin.from('mandato_acoes').insert({
     mandato_id: m.id,
     agente_id: agente.id,
     empresa_id: m.empresa_id,
-    sequencia: sequencia++,
     ferramenta: 'ciclo',
     intencao: resultado.erro ? `Ciclo terminou com erro: ${resultado.erro}` : `Ciclo de decisão (${resultado.passos} passos)`,
     resultado: { passos: resultado.passos, texto: resultado.textoFinal.slice(0, 1000), terminal: resultado.terminal } as never,
@@ -288,6 +320,10 @@ async function processarMandato(
     tokens_saida: resultado.tokens.saida,
     ciclo_id: cicloId,
   })
+  // As ações já saíram; o que falhou foi a linha de custo. Não desfaz o ciclo, mas também
+  // não some num log: vai para o `ultimo_ciclo_erro` que a tela do mandato mostra.
+  const erroRegistro = erroLinhaCiclo ? `registro do custo do ciclo falhou: ${erroLinhaCiclo.message}` : null
+  if (erroRegistro) logger.error({ mandato: m.id, erro: erroLinhaCiclo?.message }, 'Falha ao gravar a linha de custo do ciclo.')
 
   const externas = resultado.acoes.filter((a) => a.ok && !a.ferramenta.startsWith('consultar_') && a.ferramenta !== 'listar_materiais' && a.ferramenta !== 'atualizar_plano').length
   const atual = await carregarMandato(m.id)
@@ -299,14 +335,20 @@ async function processarMandato(
         acoes_executadas: atual.acoes_executadas + externas,
         ultima_acao_em: resultado.acoes.length ? new Date().toISOString() : atual.proxima_acao_em,
         ultimo_ciclo_em: new Date().toISOString(),
-        ultimo_ciclo_erro: resultado.erro ? `${resultado.erro}${resultado.erroDetalhe ? `: ${resultado.erroDetalhe}` : ''}`.slice(0, 500) : null,
+        ultimo_ciclo_erro: resultado.erro
+          ? `${resultado.erro}${resultado.erroDetalhe ? `: ${resultado.erroDetalhe}` : ''}`.slice(0, 500)
+          : erroRegistro?.slice(0, 500) ?? null,
         proxima_acao_em: proxima.toISOString(),
       })
       .eq('id', m.id)
   } else if (atual) {
     await supabaseAdmin
       .from('mandatos')
-      .update({ acoes_executadas: atual.acoes_executadas + externas, ultimo_ciclo_em: new Date().toISOString() })
+      .update({
+        acoes_executadas: atual.acoes_executadas + externas,
+        ultimo_ciclo_em: new Date().toISOString(),
+        ...(erroRegistro ? { ultimo_ciclo_erro: erroRegistro.slice(0, 500) } : {}),
+      })
       .eq('id', m.id)
   }
   if (resultado.planoAtualizado) await evento(m, 'mandato.plano_atualizado', atual?.plano?.objetivo_atual ?? 'Plano atualizado.')
@@ -337,10 +379,18 @@ function proximaAcao(m: MandatoCarregado, erro: string | null, cfg: ConfigAgente
 async function aplicarVeredito(
   m: MandatoCarregado,
   v: Exclude<ReturnType<typeof aplicarTrancas>, { passa: true }>,
+  cfg: ConfigAgentes,
 ): Promise<void> {
   const rotulo = TRANCA_LABELS[v.tranca]
   switch (v.efeito) {
     case 'pular':
+      // Kill switch e agente inapto já ficam fora da seleção; chegar aqui é corrida (o
+      // gestor pausou entre a seleção e a tranca). Mesmo assim o mandato sai da frente da
+      // fila: sem reagendar, ele voltaria no próximo ciclo ocupando a vaga de outro.
+      await supabaseAdmin
+        .from('mandatos')
+        .update({ proxima_acao_em: new Date(Date.now() + cfg.geral.intervalo_ciclo_min * 60_000).toISOString() })
+        .eq('id', m.id)
       return
     case 'reagendar':
       await supabaseAdmin.from('mandatos').update({ proxima_acao_em: v.quando.toISOString() }).eq('id', m.id)
@@ -364,7 +414,16 @@ async function aplicarVeredito(
   }
 }
 
-async function persistirAcao(m: MandatoCarregado, agenteId: string, a: AcaoDoCiclo, sequencia: number, cicloId: string): Promise<string | null> {
+/**
+ * Grava a ação. A `sequencia` é atribuída pelo banco (trigger da 0271a): calculada aqui,
+ * ela colidia com o desfecho de ligação gravado ao mesmo tempo, o `unique` recusava e a
+ * ação sumia do registro.
+ *
+ * Falha ao gravar LANÇA. Um agente que age sem deixar registro é exatamente o que o
+ * módulo existe para impedir: o loop para, e o `catch` do ciclo grava o erro em
+ * `ultimo_ciclo_erro` e recua o mandato.
+ */
+async function persistirAcao(m: MandatoCarregado, agenteId: string, a: AcaoDoCiclo, cicloId: string): Promise<string> {
   const args = (a.argumentos ?? {}) as Record<string, unknown>
   const res = (a.resultado ?? {}) as Record<string, unknown>
   const { data, error } = await supabaseAdmin
@@ -373,7 +432,6 @@ async function persistirAcao(m: MandatoCarregado, agenteId: string, a: AcaoDoCic
       mandato_id: m.id,
       agente_id: agenteId,
       empresa_id: m.empresa_id,
-      sequencia,
       ferramenta: a.ferramenta,
       intencao: a.intencao,
       argumentos: a.argumentos as never,
@@ -390,22 +448,14 @@ async function persistirAcao(m: MandatoCarregado, agenteId: string, a: AcaoDoCic
     })
     .select('id')
     .maybeSingle()
-  if (error) {
-    logger.error({ erro: error.message, mandato: m.id, ferramenta: a.ferramenta }, 'Falha ao gravar a ação do agente.')
-    return null
+  if (error || !data) {
+    logger.error({ erro: error?.message, mandato: m.id, ferramenta: a.ferramenta }, 'Falha ao gravar a ação do agente.')
+    throw new Error(`A ação "${a.ferramenta}" não foi registrada: ${error?.message ?? 'sem retorno'}`)
   }
-  if (data && typeof res.outbox_id === 'string') {
+  if (typeof res.outbox_id === 'string') {
     await supabaseAdmin.from('mensagens_outbox').update({ mandato_acao_id: data.id }).eq('id', res.outbox_id)
   }
-  return data?.id ?? null
-}
-
-async function proximaSequencia(mandatoId: string): Promise<number> {
-  const { rows } = await pool.query<{ n: number }>(
-    'select coalesce(max(sequencia), 0) + 1 as n from mandato_acoes where mandato_id = $1',
-    [mandatoId],
-  )
-  return rows[0]?.n ?? 1
+  return data.id
 }
 
 /** A mensagem recebida DEPOIS do último ciclo que exige uma pessoa, e o motivo. */
@@ -508,14 +558,16 @@ async function avisarOrcamento(): Promise<void> {
   }
 }
 
-/** A versão da Ana vista na última hora; mais velha que isso, pergunta de novo. */
-async function versaoAtualDaVoz(): Promise<VersaoVoz> {
+/** A versão da Ana (e os objetivos que ela anuncia) vista na última hora; mais velha, pergunta de novo. */
+async function statusAtualDaVoz(): Promise<StatusVoz> {
   const { data } = await supabaseAdmin.from('agentes_config').select('valor').eq('chave', 'voz_status').maybeSingle()
-  const v = data?.valor as { versao?: VersaoVoz; detectada_em?: string } | null
-  if (v?.versao && v.detectada_em && Date.now() - Date.parse(v.detectada_em) < 3_600_000) return v.versao
+  const v = data?.valor as (Partial<StatusVoz> & { detectada_em?: string }) | null
+  if (v?.versao && v.detectada_em && Date.now() - Date.parse(v.detectada_em) < 3_600_000) {
+    return { versao: v.versao, objetivos: v.objetivos ?? null }
+  }
   const conexao = configDaVoz()
-  if (!conexao) return 'desconhecida'
-  const versao = await versaoDaAna(conexao)
-  await supabaseAdmin.from('agentes_config').upsert({ chave: 'voz_status', valor: { versao, detectada_em: new Date().toISOString() } as never })
-  return versao
+  if (!conexao) return { versao: 'desconhecida', objetivos: null }
+  const status = await statusDaAna(conexao)
+  await supabaseAdmin.from('agentes_config').upsert({ chave: 'voz_status', valor: { ...status, detectada_em: new Date().toISOString() } as never })
+  return status
 }

@@ -21,17 +21,27 @@ export const ACOES_AGENTE = [
   'responder_agora',
   'agendar_toque',
   'enviar_link_agendamento',
-  'mudar_estagio_funil',
   'marcar_sem_interesse',
   'escalar_humano',
-  'pedir_enriquecimento_contato',
   'trocar_contato_da_conversa',
   'ligar',
   'aguardar',
 ] as const
 export type AcaoAgente = (typeof ACOES_AGENTE)[number]
 
-export const ACAO_LABELS: Record<AcaoAgente, string> = {
+/**
+ * Ações que o agente de conversa JÁ ofereceu e não oferece mais (09 §6.1).
+ *
+ * Nunca tiveram efeito aqui: o decisor não sabe qual card mover nem tem orçamento para
+ * enriquecer — isso é trabalho de MANDATO (`mover_estagio_funil`, `enriquecer_telefone`),
+ * onde as ferramentas existem de verdade. Saíram da lista que o modelo vê e dos playbooks
+ * (0271b); ficam só os rótulos, porque `agente_decisoes` guarda as que foram escolhidas
+ * antes e o histórico precisa continuar legível.
+ */
+export const ACOES_APOSENTADAS = ['mudar_estagio_funil', 'pedir_enriquecimento_contato'] as const
+export type AcaoAposentada = (typeof ACOES_APOSENTADAS)[number]
+
+export const ACAO_LABELS: Record<AcaoAgente | AcaoAposentada, string> = {
   responder_agora: 'Responder agora',
   agendar_toque: 'Agendar toque',
   enviar_link_agendamento: 'Enviar link de agendamento',

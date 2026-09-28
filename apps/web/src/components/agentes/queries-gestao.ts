@@ -4,6 +4,7 @@ import {
   montarConfigAgentes,
   type ConfigAgentes,
   type Grupo,
+  type Json,
   type Tables,
 } from '@jobsiteos/core'
 import { createClient } from '@/lib/supabase/client'
@@ -382,18 +383,30 @@ export async function buscarRegras(): Promise<RegraMandato[]> {
 export interface PlaybookMandato {
   id: string
   nome: string
+  funil: string
+  objetivo: string
+  instrucoes: string
+  acoes_permitidas: string[]
+  templates_disponiveis: string[] | null
+  prazos: Json
   tipo_mandato: string | null
   ativo: boolean
   versao: number
+  atualizado_em: string
 }
 
+/**
+ * Os playbooks de MANDATO (os de conversa ficam em Comunicação). Todas as versões: o
+ * seletor da regra mostra as inativas desabilitadas, e a aba Playbooks lista o histórico.
+ */
 export async function buscarPlaybooksMandato(): Promise<PlaybookMandato[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('agente_playbooks')
-    .select('id, nome, tipo_mandato, ativo, versao')
+    .select('id, nome, funil, objetivo, instrucoes, acoes_permitidas, templates_disponiveis, prazos, tipo_mandato, ativo, versao, atualizado_em')
     .not('tipo_mandato', 'is', null)
     .order('nome')
+    .order('versao', { ascending: false })
   if (error) throw new Error(error.message)
   return data ?? []
 }
