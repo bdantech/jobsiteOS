@@ -620,6 +620,24 @@ export function arredondar(v: number, casas = 2): number {
 }
 
 /**
+ * O que foi de fato CEDIDO numa antecipação: o bruto da NF menos a retenção.
+ *
+ * A retenção (fiscal ou contratual — a plataforma entrega as duas no mesmo campo) é paga
+ * pelo sacado a um terceiro, nunca ao cessionário. Ela não é crédito cedido, não imobiliza
+ * capital nosso e não gera receita; pagar comissão sobre ela era pagar sobre dinheiro que
+ * nunca passou pela operação. É o `discounted_amount` da plataforma, recalculado aqui para
+ * a regra morar num lugar testado e não numa coluna que alguém pode deixar de sincronizar.
+ *
+ * Retenção ausente é tratada como zero: o sync grava o campo sempre, e travar a comissão
+ * de uma cessão por falta dele seria pior que pagar sobre o bruto.
+ */
+export function valorCedidoDaCessao(valorBruto: number, retencao: number | null): number {
+  if (!(valorBruto > 0)) return 0
+  const retido = retencao !== null && retencao > 0 ? retencao : 0
+  return arredondar(Math.max(0, valorBruto - retido))
+}
+
+/**
  * Volume-operação-ponderado: o valor cedido corrigido pelo prazo em que ele fica parado.
  *
  * `anticipationDays` vem do payload da plataforma e NÃO é recalculado por datas (§1). A
@@ -723,7 +741,15 @@ export interface CessaoConvertida {
   origemId: string
   antecipacaoId: number | string
   convertidaEm: string
+  /** A base do VOP: o bruto JÁ LÍQUIDO da retenção (`valorCedidoDaCessao`). */
   valorCedido: number
+  /**
+   * O bruto da NF e a retenção que saiu dele. Não entram na conta — só no snapshot, para
+   * o extrato mostrar de onde veio o valor cedido. Sem eles, quem confere a folha contra
+   * a nota vê um número menor e nenhum motivo.
+   */
+  valorBruto?: number | null
+  retencao?: number | null
   anticipationDays: number
   /** O sacado como CONTA (holding do grupo, quando a nota é contra uma SPE). */
   empresaId: string | null
@@ -870,6 +896,7 @@ export function lancamentosDoOriginadorComoCedente(
       params_snapshot: {
         dias_referencia_vop: diasRef,
         prazo_maximo_vop: prazoMax,
+        ...snapshotDoValor(cessao),
         gestao_operacao: gestao,
         antecipacao_id: cessao.antecipacaoId,
         taxa_chave: chaveTaxa,
@@ -881,6 +908,12 @@ export function lancamentosDoOriginadorComoCedente(
     })
   }
   return out
+}
+
+/** Bruto e retenção da cessão, quando vieram. Chave ausente = lançamento anterior à regra. */
+function snapshotDoValor(cessao: CessaoConvertida): Record<string, number> {
+  if (cessao.valorBruto == null) return {}
+  return { valor_bruto: arredondar(cessao.valorBruto), retencao: arredondar(cessao.retencao ?? 0) }
 }
 
 /** O caminho de sempre: taxa e fase pela conta SACADA. */
@@ -941,6 +974,7 @@ function lancamentosPelaConta(
      * coisa que alguém confere ao contestar. O que a conta usou sai da explicação.
      */
     prazo_maximo_vop: prazoMax,
+    ...snapshotDoValor(cessao),
     marco_ativacao: cessao.marcoAtivacao,
     idade_meses: idade,
     fase,
@@ -1461,8 +1495,15 @@ export function explicarCalculo(l: {
   const diasUsados = diasDoVop(dias, teto)
   const limite = diasUsados < dias ? ` (prazo de ${dias} dias limitado ao teto de ${teto})` : ''
 
+  // A retenção aparece quando existe: sem ela o valor cedido não bate com o da nota, e
+  // quem confere a folha contra a NF acha que a conta está errada.
+  const retencao = Number(snap.retencao ?? 0)
+  const origemDoCedido = retencao > 0
+    ? `${brl(Number(snap.valor_bruto ?? 0))} da NF − ${brl(retencao)} de retenção = ${brl(cedido)} cedidos. `
+    : ''
+
   const conta =
-    `${brl(cedido)} × ${diasUsados}/${ref}${limite} = ${num(vop)} VOP → ` +
+    `${origemDoCedido}${brl(cedido)} × ${diasUsados}/${ref}${limite} = ${num(vop)} VOP → ` +
     `${num(mm, 2)} × ${brl(taxa)} = ${brl(arredondar(mm * taxa))}`
   // A parcela da construtora-cedente (0263) diz de onde veio: sem isso ela parece uma
   // linha de originador comum sem titular no cedente, e a contestação começa daí.

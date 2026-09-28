@@ -1,6 +1,8 @@
 import {
   COBRANCA_ESTAGIOS_ENCERRADOS,
+  buscarReconciliacaoCobranca,
   lerCobrancaConfig,
+  type ReconciliacaoGrupo,
   type CobrancaConfig,
   type TabelaIndices,
   type Tables,
@@ -31,6 +33,7 @@ export const cobrancaKeys = {
   indices: (indice: string) => [...cobrancaKeys.all, 'indices', indice] as const,
   grupos: (termo: string) => [...cobrancaKeys.all, 'grupos', termo] as const,
   abertos: (matriz: string) => [...cobrancaKeys.all, 'abertos', matriz] as const,
+  reconciliacao: (matrizes: string) => [...cobrancaKeys.all, 'reconciliacao', matrizes] as const,
   cadastro: (cnpjs: string) => [...cobrancaKeys.all, 'cadastro', cnpjs] as const,
   contatos: (empresaId: string) => [...cobrancaKeys.all, 'contatos', empresaId] as const,
   processos: (termo: string) => [...cobrancaKeys.all, 'processos', termo] as const,
@@ -334,6 +337,15 @@ export async function buscarTitulosAbertosDoGrupo(matriz: string): Promise<Titul
     .limit(2000)
   if (error) throw new Error(error.message)
   return (data ?? []) as TituloAberto[]
+}
+
+/**
+ * O vencido realmente em aberto por grupo, pelo limite consumido na plataforma (0270).
+ * A produção não marca a liquidação por título; isto é o que dá para saber do grupo.
+ */
+export async function buscarReconciliacao(matrizes: readonly string[]): Promise<Map<string, ReconciliacaoGrupo>> {
+  if (matrizes.length === 0) return new Map()
+  return buscarReconciliacaoCobranca(createClient(), matrizes)
 }
 
 export type CadastroCnpj = {

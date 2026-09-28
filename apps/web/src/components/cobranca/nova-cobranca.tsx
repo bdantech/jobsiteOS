@@ -12,13 +12,16 @@ import {
   INDICE_COBRANCA_LABELS,
   INDICES_COBRANCA,
   PAPEL_NOTIFICACAO_COBRANCA_LABELS,
+  SITUACAO_RECONCILIACAO_LABELS,
   agruparNotificacoes,
   atualizarDividaCobranca,
+  explicarReconciliacao,
   hojeSaoPaulo,
   type EscopoNotificacao,
   type IndiceCobranca,
   type NotificacaoAgrupada,
   type ParametrosAtualizacao,
+  type ReconciliacaoGrupo,
 } from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +41,7 @@ import {
   buscarCadastro,
   buscarConfigCobranca,
   buscarGruposSacado,
+  buscarReconciliacao,
   buscarTabelaIndices,
   buscarTitulosAbertosDoGrupo,
   buscarUsuariosAtivos,
@@ -85,6 +89,12 @@ export function NovaCobranca({ sacadoInicial }: { sacadoInicial?: string | null 
   const titulos = useQuery({
     queryKey: cobrancaKeys.abertos(matriz ?? ''),
     queryFn: () => buscarTitulosAbertosDoGrupo(matriz!),
+    enabled: Boolean(matriz),
+  })
+
+  const reconciliacao = useQuery({
+    queryKey: cobrancaKeys.reconciliacao(matriz ?? ''),
+    queryFn: () => buscarReconciliacao([matriz!]),
     enabled: Boolean(matriz),
   })
 
@@ -142,6 +152,9 @@ export function NovaCobranca({ sacadoInicial }: { sacadoInicial?: string | null 
           <Montagem
             matriz={matriz}
             titulos={lista}
+            // Sem a reconciliação (erro ou ainda carregando) a tela cai no aviso genérico:
+            // melhor do que travar a montagem esperando um dado que é só de apoio.
+            reconciliacao={reconciliacao.data?.get(matriz) ?? null}
             config={config.data!}
             selecionados={selecionados}
             setSelecionados={setSelecionados}
@@ -168,6 +181,12 @@ function SeletorDeGrupo({ onEscolher }: { onEscolher: (matriz: string) => void }
     queryKey: cobrancaKeys.grupos(termo),
     queryFn: () => buscarGruposSacado(termo),
     enabled: termo.length >= 3,
+  })
+  const matrizes = (grupos.data ?? []).map((g) => g.matriz).sort().join(',')
+  const reconciliacao = useQuery({
+    queryKey: cobrancaKeys.reconciliacao(matrizes),
+    queryFn: () => buscarReconciliacao(matrizes.split(',').filter(Boolean)),
+    enabled: matrizes.length > 0,
   })
 
   return (
@@ -207,7 +226,7 @@ function SeletorDeGrupo({ onEscolher }: { onEscolher: (matriz: string) => void }
                       : ''}
                   </span>
                 </span>
-                <Badge variant="secondary">{g.qtdAbertos} em aberto</Badge>
+                <BadgeDoGrupo r={reconciliacao.data?.get(g.matriz)} qtdAbertos={g.qtdAbertos} />
               </button>
             ))}
           </div>
@@ -217,11 +236,37 @@ function SeletorDeGrupo({ onEscolher }: { onEscolher: (matriz: string) => void }
   )
 }
 
+/**
+ * O que a lista de grupos mostra: quantos VENCIDOS (e não quantos em aberto — a maior
+ * parte do aberto ainda vai vencer e não é cobrável) e o que a plataforma diz deles.
+ */
+function BadgeDoGrupo({ r, qtdAbertos }: { r: ReconciliacaoGrupo | undefined; qtdAbertos: number }) {
+  if (!r) return <Badge variant="secondary">{qtdAbertos} em aberto</Badge>
+  if (r.situacao === 'sem_vencidos') return <Badge variant="outline">sem vencidos</Badge>
+  return (
+    <span className="flex shrink-0 flex-col items-end gap-1">
+      <Badge variant="secondary">{r.qtd_vencidos} vencido(s)</Badge>
+      {r.situacao === 'em_dia' ? (
+        <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+          {SITUACAO_RECONCILIACAO_LABELS.em_dia}
+        </span>
+      ) : r.situacao === 'parcial' ? (
+        <span className="text-[11px] text-amber-700 dark:text-amber-400">
+          ~{brl(r.vencido_estimado, 0)} de fato em aberto
+        </span>
+      ) : r.situacao === 'sem_dado' ? (
+        <span className="text-[11px] text-muted-foreground">{SITUACAO_RECONCILIACAO_LABELS.sem_dado}</span>
+      ) : null}
+    </span>
+  )
+}
+
 // ─── (b)–(e) Títulos, escopo, prévia, confirmação ───────────────────────────
 
 function Montagem({
   matriz,
   titulos,
+  reconciliacao,
   config,
   selecionados,
   setSelecionados,
@@ -229,6 +274,7 @@ function Montagem({
 }: {
   matriz: string
   titulos: TituloAberto[]
+  reconciliacao: ReconciliacaoGrupo | null
   config: Awaited<ReturnType<typeof buscarConfigCobranca>>
   selecionados: Set<string>
   setSelecionados: (s: Set<string>) => void
@@ -238,6 +284,12 @@ function Montagem({
   const [fCedente, setFCedente] = React.useState('todos')
   const [fSpe, setFSpe] = React.useState('todas')
   const [fFaixa, setFFaixa] = React.useState('todas')
+  // A lista abre só nos VENCIDOS: é o que se cobra. Os a vencer ficam a um clique, para
+  // a pessoa entender o tamanho do grupo — mas não disputam a atenção com o que importa.
+  const [mostrarAVencer, setMostrarAVencer] = React.useState(false)
+  const [confirmoEmDia, setConfirmoEmDia] = React.useState(false)
+  const hoje = hojeSaoPaulo()
+  const emDia = reconciliacao?.situacao === 'em_dia'
 
   const [escopo, setEscopo] = React.useState<EscopoNotificacao>('sacado')
   const [matrizCedente, setMatrizCedente] = React.useState(true)
@@ -281,13 +333,33 @@ function Montagem({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [titulos, tabela.data, juros, multa, honorarios, indice, proRata, dataBase])
 
-  const elegivel = (t: TituloAberto) => !t.cobranca_ativa_id && (t.dias_atraso ?? 0) >= minimo
+  const vencido = (t: TituloAberto) => Boolean(t.vencimento && t.vencimento < hoje)
+  /*
+   * Grupo em dia pela plataforma (0270): o limite consumido já não cobre os vencidos,
+   * então o sacado provavelmente pagou — a produção só não marcou a liquidação. Os
+   * vencidos continuam na lista (a estimativa é do grupo, não do título), mas só ficam
+   * selecionáveis depois de a pessoa dizer que conferiu. Uma carta de cobrança de
+   * título pago é o pior começo de conversa.
+   */
+  const provavelmentePago = (t: TituloAberto) => emDia && vencido(t)
+  const elegivel = (t: TituloAberto) =>
+    !t.cobranca_ativa_id && (t.dias_atraso ?? 0) >= minimo && (!provavelmentePago(t) || confirmoEmDia)
+
+  // Desconfirmou: o que só estava marcado por causa da confirmação sai da seleção.
+  React.useEffect(() => {
+    if (confirmoEmDia || !emDia) return
+    const s = new Set([...selecionados].filter((id) => !titulos.some((t) => t.id === id && provavelmentePago(t))))
+    if (s.size !== selecionados.size) setSelecionados(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmoEmDia, emDia])
 
   const cedentes = [...new Map(titulos.map((t) => [t.cedente_cnpj ?? '', t.cedente_nome ?? t.cedente_cnpj ?? ''])).entries()]
   const spes = [...new Map(titulos.map((t) => [t.sacado_cnpj ?? '', t.sacado_nome ?? t.sacado_cnpj ?? ''])).entries()]
   const faixaSel = FAIXAS.find((f) => f.id === fFaixa)
 
+  const qtdAVencer = titulos.filter((t) => !vencido(t)).length
   const filtrados = titulos.filter((t) => {
+    if (!mostrarAVencer && !vencido(t)) return false
     if (fCedente !== 'todos' && t.cedente_cnpj !== fCedente) return false
     if (fSpe !== 'todas' && t.sacado_cnpj !== fSpe) return false
     if (faixaSel && ((t.dias_atraso ?? 0) < faixaSel.de || (t.dias_atraso ?? 0) > faixaSel.ate)) return false
@@ -349,6 +421,19 @@ function Montagem({
 
   async function confirmar() {
     setCriando(true)
+    // A confirmação vai para a cobrança: é a prova de que alguém olhou o sinal da
+    // plataforma e decidiu cobrar mesmo assim — e quem, e com que número à frente.
+    const incluiuProvavelPago = emDia && escolhidos.some((t) => provavelmentePago(t))
+    const observacaoFinal = [
+      incluiuProvavelPago && reconciliacao
+        ? `Seleção confirmada apesar de a plataforma registrar o grupo em dia (limite consumido ` +
+          `${brl(reconciliacao.consumido)} para ${brl(reconciliacao.a_vencer)} a vencer` +
+          `${reconciliacao.consumido_em ? `, em ${data(reconciliacao.consumido_em)}` : ''}).`
+        : null,
+      observacoes.trim() || null,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
     const r = await criarCobrancaAction({
       titulo_ids: [...selecionados],
       escopo_notificacao: escopo,
@@ -360,7 +445,7 @@ function Montagem({
       indice_correcao: parametros.indice,
       juros_pro_rata: parametros.juros_pro_rata,
       ...(dataBase ? { data_base: dataBase } : {}),
-      ...(observacoes.trim() ? { observacoes: observacoes.trim() } : {}),
+      ...(observacaoFinal ? { observacoes: observacaoFinal } : {}),
     })
     if (!r.ok) {
       setCriando(false)
@@ -398,7 +483,7 @@ function Montagem({
       {/* (b) títulos */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">2. Títulos em aberto do grupo</CardTitle>
+          <CardTitle className="text-base">2. Títulos vencidos do grupo</CardTitle>
           <CardDescription>
             Matriz e todas as SPEs/filiais. Títulos com menos de {minimo} dias de atraso ainda são da
             plataforma de produção e não podem entrar; os que já estão em outra cobrança aparecem
@@ -406,7 +491,13 @@ function Montagem({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {temSemLiquidacao ? (
+          {reconciliacao && reconciliacao.situacao !== 'sem_vencidos' ? (
+            <AvisoReconciliacao
+              r={reconciliacao}
+              confirmado={confirmoEmDia}
+              onConfirmar={setConfirmoEmDia}
+            />
+          ) : temSemLiquidacao ? (
             <div className="flex gap-2 rounded-md border border-amber-600/30 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <p>
@@ -460,6 +551,13 @@ function Montagem({
             </Select>
           </div>
 
+          <div className="flex items-center gap-2">
+            <Switch id="mostrar-a-vencer" checked={mostrarAVencer} onCheckedChange={setMostrarAVencer} />
+            <Label htmlFor="mostrar-a-vencer" className="text-sm font-normal">
+              Mostrar também os {qtdAVencer} título(s) a vencer
+            </Label>
+          </div>
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -489,9 +587,15 @@ function Montagem({
                   const ok = elegivel(t)
                   const motivo = t.cobranca_ativa_id
                     ? `Já em cobrança (${t.cobranca_ativa_codigo ?? '—'})`
-                    : (t.dias_atraso ?? 0) < minimo
-                      ? `Menos de ${minimo} dias de atraso`
-                      : null
+                    : !vencido(t)
+                      ? 'A vencer'
+                      : (t.dias_atraso ?? 0) < minimo
+                        ? `Menos de ${minimo} dias de atraso`
+                        : provavelmentePago(t)
+                          ? confirmoEmDia
+                            ? 'Provavelmente pago — cobrança confirmada'
+                            : 'Provavelmente pago (plataforma sem saldo)'
+                          : null
                   return (
                     <TableRow key={t.id} className={cn(!ok && 'opacity-60')}>
                       <TableCell>
@@ -552,7 +656,9 @@ function Montagem({
                     <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
                       {titulos.length === 0
                         ? 'Nenhum título em aberto para este grupo.'
-                        : 'Nenhum título com esses filtros.'}
+                        : !mostrarAVencer && titulos.every((t) => !vencido(t))
+                          ? 'Nenhum título vencido neste grupo — os em aberto ainda vão vencer.'
+                          : 'Nenhum título com esses filtros.'}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -765,6 +871,60 @@ function ParametroNumero({
         padrão: {padrao.toLocaleString('pt-BR')}
         {mudou ? ' (alterado nesta cobrança)' : ''}
       </p>
+    </div>
+  )
+}
+
+// ─── O que a plataforma diz dos vencidos (0270) ─────────────────────────────
+
+/**
+ * A reconciliação do grupo pelo limite consumido. É uma estimativa do GRUPO — diz
+ * quanto do vencido segue em aberto, não quais títulos — e a caixa diz isso com as
+ * palavras e com os números, para a pessoa conferir a conta em vez de confiar no rótulo.
+ */
+function AvisoReconciliacao({
+  r,
+  confirmado,
+  onConfirmar,
+}: {
+  r: ReconciliacaoGrupo
+  confirmado: boolean
+  onConfirmar: (v: boolean) => void
+}) {
+  const tom =
+    r.situacao === 'confirma'
+      ? 'border-border bg-muted/40 text-foreground'
+      : r.situacao === 'em_dia'
+        ? 'border-emerald-600/30 bg-emerald-50 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200'
+        : 'border-amber-600/30 bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200'
+  const Icone = r.situacao === 'confirma' ? Info : AlertTriangle
+
+  return (
+    <div className={cn('space-y-2 rounded-md border p-3 text-xs', tom)}>
+      <div className="flex gap-2">
+        <Icone className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <div className="space-y-1">
+          <p className="font-medium">{SITUACAO_RECONCILIACAO_LABELS[r.situacao]}</p>
+          <p>{explicarReconciliacao(r)}</p>
+          {r.consumido_em ? (
+            <p className="opacity-80">Limite da plataforma lido em {data(r.consumido_em)}.</p>
+          ) : null}
+        </div>
+      </div>
+      {r.situacao === 'em_dia' ? (
+        <label className="flex items-start gap-2 pl-6">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={confirmado}
+            onChange={(e) => onConfirmar(e.target.checked)}
+          />
+          <span>
+            Conferi com a produção/financeiro que os títulos que vou selecionar <strong>não</strong> foram
+            pagos. A confirmação fica registrada nas observações da cobrança.
+          </span>
+        </label>
+      ) : null}
     </div>
   )
 }

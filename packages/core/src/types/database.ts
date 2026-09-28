@@ -18776,6 +18776,20 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_cobranca_reconciliacao: {
+        Args: { p_matrizes?: string[] | null }
+        Returns: {
+          a_vencer: number
+          aberto: number
+          consumido: number | null
+          consumido_em: string | null
+          qtd_vencidos: number
+          sacado_matriz_cnpj: string
+          situacao: string
+          vencido: number
+          vencido_estimado: number | null
+        }[]
+      }
       app_cobranca_regularizar_sacado: { Args: { p: Json }; Returns: Json }
       app_cobranca_retirar_titulo: {
         Args: { p: Json }

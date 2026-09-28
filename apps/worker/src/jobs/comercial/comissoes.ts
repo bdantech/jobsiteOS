@@ -12,6 +12,7 @@ import {
   type RegraComissao,
   type TipoVendedor,
 } from '../../../../../packages/core/src/comercial/comissao.js'
+import { valorCedidoDaCessao } from '../../../../../packages/core/src/comercial/comissao-v2.js'
 import { pool, supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { avisar, emitirEvento, usuarioDoVendedor } from '../../radar/eventos.js'
@@ -132,10 +133,10 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
    */
   interface Candidata { id: string; nome: string | null }
   const { rows: convertidas } = await pool.query<{
-    id_externo: number; convertida_em: string; gross_value: string | null;
+    id_externo: number; convertida_em: string; gross_value: string | null; withhold_tax: string | null;
     candidatas: (Candidata | null)[]
   }>(
-    `select a.id_externo, a.convertida_em, a.gross_value,
+    `select a.id_externo, a.convertida_em, a.gross_value, a.withhold_tax,
             jsonb_build_array(
               case when cf.id is not null then jsonb_build_object('id', cf.id, 'nome', cf.razao_social) end,
               case when cs.id is not null then jsonb_build_object('id', cs.id, 'nome', cs.razao_social) end,
@@ -173,7 +174,11 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
       antecipacao_id: String(c.id_externo),
       vendedor_id: dono,
       convertida_em: c.convertida_em,
-      gross_value: Number(c.gross_value ?? 0),
+      // A base é o que foi CEDIDO: o bruto da NF menos a retenção, a mesma regra do v2.
+      gross_value: valorCedidoDaCessao(
+        Number(c.gross_value ?? 0),
+        c.withhold_tax === null ? null : Number(c.withhold_tax),
+      ),
       empresa: empresa ?? '—',
     })
     if (l) { lancamentos.push(l); acc.nfs++ } else acc.sem_regra++
@@ -195,13 +200,14 @@ export async function apurarComissoesJob(competenciaIn?: string): Promise<Result
     empresa_id: string; empresa: string | null; volume: string; via_spe: string
   }>(
     `with dona as (
-       select a.id_externo, a.gross_value, a.sacado_cnpj,
+       select a.id_externo, a.gross_value, a.withhold_tax, a.sacado_cnpj,
               public.app_holding_do_sacado(a.sacado_cnpj) as empresa_id
        from antecipacoes a
        where a.convertida_em >= $1 and a.convertida_em < $2 and a.regrediu_em is null
      )
      select d.empresa_id, e.razao_social as empresa,
-            coalesce(sum(d.gross_value), 0) as volume,
+            -- Líquido da retenção, como a comissão por cessão (valorCedidoDaCessao).
+            coalesce(sum(greatest(d.gross_value - coalesce(d.withhold_tax, 0), 0)), 0) as volume,
             count(*) filter (where d.sacado_cnpj <> e.cnpj) as via_spe
      from dona d
      join empresas e on e.id = d.empresa_id

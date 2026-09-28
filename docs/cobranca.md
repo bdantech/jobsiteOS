@@ -252,6 +252,41 @@ consequências, e nenhuma delas é resolvida inventando valor:
   (§7.3) é calculada com o que existe e **mostra a conta aberta**, com o teto do limite
   marcado como estimado quando for.
 
+### O limite consumido desfaz a ambiguidade — por grupo (0270)
+
+Em 28/09/2026 ficou claro que o "ambíguo" é quase sempre "já pago": a produção deixa a
+antecipação em `BILLET_SWAPPED` depois da liquidação e raramente marca `CONCLUDED`. O
+sinal que existe é o **limite consumido** do sacado na plataforma
+(`clientes_onepay.consumed_limit`): ele sobe na cessão e desce no pagamento, e fica na
+matriz — cobre o grupo inteiro. Então
+
+```
+vencido realmente em aberto ≈ consumido − a vencer        (limitado a [0, vencido])
+```
+
+Medido: ENGEFY tinha R$ 736 mil "vencidos" na lista e R$ 675 mil consumidos para R$ 678
+mil a vencer — vencido real ≈ 0. CASA ORANGE, R$ 109 mil vencidos e consumido zero.
+PLANOVA, ao contrário, confirma uns R$ 5,5 mi de fato vencidos.
+
+`app_cobranca_reconciliacao()` devolve isso por grupo, com a situação `em_dia` (≤ R$ 1.000
+ou 2% do vencido), `parcial`, `confirma`, `sem_dado` ou `sem_vencidos`. **É estimativa do
+grupo, não do título** — diz quanto, não quais —, e por isso nenhum título vira "pago"
+por ela. O que ela muda:
+
+- **Nova cobrança** lista só os vencidos (os a vencer ficam atrás de um interruptor) e
+  mostra a reconciliação do grupo. Grupo em dia: os vencidos saem marcados
+  "provavelmente pago" e só são selecionáveis com a confirmação de quem conferiu — que
+  fica gravada nas observações da cobrança, com o número da plataforma.
+- **O relógio** (job e painel) não avisa nem marca `perdido` o prazo de grupo em dia que
+  esteja fora de cobrança; no painel eles ficam ocultos por padrão. Grupo parcial avisa
+  com a estimativa ao lado do total listado.
+- Se a leitura da plataforma falhar, o relógio **avisa tudo**: alerta falso custa menos
+  que prazo de apólice perdido em silêncio.
+
+A projeção pode estar atrás da plataforma (roda depois do sync); cessões novas aumentam o
+consumido sem aumentar o "a vencer", e o erro vai para o lado conservador — estima mais
+vencido em aberto, nunca menos.
+
 O que falta está pedido ao time de produção em
 [`docs/requisicao-titulos-plataforma-producao.md`](requisicao-titulos-plataforma-producao.md).
 Quando o endpoint existir, a projeção troca a fonte e `pago_em_origem` passa a `producao`.

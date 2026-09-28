@@ -20,6 +20,7 @@ import {
   resolverParametro,
   simularComissao,
   sugereRevisao,
+  valorCedidoDaCessao,
   valorParametro,
   type CessaoConvertida,
   type CommissionParam,
@@ -117,6 +118,50 @@ test('o teto de prazo trava o numerador, e só quando morde', () => {
 test('sem teto o VOP é o de antes — a cessão anterior à vigência vale o que valia', () => {
   assert.equal(calcularVOP(100_000, 300, 30, null), 1_000_000)
   assert.equal(calcularVOP(100_000, 300, 30, 0), 1_000_000)
+})
+
+test('o valor cedido é o bruto da NF menos a retenção', () => {
+  assert.equal(valorCedidoDaCessao(41_012.3, 6_561.99), 34_450.31)
+  assert.equal(valorCedidoDaCessao(500_000, 0), 500_000)
+  // Sem retenção informada, o bruto — travar a comissão por falta do campo seria pior.
+  assert.equal(valorCedidoDaCessao(500_000, null), 500_000)
+  // Retenção maior que o bruto não vira base negativa.
+  assert.equal(valorCedidoDaCessao(1_000, 1_500), 0)
+  assert.equal(valorCedidoDaCessao(0, 100), 0)
+})
+
+test('a retenção sai da base: a comissão é sobre o líquido, e o snapshot guarda o bruto', () => {
+  const bruto = 500_000
+  const retencao = 50_000
+  const ls = lancamentosDaCessao(
+    { ...CESSAO, valorCedido: valorCedidoDaCessao(bruto, retencao), valorBruto: bruto, retencao },
+    TITULARES,
+    PARAMS,
+  )
+  const vend = ls.find((l) => l.papel === 'VENDEDOR')!
+  // 450.000 × 45/30 = 675.000 de VOP, e não os 750.000 do bruto.
+  assert.equal(vend.valor_cedido, 450_000)
+  assert.equal(vend.vop, 675_000)
+  assert.equal(vend.valor, 675)
+  assert.equal(vend.params_snapshot.valor_bruto, 500_000)
+  assert.equal(vend.params_snapshot.retencao, 50_000)
+
+  const texto = explicarCalculo(vend)
+  assert.match(texto, /de retenção/)
+  assert.match(texto, /450\.000,00 cedidos/)
+})
+
+test('a explicação cala a retenção quando ela é zero ou o lançamento é anterior à regra', () => {
+  const semRetencao = lancamentosDaCessao(
+    { ...CESSAO, valorBruto: CESSAO.valorCedido, retencao: 0 },
+    TITULARES,
+    PARAMS,
+  )[0]!
+  assert.doesNotMatch(explicarCalculo(semRetencao), /retenção/)
+  // Lançamento antigo não tem as chaves no snapshot — e não pode inventar uma retenção.
+  const antigo = lancamentosDaCessao(CESSAO, TITULARES, PARAMS)[0]!
+  assert.equal(antigo.params_snapshot.valor_bruto, undefined)
+  assert.doesNotMatch(explicarCalculo(antigo), /retenção/)
 })
 
 test('diasDoVop é a única resposta para "que prazo entrou na conta"', () => {

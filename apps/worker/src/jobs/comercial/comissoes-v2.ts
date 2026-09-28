@@ -11,6 +11,7 @@ import {
   lancamentoSdrReuniao,
   lancamentosDaCessao,
   sugereRevisao,
+  valorCedidoDaCessao,
   valorParametro,
   type AuxiliarDoCloser,
   type CessaoConvertida,
@@ -328,6 +329,7 @@ interface LinhaCessao {
   id_externo: number
   convertida_em: string
   gross_value: string | null
+  withhold_tax: string | null
   anticipation_days: number | null
   sacado_cnpj: string | null
   fornecedor_cnpj: string | null
@@ -340,6 +342,19 @@ interface LinhaCessao {
   sacado_fase_manual: string | null
   cedente_empresa_id: string | null
   cedente_nome: string | null
+}
+
+/**
+ * A base da cessão: o bruto da NF menos a retenção. Um lugar só para o lançamento ao vivo
+ * e a prévia da deriva — se um deles lesse o bruto, a deriva acusaria toda cessão com
+ * retenção como alterada, todo dia.
+ */
+function valorDaCessao(
+  c: Pick<LinhaCessao, 'gross_value' | 'withhold_tax'>,
+): Pick<CessaoConvertida, 'valorCedido' | 'valorBruto' | 'retencao'> {
+  const valorBruto = Number(c.gross_value ?? 0)
+  const retencao = c.withhold_tax === null ? null : Number(c.withhold_tax)
+  return { valorCedido: valorCedidoDaCessao(valorBruto, retencao), valorBruto, retencao }
 }
 
 /**
@@ -357,6 +372,7 @@ export async function lancarCessaoConvertida(
     `select a.id_externo,
             a.convertida_em,
             a.gross_value,
+            a.withhold_tax,
             a.anticipation_days,
             a.sacado_cnpj,
             a.fornecedor_cnpj,
@@ -427,7 +443,7 @@ export async function lancarCessaoConvertida(
     origemId,
     antecipacaoId: c.id_externo,
     convertidaEm: quando,
-    valorCedido: Number(c.gross_value ?? 0),
+    ...valorDaCessao(c),
     anticipationDays: Number(c.anticipation_days ?? 0),
     empresaId: c.sacado_empresa_id,
     sacadoNome: c.sacado_nome,
@@ -1450,7 +1466,7 @@ async function preverCessao(
     origemId: `antecipacao:${c.id_externo}`,
     antecipacaoId: c.id_externo,
     convertidaEm: quando,
-    valorCedido: Number(c.gross_value ?? 0),
+    ...valorDaCessao(c),
     anticipationDays: Number(c.anticipation_days ?? 0),
     empresaId: c.sacado_empresa_id,
     sacadoNome: c.sacado_nome,
@@ -1521,6 +1537,7 @@ export async function derivaComissaoJob(): Promise<DerivaComissao> {
     `select a.id_externo,
             a.convertida_em,
             a.gross_value,
+            a.withhold_tax,
             a.anticipation_days,
             a.sacado_cnpj,
             a.fornecedor_cnpj,

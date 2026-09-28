@@ -9,6 +9,10 @@ import {
   type EstadoPrazo,
 } from '../../../../../packages/core/src/cobranca/relogio-apolice.js'
 import { formatarBrl, formatarCnpjCobranca, formatarDataBr } from '../../../../../packages/core/src/cobranca/modelos.js'
+import {
+  buscarReconciliacaoCobranca,
+  type ReconciliacaoGrupo,
+} from '../../../../../packages/core/src/cobranca/reconciliacao.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { todasAsPaginas } from '../../paginar.js'
@@ -33,6 +37,15 @@ import {
  *   d) os alertas escalonados, UM por grupo e marco (ver `agruparAlertas`);
  *   e) o prazo que passou sem o ato vira `perdido`, com um aviso só.
  *
+ * ── GRUPO EM DIA PELA PLATAFORMA NÃO ALERTA (0270) ──────────────────────────
+ * A produção não marca a liquidação por título: o pago continua `BILLET_SWAPPED`, e sem
+ * este filtro o relógio avisaria "5 dias para perder a indenização" de sacado que já
+ * pagou. Quando o limite consumido do grupo não cobre mais os vencidos, os prazos
+ * continuam calculados (o relógio não apaga nada), mas não geram aviso nem viram
+ * `perdido` — a não ser que o título esteja numa cobrança ativa, onde uma pessoa já
+ * decidiu que a dívida existe. Se a leitura da plataforma falhar, avisa tudo: um
+ * alerta falso custa menos que um prazo de apólice perdido em silêncio.
+ *
  * ── NADA VAI À SEGURADORA ───────────────────────────────────────────────────
  * §6.3.4: "o alerta é a ação". Este job não chama API nem manda e-mail a ninguém de fora;
  * notificar a Atradius é um botão, apertado por gente, na tela do sinistro.
@@ -54,6 +67,8 @@ export interface ResultadoRelogio {
   titulos_avisados: number
   prazos_perdidos: number
   avisos_perdido: number
+  /** Prazos calados porque a plataforma registra o grupo em dia (0270). */
+  prazos_em_dia_pela_plataforma: number
 }
 
 const SITUACOES_ATIVAS = ['em_cobranca', 'acordado', 'protestado', 'sinistrado']
@@ -115,6 +130,7 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
     titulos_avisados: 0,
     prazos_perdidos: 0,
     avisos_perdido: 0,
+    prazos_em_dia_pela_plataforma: 0,
   }
 
   const { data: apolicesBrutas, error: erroApolices } = await supabaseAdmin
@@ -219,6 +235,13 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
     for (const s of data ?? []) estagioDoSinistro.set(s.id, s.estagio)
   }
 
+  let reconciliacao = new Map<string, ReconciliacaoGrupo>()
+  try {
+    reconciliacao = await buscarReconciliacaoCobranca(supabaseAdmin)
+  } catch (e) {
+    logger.warn({ erro: e instanceof Error ? e.message : String(e) }, 'Reconciliação com a plataforma indisponível: o relógio avisa tudo.')
+  }
+
   const paraAvisar: AlertaDeTitulo[] = []
   const perdidos: (AlertaDeTitulo & { marcoPerdido: string })[] = []
   const novosEmitidos = new Map<string, Record<string, string>>()
@@ -254,6 +277,11 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
       cobranca_id: cobranca?.id ?? null,
       cobranca_codigo: cobranca?.codigo ?? null,
       responsavel_id: cobranca?.responsavel_id ?? null,
+    }
+
+    if (!cobranca && reconciliacao.get(t.sacado_matriz_cnpj)?.situacao === 'em_dia') {
+      r.prazos_em_dia_pela_plataforma++
+      continue
     }
 
     // O prazo perdido vem ANTES dos alertas: avisar "faltam 5 dias" de um prazo que já
@@ -293,7 +321,15 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
   // ── Os avisos, agregados ──
   const prazoPorId = new Map(prazos.map((p) => [p.id, p]))
   for (const g of agruparAlertas(paraAvisar)) {
-    const { titulo, resumo } = textoDoAviso(g)
+    const { titulo, resumo: texto } = textoDoAviso(g)
+    // Parte do vencido já foi paga (0270): o aviso diz quanto a plataforma indica em
+    // aberto, para ninguém tratar o total da lista como dívida.
+    const rec = reconciliacao.get(g.sacado_matriz_cnpj)
+    const resumo =
+      rec?.situacao === 'parcial' && rec.vencido_estimado !== null
+        ? `${texto} A plataforma indica cerca de ${formatarBrl(rec.vencido_estimado)} de fato vencido em aberto no grupo ` +
+          `(de ${formatarBrl(rec.vencido)} listados).`
+        : texto
     await avisar(
       g.nivel === 'critico' ? 'apolice.prazo_critico' : 'apolice.prazo_alerta',
       {

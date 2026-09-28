@@ -4,12 +4,18 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { AlertOctagon, Clock, Info } from 'lucide-react'
+import {
+  SITUACAO_RECONCILIACAO_LABELS,
+  buscarReconciliacaoCobranca,
+  type ReconciliacaoGrupo,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { buscarRelogio, buscarTitulosBoletoTrocado, gestaoKeys, type LinhaRelogio } from './gestao-queries'
 import { MARCO_APOLICE_LABELS, brl, cnpj, corDoPrazo, data, prazoTexto } from './format'
@@ -29,6 +35,12 @@ import { MARCO_APOLICE_LABELS, brl, cnpj, corDoPrazo, data, prazoTexto } from '.
  * O prazo corre por título, mas a decisão é por grupo: a franquia é por comprador e
  * o sinistro consolida o grupo inteiro (§7.3). Os grupos saem ordenados pelo título
  * mais urgente de cada um.
+ *
+ * ── GRUPO EM DIA PELA PLATAFORMA SAI DA CONTA (0270) ────────────────────────
+ * A produção não marca a liquidação por título; o limite consumido do grupo, sim. Grupo
+ * cujo consumido já não cobre os vencidos provavelmente pagou, e os prazos dele — fora
+ * de cobrança — ficam ocultos por padrão, como no job de alertas. Um interruptor os traz
+ * de volta: o relógio escolhe o que mostrar primeiro, não apaga nada.
  */
 
 type Faixa = 'vencido' | 'ate5' | 'ate15' | 'ate30' | 'mais30'
@@ -60,6 +72,11 @@ const GRUPOS_POR_PAGINA = 20
 export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gestor: boolean }) {
   const relogio = useQuery({ queryKey: gestaoKeys.relogio(), queryFn: buscarRelogio })
   const trocados = useQuery({ queryKey: gestaoKeys.boletoTrocado(), queryFn: buscarTitulosBoletoTrocado })
+  const reconciliacao = useQuery({
+    queryKey: gestaoKeys.reconciliacao(),
+    queryFn: () => buscarReconciliacaoCobranca(createClient()),
+  })
+  const [incluirEmDia, setIncluirEmDia] = React.useState(false)
 
   // Operador abre na PRÓPRIA fila; gestor, na carteira inteira. Um toggle troca — o
   // relógio não esconde nada de ninguém, só escolhe por onde começar.
@@ -69,9 +86,19 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
   React.useEffect(() => setMinhas(!gestor), [gestor])
 
   const linhas = React.useMemo(() => relogio.data ?? [], [relogio.data])
+  // Em dia pela plataforma e fora de cobrança: provavelmente pago (0270).
+  const emDia = React.useCallback(
+    (l: LinhaRelogio) =>
+      !l.cobranca_id && reconciliacao.data?.get(l.sacado_matriz_cnpj ?? '')?.situacao === 'em_dia',
+    [reconciliacao.data],
+  )
+  const ocultosEmDia = React.useMemo(() => linhas.filter(emDia).length, [linhas, emDia])
   const visiveis = React.useMemo(
-    () => (minhas ? linhas.filter((l) => l.responsavel_id === usuarioId) : linhas),
-    [linhas, minhas, usuarioId],
+    () =>
+      linhas.filter(
+        (l) => (!minhas || l.responsavel_id === usuarioId) && (incluirEmDia || !emDia(l)),
+      ),
+    [linhas, minhas, usuarioId, incluirEmDia, emDia],
   )
 
   const porFaixa = React.useMemo(() => {
@@ -104,6 +131,7 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
         return {
           matriz,
           nome: daMatriz?.sacado_nome ?? itens[0]?.sacado_nome ?? null,
+          reconciliacao: reconciliacao.data?.get(matriz) ?? null,
           itens: ordenados,
           minimo: ordenados[0]?.dias_restantes ?? 9999,
           valor: itens.reduce((s, i) => s + Number(i.valor_face ?? 0), 0),
@@ -111,7 +139,7 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
         }
       })
       .sort((a, b) => a.minimo - b.minimo)
-  }, [visiveis, faixa])
+  }, [visiveis, faixa, reconciliacao.data])
 
   if (relogio.isLoading) return <Skeleton className="h-72 w-full" />
   if (relogio.isError) {
@@ -132,11 +160,19 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
             <Clock className="h-4 w-4" aria-hidden />
             Relógio da apólice
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Switch id="relogio-minhas" checked={minhas} onCheckedChange={setMinhas} />
-            <Label htmlFor="relogio-minhas" className="text-sm font-normal">
-              Só minhas cobranças
-            </Label>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch id="relogio-minhas" checked={minhas} onCheckedChange={setMinhas} />
+              <Label htmlFor="relogio-minhas" className="text-sm font-normal">
+                Só minhas cobranças
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="relogio-em-dia" checked={incluirEmDia} onCheckedChange={setIncluirEmDia} />
+              <Label htmlFor="relogio-em-dia" className="text-sm font-normal">
+                Incluir grupos em dia pela plataforma{ocultosEmDia > 0 ? ` (${ocultosEmDia})` : ''}
+              </Label>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -195,8 +231,9 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
 
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          A produção não informa a liquidação de títulos com boleto trocado (BILLET_SWAPPED e variantes): alguns
-          destes podem já estar pagos. Os marcados “boleto trocado” pedem conferência na plataforma antes de qualquer
+          A produção não marca a liquidação por título: o pago continua “boleto trocado” (BILLET_SWAPPED). O
+          relógio cruza com o limite consumido de cada grupo na plataforma — grupos em dia ficam ocultos por
+          padrão, e os que pagaram parte mostram quanto segue de fato em aberto. Confira antes de qualquer
           comunicação à seguradora.
         </p>
 
@@ -215,7 +252,8 @@ export function RelogioApolice({ usuarioId, gestor }: { usuarioId: string; gesto
                     <span className="font-medium">{g.nome ?? 'Sacado sem nome'}</span>
                     <span className="ml-2 font-mono text-xs text-muted-foreground">{cnpj(g.matriz)}</span>
                   </div>
-                  <span className="text-xs tabular-nums text-muted-foreground">
+                  <span className="flex flex-wrap items-center gap-2 text-xs tabular-nums text-muted-foreground">
+                    <SeloReconciliacao r={g.reconciliacao} />
                     {g.itens.length} título(s) · {brl(g.valor)}
                   </span>
                 </div>
@@ -284,4 +322,17 @@ function LinhaPrazo({ l, boletoTrocado }: { l: LinhaRelogio; boletoTrocado: bool
       </div>
     </li>
   )
+}
+
+/** O que a plataforma diz do grupo, em uma linha, ao lado do total da lista. */
+function SeloReconciliacao({ r }: { r: ReconciliacaoGrupo | null }) {
+  if (!r || r.situacao === 'confirma' || r.situacao === 'sem_vencidos') return null
+  if (r.situacao === 'parcial') {
+    return (
+      <Badge variant="warning" title={SITUACAO_RECONCILIACAO_LABELS.parcial}>
+        ~{brl(r.vencido_estimado, 0)} vencido de fato (plataforma)
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">{SITUACAO_RECONCILIACAO_LABELS[r.situacao]}</Badge>
 }

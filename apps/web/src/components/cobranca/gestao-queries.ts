@@ -13,6 +13,7 @@ export const gestaoKeys = {
   painel: () => [...gestaoKeys.all, 'painel'] as const,
   relogio: () => [...gestaoKeys.all, 'relogio'] as const,
   boletoTrocado: () => [...gestaoKeys.all, 'boleto-trocado'] as const,
+  reconciliacao: () => [...gestaoKeys.all, 'reconciliacao', 'todos'] as const,
   bloqueados: () => [...gestaoKeys.all, 'bloqueados'] as const,
   insolvencias: () => [...gestaoKeys.all, 'insolvencias'] as const,
   sinistros: () => [...gestaoKeys.all, 'sinistros'] as const,

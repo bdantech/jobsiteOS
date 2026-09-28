@@ -14,3 +14,5 @@ export * from './dossie.js'
 export * from './mutations.js'
 // O bloqueio visto dos outros módulos (funil, composer, Company 360): só a lista de CNPJs.
 export * from './bloqueio.js'
+// O vencido realmente em aberto por grupo, pelo limite consumido na plataforma (0270).
+export * from './reconciliacao.js'

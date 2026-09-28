@@ -3,6 +3,7 @@ import { agruparNotificacoes, ErroAgrupamento } from '../../cobranca/agrupamento
 import { atualizarDividaCobranca } from '../../cobranca/atualizacao.js'
 import { hojeSaoPaulo } from '../../cobranca/datas.js'
 import { simularParcelamento } from '../../cobranca/parcelamento.js'
+import { buscarReconciliacaoCobranca, explicarReconciliacao } from '../../cobranca/reconciliacao.js'
 import {
   CANAL_ENTREGA_LABELS,
   COBRANCA_ESTAGIOS_ENCERRADOS,
@@ -176,14 +177,21 @@ async function titulosEmAberto(input: z.infer<typeof titulosEmAbertoToolSchema>,
 
   const linhas = data ?? []
   const vencidos = linhas.filter((l) => (l.dias_atraso ?? 0) > 0)
+  // A produção não marca a liquidação por título; o limite consumido do grupo diz quanto
+  // do vencido segue de fato em aberto (0270). Falhar aqui não derruba a resposta.
+  const rec = await buscarReconciliacaoCobranca(ctx.supabase, [g.matriz])
+    .then((m) => m.get(g.matriz) ?? null)
+    .catch(() => null)
   return {
     grupo: `${g.nome ?? ''} (matriz ${formatCnpj(g.matriz)})`,
     total: linhas.length,
     vencidos: vencidos.length,
     valor_vencido: brl(vencidos.reduce((s, l) => s + Number(l.valor_face ?? 0), 0)),
+    plataforma: rec ? explicarReconciliacao(rec) : null,
+    vencido_estimado_pela_plataforma: rec?.vencido_estimado === null || !rec ? null : brl(rec.vencido_estimado),
     aviso:
-      'A produção ainda não informa a liquidação de títulos antes de concluir a operação: título ' +
-      '"aberto" aqui pode já ter sido pago ao banco. Confira antes de cobrar.',
+      'A produção não marca a liquidação por título: um título "aberto" aqui pode já ter sido pago. ' +
+      'O campo `plataforma` diz o que o limite consumido do grupo indica; confira antes de cobrar.',
     titulos: linhas.map((l) => ({
       numero: l.numero,
       spe: l.sacado_nome,
