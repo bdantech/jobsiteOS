@@ -26,6 +26,11 @@ export interface CronCatalogado {
   destino?: string
   /** Jobs que ESTE cron dispara em seguida, na mesma corrida. */
   encadeia?: string[]
+  /**
+   * Quanto tempo o job pode ficar sem retorno antes de o monitor dá-lo por perdido
+   * (worker reiniciado no meio, por exemplo). Padrão: `LIMITE_SEM_RETORNO_HORAS`.
+   */
+  limiteSemRetornoHoras?: number
 }
 
 export const CRONS: readonly CronCatalogado[] = [
@@ -36,6 +41,8 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Baixa e ingere o dump mensal de CNPJs da Receita Federal — a base do universo do Mercado. Dia 10 porque o arquivo do mês é publicado na primeira quinzena e só até lá está no ar de forma confiável. Nunca cai no espelho sozinho: usar cópia de terceiro é decisão de admin, na tela de Ingestões.',
     destino: 'POST /jobs/receita',
+    // Cem milhões de linhas e as derivadas atrás: quatro horas num dia bom.
+    limiteSemRetornoHoras: 24,
   },
   {
     path: '/api/cron/mercado-cno',
@@ -44,6 +51,7 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Obras do Cadastro Nacional de Obras, filtradas pelas raízes de CNPJ que já conhecemos. Roda dois dias depois da Receita para casar contra o universo já atualizado.',
     destino: 'POST /jobs/cno',
+    limiteSemRetornoHoras: 24,
   },
   {
     path: '/api/cron/radar-onepay',
@@ -284,6 +292,13 @@ export const CRONS: readonly CronCatalogado[] = [
     moduloId: 'admin',
     descricao:
       'Não faz trabalho de negócio: prova o caminho Vercel Cron → CRON_SECRET → handler autenticado. É a sonda que denuncia agenda quebrada ou segredo trocado antes de um job de verdade falhar calado.',
+  },
+  {
+    path: '/api/cron/crons-monitor',
+    nome: 'Monitor das rotinas',
+    moduloId: 'admin',
+    descricao:
+      'Confere a agenda contra os disparos registrados: horário que passou sem disparo vira "não rodou", job sem retorno do worker além do limite vira falha, e cada falha nova avisa os admins por sino, push e e-mail. Roda na Vercel e não no worker de propósito — é justamente quando o worker cai que o aviso tem de sair.',
   },
   // ─── Comunicação (05A): os seis relógios do cano ──────────────────────────
   {

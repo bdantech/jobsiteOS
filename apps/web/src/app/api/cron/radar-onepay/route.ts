@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { autorizarCron } from '../auth'
+import { comRegistro } from '../registro'
 import {
   dispararSincronizarAnalisesPlataforma,
   dispararSincronizarCertificados,
@@ -22,7 +23,7 @@ import {
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function executar(request: Request): Promise<NextResponse> {
   const auth = autorizarCron(request)
   if (!auth.ok) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
@@ -64,6 +65,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     disparadoEm: new Date().toISOString(),
   })
 }
+
+export const GET = comRegistro(executar)
 
 export async function POST(request: Request): Promise<NextResponse> {
   return GET(request)

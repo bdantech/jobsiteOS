@@ -6,6 +6,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/crons-monitor",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/mercado-receita",
       "schedule": "0 6 10 * *"
     },

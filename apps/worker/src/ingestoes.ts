@@ -3,6 +3,7 @@ import {
   FONTE_INGESTAO_LABELS,
   type FonteIngestao,
 } from '../../../packages/core/src/mercado/schemas.js'
+import { assumirExecucaoCron, encerrarExecucaoCron } from './cron-execucao.js'
 import { supabaseAdmin } from './db.js'
 import { env } from './env.js'
 import { logger } from './logger.js'
@@ -29,6 +30,7 @@ export async function abrirIngestao(fonte: FonteIngestao, meta: Meta = {}): Prom
     .single()
 
   if (error) throw new Error(`Falha ao abrir a ingestão: ${error.message}`)
+  assumirExecucaoCron(data.id)
   return data.id
 }
 
@@ -70,6 +72,7 @@ export async function concluirIngestao(
     .eq('id', id)
 
   if (error) throw new Error(`Falha ao concluir a ingestão: ${error.message}`)
+  await encerrarExecucaoCron(id, 'concluida')
 
   await registrarEvento(EVENTO_TIPOS.MERCADO_INGESTAO_CONCLUIDA, {
     titulo: `Ingestão concluída — ${rotuloFonte(fonte)}`,
@@ -111,6 +114,8 @@ export async function falharIngestao(
       ...contadores,
     })
     .eq('id', id)
+
+  await encerrarExecucaoCron(id, 'falhou', mensagem)
 
   const titulo = `Ingestão falhou — ${rotuloFonte(fonte)}`
   const corpo =

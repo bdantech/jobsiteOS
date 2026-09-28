@@ -1,5 +1,12 @@
 import 'server-only'
-import type { CamadaComRegra, PreviaRegra } from '@jobsiteos/core'
+import {
+  CABECALHO_CRON_ACOMPANHADO,
+  CABECALHO_CRON_EXECUCAO,
+  CABECALHO_CRON_JOB,
+  type CamadaComRegra,
+  type PreviaRegra,
+} from '@jobsiteos/core'
+import { execucaoCron } from '@/lib/cron-execucao'
 
 /**
  * The ONE place in the web app that talks to `apps/worker` (Railway).
@@ -153,6 +160,10 @@ async function postar(
     return { ok: false, code: 'config', message: 'WORKER_URL inválida.' }
   }
 
+  // Chamado de dentro de uma rota de cron: o worker recebe o id da execução e a fecha
+  // quando o job terminar (0272). Fora de cron (botão de admin), nada muda.
+  const execucao = execucaoCron.getStore()
+
   let resposta: Response
   try {
     resposta = await fetch(url, {
@@ -160,6 +171,7 @@ async function postar(
       headers: {
         authorization: `Bearer ${secret}`,
         'content-type': 'application/json',
+        ...(execucao ? { [CABECALHO_CRON_EXECUCAO]: execucao.id } : {}),
         ...headersExtra,
       },
       body: JSON.stringify(corpoJson),
@@ -176,6 +188,14 @@ async function postar(
       ok: false,
       code: 'rede',
       message: 'Não foi possível falar com o worker. Verifique se o serviço está no ar.',
+    }
+  }
+
+  if (execucao) {
+    if (resposta.status === 409) execucao.pulada = true
+    if (resposta.headers.get(CABECALHO_CRON_ACOMPANHADO) === '1') {
+      execucao.acompanhado = true
+      execucao.jobId = resposta.headers.get(CABECALHO_CRON_JOB)
     }
   }
 

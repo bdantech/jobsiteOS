@@ -4622,6 +4622,48 @@ export type Database = {
         }
         Relationships: []
       }
+      cron_execucoes: {
+        Row: {
+          acompanhado: boolean
+          aviso: string | null
+          erro: string | null
+          esperado_em: string | null
+          id: string
+          iniciado_em: string
+          job_id: string | null
+          notificado_em: string | null
+          path: string
+          status: string
+          terminado_em: string | null
+        }
+        Insert: {
+          acompanhado?: boolean
+          aviso?: string | null
+          erro?: string | null
+          esperado_em?: string | null
+          id?: string
+          iniciado_em?: string
+          job_id?: string | null
+          notificado_em?: string | null
+          path: string
+          status?: string
+          terminado_em?: string | null
+        }
+        Update: {
+          acompanhado?: boolean
+          aviso?: string | null
+          erro?: string | null
+          esperado_em?: string | null
+          id?: string
+          iniciado_em?: string
+          job_id?: string | null
+          notificado_em?: string | null
+          path?: string
+          status?: string
+          terminado_em?: string | null
+        }
+        Relationships: []
+      }
       descoberta_execucoes: {
         Row: {
           camada: string
@@ -15073,6 +15115,21 @@ export type Database = {
           razao_social: string | null
           segurado_em: string | null
           situacao: string | null
+        }
+        Relationships: []
+      }
+      cron_execucoes_ultimas: {
+        Row: {
+          acompanhado: boolean | null
+          erro: string | null
+          esperado_em: string | null
+          id: string | null
+          iniciado_em: string | null
+          job_id: string | null
+          path: string | null
+          status: string | null
+          terminado_em: string | null
+          ultimo_disparo_em: string | null
         }
         Relationships: []
       }

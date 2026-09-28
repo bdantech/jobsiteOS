@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autorizarCron } from '../auth'
+import { comRegistro } from '../registro'
 import { dispararReportSemanal } from '@/lib/mercado/worker'
 
 /**
@@ -24,7 +25,7 @@ export const runtime = 'nodejs'
 /** Geração + modelo + PDF + upload + envio. O padrão de 10s não cobre isso. */
 export const maxDuration = 300
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function executar(request: Request): Promise<NextResponse> {
   const auth = autorizarCron(request)
   if (!auth.ok) return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
 
@@ -73,6 +74,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
   return NextResponse.json({ ok: true, job: 'reports-semanal', dia_iso: diaIso })
 }
+
+export const GET = comRegistro(executar)
 
 export async function POST(request: Request): Promise<NextResponse> {
   return GET(request)

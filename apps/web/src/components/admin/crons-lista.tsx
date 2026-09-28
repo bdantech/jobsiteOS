@@ -1,5 +1,15 @@
 import { AlertTriangle, ArrowRight, Clock } from 'lucide-react'
-import { getModule, type CronDaPlataforma } from '@jobsiteos/core'
+import {
+  CRONS,
+  LIMITE_SEM_RETORNO_HORAS,
+  getModule,
+  saudeDaRotina,
+  saudeGeral,
+  type CorSaude,
+  type CronDaPlataforma,
+  type ExecucaoCron,
+} from '@jobsiteos/core'
+import { CronsSaude, type LinhaSaude } from '@/components/admin/crons-saude'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -39,8 +49,56 @@ const dataHora = new Intl.DateTimeFormat('pt-BR', {
   minute: '2-digit',
 })
 
-export function CronsLista({ crons, agora }: { crons: CronDaPlataforma[]; agora: Date }) {
+const ORDEM_COR: Record<CorSaude, number> = { vermelha: 0, amarela: 1, verde: 2 }
+
+const limitePorPath = new Map(CRONS.map((c) => [c.path, c.limiteSemRetornoHoras ?? LIMITE_SEM_RETORNO_HORAS]))
+
+/** A linha de cada rotina AGENDADA — a que não está no vercel.json não tem o que rodar. */
+function linhasDeSaude(crons: CronDaPlataforma[], ultimas: ExecucaoCron[], agora: Date): LinhaSaude[] {
+  const porPath = new Map(ultimas.map((u) => [u.path, u]))
+
+  return crons
+    .filter((c) => !c.naoAgendado)
+    .map((c) => {
+      const ultima = porPath.get(c.path) ?? null
+      const { cor, rotulo } = saudeDaRotina(ultima, agora, limitePorPath.get(c.path))
+      // A falta é datada pelo horário que a agenda previa, não por quando o monitor a viu.
+      const momento = ultima ? new Date(ultima.esperado_em ?? ultima.iniciado_em) : null
+      return {
+        path: c.path,
+        nome: c.nome,
+        cor,
+        rotulo,
+        quando: momento ? dataHora.format(momento) : null,
+        relativo: momento ? daquiA(momento, agora) : null,
+        erro: ultima && cor !== 'verde' ? ultima.erro : null,
+      }
+    })
+    .sort((a, b) => ORDEM_COR[a.cor] - ORDEM_COR[b.cor] || a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
+function resumoDaSaude(linhas: LinhaSaude[]): string {
+  const vermelhas = linhas.filter((l) => l.cor === 'vermelha').length
+  const amarelas = linhas.filter((l) => l.cor === 'amarela').length
+  if (!vermelhas && !amarelas) return `Todas as ${linhas.length} rotinas rodaram na última vez.`
+  const partes = [
+    vermelhas && `${vermelhas} com falha`,
+    amarelas && `${amarelas} sem confirmação`,
+  ].filter(Boolean)
+  return `${linhas.length} rotinas: ${partes.join(', ')}.`
+}
+
+export function CronsLista({
+  crons,
+  ultimas,
+  agora,
+}: {
+  crons: CronDaPlataforma[]
+  ultimas: ExecucaoCron[]
+  agora: Date
+}) {
   const problemas = crons.filter((c) => c.naoAgendado || c.semCatalogo || c.erro)
+  const saude = linhasDeSaude(crons, ultimas, agora)
 
   return (
     <div className="flex flex-col gap-4">
@@ -51,6 +109,12 @@ export function CronsLista({ crons, agora }: { crons: CronDaPlataforma[]; agora:
           ao lado é a que está valendo em <code className="text-xs">apps/web/vercel.json</code>.
         </p>
       </div>
+
+      <CronsSaude
+        rotinas={saude}
+        geral={saudeGeral(saude.map((l) => l.cor))}
+        resumo={resumoDaSaude(saude)}
+      />
 
       {problemas.length > 0 && (
         <Card className="border-destructive/50">

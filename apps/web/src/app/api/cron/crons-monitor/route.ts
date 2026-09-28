@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
 import { autorizarCron } from '../auth'
 import { comRegistro } from '../registro'
-import { dispararSlaComercial } from '@/lib/mercado/worker'
+import { monitorarCrons } from '@/lib/crons-monitor.server'
 
 /**
- * Diário: devolve ao pool o lead a contatar parado além do SLA e cobra vendedor sem movimento (em dias ÚTEIS).
+ * A cada cinco minutos: confere a agenda contra os disparos registrados e avisa os
+ * admins do que falhou (0272). Não fala com o worker — é quando ele cai que isto
+ * mais precisa rodar. A lógica está em `lib/crons-monitor.server.ts`.
  */
 
 export const dynamic = 'force-dynamic'
@@ -14,14 +16,15 @@ async function executar(request: Request): Promise<NextResponse> {
   const auth = autorizarCron(request)
   if (!auth.ok) return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
 
-  const r = await dispararSlaComercial()
-  if (!r.ok) {
+  try {
+    const r = await monitorarCrons()
+    return NextResponse.json({ ok: true, job: 'crons-monitor', ...r })
+  } catch (erro) {
     return NextResponse.json(
-      { ok: false, job: 'comercial-sla', erro: r.message },
-      { status: r.code === 'config' ? 500 : 502 },
+      { ok: false, job: 'crons-monitor', erro: erro instanceof Error ? erro.message : String(erro) },
+      { status: 500 },
     )
   }
-  return NextResponse.json({ ok: true, job: 'comercial-sla', disparadoEm: new Date().toISOString() })
 }
 
 export const GET = comRegistro(executar)

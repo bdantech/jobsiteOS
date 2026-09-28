@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { arvoreSchema } from '../../../packages/core/src/mercado/filters.js'
 import { camadaComRegraSchema } from '../../../packages/core/src/mercado/schemas.js'
 import { exigirSegredo } from './auth.js'
+import { contextoDeCron } from './cron-execucao.js'
 import { gerarReportSemanal } from './jobs/reports/semanal.js'
 import { pingDb, pool } from './db.js'
 import { env } from './env.js'
@@ -399,6 +400,10 @@ app.post('/webhooks/voz', async (req: Request, res: Response) => {
 })
 
 app.use(exigirSegredo)
+// O id da execução de cron que a Vercel abriu (0272): vira contexto da requisição, e o
+// job que nasce dela fecha a linha quando terminar. Depois do segredo: só quem o tem
+// escreve em `cron_execucoes`.
+app.use(contextoDeCron)
 
 // ─── Jobs de ingestão ───────────────────────────────────────────────────────
 

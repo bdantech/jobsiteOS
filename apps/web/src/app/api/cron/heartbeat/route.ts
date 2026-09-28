@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { autorizarCron } from '../auth'
+import { comRegistro } from '../registro'
 
 /**
  * Cron plumbing, intentionally doing no real work yet.
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic'
 // node:crypto (timing-safe compare) is not available on the edge runtime.
 export const runtime = 'nodejs'
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function executar(request: Request): Promise<NextResponse> {
   const auth = autorizarCron(request)
 
   if (!auth.ok) {
@@ -34,6 +35,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     executadoEm: new Date().toISOString(),
   })
 }
+
+export const GET = comRegistro(executar)
 
 // Vercel Cron issues GET. POST is here so the same job can be triggered manually
 // (curl with the bearer secret) without a second, differently-guarded route.

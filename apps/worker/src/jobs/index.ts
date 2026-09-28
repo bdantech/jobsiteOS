@@ -42,6 +42,7 @@ import {
   gerarReportSemanal, materializarSeriesReport, type OpcoesReport,
 } from './reports/semanal.js'
 import { distribuirSdrJob, slaLeadsJob } from './comercial/distribuir.js'
+import { assumirExecucaoCron, encerrarExecucaoCron } from '../cron-execucao.js'
 import { gerarPitchLead } from './comercial/pitch.js'
 import {
   atualizarFunilFornecedores,
@@ -416,6 +417,7 @@ function dispararAvulso(tipo: TipoJob, trabalho: (client: pg.Client) => Promise<
   const id = randomUUID()
   reservar(tipo, id)
   avulsos.set(id, { id, tipo, status: 'executando', iniciado_em: new Date().toISOString() })
+  assumirExecucaoCron(id)
 
   void (async () => {
     const client = await sessaoDedicada()
@@ -427,6 +429,7 @@ function dispararAvulso(tipo: TipoJob, trabalho: (client: pg.Client) => Promise<
         terminado_em: new Date().toISOString(),
         resultado,
       })
+      await encerrarExecucaoCron(id, 'concluida')
     } catch (erro) {
       logger.error({ tipo, id, erro: String(erro) }, 'Job avulso falhou.')
       avulsos.set(id, {
@@ -435,6 +438,7 @@ function dispararAvulso(tipo: TipoJob, trabalho: (client: pg.Client) => Promise<
         terminado_em: new Date().toISOString(),
         erro: String(erro),
       })
+      await encerrarExecucaoCron(id, 'falhou', erro)
     } finally {
       await client.end().catch(() => undefined)
       emExecucao.delete(tipo)

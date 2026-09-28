@@ -132,6 +132,43 @@ export function proximaExecucao(expressao: string, agora: Date): Date | null {
   return null
 }
 
+/**
+ * A última vez que a expressão disparou, em UTC, em `agora` ou antes — o espelho de
+ * `proximaExecucao`. É o que o monitor compara com os disparos registrados: um horário
+ * da agenda que passou sem linha nenhuma é a rotina que não rodou.
+ */
+export function execucaoAnterior(expressao: string, agora: Date): Date | null {
+  const campos = parseCron(expressao)
+
+  // O minuto cheio de `agora`, que ainda conta: 10:00:40 é o disparo das 10:00.
+  const d = new Date(
+    Date.UTC(
+      agora.getUTCFullYear(),
+      agora.getUTCMonth(),
+      agora.getUTCDate(),
+      agora.getUTCHours(),
+      agora.getUTCMinutes(),
+    ),
+  )
+
+  const limite = new Date(d.getTime() - 5 * 366 * 24 * 60 * 60 * 1000)
+
+  while (d > limite) {
+    if (!diaCorresponde(campos, d)) {
+      // Pula para o último minuto do dia anterior.
+      d.setUTCHours(0, 0, 0, 0)
+      d.setUTCMinutes(-1)
+      continue
+    }
+    if (campos.horas.includes(d.getUTCHours()) && campos.minutos.includes(d.getUTCMinutes())) {
+      return d
+    }
+    d.setUTCMinutes(d.getUTCMinutes() - 1)
+  }
+
+  return null
+}
+
 export type Cadencia = 'diaria' | 'semanal' | 'mensal' | 'outra'
 
 export interface DescricaoCron {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { autorizarCron } from '../auth'
+import { comRegistro } from '../registro'
 import { dispararJob } from '@/lib/mercado/worker'
 
 /**
@@ -25,7 +26,7 @@ export const dynamic = 'force-dynamic'
 // node:crypto (timing-safe secret compare, in ../auth) is not on the edge runtime.
 export const runtime = 'nodejs'
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function executar(request: Request): Promise<NextResponse> {
   const auth = autorizarCron(request)
   if (!auth.ok) {
     // No detail: an unauthorised caller learns nothing about why.
@@ -50,6 +51,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     disparadoEm: new Date().toISOString(),
   })
 }
+
+export const GET = comRegistro(executar)
 
 // Vercel Cron issues GET. POST exists so the same job can be fired by hand with
 // the bearer secret, without a second, differently-guarded route.
