@@ -66,17 +66,25 @@ export async function enfileirarLigacao(
   }
 }
 
+/**
+ * O que o `DELETE` respondeu. A Ana: `200` antes de discar, `409` depois (a ligação
+ * acontece e o `ligacao.encerrada` vem normalmente), `404` quando ela não conhece o id.
+ */
+export type CancelamentoNaAna = 'cancelada' | 'ja_discou' | 'nao_existe' | 'erro'
+
 /** `DELETE /api/ligacoes/{id}` — só funciona enquanto ninguém discou. */
-export async function cancelarLigacao(cfg: VozConfigurada, ligacaoId: string): Promise<boolean> {
+export async function cancelarLigacao(cfg: VozConfigurada, ligacaoId: string): Promise<CancelamentoNaAna> {
   try {
     await requisitarJson(`${cfg.url}/api/ligacoes/${ligacaoId}`, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${cfg.token}` },
       tentativas: 1,
     })
-    return true
-  } catch {
-    return false
+    return 'cancelada'
+  } catch (erro) {
+    if (erro instanceof HttpError && erro.status === 409) return 'ja_discou'
+    if (erro instanceof HttpError && erro.status === 404) return 'nao_existe'
+    return 'erro'
   }
 }
 

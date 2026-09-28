@@ -132,7 +132,9 @@ export function traduzirPedido(
       empresa: ctx.empresa,
       briefing: ctx.motivo,
       identificacao: ctx.identificacao ?? 'se_perguntada',
-      ...(ctx.pedido_v1 ? { oferta: ctx.pedido_v1.oferta } : {}),
+      // Oferta SÓ no objetivo de oferta: a Ana recusa com 422 qualquer outro objetivo que a
+      // traga, para não falar valores numa ligação que não é sobre eles.
+      ...(ctx.objetivo === 'ofertar_antecipacao' && ctx.pedido_v1 ? { oferta: ctx.pedido_v1.oferta } : {}),
       ...(ctx.janelas?.length ? { janelas: ctx.janelas } : {}),
     },
   }

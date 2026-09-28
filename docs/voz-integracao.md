@@ -25,8 +25,9 @@ Daqui sai o pedido; de lá volta um webhook assinado.
 > - **Nada é descartado no webhook:** desfecho ou status fora da lista são aceitos (desfecho
 >   vira `desconhecido`, o cru fica em `resultado`), o corpo cru vai para a RPC, e `links`,
 >   `transcricao`, `custo_centavos` e `duracao_s` ganharam coluna — o botão "Ouvir" funciona.
-> - **Ligação órfã:** `enviada` sem resultado há mais de `voz_timeout_minutos` vira `falhou`
->   (`/api/cron/voz-varrer-orfas`) e libera a nota; se o resultado chegar depois, reabre.
+> - **Ligação órfã:** discada e sem resultado há mais de `voz_timeout_minutos` vira `falhou`
+>   (`/api/cron/voz-varrer-orfas`) e libera a nota; se o resultado chegar depois, reabre. A
+>   ainda não discada segue a regra da fila, abaixo (0274).
 > - **Cancelar:** a tela cancela do nosso lado (`app_voz_cancelar`) e o worker tenta o
 >   `DELETE` na Ana.
 > - **Versão da Ana:** o worker pergunta `GET /api/versao` (404 = v1) e grava em
@@ -35,6 +36,29 @@ Daqui sai o pedido; de lá volta um webhook assinado.
 > - **Desfechos estruturados** (`indicou_outro_contato`, `agendar_retorno`,
 >   `reuniao_agendada`) são consumidos pelo mandato: contato novo registrado, retorno anotado,
 >   janela confirmada vira reunião.
+
+> ### A v2 real (resposta da Ana, 28/09/2026)
+>
+> - **No ar**, com os quatro objetivos. `GET /api/versao` responde `2` e a lista `objetivos`;
+>   o JobsiteOS só manda o que estiver nela.
+> - **A fila é uma ligação por vez**, ~3 min cada, só das 9h às 18h em dias úteis. Por isso:
+>   - o prazo de `voz_timeout_minutos` conta da **discagem** (`ligacao.iniciada`, gravado em
+>     `voz_ligacoes.iniciada_em`, 0274), não da entrada na fila;
+>   - ligação não discada até o fim do expediente em que devia ser (`fimDoExpedienteDaVoz`) é
+>     cancelada na Ana pela varredura (`DELETE`), e só vira falha se ela confirmar (`200`/`404`);
+>   - as janelas de uma ligação de agendamento ficam reservadas até esse mesmo instante, e só
+>     são oferecidas janelas que começam depois dele — a Ana confere o `expira_em` na hora.
+>   O `ligacao.iniciada` é melhor esforço (sem reenvio); o `ligacao.encerrada` é durável.
+> - **`oferta` só em `ofertar_antecipacao`**: com outro objetivo a Ana devolve 422.
+> - **`voz_conta_id` é o nome da voz** do GPT-Live (`bossa`, a padrão, `tempo`, `marin`,
+>   `cedar`, `vale`…). Vazio ou desconhecido cai na `bossa`.
+> - **`custo.valor_brl` vem nulo** até a Ana ter a tarifa por minuto; os `minutos` vêm. Enquanto
+>   isso, o orçamento fica com a estimativa da ferramenta `ligar` (`precos.ferramentas_centavos`).
+> - **Transferência ao vivo desligada** até a Ana ter o número de destino: ela encerra com
+>   `transferido_humano`, e o mandato escala.
+> - **Teste de payload: `POST /api/ligacoes?validar=1`**, que valida sem ligar. Um teste da
+>   v2 com o telefone de exemplo do contrato ligou para uma pessoa de verdade — ligação real,
+>   só para número nosso.
 
 ---
 

@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { AlertTriangle, ArrowLeft, Camera, Info, Save } from 'lucide-react'
 import {
   LIMITES_AGENTE_PADRAO,
+  VOZES_ANA,
+  VOZ_ANA_LABELS,
   escopoSchema,
   lerLimitesAgente,
   personaSchema,
@@ -542,15 +544,30 @@ export function PersonaForm({
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="p-voz">Conta de voz (Ana)</Label>
-            <Input
-              id="p-voz"
-              value={r.voz_conta_id}
-              maxLength={120}
-              onChange={(e) => set('voz_conta_id', e.target.value)}
-              placeholder="Identificador da persona na Ana"
-            />
-            <p className="text-xs text-muted-foreground">Sem conta de voz, o agente não liga — só escreve.</p>
+            <Label htmlFor="p-voz">Voz nas ligações (Ana)</Label>
+            <Select
+              value={r.voz_conta_id || NENHUM}
+              onValueChange={(v) => set('voz_conta_id', v === NENHUM ? '' : v)}
+            >
+              <SelectTrigger id="p-voz">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NENHUM}>Padrão da Ana (bossa)</SelectItem>
+                {VOZES_ANA.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {VOZ_ANA_LABELS[v]}
+                  </SelectItem>
+                ))}
+                {/* Valor antigo, fora do catálogo: continua visível para não sumir ao salvar. */}
+                {r.voz_conta_id && !(VOZES_ANA as readonly string[]).includes(r.voz_conta_id) ? (
+                  <SelectItem value={r.voz_conta_id}>{r.voz_conta_id} (fora do catálogo: a Ana usa a padrão)</SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              É o nome da voz no catálogo da Ana. O agente se apresenta com o nome de exibição da persona.
+            </p>
           </div>
 
           <CaixaEmailCampo

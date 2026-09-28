@@ -151,3 +151,39 @@ export function rotuloDaJanela(i: Intervalo, tz: string): string {
   const p = partesNoFuso(i.inicio, tz)
   return `${dia} às ${p.hora}h${p.minuto ? String(p.minuto).padStart(2, '0') : ''}`
 }
+
+/**
+ * O EXPEDIENTE DA ANA: ela disca uma ligação por vez, das 9h às 18h, em dias úteis — e a
+ * fila só anda nesse horário (resposta da Ana à v2, 28/09/2026). Uma ligação enfileirada
+ * às 17h40 de sexta é discada na segunda às 9h.
+ */
+export const EXPEDIENTE_DA_ANA: HorarioComercial = {
+  hora_inicio: 9,
+  hora_fim: 18,
+  dias_semana: [1, 2, 3, 4, 5],
+  timezone: 'America/Sao_Paulo',
+}
+
+/**
+ * ATÉ QUANDO UMA LIGAÇÃO ENFILEIRADA AGORA AINDA DEVE SER DISCADA: o fim do expediente da
+ * Ana no primeiro dia útil que ainda tenha pelo menos `folgaMin` de fila pela frente.
+ *
+ * Serve a duas coisas que precisam do mesmo instante:
+ *   • a RESERVA das janelas de uma ligação de agendamento dura até aqui. A Ana confere o
+ *     `expira_em` de cada janela na hora de oferecer, então uma reserva de uma hora morria
+ *     antes de ela discar sempre que a fila tinha mais de vinte ligações ou virava a noite;
+ *   • a VARREDURA desiste da ligação que não foi discada até aqui: cancela na Ana e devolve
+ *     o mandato ao agente.
+ */
+export function fimDoExpedienteDaVoz(agora: Date, folgaMin = 60, horario: HorarioComercial = EXPEDIENTE_DA_ANA): Date {
+  const hoje = partesNoFuso(agora, horario.timezone)
+  for (let d = 0; d < 15; d++) {
+    const base = new Date(Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia + d, 12))
+    const pd = partesNoFuso(base, horario.timezone)
+    if (!horario.dias_semana.includes(pd.diaSemana)) continue
+    const fecha = instanteNoFuso(pd.ano, pd.mes, pd.dia, horario.hora_fim, 0, horario.timezone)
+    if (fecha.getTime() - agora.getTime() >= folgaMin * 60_000) return fecha
+  }
+  // Inalcançável com um dia útil na semana; o fallback só evita um `Date` inválido.
+  return new Date(agora.getTime() + 24 * 3_600_000)
+}

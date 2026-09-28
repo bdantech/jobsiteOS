@@ -422,6 +422,21 @@ export const OBJETIVO_LIGACAO_LABELS: Record<ObjetivoLigacao, string> = {
   reativar: 'Reativar cliente',
 }
 
+/**
+ * AS VOZES DA ANA. `voz_conta_id` não é um cadastro do lado dela: é o NOME da voz do
+ * GPT-Live (resposta da Ana à v2, 28/09/2026). Nome desconhecido não derruba a ligação —
+ * cai na voz padrão dela, `bossa`, e fica registrado. Vazio também é `bossa`.
+ */
+export const VOZES_ANA = ['bossa', 'tempo', 'marin', 'cedar', 'vale'] as const
+export const VOZ_ANA_PADRAO = 'bossa'
+export const VOZ_ANA_LABELS: Record<(typeof VOZES_ANA)[number], string> = {
+  bossa: 'bossa — feminina, português do Brasil (padrão da Ana)',
+  tempo: 'tempo',
+  marin: 'marin',
+  cedar: 'cedar',
+  vale: 'vale',
+}
+
 /** O agente dono deste tipo de mandato fala como SDR (reunião) ou como originador (NF)? */
 export function tipoVendedorDoMandato(tipo: TipoMandato): 'sdr' | 'originador' {
   return tipo === 'originacao_nf' ? 'originador' : 'sdr'

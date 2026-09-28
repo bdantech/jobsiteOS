@@ -53,12 +53,15 @@ export type ResultadoDoWebhook =
  * qualquer efeito, e o reenvio para ali sem duplicar ação, evento ou reunião.
  */
 export async function registrarResultadoDaLigacao(corpo: unknown): Promise<ResultadoDoWebhook> {
+  const evento = corpo && typeof corpo === 'object' ? (corpo as Record<string, unknown>).evento : null
+  if (evento === 'ligacao.iniciada') return registrarDiscagem(corpo as Record<string, unknown>)
+
   const lido = resultadoLigacaoSchema.safeParse(corpo)
   if (!lido.success) {
     // Corpo que não entendemos não vai virar retentativa eterna do outro lado.
     return { ok: false, erro: lido.error.issues.map((i) => i.message).join('; '), recusar: true }
   }
-  // Outro evento (a v2 pode avisar "ligação iniciada"): recebido, nada a gravar ainda.
+  // Evento que ainda não conhecemos: recebido, nada a gravar.
   if (lido.data.evento !== 'ligacao.encerrada') {
     logger.info({ evento: lido.data.evento, id_externo: lido.data.id_externo }, 'Evento de voz ignorado.')
     return { ok: true, access_key: lido.data.id_externo, status: lido.data.status }
@@ -96,4 +99,34 @@ export async function registrarResultadoDaLigacao(corpo: unknown): Promise<Resul
     'Resultado da ligação registrado.',
   )
   return { ok: true, access_key: lido.data.id_externo, status: lido.data.status }
+}
+
+/**
+ * `ligacao.iniciada` (v2): a Ana discou. É o instante do qual a varredura conta o
+ * `voz_timeout_minutos` (0274) — antes dele a ligação está na fila dela, que anda uma por
+ * vez, e esperar não é sintoma de nada.
+ *
+ * O corpo deste evento é menor que o do resultado (`ligacao_id`, `telefone`, `objetivo`,
+ * `iniciada_em`, e talvez o `id_externo`), então não passa pelo schema do resultado: a
+ * linha é achada por qualquer um dos dois ids. É melhor esforço do lado dela, sem reenvio;
+ * do nosso, um evento sem linha correspondente responde 200 do mesmo jeito — recusar não
+ * traria o evento de volta.
+ */
+async function registrarDiscagem(corpo: Record<string, unknown>): Promise<ResultadoDoWebhook> {
+  const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  const idExterno = texto(corpo.id_externo)
+  const ligacaoId = texto(corpo.ligacao_id)
+  const quando = texto(corpo.iniciada_em)
+  const instante = quando && Number.isFinite(Date.parse(quando)) ? new Date(quando) : new Date()
+  if (!idExterno && !ligacaoId) return { ok: false, erro: 'ligacao.iniciada sem id_externo nem ligacao_id', recusar: true }
+
+  const { rows } = await pool.query<{ id_externo: string }>(
+    `update voz_ligacoes set iniciada_em = coalesce(iniciada_em, $3)
+      where status = 'enviada'
+        and (($1::text is not null and id_externo = $1) or ($2::text is not null and ligacao_id = $2))
+      returning id_externo`,
+    [idExterno, ligacaoId, instante.toISOString()],
+  )
+  if (!rows.length) logger.info({ id_externo: idExterno, ligacao_id: ligacaoId }, 'ligacao.iniciada sem ligação enviada correspondente.')
+  return { ok: true, access_key: rows[0]?.id_externo ?? idExterno ?? ligacaoId ?? '', status: 'em_curso' }
 }

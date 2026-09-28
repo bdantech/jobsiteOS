@@ -13666,6 +13666,7 @@ export type Database = {
           fornecedor_cnpj: string | null
           id: string
           id_externo: string
+          iniciada_em: string | null
           ligacao_id: string | null
           links: Json | null
           mandato_id: string | null
@@ -13704,6 +13705,7 @@ export type Database = {
           fornecedor_cnpj?: string | null
           id?: string
           id_externo: string
+          iniciada_em?: string | null
           ligacao_id?: string | null
           links?: Json | null
           mandato_id?: string | null
@@ -13742,6 +13744,7 @@ export type Database = {
           fornecedor_cnpj?: string | null
           id?: string
           id_externo?: string
+          iniciada_em?: string | null
           ligacao_id?: string | null
           links?: Json | null
           mandato_id?: string | null
@@ -17362,6 +17365,7 @@ export type Database = {
           fornecedor_cnpj: string | null
           id: string
           id_externo: string
+          iniciada_em: string | null
           ligacao_id: string | null
           links: Json | null
           mandato_id: string | null
@@ -17420,6 +17424,7 @@ export type Database = {
           fornecedor_cnpj: string | null
           id: string
           id_externo: string
+          iniciada_em: string | null
           ligacao_id: string | null
           links: Json | null
           mandato_id: string | null
@@ -22722,6 +22727,7 @@ export type Database = {
           fornecedor_cnpj: string | null
           id: string
           id_externo: string
+          iniciada_em: string | null
           ligacao_id: string | null
           links: Json | null
           mandato_id: string | null

@@ -1,4 +1,10 @@
-import { rotuloDaJanela, escolherCloser, janelasLivres, type Intervalo } from '../../../../../packages/core/src/agentes/agenda.js'
+import {
+  escolherCloser,
+  fimDoExpedienteDaVoz,
+  janelasLivres,
+  rotuloDaJanela,
+  type Intervalo,
+} from '../../../../../packages/core/src/agentes/agenda.js'
 import type { IdFerramenta } from '../../../../../packages/core/src/agentes/ferramentas.js'
 import type { ResultadoFerramenta } from '../../../../../packages/core/src/agentes/loop.js'
 import { violaIdentificacao } from '../../../../../packages/core/src/agentes/prompt.js'
@@ -566,10 +572,16 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
    * ficam RESERVADAS para esta ligação. Sem isto toda ligação de agendamento morria em
    * `falta_janelas` no adapter.
    *
-   * A reserva dura a fila mais o tempo que esperamos a Ana (`voz_timeout_minutos`): a
-   * reserva de conversa (`reserva_janela_min`) cobre o modelo oferecer no chat, não uma
-   * ligação que ainda vai ser discada. Quando o resultado volta, as não escolhidas são
-   * devolvidas e a escolhida é reconferida antes de virar reunião (voz-mandato.ts).
+   * A reserva dura até o FIM DO EXPEDIENTE DA ANA em que ela deve discar
+   * (`fimDoExpedienteDaVoz`). A fila dela é uma ligação por vez, só das 9h às 18h em dia
+   * útil, e ela confere o `expira_em` de cada janela na hora de oferecer: uma reserva de
+   * uma hora morria antes da discagem sempre que a fila passava de vinte ligações ou virava
+   * a noite. Pelo mesmo motivo as janelas começam DEPOIS desse instante — uma janela de
+   * hoje às 16h, oferecida numa ligação discada às 17h, já seria passado.
+   *
+   * Quando o resultado volta, as não escolhidas são devolvidas e a escolhida é reconferida
+   * antes de virar reunião (voz-mandato.ts). Ligação não discada até o fim do expediente é
+   * cancelada na Ana pela varredura (varrer-orfas.ts), e as reservas vencem junto.
    *
    * Na v1 nada é reservado: o adapter recusa o objetivo logo abaixo, com o erro dele.
    */
@@ -578,10 +590,12 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
   let closerDaLigacao: string | null = null
   if (objetivo === 'agendar_reuniao' && ctx.versaoVoz === 'v2') {
     const g = ctx.cfg.geral
-    const r = await reservarJanelasDoCloser(ctx, 3, g.reserva_janela_min + g.voz_timeout_minutos)
+    const limite = fimDoExpedienteDaVoz(ctx.agora)
+    const minutos = Math.ceil((limite.getTime() - ctx.agora.getTime()) / 60_000)
+    // Antecedência = até o limite, mais o buffer de reunião: a janela começa depois dele.
+    const r = await reservarJanelasDoCloser(ctx, 3, minutos, minutos + g.reuniao_buffer_min)
     if (!r.ok) return falha(`Não dá para ligar para agendar: ${r.erro}`)
-    const expiraEm = new Date(Date.now() + (g.reserva_janela_min + g.voz_timeout_minutos) * 60_000).toISOString()
-    janelas = r.janelas.map((j) => ({ id: j.reserva_id, inicio: j.inicio, fim: j.fim, expira_em: expiraEm }))
+    janelas = r.janelas.map((j) => ({ id: j.reserva_id, inicio: j.inicio, fim: j.fim, expira_em: limite.toISOString() }))
     rotulos = r.janelas.map((j) => j.rotulo)
     closerDaLigacao = r.closerNome
   }
@@ -679,7 +693,13 @@ type JanelasDoCloser =
  * `agendar_reuniao`): duas contas para "quando o closer está livre" divergiriam no
  * primeiro buffer que alguém mudasse.
  */
-async function reservarJanelasDoCloser(ctx: ContextoExecucao, quantas: number, minutos: number): Promise<JanelasDoCloser> {
+async function reservarJanelasDoCloser(
+  ctx: ContextoExecucao,
+  quantas: number,
+  minutos: number,
+  /** Nenhuma janela começa antes disto (a partir de agora). Omitido: o padrão do core, 2 h. */
+  antecedenciaMin?: number,
+): Promise<JanelasDoCloser> {
   const g = ctx.cfg.geral
   const candidatos = [ctx.agente.closer_id, ctx.agente.closer_substituto_id].filter((x): x is string => !!x)
   if (!candidatos.length) return { ok: false, erro: 'O agente não tem closer designado.' }
@@ -711,6 +731,7 @@ async function reservarJanelasDoCloser(ctx: ContextoExecucao, quantas: number, m
       reservas: (reservas ?? []).map((r) => ({ inicio: new Date(r.inicio), fim: new Date(r.fim), expiraEm: new Date(r.expira_em), mandatoId: r.mandato_id })),
       mandatoId: ctx.mandato.id,
       quantas,
+      antecedenciaMinimaMin: antecedenciaMin,
     })
     return { id, ausenteAte: c.ausente_ate, janelas }
   }

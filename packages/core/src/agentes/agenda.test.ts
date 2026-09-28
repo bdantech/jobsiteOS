@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { escolherCloser, instanteNoFuso, janelasLivres, rotuloDaJanela, type ParametrosJanelas } from './agenda.ts'
+import {
+  escolherCloser,
+  fimDoExpedienteDaVoz,
+  instanteNoFuso,
+  janelasLivres,
+  rotuloDaJanela,
+  type ParametrosJanelas,
+} from './agenda.ts'
 
 const TZ = 'America/Sao_Paulo'
 // Segunda 28/09/2026, 8h em SP.
@@ -94,4 +101,15 @@ test('fim de semana não entra', () => {
   const j = janelasLivres(params({ agora: sextaAs17, quantas: 1 }))
   assert.equal(j[0]!.inicio.toISOString(), instanteNoFuso(2026, 10, 5, 9, 0, TZ).toISOString())
   assert.match(rotuloDaJanela(j[0]!, TZ), /segunda/)
+})
+
+test('fim do expediente da Ana: hoje às 18h, ou o próximo dia útil quando falta menos de uma hora', () => {
+  // Segunda, 28/09/2026, 10h em São Paulo → segunda 18h.
+  assert.equal(fimDoExpedienteDaVoz(new Date('2026-09-28T13:00:00Z')).toISOString(), '2026-09-28T21:00:00.000Z')
+  // Segunda 17h30: meia hora de fila não basta → terça 18h.
+  assert.equal(fimDoExpedienteDaVoz(new Date('2026-09-28T20:30:00Z')).toISOString(), '2026-09-29T21:00:00.000Z')
+  // Sexta 17h40 → segunda 18h (o fim de semana não conta).
+  assert.equal(fimDoExpedienteDaVoz(new Date('2026-10-02T20:40:00Z')).toISOString(), '2026-10-05T21:00:00.000Z')
+  // Sábado → segunda 18h.
+  assert.equal(fimDoExpedienteDaVoz(new Date('2026-10-03T15:00:00Z')).toISOString(), '2026-10-05T21:00:00.000Z')
 })
