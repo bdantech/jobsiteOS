@@ -255,7 +255,8 @@ async function simularAtualizacao(input: z.infer<typeof simularAtualizacaoToolSc
       .from('cobranca_titulos_abertos')
       .select('id, valor_face, vencimento, numero')
       .eq('sacado_matriz_cnpj', g.matriz)
-      .lt('vencimento', dataBase)
+      // em atraso = passada a liquidação esperada (0275), não só o vencimento
+      .eq('em_atraso', true)
     if (error) throw new Error(error.message)
     titulos = (data ?? []).map((t) => ({ id: t.id!, valor_face: Number(t.valor_face), vencimento: t.vencimento!, descricao: t.numero }))
     rotulo = g.nome ?? g.matriz

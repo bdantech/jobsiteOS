@@ -14824,6 +14824,7 @@ export type Database = {
           desembolsado_em: string | null
           devedor_terceiro: boolean | null
           dias_atraso: number | null
+          em_atraso: boolean | null
           emissao: string | null
           externo_id: string | null
           id: string | null
@@ -14831,6 +14832,7 @@ export type Database = {
           limite_credito_vigente: number | null
           limite_documento: string | null
           limite_expira_em: string | null
+          liquidacao_esperada: string | null
           liquidacao_fonte: string | null
           liquidacao_pagamentos: Json
           migrado: boolean | null
@@ -16923,6 +16925,7 @@ export type Database = {
         Returns: string[]
       }
       app__cobranca_ingerir_titulos: { Args: { p: Json }; Returns: number }
+      app__cobranca_liquidacao_esperada: { Args: { p_vencimento: string }; Returns: string }
       app__cobranca_projetar_titulos: { Args: never; Returns: Json }
       app__cobranca_status_cedido: {
         Args: { p_status: string }

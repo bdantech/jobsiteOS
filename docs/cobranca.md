@@ -231,6 +231,26 @@ A **certidão de protesto entra sozinha no item (g) do dossiê** — é por isso
 antes de sinistrar quase sempre compensa. A **retirada é obrigatória depois da quitação**
 (`retirar_protesto_ao_quitar`, que só se desliga com justificativa).
 
+## Quando um título está "em atraso"
+
+Não é `vencimento < hoje`. O boleto pago em dia só aparece liquidado no dia útil
+seguinte ao pagamento, e o vencimento em fim de semana ou feriado bancário só é pago no
+primeiro dia útil. Então o título entra na lista de vencidos só **depois** da liquidação
+esperada (0275; `liquidacaoEsperada`/`emAtraso` no core, `app__cobranca_liquidacao_esperada`
+no banco — as duas contas precisam dar o mesmo dia):
+
+| vence | paga | liquida | em atraso a partir de |
+| --- | --- | --- | --- |
+| segunda | segunda | terça | quarta |
+| sábado ou domingo | segunda | terça | quarta |
+| sexta | sexta | segunda | terça |
+
+Os dias de atraso continuam contados do vencimento original, e nenhum prazo muda: o
+relógio da apólice e os juros contam do vencimento (cl. 16900.20), e a entrada em
+cobrança continua em D+15. O que muda é quem aparece como vencido — na nova cobrança, no
+relógio do painel (o worker só cria prazo para título em atraso), na reconciliação, no
+Company 360 e nas tools.
+
 ## A lacuna de dados da produção
 
 > **Resolvida em 28/09/2026 (0273).** A produção respondeu com

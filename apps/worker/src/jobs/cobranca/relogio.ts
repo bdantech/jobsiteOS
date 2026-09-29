@@ -1,4 +1,4 @@
-import { hojeSaoPaulo } from '../../../../../packages/core/src/cobranca/datas.js'
+import { emAtraso, hojeSaoPaulo } from '../../../../../packages/core/src/cobranca/datas.js'
 import {
   alertasDoDia,
   calcularPrazosApolice,
@@ -156,7 +156,9 @@ export async function relogioApolice(): Promise<ResultadoRelogio> {
   const decisaoDo = new Map((insolvencias ?? []).map((i) => [i.sacado_matriz_cnpj, i.data_decisao]))
 
   // ── b) Os prazos dos títulos abertos, cobertos e vencidos ───────────────
-  const vencidos = abertos.filter((t) => t.coberto_apolice && t.vencimento < hoje)
+  // Prazo só para título EM ATRASO (0275): o de ontem, ou o de sábado, pode estar pago e
+  // compensando. As datas do prazo continuam contando do vencimento original.
+  const vencidos = abertos.filter((t) => t.coberto_apolice && emAtraso(t.vencimento, hoje))
   const tituloPorId = new Map(abertos.map((t) => [t.id, t]))
 
   const ativos = await todasAsPaginas<{ titulo_id: string; cobranca_id: string }>((de, ate) =>

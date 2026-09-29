@@ -292,7 +292,6 @@ function Montagem({
   // a pessoa entender o tamanho do grupo — mas não disputam a atenção com o que importa.
   const [mostrarAVencer, setMostrarAVencer] = React.useState(false)
   const [confirmoEmDia, setConfirmoEmDia] = React.useState(false)
-  const hoje = hojeSaoPaulo()
   const emDia = reconciliacao?.situacao === 'em_dia'
 
   const [escopo, setEscopo] = React.useState<EscopoNotificacao>('sacado')
@@ -337,7 +336,9 @@ function Montagem({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [titulos, tabela.data, juros, multa, honorarios, indice, proRata, dataBase])
 
-  const vencido = (t: TituloAberto) => Boolean(t.vencimento && t.vencimento < hoje)
+  // Em atraso só depois da liquidação esperada (0275): o boleto de sábado é pago na
+  // segunda e compensa na terça — antes disso ele não é "vencido", é "compensando".
+  const vencido = (t: TituloAberto) => t.em_atraso === true
   /*
    * Grupo em dia pela plataforma (0270): o limite consumido já não cobre os vencidos,
    * então o sacado provavelmente pagou — a produção só não marcou a liquidação. Os

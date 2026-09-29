@@ -103,3 +103,45 @@ export function somarDiasUteis(data: string, dias: number): string {
   }
   return atual
 }
+
+/** O próprio dia, se for útil; senão o primeiro dia útil depois dele. */
+export function proximoDiaUtil(data: string): string {
+  let atual = data.slice(0, 10)
+  while (!ehDiaUtil(atual)) atual = somarDiasCorridos(atual, 1)
+  return atual
+}
+
+// ─── Quando um título passa a estar EM ATRASO ───────────────────────────────
+
+/**
+ * O dia em que um boleto pago em dia aparece como liquidado: o sacado paga no vencimento
+ * — ou no primeiro dia útil depois dele, se o vencimento cai em fim de semana ou
+ * feriado bancário — e o banco compensa no dia útil seguinte.
+ *
+ *   vence segunda  → paga segunda → liquida terça
+ *   vence sábado   → paga segunda → liquida terça
+ *   vence sexta    → paga sexta   → liquida segunda
+ *
+ * O espelho em SQL é `app__cobranca_liquidacao_esperada` (0274): as telas leem da view,
+ * o worker e as tools leem daqui, e os dois precisam dar o mesmo dia.
+ */
+export function liquidacaoEsperada(vencimento: string): string {
+  return somarDiasUteis(proximoDiaUtil(vencimento), 1)
+}
+
+/**
+ * Em atraso só DEPOIS do dia da liquidação esperada. Antes disso o título pode estar
+ * pago e só não ter compensado — e uma lista de "vencidos" que mostra o boleto de sábado
+ * na segunda é uma lista que ensina a desconfiar dela.
+ *
+ * Isto decide o que as LISTAS chamam de vencido. Não mexe em prazo nenhum: o relógio da
+ * apólice e os juros continuam contando do vencimento original (cl. 16900.20).
+ */
+export function emAtraso(vencimento: string, hoje: string): boolean {
+  return hoje > liquidacaoEsperada(vencimento)
+}
+
+/** Dias de atraso contados do vencimento — mas só quando o título já está em atraso. */
+export function diasEmAtraso(vencimento: string, hoje: string): number {
+  return emAtraso(vencimento, hoje) ? diasEntreDatas(vencimento, hoje) : 0
+}
