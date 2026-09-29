@@ -27,8 +27,9 @@ export class PushError extends Error {
  * through `unknown` — an `any` leaking out of here would silently disable
  * type-checking at every call site.
  *
- * app.config.ts only sets `extra.eas.projectId` when EAS_PROJECT_ID is exported.
- * Without it Expo cannot mint a push token at all, which is a build/config fact,
+ * `extra.eas.projectId` is committed in app.json (project @oneos/jobsiteos). A
+ * config without it — a fork, or someone who deleted it — cannot mint a push
+ * token at all, which is a build/config fact,
  * not a user error: the UI says so and disables the switch instead of throwing.
  */
 function lerProjectId(): string | null {

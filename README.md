@@ -127,10 +127,14 @@ caller themselves.
 
 ```bash
 cd apps/mobile
-eas init            # writes the EAS project id — Expo push will NOT deliver without it
-eas build --profile preview --platform ios
-eas submit
+eas build --profile production-simulator --platform ios   # abre no simulador ANTES de ir à loja
+eas build --profile production --platform ios --auto-submit
 ```
+
+O projeto EAS é o `@oneos/jobsiteos` (id no `app.json`, conta `oneos`, a mesma do Onepay). As
+`EXPO_PUBLIC_*` de produção não vêm do `.env`: ficam no ambiente `production` do EAS
+(`eas env:list --environment production`) e entram no bundle na hora do build. O iOS sai
+como **Unlisted** na App Store — fora da busca, instalado só por link.
 
 **Testing Expo push:** it does not work on the simulator — you need a physical device. Log in on the
 device (which registers its token), grab the token, and send a test through

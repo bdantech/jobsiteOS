@@ -28,7 +28,7 @@ export type PushRegistrationStatus =
   | 'simulador'
   /** The user said no (or never answered). Not an error — do not nag. */
   | 'sem-permissao'
-  /** EAS_PROJECT_ID was never set, so Expo cannot attribute a token. */
+  /** app.json has no `extra.eas.projectId`, so Expo cannot attribute a token. */
   | 'sem-projeto'
   /** Network, Expo push service, or our backend rejected it. */
   | 'falha'
@@ -55,8 +55,8 @@ export async function ensureAndroidChannel(): Promise<void> {
 }
 
 /**
- * `extra.eas.projectId`, injected by app.config.ts from EAS_PROJECT_ID. Absent
- * until the operator runs `eas init` — getExpoPushTokenAsync() would throw, so
+ * `extra.eas.projectId`, committed in app.json. Should it ever be missing,
+ * getExpoPushTokenAsync() would throw, so
  * we detect it and degrade to a status instead of crashing the shell.
  */
 function resolveProjectId(): string | null {
