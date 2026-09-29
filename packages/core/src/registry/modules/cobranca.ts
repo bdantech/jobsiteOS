@@ -168,9 +168,9 @@ async function titulosEmAberto(input: z.infer<typeof titulosEmAbertoToolSchema>,
 
   let q = ctx.supabase
     .from('cobranca_titulos_abertos')
-    .select('id, numero, sacado_cnpj, sacado_nome, cedente_nome, vencimento, dias_atraso, valor_face, status_producao, cobranca_ativa_codigo')
+    .select('id, numero, sacado_cnpj, sacado_nome, cedente_nome, vencimento_vigente, dias_atraso, valor_face, status_producao, cobranca_ativa_codigo')
     .eq('sacado_matriz_cnpj', g.matriz)
-    .order('vencimento')
+    .order('vencimento_vigente')
   if (input.atraso_minimo) q = q.gte('dias_atraso', input.atraso_minimo)
   const { data, error } = await q.limit(500)
   if (error) throw new Error(error.message)
@@ -196,7 +196,7 @@ async function titulosEmAberto(input: z.infer<typeof titulosEmAbertoToolSchema>,
       numero: l.numero,
       spe: l.sacado_nome,
       cedente: l.cedente_nome,
-      vencimento: l.vencimento,
+      vencimento: l.vencimento_vigente,
       dias_atraso: l.dias_atraso,
       valor_face: brl(l.valor_face),
       status_producao: l.status_producao,
@@ -253,12 +253,12 @@ async function simularAtualizacao(input: z.infer<typeof simularAtualizacaoToolSc
     if (!g) return { encontrada: false, aviso: `Nenhum título cedido para "${input.construtora}".` }
     const { data, error } = await ctx.supabase
       .from('cobranca_titulos_abertos')
-      .select('id, valor_face, vencimento, numero')
+      .select('id, valor_face, vencimento_vigente, numero')
       .eq('sacado_matriz_cnpj', g.matriz)
       // em atraso = passada a liquidação esperada (0275), não só o vencimento
       .eq('em_atraso', true)
     if (error) throw new Error(error.message)
-    titulos = (data ?? []).map((t) => ({ id: t.id!, valor_face: Number(t.valor_face), vencimento: t.vencimento!, descricao: t.numero }))
+    titulos = (data ?? []).map((t) => ({ id: t.id!, valor_face: Number(t.valor_face), vencimento: t.vencimento_vigente!, descricao: t.numero }))
     rotulo = g.nome ?? g.matriz
   } else {
     return { aviso: 'Informe a cobrança ou a construtora.' }

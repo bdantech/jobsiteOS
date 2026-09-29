@@ -14857,6 +14857,7 @@ export type Database = {
           valor_pago: number | null
           vencimento: string | null
           vencimento_prorrogado: string | null
+          vencimento_vigente: string | null
         }
         Relationships: [
           {

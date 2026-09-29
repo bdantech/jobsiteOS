@@ -245,11 +245,17 @@ no banco — as duas contas precisam dar o mesmo dia):
 | sábado ou domingo | segunda | terça | quarta |
 | sexta | sexta | segunda | terça |
 
-Os dias de atraso continuam contados do vencimento original, e nenhum prazo muda: o
-relógio da apólice e os juros contam do vencimento (cl. 16900.20), e a entrada em
-cobrança continua em D+15. O que muda é quem aparece como vencido — na nova cobrança, no
-relógio do painel (o worker só cria prazo para título em atraso), na reconciliação, no
-Company 360 e nas tools.
+**Qual vencimento (0276):** quem cobra olha o **vigente** (`coalesce(vencimento_prorrogado,
+vencimento)`); o relógio da apólice olha o **original**. Com o original, 71 dos 127 títulos
+"em atraso" de 29/09 eram prorrogações que ainda não tinham vencido na data acordada —
+pelo vigente sobram 56, o número da produção. Então:
+
+- listas, nova cobrança (D+15 incluído), reconciliação, juros, a carta e o snapshot de
+  `cobranca_titulos.vencimento_snapshot` usam o **vigente**;
+- o relógio da apólice (worker e painel) usa `titulos.vencimento`, o **original**: a
+  prorrogação não desloca a data da apólice (cl. 16900.20), e passar de 60 dias corta a
+  cobertura. Por isso um título prorrogado pode estar no relógio sem estar na lista de
+  cobrança — é o caso a olhar com atenção, não um erro.
 
 ## A lacuna de dados da produção
 

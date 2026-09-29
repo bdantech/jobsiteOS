@@ -29,6 +29,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -44,7 +45,6 @@ import {
   buscarReconciliacao,
   buscarTabelaIndices,
   buscarTitulosAbertosDoGrupo,
-  buscarUsuariosAtivos,
   cobrancaKeys,
   type TituloAberto,
 } from './queries'
@@ -69,6 +69,11 @@ const FAIXAS = [
   { id: '91-180', rotulo: '91–180 dias', de: 91, ate: 180 },
   { id: '180+', rotulo: 'mais de 180 dias', de: 181, ate: Number.POSITIVE_INFINITY },
 ] as const
+
+const DESCRICAO_ESCOPO: Record<EscopoNotificacao, string> = {
+  sacado: 'A matriz recebe o consolidado do grupo; cada SPE/filial, só os títulos dela.',
+  sacado_e_cedente: 'Além do sacado, cada cedente recebe a carta dos títulos que cedeu.',
+}
 
 /** O status de liquidação da produção, em português (0273). */
 const STATUS_PRODUCAO_LABELS: Record<string, string> = {
@@ -296,7 +301,6 @@ function Montagem({
 
   const [escopo, setEscopo] = React.useState<EscopoNotificacao>('sacado')
   const [matrizCedente, setMatrizCedente] = React.useState(true)
-  const [responsavel, setResponsavel] = React.useState('')
   const [observacoes, setObservacoes] = React.useState('')
   const [juros, setJuros] = React.useState(String(config.calculo.juros_mora_mes))
   const [multa, setMulta] = React.useState(String(config.calculo.multa_pct))
@@ -307,8 +311,24 @@ function Montagem({
   const [aceitarAgora, setAceitarAgora] = React.useState(false)
   const [criando, setCriando] = React.useState(false)
 
-  const usuarios = useQuery({ queryKey: cobrancaKeys.usuarios(), queryFn: buscarUsuariosAtivos })
   const tabela = useQuery({ queryKey: cobrancaKeys.indices(indice), queryFn: () => buscarTabelaIndices(indice) })
+
+  const parametrosAlterados =
+    (numOuNull(juros) ?? config.calculo.juros_mora_mes) !== config.calculo.juros_mora_mes ||
+    (numOuNull(multa) ?? config.calculo.multa_pct) !== config.calculo.multa_pct ||
+    (numOuNull(honorarios) ?? config.calculo.honorarios_pct) !== config.calculo.honorarios_pct ||
+    indice !== config.calculo.indice ||
+    proRata !== config.calculo.juros_pro_rata ||
+    dataBase !== hojeSaoPaulo()
+
+  function restaurarParametros() {
+    setJuros(String(config.calculo.juros_mora_mes))
+    setMulta(String(config.calculo.multa_pct))
+    setHonorarios(String(config.calculo.honorarios_pct))
+    setIndice(config.calculo.indice)
+    setProRata(config.calculo.juros_pro_rata)
+    setDataBase(hojeSaoPaulo())
+  }
 
   const parametros: ParametrosAtualizacao = {
     juros_mora_mes: numOuNull(juros) ?? config.calculo.juros_mora_mes,
@@ -325,8 +345,13 @@ function Montagem({
     if (!tabela.data || titulos.length === 0) return m
     const r = atualizarDividaCobranca(
       titulos
-        .filter((t) => t.id && t.vencimento)
-        .map((t) => ({ id: t.id!, valor_face: Number(t.saldo_em_aberto ?? t.valor_face ?? 0), vencimento: t.vencimento! })),
+        .filter((t) => t.id && t.vencimento_vigente)
+        // Juros e correção contam do vencimento VIGENTE (0276): é a data que o sacado combinou.
+        .map((t) => ({
+          id: t.id!,
+          valor_face: Number(t.saldo_em_aberto ?? t.valor_face ?? 0),
+          vencimento: t.vencimento_vigente!,
+        })),
       parametros,
       tabela.data,
       dataBase || hojeSaoPaulo(),
@@ -442,7 +467,6 @@ function Montagem({
       titulo_ids: [...selecionados],
       escopo_notificacao: escopo,
       notificar_matriz_cedente: matrizCedente,
-      ...(responsavel ? { responsavel_id: responsavel } : {}),
       juros_mora_mes: parametros.juros_mora_mes,
       multa_pct: parametros.multa_pct,
       honorarios_pct: parametros.honorarios_pct,
@@ -635,7 +659,14 @@ function Montagem({
                         </span>
                       </TableCell>
                       <TableCell className="text-xs">{data(t.emissao)}</TableCell>
-                      <TableCell className="text-xs">{data(t.vencimento)}</TableCell>
+                      <TableCell className="text-xs">
+                        {data(t.vencimento_vigente)}
+                        {t.vencimento_prorrogado ? (
+                          <span className="block text-[10px] text-muted-foreground" title="A apólice conta do original">
+                            original {data(t.vencimento)}
+                          </span>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="text-right text-xs tabular-nums">{t.dias_atraso ?? 0} d</TableCell>
                       <TableCell className="text-right text-xs tabular-nums">
                         {brl(t.saldo_em_aberto ?? t.valor_face)}
@@ -678,68 +709,70 @@ function Montagem({
         </CardContent>
       </Card>
 
-      {/* (c) escopo e parâmetros */}
+      {/* (c) notificação e atualização da dívida */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">3. Escopo, parâmetros e responsável</CardTitle>
+          <CardTitle className="text-base">3. Notificação e atualização da dívida</CardTitle>
+          <CardDescription>
+            Quem recebe a carta e como o valor é atualizado. Você fica como responsável por esta cobrança.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Quem é notificado</Label>
-              <Select value={escopo} onValueChange={(v) => setEscopo(v as EscopoNotificacao)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(ESCOPO_NOTIFICACAO_LABELS) as EscopoNotificacao[]).map((e) => (
-                    <SelectItem key={e} value={e}>
-                      {ESCOPO_NOTIFICACAO_LABELS[e]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <CardContent className="space-y-6">
+          <section className="space-y-3" aria-labelledby="titulo-escopo">
+            <h3 id="titulo-escopo" className="text-sm font-medium">
+              Quem é notificado
+            </h3>
+            <div role="radiogroup" aria-labelledby="titulo-escopo" className="grid gap-3 sm:grid-cols-2">
+              {(Object.keys(ESCOPO_NOTIFICACAO_LABELS) as EscopoNotificacao[]).map((e) => {
+                const ativo = escopo === e
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativo}
+                    onClick={() => setEscopo(e)}
+                    className={cn(
+                      'rounded-md border p-3 text-left transition-colors',
+                      ativo ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:bg-muted/50',
+                    )}
+                  >
+                    <span className="block text-sm font-medium">{ESCOPO_NOTIFICACAO_LABELS[e]}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{DESCRICAO_ESCOPO[e]}</span>
+                  </button>
+                )
+              })}
             </div>
             {escopo === 'sacado_e_cedente' ? (
-              <label className="flex items-start gap-3 text-sm">
-                <Switch checked={matrizCedente} onCheckedChange={setMatrizCedente} />
+              <label className="flex items-start gap-3 rounded-md bg-muted/40 p-3 text-sm">
+                <Switch checked={matrizCedente} onCheckedChange={setMatrizCedente} className="mt-0.5" />
                 <span>
-                  Notificar a matriz do cedente
+                  Consolidar na matriz do cedente
                   <span className="block text-xs text-muted-foreground">
-                    Com a opção ligada, a matriz do cedente recebe o consolidado e cada filial o dela. Desligada,
-                    cada CNPJ cedente recebe só o que cedeu.
+                    Ligado, a matriz do cedente recebe o consolidado e cada filial o dela. Desligado, cada CNPJ
+                    cedente recebe só o que cedeu.
                   </span>
                 </span>
               </label>
             ) : null}
-            <div className="space-y-1">
-              <Label>Responsável</Label>
-              <Select value={responsavel || 'eu'} onValueChange={(v) => setResponsavel(v === 'eu' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="eu">Eu</SelectItem>
-                  {(usuarios.data ?? []).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="obs">Observações</Label>
-              <Textarea id="obs" rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
-            </div>
-          </div>
+          </section>
 
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Parâmetros de atualização da dívida desta cobrança. O padrão das configurações aparece ao lado;
-              mudar aqui não muda o padrão.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
+          <Separator />
+
+          <section className="space-y-3" aria-labelledby="titulo-parametros">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 id="titulo-parametros" className="text-sm font-medium">
+                Atualização da dívida
+              </h3>
+              {parametrosAlterados ? (
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={restaurarParametros}>
+                  Voltar ao padrão
+                </Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">Padrão das configurações; mudar aqui vale só para esta cobrança.</span>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <ParametroNumero rotulo="Juros de mora (% a.m.)" valor={juros} onChange={setJuros} padrao={config.calculo.juros_mora_mes} />
               <ParametroNumero rotulo="Multa (%)" valor={multa} onChange={setMulta} padrao={config.calculo.multa_pct} />
               <ParametroNumero
@@ -762,19 +795,35 @@ function Montagem({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">padrão: {INDICE_COBRANCA_LABELS[config.calculo.indice]}</p>
+                <DicaPadrao mudou={indice !== config.calculo.indice} texto={INDICE_COBRANCA_LABELS[config.calculo.indice]} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="data-base">Data-base</Label>
                 <Input id="data-base" type="date" value={dataBase} onChange={(e) => setDataBase(e.target.value)} />
-                <p className="text-[11px] text-muted-foreground">padrão: hoje</p>
+                <DicaPadrao mudou={dataBase !== hojeSaoPaulo()} texto="hoje" />
               </div>
-              <label className="flex items-center gap-2 pt-6 text-sm">
-                <Switch checked={proRata} onCheckedChange={setProRata} />
-                Juros pro rata die
-              </label>
+              <div className="space-y-1">
+                <Label htmlFor="pro-rata">Contagem dos juros</Label>
+                <div className="flex h-9 items-center gap-2">
+                  <Switch id="pro-rata" checked={proRata} onCheckedChange={setProRata} />
+                  <span className="text-sm">{proRata ? 'Pro rata die' : 'Por mês completo'}</span>
+                </div>
+                <DicaPadrao
+                  mudou={proRata !== config.calculo.juros_pro_rata}
+                  texto={config.calculo.juros_pro_rata ? 'pro rata die' : 'por mês completo'}
+                />
+              </div>
             </div>
-          </div>
+          </section>
+
+          <Separator />
+
+          <section className="space-y-1">
+            <Label htmlFor="obs">
+              Observações <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Textarea id="obs" rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
+          </section>
         </CardContent>
       </Card>
 
@@ -869,11 +918,18 @@ function ParametroNumero({
     <div className="space-y-1">
       <Label htmlFor={id}>{rotulo}</Label>
       <Input id={id} inputMode="decimal" value={valor} onChange={(e) => onChange(e.target.value)} />
-      <p className={cn('text-[11px]', mudou ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
-        padrão: {padrao.toLocaleString('pt-BR')}
-        {mudou ? ' (alterado nesta cobrança)' : ''}
-      </p>
+      <DicaPadrao mudou={mudou} texto={padrao.toLocaleString('pt-BR')} />
     </div>
+  )
+}
+
+/** A mesma linha embaixo de todo parâmetro, para as colunas alinharem — e o âmbar diz o que mudou. */
+function DicaPadrao({ mudou, texto }: { mudou: boolean; texto: string }) {
+  return (
+    <p className={cn('text-[11px]', mudou ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+      padrão: {texto}
+      {mudou ? ' · alterado nesta cobrança' : ''}
+    </p>
   )
 }
 
