@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "jobsiteos",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -20,6 +21,10 @@
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundColor": "#050E40"
+      },
       "package": "com.oneos.jobsiteos",
       "permissions": [
         "POST_NOTIFICATIONS",
@@ -29,6 +34,19 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#050E40",
+          "image": "./assets/images/splash-dot.png",
+          "imageWidth": 22,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#050E40",
+            "image": "./assets/images/splash-dot.png"
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-notifications",

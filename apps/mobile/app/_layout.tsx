@@ -3,6 +3,7 @@ import '../global.css'
 import { ThemeProvider } from '@react-navigation/native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Stack, usePathname, useRouter } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -21,10 +22,15 @@ import {
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope'
 
 import { ColorSchemeProvider, useTheme } from '@/components/color-scheme-provider'
+import { AberturaAnimada } from '@/components/shell/abertura-animada'
 import { opcoesDePilha } from '@/components/shell/cabecalho-de-vidro'
 import { SessionProvider, useSession } from '@/lib/auth'
 import { canOpenOnMobile, landingRoute } from '@/lib/linking'
 import { NAV_THEME } from '@/lib/theme'
+
+// A splash nativa fica até a abertura animada assumir o quadro 0 dela — quem a
+// esconde é o <AberturaAnimada>, não o carregamento das fontes.
+SplashScreen.preventAutoHideAsync().catch(() => {})
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -94,6 +100,12 @@ function RootGate({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** A abertura sai quando a sessão resolveu — nunca revela o spinner do RootGate. */
+function Abertura() {
+  const { loading } = useSession()
+  return <AberturaAnimada pronto={!loading} />
+}
+
 function RootNavigator() {
   const { scheme, colors } = useTheme()
 
@@ -153,9 +165,9 @@ export default function RootLayout() {
    * diferença entre as duas é o que dá hierarquia sem precisar de mais um
    * tamanho de corpo.
    *
-   * Enquanto não carregam, a tela fica em branco em vez de renderizar na fonte
-   * do sistema: um flash de Helvetica e depois Poppins reposiciona cada linha
-   * do app, e isso é mais feio que meio segundo de espera.
+   * Enquanto não carregam, a splash nativa continua na tela em vez de renderizar
+   * na fonte do sistema: um flash de Helvetica e depois Poppins reposiciona cada
+   * linha do app — e o nome na abertura animada é Manrope.
    */
   const [fontesProntas] = useFonts({
     Poppins_400Regular,
@@ -167,7 +179,7 @@ export default function RootLayout() {
     Manrope_800ExtraBold,
   })
 
-  if (!fontesProntas) return <View style={{ flex: 1, backgroundColor: '#050e40' }} />
+  if (!fontesProntas) return null
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -176,6 +188,7 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <SessionProvider>
               <RootNavigator />
+              <Abertura />
             </SessionProvider>
           </QueryClientProvider>
         </ColorSchemeProvider>

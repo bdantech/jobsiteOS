@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Splash NATIVA: só o ponto verde do ícone. É o quadro 0 da abertura animada
+       (src/components/shell/abertura-animada.tsx), que parte dele. -->
+  <circle cx="256" cy="256" r="256" fill="#2DAD40"/>
+</svg>
