@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { ConviteNotificacoes } from '@/features/auth/components/convite-notificacoes'
 import { useSession } from '@/lib/auth'
+import { VERSAO_DO_APP } from '@/lib/versao'
 
 /**
  * The 5th tab: the full module grid plus the account block. It is the app's
@@ -109,7 +110,7 @@ export default function MaisScreen() {
             <Text className="text-[15px] font-semibold text-destructive">Sair da conta</Text>
           </Pressable>
 
-          <Text className="text-center text-xs text-muted-foreground">JobsiteOS · v2.4.0</Text>
+          <Text className="text-center text-xs text-muted-foreground">JobsiteOS · {VERSAO_DO_APP}</Text>
         </View>
       </ScrollView>
 

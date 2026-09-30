@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { EsqueciSenhaSheet } from '@/features/auth/components/esqueci-senha-sheet'
 import { supabase } from '@/lib/supabase'
+import { VERSAO_DO_APP } from '@/lib/versao'
 
 interface FieldErrors {
   email?: string
@@ -241,7 +242,7 @@ export default function LoginScreen() {
               <Text className="text-[13px] text-secondary-foreground">
                 Problemas para acessar? Fale com um administrador.
               </Text>
-              <Text className="text-xs text-muted-foreground">Oneos · v2.4.0</Text>
+              <Text className="text-xs text-muted-foreground">Oneos · {VERSAO_DO_APP}</Text>
             </View>
           </View>
         </ScrollView>
