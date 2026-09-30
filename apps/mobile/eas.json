@@ -10,13 +10,23 @@
     },
     "production": {
       "extends": "base",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     },
     "production-simulator": {
       "extends": "base",
       "distribution": "internal",
       "ios": {
         "simulator": true
+      }
+    },
+    "production-apk": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       }
     }
   },
@@ -25,6 +35,11 @@
       "ios": {
         "ascAppId": "6817750591",
         "appleTeamId": "MNPY9LF8LR"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./play-sa.json",
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }

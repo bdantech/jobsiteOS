@@ -45,3 +45,6 @@ coverage/
 # destes commitado uma vez fica no histórico de todo clone, para sempre, e sai
 # de lá só reescrevendo a história do repositório.
 Importacao/
+
+# Conta de serviço do Google Play (eas submit) — nunca no repo
+apps/mobile/play-sa.json
