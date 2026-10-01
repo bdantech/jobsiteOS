@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "118421654447",
+    "project_id": "jobsiteos-28e19",
+    "storage_bucket": "jobsiteos-28e19.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:118421654447:android:a873d7f5ace0651720bd5a",
+        "android_client_info": {
+          "package_name": "com.oneos.jobsiteos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCN46y5Bung_TOCUIXwWFKK0m5YtLcBT8w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

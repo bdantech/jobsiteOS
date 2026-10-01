@@ -27,6 +27,7 @@
         "backgroundColor": "#050E40"
       },
       "package": "com.oneos.jobsiteos",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",

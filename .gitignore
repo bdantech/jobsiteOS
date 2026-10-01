@@ -48,3 +48,5 @@ Importacao/
 
 # Conta de serviço do Google Play (eas submit) — nunca no repo
 apps/mobile/play-sa.json
+# Chave da conta de serviço do FCM (expo-push@jobsiteos-28e19) — vai para o EAS, nunca para o repo
+apps/mobile/fcm-expo-push.json
