@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Ban, Building2, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
+import { ArrowRight, Ban, Bot, Building2, ExternalLink, Layers, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   ESTAGIOS_ABERTOS,
@@ -37,6 +37,7 @@ import {
   moverOportunidadeAction,
   promoverFornecedorAction,
 } from '@/actions/antecipacao'
+import { DelegarAoAgenteDialog, usePodeDelegar } from '@/components/agentes/delegar-ao-agente'
 import { SemInteresseDialog } from './acoes-nota'
 import { useEmCobranca } from '@/hooks/use-em-cobranca'
 import { antecipacaoKeys, type Oportunidade } from './queries'
@@ -162,6 +163,8 @@ export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
   const [destino, setDestino] = React.useState<EstagioFunil | null>(null)
   const [semInteresse, setSemInteresse] = React.useState(false)
   const [criandoFicha, setCriandoFicha] = React.useState(false)
+  const [delegar, setDelegar] = React.useState(false)
+  const podeDelegar = usePodeDelegar()
   const tipo = (item.tipo ?? 'nf') as TipoOportunidade
 
   /*
@@ -203,6 +206,21 @@ export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
   )
 
   const podeSuprimir = Boolean(item.fornecedor_cnpj) && item.credor_pessoa_fisica !== true
+
+  /*
+   * Delegar a originação a um agente (Prompt 09 §2.3). O mandato de originação é sobre o
+   * FORNECEDOR e amarra uma NF (`mandatos.nota_access_key` aponta para `notas_fiscais`),
+   * então só a NF delega; pré-autorização e título aparecem desabilitados, com o porquê.
+   * Era um item do menu antigo da nota (`acoes-nota`), que o funil deixou de usar quando
+   * o card passou a ser um só para as três fontes — e o botão sumiu da tela com ele.
+   */
+  const delegavel = tipo === 'nf' && Boolean(item.fornecedor_empresa_id && item.access_key)
+  const porQueNaoDelega =
+    tipo !== 'nf'
+      ? 'Por enquanto o agente origina só NF'
+      : !item.fornecedor_empresa_id
+        ? 'Fornecedor sem ficha de empresa'
+        : null
 
   return (
     <>
@@ -260,6 +278,21 @@ export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
             </DropdownMenuItem>
           )}
 
+          {podeDelegar && delegavel ? (
+            <DropdownMenuItem onSelect={() => setDelegar(true)}>
+              <Bot className="mr-2 h-4 w-4" />
+              Delegar ao agente
+            </DropdownMenuItem>
+          ) : podeDelegar && porQueNaoDelega ? (
+            <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
+              <span className="flex items-center">
+                <Bot className="mr-2 h-4 w-4" />
+                Delegar ao agente
+              </span>
+              <span className="pl-6 text-[11px] text-muted-foreground">{porQueNaoDelega}</span>
+            </DropdownMenuItem>
+          ) : null}
+
           {podeSuprimir && (
             <DropdownMenuItem asChild>
               <Link href={`/antecipacao/fornecedores/${item.fornecedor_cnpj}`}>
@@ -306,6 +339,20 @@ export function MenuAcoesOportunidade({ item }: { item: Oportunidade }) {
           onOpenChange={(v) => !v && setDestino(null)}
         />
       )}
+      {podeDelegar && delegavel && item.fornecedor_empresa_id && item.access_key ? (
+        <DelegarAoAgenteDialog
+          aberto={delegar}
+          onOpenChange={setDelegar}
+          contexto={{
+            empresaId: item.fornecedor_empresa_id,
+            empresaNome: item.fornecedor_nome,
+            tipos: ['originacao_nf'],
+            notaAccessKey: item.access_key,
+            notaNumero: item.numero_exibicao ?? item.numero,
+            notaValor: item.valor,
+          }}
+        />
+      ) : null}
       {podeSuprimir && item.fornecedor_cnpj && (
         <SemInteresseDialog
           cnpj={item.fornecedor_cnpj}
