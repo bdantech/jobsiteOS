@@ -6,7 +6,8 @@
   "build": {
     "base": {
       "pnpm": "9.15.0",
-      "environment": "production"
+      "environment": "production",
+      "channel": "production"
     },
     "production": {
       "extends": "base",

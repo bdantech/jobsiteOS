@@ -3,7 +3,15 @@
     "name": "JobsiteOS",
     "slug": "jobsiteos",
     "owner": "oneos",
-    "version": "1.0.0",
+    "version": "1.0.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/600f94f0-52ac-4504-806c-c10aabaa5990",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "scheme": "jobsiteos",
     "userInterfaceStyle": "automatic",

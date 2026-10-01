@@ -136,6 +136,23 @@ O projeto EAS é o `@oneos/jobsiteos` (id no `app.json`, conta `oneos`, a mesma 
 (`eas env:list --environment production`) e entram no bundle na hora do build. O iOS sai
 como **Unlisted** na App Store — fora da busca, instalado só por link.
 
+**Atualização instantânea (OTA, `expo-updates`).** Mudança só de JavaScript — tela, texto,
+regra, correção — sai sem loja e sem revisão da Apple:
+
+```bash
+cd apps/mobile
+pnpm update:prod --message "o que mudou"   # eas update, canal production, env production, cache limpo
+```
+
+O app baixa a atualização ao abrir e aplica na abertura seguinte. Ela só chega aos
+binários com a MESMA `expo.version` do `app.json` (`runtimeVersion: appVersion`).
+
+**Quando a OTA não serve — build novo nas lojas:** pacote nativo novo ou atualizado
+(`expo install`), permissão, plugin ou qualquer campo nativo do `app.json`, ícone/splash,
+upgrade do SDK. Nesses casos, **suba `expo.version`** (ex.: 1.0.1 → 1.1.0) ANTES do build:
+uma OTA com código nativo novo, mandada a um binário antigo da mesma versão, derruba o app
+na abertura.
+
 **Testing Expo push:** it does not work on the simulator — you need a physical device. Log in on the
 device (which registers its token), grab the token, and send a test through
 [expo.dev/notifications](https://expo.dev/notifications).

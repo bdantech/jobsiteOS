@@ -7,7 +7,8 @@
     "dev": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "update:prod": "eas update --channel production --environment production --clear-cache"
   },
   "dependencies": {
     "@babel/runtime": "^7.26.0",
@@ -34,6 +35,7 @@
     "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.24",
     "lucide-react-native": "^1.41.0",
     "nativewind": "4.2.6",
     "react": "19.2.3",
