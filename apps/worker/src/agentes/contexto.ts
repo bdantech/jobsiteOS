@@ -279,7 +279,9 @@ export async function montarContexto(e: EntradaContexto): Promise<BlocoContexto[
   const tentativas = new Map(m.contatos_tentados.map((t) => [t.contato_id, t]))
 
   const linhas: string[] = []
-  linhas.push(`Agora: ${e.agora.toLocaleString('pt-BR', { timeZone: tz, weekday: 'long', dateStyle: 'full', timeStyle: 'short' } as Intl.DateTimeFormatOptions)} (${tz}).`)
+  // `dateStyle: 'full'` já traz o dia da semana ("quinta-feira, 1 de outubro de 2026"). Somar
+  // `weekday` a ele lança "Invalid option" no Intl, e era o que derrubava todo ciclo.
+  linhas.push(`Agora: ${e.agora.toLocaleString('pt-BR', { timeZone: tz, dateStyle: 'full', timeStyle: 'short' })} (${tz}).`)
   linhas.push(`O que acordou este ciclo: ${e.gatilho}.`)
   linhas.push('')
   linhas.push(`── Mandato ${m.codigo ?? m.id} — ${TIPO_MANDATO_LABELS[m.tipo]}`)
