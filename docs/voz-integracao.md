@@ -84,7 +84,7 @@ envio — o `a_enviar` continua lá, com o pedido já montado.
 
 | Cron | Quando | O que faz |
 | --- | --- | --- |
-| `/api/cron/voz-enviar` | 9h–17h30, de 30 em 30 min | Leva para a Ana o que já está na fila |
+| `/api/cron/voz-enviar` | 9h–17h55, de 5 em 5 min | Leva para a Ana o que já está na fila |
 
 ---
 

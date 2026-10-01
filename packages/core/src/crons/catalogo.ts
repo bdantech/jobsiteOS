@@ -397,7 +397,7 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Envio para a Ana (voz)',
     moduloId: 'comunicacao',
     descricao:
-      'Leva para o serviço de voz o que está na fila — posto por uma PESSOA em Comunicação → Ligações ou por um AGENTE de IA dentro de um mandato (09). Antes de enviar, reexecuta o portão de permissão (supressão, cobrança, Procon, base legal) e remonta a oferta com dados de agora (taxa, TAC, líquido, estágio da nota): o que mudou desde o enfileiramento cancela a ligação, com o motivo à vista. De meia em meia hora entre 9h e 17h30 — mandar mais rápido não faz ligar mais rápido (a Ana liga uma por vez).',
+      'Leva para o serviço de voz o que está na fila — posto por uma PESSOA em Comunicação → Ligações ou por um AGENTE de IA dentro de um mandato (09). Antes de enviar, reexecuta o portão de permissão (supressão, cobrança, Procon, base legal) e remonta a oferta com dados de agora (taxa, TAC, líquido, estágio da nota): o que mudou desde o enfileiramento cancela a ligação, com o motivo à vista. De 5 em 5 minutos entre 9h e 17h55: com a fila da Ana vazia, a ligação que um agente decidiu fazer sai em minutos, não na meia hora seguinte. Com fila, ela espera a vez do mesmo jeito (a Ana liga uma por vez); rodada sem nada na fila não consulta a Ana.',
     destino: 'POST /jobs/voz/enviar',
   },
   {
@@ -405,7 +405,7 @@ export const CRONS: readonly CronCatalogado[] = [
     nome: 'Ligações sem resultado',
     moduloId: 'comunicacao',
     descricao:
-      'Marca como falha (motivo `timeout`) a ligação `enviada` há mais de `voz_timeout_minutos` sem webhook — ela prendia a nota para sempre. Libera a nota para nova tentativa e acorda o mandato, se houver. Se o resultado chegar depois, ele é aceito e reabre a linha.',
+      'Marca como falha (motivo `timeout`) a ligação DISCADA há mais de `voz_timeout_minutos` sem resultado, e cancela na Ana a que não foi discada até o fim do expediente em que devia ser (só marca o que ela confirmar). Libera a nota para nova tentativa e acorda o mandato, se houver. Se o resultado chegar depois, ele é aceito e reabre a linha.',
     destino: 'POST /jobs/voz/varrer-orfas',
   },
   {
