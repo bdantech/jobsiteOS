@@ -39,7 +39,7 @@
       "android": {
         "serviceAccountKeyPath": "./play-sa.json",
         "track": "internal",
-        "releaseStatus": "draft"
+        "releaseStatus": "completed"
       }
     }
   }
