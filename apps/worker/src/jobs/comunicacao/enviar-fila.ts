@@ -14,6 +14,7 @@ import {
 import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import type { Anexo, Transporte } from '../../../../../packages/core/src/transportes/index.js'
 import { lerConfigComunicacao } from '../../comunicacao/config.js'
+import { confirmarQuedaNoEnvio } from '../../comunicacao/sessao.js'
 import {
   conversaPara,
   enviadasNaThreadHoje,
@@ -413,6 +414,9 @@ async function processar(
       .eq('id', linha.id)
 
     if (!podeTentar) await avisarFalha(linha, r.erro ?? 'Falha ao enviar.')
+    // O número caiu: o aviso acima é de quem escreveu ESTA mensagem; este é de quem
+    // precisa reconectar o número antes da próxima (0277).
+    if ('sessaoCaida' in r && r.sessaoCaida && conta) await confirmarQuedaNoEnvio(conta)
     return { desfecho: 'falhas', conta }
   }
 

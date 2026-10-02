@@ -1061,7 +1061,7 @@ export async function dispararBriefingJuridico(input: {
 
 // ─── Comunicação (05A) ──────────────────────────────────────────────────────
 /*
- * Os seis relógios do módulo. Todos enfileiram e devolvem 202 — nenhum deles é
+ * Os sete relógios do módulo. Todos enfileiram e devolvem 202 — nenhum deles é
  * um clique que alguém está esperando na tela, e o único que fica perto disso (a
  * fila de envio) já responde em segundos porque o trabalho pesado é o intervalo
  * entre envios, que roda dentro do worker.
@@ -1095,6 +1095,10 @@ export async function dispararReunioesGoogle(
 
 export async function dispararPlantao(): Promise<DispararJobResultado> {
   return postar('/jobs/comunicacao/plantao', {}, 'comunicacao-plantao')
+}
+
+export async function dispararVerificarSessoes(): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/sessoes', {}, 'comunicacao-sessoes')
 }
 
 export async function dispararAgenteDecidir(

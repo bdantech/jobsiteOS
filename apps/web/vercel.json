@@ -150,6 +150,10 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/comunicacao-sessoes",
+      "schedule": "*/10 10-23 * * 1-6"
+    },
+    {
       "path": "/api/cron/agente-decidir",
       "schedule": "30 * * * *"
     },

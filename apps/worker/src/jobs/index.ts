@@ -139,6 +139,7 @@ import { simularCampanha } from './campanhas/simular.js'
 import { decidirProximosPassos } from './agente/decidir.js'
 import { apurarDesfechos, executarAgendados } from './agente/executar-agendados.js'
 import { plantaoDeEventos } from '../comunicacao/plantao.js'
+import { verificarSessoes } from '../comunicacao/sessao.js'
 import { atualizarTitulosCobranca, type ModoSyncTitulos } from './cobranca/atualizar-titulos.js'
 import { lembretesCobranca } from './cobranca/lembretes.js'
 import { relogioApolice } from './cobranca/relogio.js'
@@ -241,6 +242,7 @@ export type TipoJob =
   | 'comunicacao-triagem'
   | 'comunicacao-lembretes'
   | 'comunicacao-plantao'
+  | 'comunicacao-sessoes'
   | 'agente-decidir'
   | 'agente-agendados'
   | 'campanhas-simular'
@@ -2014,6 +2016,11 @@ export function dispararReunioesGoogle(limite?: number): string {
 
 export function dispararPlantao(): string {
   return dispararAvulso('comunicacao-plantao', async () => plantaoDeEventos())
+}
+
+/** Pergunta ao Wasender se cada número está conectado, e avisa o dono do que caiu (0277). */
+export function dispararVerificarSessoes(): string {
+  return dispararAvulso('comunicacao-sessoes', async () => verificarSessoes())
 }
 
 export function dispararAgenteDecidir(limite?: number): string {

@@ -14,7 +14,9 @@ import {
   TransporteWasender,
   lerEntradasWasender,
   lerEnviosWasender,
+  lerSessaoWasender,
   lerStatusWasender,
+  sessaoCaiu,
 } from './wasender.ts'
 import * as crypto from 'node:crypto'
 import { extensaoDaMidia } from './midia-tipos.ts'
@@ -57,6 +59,64 @@ test('o envio devolve o id externo, que é a chave de idempotência', async () =
   assert.equal(recebido!.url, 'https://wasender.test/api/send-message')
   // O destino sai em E.164 sem "+", como o provedor espera.
   assert.equal(recebido!.body.to, '5511999998888')
+})
+
+test('200 sem id é número desconectado: falha, sem retry, e diz que a sessão caiu', async () => {
+  const t = new TransporteWasender({
+    baseUrl: 'https://w.test',
+    token: 't',
+    numero: '5511940420909',
+    fetchImpl: (async () =>
+      new Response(JSON.stringify({ success: true, data: {} }), { status: 200 })) as unknown as typeof fetch,
+  })
+  const r = await t.enviar({ destino: '11999998888', corpo: 'Bom dia' })
+  assert.equal(r.ok, false)
+  assert.equal(r.retryavel, false)
+  assert.equal(r.sessaoCaida, true)
+  assert.match(r.erro ?? '', /5511940420909 parece desconectado/)
+})
+
+test('o status da sessão vem de /api/status, e falha de rede vira status nulo', async () => {
+  let url = ''
+  const conectado = new TransporteWasender({
+    baseUrl: 'https://w.test/',
+    token: 't',
+    numero: '55',
+    fetchImpl: (async (u: string) => {
+      url = u
+      return new Response(JSON.stringify({ status: 'NEED_SCAN' }), { status: 200 })
+    }) as unknown as typeof fetch,
+  })
+  assert.deepEqual(await conectado.statusSessao(), { status: 'need_scan', erro: null })
+  assert.equal(url, 'https://w.test/api/status')
+
+  const semRede = new TransporteWasender({
+    baseUrl: 'https://w.test',
+    token: 't',
+    numero: '55',
+    fetchImpl: (async () => {
+      throw new Error('ECONNRESET')
+    }) as unknown as typeof fetch,
+  })
+  const r = await semRede.statusSessao()
+  assert.equal(r.status, null)
+  assert.match(r.erro ?? '', /ECONNRESET/)
+})
+
+test('session.status é lido como sessão, não como status de entrega', () => {
+  const p = { event: 'session.status', sessionId: 'x', data: { status: 'logged_out' } }
+  assert.deepEqual(lerSessaoWasender(p), { status: 'logged_out' })
+  assert.equal(lerStatusWasender(p), null)
+  assert.equal(lerSessaoWasender({ event: 'messages.upsert', data: { status: 'x' } }), null)
+})
+
+test('connecting não é queda; os estados que pedem gente são', () => {
+  assert.equal(sessaoCaiu('connecting'), false)
+  assert.equal(sessaoCaiu('connected'), false)
+  assert.equal(sessaoCaiu(null), false)
+  for (const s of ['disconnected', 'need_scan', 'need_passkey', 'logged_out', 'expired', 'envio_sem_id']) {
+    assert.equal(sessaoCaiu(s), true, s)
+  }
 })
 
 test('429 é retryável e 400 não é', async () => {

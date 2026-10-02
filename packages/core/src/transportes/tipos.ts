@@ -54,6 +54,12 @@ export interface ResultadoEnvio {
    * e a notificação ao dono — insistir num número inexistente é gastar a conta.
    */
   retryavel?: boolean
+  /**
+   * O provedor aceitou e nada saiu, porque o número está desconectado (Wasender).
+   * Quem envia avisa o dono do número: a falha não é desta mensagem, é de todas as
+   * próximas até alguém reconectar.
+   */
+  sessaoCaida?: boolean
 }
 
 export interface Transporte {

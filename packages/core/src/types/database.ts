@@ -14004,6 +14004,9 @@ export type Database = {
           mensagens_por_dia: number
           numero: string
           provedor: string
+          sessao_caiu_em: string | null
+          sessao_status: string | null
+          sessao_verificada_em: string | null
           tipo: string
           token_definido_em: string | null
           token_secret_id: string | null
@@ -14023,6 +14026,9 @@ export type Database = {
           mensagens_por_dia?: number
           numero: string
           provedor?: string
+          sessao_caiu_em?: string | null
+          sessao_status?: string | null
+          sessao_verificada_em?: string | null
           tipo?: string
           token_definido_em?: string | null
           token_secret_id?: string | null
@@ -14042,6 +14048,9 @@ export type Database = {
           mensagens_por_dia?: number
           numero?: string
           provedor?: string
+          sessao_caiu_em?: string | null
+          sessao_status?: string | null
+          sessao_verificada_em?: string | null
           tipo?: string
           token_definido_em?: string | null
           token_secret_id?: string | null
@@ -22289,6 +22298,9 @@ export type Database = {
           mensagens_por_dia: number
           numero: string
           provedor: string
+          sessao_caiu_em: string | null
+          sessao_status: string | null
+          sessao_verificada_em: string | null
           tipo: string
           token_definido_em: string | null
           token_secret_id: string | null

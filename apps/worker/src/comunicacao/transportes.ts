@@ -42,6 +42,12 @@ export async function buscarConta(id: string): Promise<ContaWhatsapp | null> {
   return (data as ContaWhatsapp | null) ?? null
 }
 
+/** Todas as contas ligadas, de qualquer tipo — para quem precisa olhar cada número. */
+export async function contasAtivas(): Promise<ContaWhatsapp[]> {
+  const { data } = await supabaseAdmin.from('whatsapp_contas').select(COLUNAS_CONTA).eq('ativo', true)
+  return (data ?? []) as ContaWhatsapp[]
+}
+
 /**
  * O NÚMERO DE QUEM ESCREVEU. É a primeira pergunta, e não havia quem a fizesse.
  *

@@ -300,7 +300,7 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Confere a agenda contra os disparos registrados: horário que passou sem disparo vira "não rodou", job sem retorno do worker além do limite vira falha, e cada falha nova avisa os admins por sino, push e e-mail. Roda na Vercel e não no worker de propósito — é justamente quando o worker cai que o aviso tem de sair.',
   },
-  // ─── Comunicação (05A): os seis relógios do cano ──────────────────────────
+  // ─── Comunicação (05A): os sete relógios do cano ──────────────────────────
   {
     path: '/api/cron/comunicacao-fila',
     nome: 'Fila de envio',
@@ -348,6 +348,14 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Alerta crítico para o time, por um número próprio. É transporte SEPARADO: não passa por warmup, supressão, janela nem teto — um orçamento estourado às 23h de um sábado é exatamente o alerta que precisa sair às 23h de um sábado.',
     destino: 'POST /jobs/comunicacao/plantao',
+  },
+  {
+    path: '/api/cron/comunicacao-sessoes',
+    nome: 'Números de WhatsApp conectados',
+    moduloId: 'comunicacao',
+    descricao:
+      'Pergunta ao Wasender se cada número está conectado e, no que caiu, avisa quem responde por ele e o Admin, por sino, push e e-mail — repetindo a cada 4 h enquanto seguir caído. Existe porque um número desconectado não dá erro em lugar nenhum: o webhook só para de chegar. Em 02/10/2026 o Rodrigo e a Ana caíram de manhã e o time só percebeu à tarde, pelo volume. De 10 em 10 minutos das 7h às 20h50, de segunda a sábado; fora disso, o envio sem id e o evento session.status do webhook seguem avisando.',
+    destino: 'POST /jobs/comunicacao/sessoes',
   },
   {
     path: '/api/cron/agente-decidir',

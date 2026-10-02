@@ -86,14 +86,103 @@ export class TransporteWasender implements Transporte {
         }
       }
 
+      /*
+       * ── 200 SEM ID NÃO É ENVIO ───────────────────────────────────────────────
+       * Com o número desconectado, o Wasender responde 200 e não devolve id — e nada
+       * sai. Era gravado como `enviada`: em 02/10/2026 o Rodrigo e a Ana caíram de
+       * manhã, o agente deu por feitos contatos que nunca chegaram, e ninguém soube
+       * até o volume do dia despencar. Das ~595 saídas pela API até ali, as 7 sem id
+       * caíram todas em janelas de desconexão, e nenhuma voltou depois como eco.
+       *
+       * Não é retryável: reenviar com o número caído falha igual, e quem escreveu
+       * precisa saber agora — não depois de três tentativas e meia hora.
+       */
       const id = corpo.data?.msgId ?? corpo.data?.id
-      return { ok: true, idExterno: id !== undefined ? String(id) : null }
+      if (id === undefined || id === null || id === '') {
+        return {
+          ok: false,
+          erro: `O WhatsApp ${this.cfg.numero} parece desconectado: o Wasender aceitou o envio sem devolver o id da mensagem, e ela não saiu. Reconecte o número e reenvie.`,
+          retryavel: false,
+          sessaoCaida: true,
+        }
+      }
+      return { ok: true, idExterno: String(id) }
     } catch (erro) {
       // Rede e timeout SEMPRE valem retry: a mensagem pode ter saído, e é o
       // `id_externo` do webhook que resolve a duplicata do outro lado.
       return { ok: false, erro: String(erro), retryavel: true }
     }
   }
+
+  /**
+   * O estado da sessão do número (`GET /api/status`, com o token da própria sessão).
+   * `status` nulo quando não deu para saber — rede, token recusado, resposta sem o
+   * campo — e aí `erro` diz por quê. Nunca lança.
+   */
+  async statusSessao(): Promise<{ status: string | null; erro: string | null }> {
+    const f = this.cfg.fetchImpl ?? fetch
+    try {
+      const res = await f(`${this.cfg.baseUrl.replace(/\/$/, '')}/api/status`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${this.cfg.token}` },
+        signal: AbortSignal.timeout(this.cfg.timeoutMs ?? 20_000),
+      })
+      const texto = await res.text()
+      const corpo = (texto ? safeJson(texto) : {}) as {
+        status?: string
+        data?: { status?: string }
+        message?: string
+        error?: string
+      }
+      if (!res.ok) return { status: null, erro: corpo.message ?? corpo.error ?? `HTTP ${res.status}` }
+      const status = corpo.status ?? corpo.data?.status
+      return status ? { status: String(status).toLowerCase(), erro: null } : { status: null, erro: 'Resposta sem status.' }
+    } catch (erro) {
+      return { status: null, erro: String(erro) }
+    }
+  }
+}
+
+/**
+ * Os estados de sessão do Wasender em que NADA entra nem sai. `connecting` fica de
+ * fora: é o próprio provedor reconectando, e dura segundos. `envio_sem_id` é o
+ * nosso — o 200 sem id de `enviar`, quando nem a consulta de status respondeu.
+ */
+export const STATUS_SESSAO_CAIDA = new Set([
+  'disconnected',
+  'need_scan',
+  'need_passkey',
+  'logged_out',
+  'expired',
+  'envio_sem_id',
+])
+
+export function sessaoCaiu(status: string | null | undefined): boolean {
+  return status != null && STATUS_SESSAO_CAIDA.has(status)
+}
+
+/** O que cada estado pede de quem vai consertar. */
+export const ROTULO_STATUS_SESSAO: Record<string, string> = {
+  disconnected: 'desconectado',
+  need_scan: 'esperando a leitura do QR code',
+  need_passkey: 'esperando a aprovação da passkey no celular',
+  logged_out: 'deslogado do aparelho',
+  expired: 'com a sessão expirada',
+  envio_sem_id: 'recusando envios',
+}
+
+/**
+ * O evento `session.status` (o Wasender o manda quando a conexão do número muda).
+ * Lido ANTES dos outros leitores: o nome contém "status" e, sem isto, ia parar no
+ * leitor de status de entrega, que o descartava por não achar id de mensagem.
+ */
+export function lerSessaoWasender(payload: unknown): { status: string } | null {
+  const p = payload as Record<string, any> | null
+  if (!p) return null
+  const evento = String(p.event ?? p.type ?? '')
+  if (!evento.startsWith('session.')) return null
+  const status = p.data?.status ?? p.status
+  return status ? { status: String(status).toLowerCase() } : null
 }
 
 /**

@@ -109,6 +109,7 @@ import {
   dispararLembretesReuniao,
   dispararReunioesGoogle,
   dispararPlantao,
+  dispararVerificarSessoes,
   dispararAgenteDecidir,
   dispararAgenteAgendados,
   dispararCampanhaSimular,
@@ -1681,6 +1682,14 @@ app.post('/jobs/comercial/reunioes-google', (req: Request, res: Response, next: 
 app.post('/jobs/comunicacao/plantao', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararPlantao(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/sessoes', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararVerificarSessoes(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

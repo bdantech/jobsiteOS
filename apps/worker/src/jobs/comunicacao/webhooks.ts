@@ -3,6 +3,7 @@ import { EVENTO_TIPOS } from '../../../../../packages/core/src/constants.js'
 import {
   lerEntradasWasender,
   lerEnviosWasender,
+  lerSessaoWasender,
   lerStatusWasender,
   lerWebhookResend,
   type MensagemEnviadaWasender,
@@ -19,6 +20,7 @@ import {
   tocarConversa,
 } from '../../comunicacao/ledger.js'
 import { enfileirarNaoVinculada, resolverRemetente } from '../../comunicacao/resolver.js'
+import { registrarSessao } from '../../comunicacao/sessao.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 import { emitirEvento } from '../../radar/eventos.js'
@@ -54,6 +56,15 @@ export async function processarWebhookWasender(
    */
   conta: ContaDoWebhook | null = null,
 ): Promise<ResultadoWebhook> {
+  // A conexão do número mudou (0277). Antes do status de entrega: o nome do evento
+  // também contém "status", e lá ele era descartado por não trazer id de mensagem.
+  const sessao = lerSessaoWasender(payload)
+  if (sessao) {
+    if (conta) await registrarSessao(conta, sessao.status, 'webhook')
+    else logger.warn({ status: sessao.status }, 'session.status pelo segredo global: não dá para saber de qual número.')
+    return { ok: true, gravada: false, motivo: 'sessao' }
+  }
+
   const status = lerStatusWasender(payload)
   if (status) {
     const { error } = await supabaseAdmin
