@@ -37,19 +37,23 @@ export default async function Pagina({
 
   if (!ehGestor && !vendedor) redirect('/comercial/comissoes')
 
-  const dia = await carregarMeuDia(escolhido ?? vendedor?.id ?? null)
-
   const supabase = await createClient()
-  const { data: visiveis } = await supabase.rpc('comercial_vendedores_visiveis')
+  const { data } = await supabase.rpc('comercial_vendedores_visiveis')
+  // O auxiliar fica fora da lista: o dia dele é o do closer, e oferecer os dois
+  // seria oferecer a mesma tela com dois nomes.
+  const visiveis = (
+    (data ?? []) as { id: string; nome: string; tipo: string; sou_eu: boolean }[]
+  ).filter((v) => v.tipo !== 'auxiliar')
 
-  return (
-    <MeuDiaTela
-      dia={dia}
-      // O auxiliar fica fora da lista: o dia dele é o do closer, e oferecer os dois
-      // seria oferecer a mesma tela com dois nomes.
-      visiveis={(
-        (visiveis ?? []) as { id: string; nome: string; tipo: string; sou_eu: boolean }[]
-      ).filter((v) => v.tipo !== 'auxiliar')}
-    />
-  )
+  /*
+   * O GESTOR SEM FICHA DE VENDEDOR abre no primeiro nome da lista.
+   *
+   * Antes ele caía no dia de ninguém (o agregador devolve vazio sem alvo), e o seletor,
+   * sem opção que casasse com o valor, mostrava o primeiro nome mesmo assim — a tela
+   * dizia "Fulano" e exibia nada, e escolher Fulano não disparava troca nenhuma. Agora
+   * o nome do seletor é o dia aberto.
+   */
+  const dia = await carregarMeuDia(escolhido ?? vendedor?.id ?? visiveis[0]?.id ?? null)
+
+  return <MeuDiaTela dia={dia} visiveis={visiveis} />
 }

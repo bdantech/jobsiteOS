@@ -163,6 +163,13 @@ export function MeuDiaTela({ dia, visiveis }: MeuDiaTelaProps) {
             onChange={(e) => router.push(`/comercial/meu-dia?vendedor=${e.target.value}`)}
             className="h-8 w-52 rounded-md border border-input bg-background px-2 text-xs"
           >
+            {/*
+              Sem opção que case com o dia aberto, o React marca a primeira — e o seletor
+              passa a nomear um dia que não está na tela, e que não abre ao ser escolhido.
+            */}
+            {!visiveis.some((v) => v.id === dia.vendedor_id) && (
+              <option value="" disabled>Escolha uma pessoa</option>
+            )}
             {visiveis.map((v) => (
               <option key={v.id} value={v.id}>{v.nome}</option>
             ))}
