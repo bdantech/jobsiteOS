@@ -115,11 +115,13 @@ export function CreditoCard(props: CreditoCardProps) {
     staleTime: 5 * 60_000,
   })
 
-  // O escopo é do prompt, não uma limitação de tela: "quanto de limite" é a pergunta de
-  // SACADO. Fornecedor tem outra (adesão), e mostrar este card para ele seria oferecer
-  // uma resposta para uma pergunta que ninguém fez.
+  // "Quanto de limite" é a pergunta de SACADO, e o score e o potencial só existem para
+  // construtora/incorporadora. O fornecedor que pede limite de risco sacado (0281) ganha
+  // o card sem esses dois blocos: só a análise e o botão de pedir — o resto seria uma
+  // estimativa que o worker nunca calcula para ele.
   const ehSacado = props.tipo === 'construtora' || props.tipo === 'incorporadora'
-  if (!ehSacado) return null
+  const ehFornecedor = props.tipo === 'fornecedor'
+  if (!ehSacado && !ehFornecedor) return null
 
   const analise = (esteira.data ?? []).find((a) => a.cnpj === props.cnpj) ?? null
   const emCurso =
@@ -148,11 +150,18 @@ export function CreditoCard(props: CreditoCardProps) {
               Crédito
             </CardTitle>
             <SelosCobrancaCredito bloqueio={props.bloqueioCobranca} revisao={props.revisaoPosInadimplencia} />
-            <CardDescription>
-              Quanto de limite esta empresa sustentaria, qual a chance de a seguradora conceder,
-              e quanto isso vale por mês. Tudo aqui é <strong>estimativa encadeada</strong>: a
-              confiança do limite é herdada do faturamento e não sobe pelo caminho.
-            </CardDescription>
+            {ehSacado ? (
+              <CardDescription>
+                Quanto de limite esta empresa sustentaria, qual a chance de a seguradora conceder,
+                e quanto isso vale por mês. Tudo aqui é <strong>estimativa encadeada</strong>: a
+                confiança do limite é herdada do faturamento e não sobe pelo caminho.
+              </CardDescription>
+            ) : (
+              <CardDescription>
+                Fornecedor que quer limite de risco sacado: a análise segue a mesma esteira de
+                um sacado. Não há score nem limite potencial estimado para fornecedor.
+              </CardDescription>
+            )}
           </div>
           {/*
             ANÁLISE DECIDIDA NÃO É FIM DE LINHA, e a tela dizia que era.
@@ -187,145 +196,147 @@ export function CreditoCard(props: CreditoCardProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {score.isPending ? (
-          <Skeleton className="h-24 w-full" />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* ── Score ── */}
-            <div className="space-y-3 rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Chance de concessão</p>
-              {score.data ? (
-                <>
-                  <BarraScore score={score.data.score} faixa={score.data.faixa} />
-                  <p className="text-[11px] text-muted-foreground">
-                    Completude {Math.round(Number(score.data.completude) * 100)}% dos pesos
-                    {score.data.scorecard_versao ? ` · scorecard v${score.data.scorecard_versao}` : ''}
+      {ehSacado ? (
+        <CardContent className="space-y-4">
+          {score.isPending ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* ── Score ── */}
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Chance de concessão</p>
+                {score.data ? (
+                  <>
+                    <BarraScore score={score.data.score} faixa={score.data.faixa} />
+                    <p className="text-[11px] text-muted-foreground">
+                      Completude {Math.round(Number(score.data.completude) * 100)}% dos pesos
+                      {score.data.scorecard_versao ? ` · scorecard v${score.data.scorecard_versao}` : ''}
+                    </p>
+                    {score.data.knockout && (
+                      <p className="flex items-start gap-1.5 text-xs text-destructive">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {KNOCKOUT_LABELS[score.data.knockout as Knockout] ?? score.data.knockout}
+                      </p>
+                    )}
+                    {semScore && (
+                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <ShieldQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Score não exibido: os dados disponíveis não cobrem o mínimo. Um número
+                        calculado sobre poucos fatores <em>parece</em> um score.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Ainda não pontuada.</p>
+                )}
+              </div>
+
+              {/* ── Economia ── */}
+              <div className="space-y-2 rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Potencial</p>
+                {props.limitePotencial === null ? (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="block text-sm font-medium text-foreground">Sem limite calculado.</span>
+                    {props.faturamentoEstimado === null
+                      ? MOTIVO_SEM_POTENCIAL_LABELS.sem_faturamento
+                      : MOTIVO_SEM_POTENCIAL_LABELS.sem_calibracao}
                   </p>
-                  {score.data.knockout && (
-                    <p className="flex items-start gap-1.5 text-xs text-destructive">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                      {KNOCKOUT_LABELS[score.data.knockout as Knockout] ?? score.data.knockout}
-                    </p>
-                  )}
-                  {semScore && (
-                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <ShieldQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Score não exibido: os dados disponíveis não cobrem o mínimo. Um número
-                      calculado sobre poucos fatores <em>parece</em> um score.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Ainda não pontuada.</p>
-              )}
+                ) : (
+                  <>
+                    <dl className="space-y-1 text-sm">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <dt className="text-muted-foreground">Limite potencial</dt>
+                        <dd className="font-semibold tabular-nums">{moeda(props.limitePotencial)}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <dt className="text-muted-foreground">
+                          Receita prevista
+                          {/*
+                           * A taxa aparece junto do número porque ela é metade dele. Vem
+                           * da análise de crédito desta empresa quando existe; senão, da
+                           * padrão da carteira — e entre 1,9% e 2,6% há um terço de
+                           * diferença na mesma previsão.
+                           */}
+                          {props.receitaTaxaAm === null ? null : (
+                            <span
+                              className="block text-xs"
+                              title="Taxa mensal usada na conta: a monthlyRateD0 desta empresa quando ela já tem análise de crédito, senão a padrão da configuração."
+                            >
+                              a {props.receitaTaxaAm.toLocaleString('pt-BR')}% a.m.
+                            </span>
+                          )}
+                        </dt>
+                        <dd className="tabular-nums">{moeda(props.receitaMensalPrevista)}/mês</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <dt className="text-muted-foreground">Valor esperado</dt>
+                        <dd className="font-semibold tabular-nums">{moeda(props.valorEsperadoMensal)}/mês</dd>
+                      </div>
+                    </dl>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {props.limiteConfianca && (
+                        <Badge variant="outline" className="text-[10px]">
+                          confiança {props.limiteConfianca}
+                        </Badge>
+                      )}
+                      {props.chanceConcessao !== null && (
+                        <Badge variant="outline" className="text-[10px]">
+                          chance {Math.round(Number(props.chanceConcessao) * 100)}%
+                          {semScore ? ' (presumida)' : ''}
+                        </Badge>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
+          )}
 
-            {/* ── Economia ── */}
-            <div className="space-y-2 rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Potencial</p>
-              {props.limitePotencial === null ? (
+          {/* ── Breakdown ── */}
+          {breakdown.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Como o score foi montado</h4>
+              <ul className="divide-y rounded-lg border">
+                {breakdown.map((b, i) => (
+                  <li key={b.fator ?? i} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm">{b.label ?? b.fator}</p>
+                      <p className="text-xs text-muted-foreground">{b.observado}</p>
+                      {b.ressalva ? (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">{b.ressalva}</p>
+                      ) : null}
+                    </div>
+                    <span
+                      className={cn(
+                        'shrink-0 text-sm tabular-nums',
+                        b.pontos === null || b.pontos === undefined
+                          ? 'italic text-muted-foreground'
+                          : 'font-medium',
+                      )}
+                    >
+                      {b.pontos === null || b.pontos === undefined ? 'não avaliável' : `+${b.pontos} de ${b.peso}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {naoAvaliaveis.length > 0 && (
+                // O que falta é a metade ACIONÁVEL da resposta: dá para ir buscar. Esconder
+                // os não avaliáveis deixaria o score parecendo completo.
                 <p className="text-xs text-muted-foreground">
-                  <span className="block text-sm font-medium text-foreground">Sem limite calculado.</span>
-                  {props.faturamentoEstimado === null
-                    ? MOTIVO_SEM_POTENCIAL_LABELS.sem_faturamento
-                    : MOTIVO_SEM_POTENCIAL_LABELS.sem_calibracao}
+                  {naoAvaliaveis.length} fator(es) sem dado saíram da conta — não valeram zero, foram
+                  removidos do numerador e do denominador. Preencher qualquer um deles muda o score.
                 </p>
-              ) : (
-                <>
-                  <dl className="space-y-1 text-sm">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <dt className="text-muted-foreground">Limite potencial</dt>
-                      <dd className="font-semibold tabular-nums">{moeda(props.limitePotencial)}</dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <dt className="text-muted-foreground">
-                        Receita prevista
-                        {/*
-                         * A taxa aparece junto do número porque ela é metade dele. Vem
-                         * da análise de crédito desta empresa quando existe; senão, da
-                         * padrão da carteira — e entre 1,9% e 2,6% há um terço de
-                         * diferença na mesma previsão.
-                         */}
-                        {props.receitaTaxaAm === null ? null : (
-                          <span
-                            className="block text-xs"
-                            title="Taxa mensal usada na conta: a monthlyRateD0 desta empresa quando ela já tem análise de crédito, senão a padrão da configuração."
-                          >
-                            a {props.receitaTaxaAm.toLocaleString('pt-BR')}% a.m.
-                          </span>
-                        )}
-                      </dt>
-                      <dd className="tabular-nums">{moeda(props.receitaMensalPrevista)}/mês</dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <dt className="text-muted-foreground">Valor esperado</dt>
-                      <dd className="font-semibold tabular-nums">{moeda(props.valorEsperadoMensal)}/mês</dd>
-                    </div>
-                  </dl>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {props.limiteConfianca && (
-                      <Badge variant="outline" className="text-[10px]">
-                        confiança {props.limiteConfianca}
-                      </Badge>
-                    )}
-                    {props.chanceConcessao !== null && (
-                      <Badge variant="outline" className="text-[10px]">
-                        chance {Math.round(Number(props.chanceConcessao) * 100)}%
-                        {semScore ? ' (presumida)' : ''}
-                      </Badge>
-                    )}
-                  </div>
-                </>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Breakdown ── */}
-        {breakdown.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Como o score foi montado</h4>
-            <ul className="divide-y rounded-lg border">
-              {breakdown.map((b, i) => (
-                <li key={b.fator ?? i} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm">{b.label ?? b.fator}</p>
-                    <p className="text-xs text-muted-foreground">{b.observado}</p>
-                    {b.ressalva ? (
-                      <p className="text-[11px] text-amber-700 dark:text-amber-400">{b.ressalva}</p>
-                    ) : null}
-                  </div>
-                  <span
-                    className={cn(
-                      'shrink-0 text-sm tabular-nums',
-                      b.pontos === null || b.pontos === undefined
-                        ? 'italic text-muted-foreground'
-                        : 'font-medium',
-                    )}
-                  >
-                    {b.pontos === null || b.pontos === undefined ? 'não avaliável' : `+${b.pontos} de ${b.peso}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {naoAvaliaveis.length > 0 && (
-              // O que falta é a metade ACIONÁVEL da resposta: dá para ir buscar. Esconder
-              // os não avaliáveis deixaria o score parecendo completo.
-              <p className="text-xs text-muted-foreground">
-                {naoAvaliaveis.length} fator(es) sem dado saíram da conta — não valeram zero, foram
-                removidos do numerador e do denominador. Preencher qualquer um deles muda o score.
-              </p>
-            )}
-          </div>
-        )}
-
-        {props.creditoCalculadoEm && (
-          <p className="text-[11px] text-muted-foreground">
-            Potencial calculado em {new Date(props.creditoCalculadoEm).toLocaleString('pt-BR')}.
-          </p>
-        )}
-      </CardContent>
+          {props.creditoCalculadoEm && (
+            <p className="text-[11px] text-muted-foreground">
+              Potencial calculado em {new Date(props.creditoCalculadoEm).toLocaleString('pt-BR')}.
+            </p>
+          )}
+        </CardContent>
+      ) : null}
 
       {solicitando && (
         <SolicitarAnaliseDialog
