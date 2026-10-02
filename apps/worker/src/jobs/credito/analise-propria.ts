@@ -572,7 +572,7 @@ async function etapaExtracao(linha: LinhaAnalise): Promise<void> {
   )
   if (legiveis.length === 0) {
     throw new Error(
-      'Nenhum documento contábil anexado. Anexe ao menos o balanço e o DRE antes de rodar a análise.',
+      'Nenhum documento contábil anexado. Anexe as demonstrações financeiras (ou o balanço e a DRE) antes de rodar a análise.',
     )
   }
 

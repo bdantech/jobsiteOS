@@ -298,12 +298,14 @@ base de uma decisão de crédito e precisa existir numa auditoria futura.
 `application/vnd.ms-excel` (xls). Tamanho máximo 20 MB.
 
 **`tipo` do documento** (a lista completa):
-`balanco_patrimonial`, `dre`, `balancete`, `dfc`, `dmpl`, `notas_explicativas`,
+`demonstracoes_financeiras`, `balanco_patrimonial`, `dre`, `balancete`, `dfc`, `dmpl`, `notas_explicativas`,
 `faturamento_declarado`, `relacao_faturamento_mensal`, `contrato_social`,
 `certidoes`, `imposto_renda_pj`, `sped_ecd`, `parecer_auditoria`, `outros`.
 
-Os **essenciais** — os que tiram a análise de `docs_pendentes` — são configuráveis
-pelo time de Crédito. Hoje: `balanco_patrimonial`, `dre`, `faturamento_declarado`.
+Os **obrigatórios** — os que tiram a análise de `docs_pendentes` — são configuráveis
+pelo time de Crédito. Hoje: `balanco_patrimonial` e `dre`. O tipo
+`demonstracoes_financeiras` (DF, o PDF com as duas peças juntas) vale pelos dois:
+mandem a DF **ou** o balanço e a DRE separados.
 Não fixem essa lista no código de vocês: leiam `documentos_faltantes` da resposta.
 
 Quando o último essencial chega, a análise passa sozinha de `docs_pendentes` para

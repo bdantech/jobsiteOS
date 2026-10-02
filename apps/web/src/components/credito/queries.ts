@@ -239,3 +239,17 @@ export async function baixarDocAnalise(caminho: string, nomeArquivo?: string | n
   if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Não foi possível gerar o link.')
   return data.signedUrl
 }
+
+/**
+ * A URL para EXIBIR um documento da análise na própria plataforma.
+ *
+ * A mesma assinatura curta de `baixarDocAnalise`, sem o `download`: sem ele o storage não
+ * manda `Content-Disposition: attachment`, e o navegador mostra o PDF ou a imagem dentro
+ * do modal em vez de salvar. Baixar continua sendo um botão do modal.
+ */
+export async function previaDocAnalise(caminho: string): Promise<string> {
+  const supabase = createClient()
+  const { data, error } = await supabase.storage.from('analise-docs').createSignedUrl(caminho, 300)
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Não foi possível gerar o link.')
+  return data.signedUrl
+}

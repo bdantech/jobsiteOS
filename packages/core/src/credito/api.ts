@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { isValidCnpj, normalizeCnpj } from '../schemas/cnpj.js'
-import { TIPOS_DOC_CONTABEIS, type TipoDocContabil } from './analise.js'
+import { docsCobertos, TIPOS_DOC_CONTABEIS, type TipoDocContabil } from './analise.js'
 import type { PayloadProducao } from './precificacao.js'
 import { ESTAGIOS_ANALISE, type EstagioAnalise } from './schemas.js'
 
@@ -107,7 +107,9 @@ export function documentosFaltantes(
   recebidos: readonly string[],
   obrigatorios: readonly string[],
 ): string[] {
-  const tem = new Set(recebidos)
+  // A DF cobre balanço e DRE (`DOCS_SUBSTITUEM`): quem mandou as demonstrações
+  // financeiras não deve ouvir que faltam as duas peças que estão dentro delas.
+  const tem = docsCobertos(recebidos)
   return obrigatorios.filter((e) => !tem.has(e))
 }
 

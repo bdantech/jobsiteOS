@@ -4,8 +4,10 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ExternalLink, FileUp, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
-import { ESTAGIOS_ANALISE, ESTAGIO_ANALISE_LABELS, type EstagioAnalise } from '@jobsiteos/core'
+import { CheckCircle2, ExternalLink, FileUp, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
+import {
+  ESTAGIOS_ANALISE, ESTAGIO_ANALISE_LABELS, docsCobertos, type EstagioAnalise,
+} from '@jobsiteos/core'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -59,10 +61,17 @@ interface DocDaAnalise {
   enviado_em: string
 }
 
-/** O catálogo real vive em `credito_config`, que o comercial não lê. Este é o essencial. */
-const TIPOS = [
+/**
+ * O catálogo real vive em `credito_config`, que o comercial não lê. Este é o essencial,
+ * em dois grupos: o OBRIGATÓRIO (as demonstrações financeiras, OU balanço + DRE — a DF
+ * cobre os dois, ver `DOCS_SUBSTITUEM`) e o resto, que ajuda mas não segura a análise.
+ */
+const TIPO_DF = { id: 'demonstracoes_financeiras', label: 'Demonstrações financeiras (DF)' } as const
+const TIPOS_PAR = [
   { id: 'balanco_patrimonial', label: 'Balanço patrimonial' },
   { id: 'dre', label: 'DRE' },
+] as const
+const TIPOS_OPCIONAIS = [
   { id: 'faturamento_declarado', label: 'Faturamento declarado' },
   { id: 'contrato_social', label: 'Contrato social' },
   { id: 'outros', label: 'Outros' },
@@ -413,58 +422,121 @@ function Documentos({ analiseId, onMudou }: { analiseId: string; onMudou: () => 
     l.push(d)
     porTipo.set(d.tipo, l)
   }
+  const obrigatorioCompleto = (() => {
+    const cobertos = docsCobertos(porTipo.keys())
+    return TIPOS_PAR.every((t) => cobertos.has(t.id))
+  })()
+
+  const linha = (t: { id: string; label: string }) => (
+    <LinhaDoc
+      key={t.id}
+      label={t.label}
+      enviados={(porTipo.get(t.id) ?? []).length}
+      enviando={enviando === t.id}
+      bloqueado={enviando !== null}
+      onArquivo={async (arquivo) => {
+        setEnviando(t.id)
+        await subir.mutateAsync({ tipo: t.id, arquivo }).catch(() => undefined)
+        setEnviando(null)
+      }}
+    />
+  )
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="text-[11px] font-medium text-muted-foreground">
         Documentos — vão direto para a análise do Crédito
       </p>
       {docs.isPending ? (
         <Skeleton className="h-24 w-full rounded-lg" />
       ) : (
-        <div className="space-y-1.5">
-          {TIPOS.map((t) => {
-            const enviados = porTipo.get(t.id) ?? []
-            return (
-              <div key={t.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
-                <span className="min-w-32 flex-1 text-sm">{t.label}</span>
-                {enviados.length > 0 && (
-                  <Badge variant="outline" className="text-[10px]">
-                    {enviados.length} enviado{enviados.length > 1 ? 's' : ''}
-                  </Badge>
-                )}
-                <label className="shrink-0">
-                  <input
-                    type="file"
-                    className="hidden"
-                    disabled={enviando !== null}
-                    onChange={async (e) => {
-                      const arquivo = e.target.files?.[0]
-                      if (!arquivo) return
-                      setEnviando(t.id)
-                      await subir.mutateAsync({ tipo: t.id, arquivo }).catch(() => undefined)
-                      setEnviando(null)
-                      e.target.value = ''
-                    }}
-                  />
-                  <span className="inline-flex h-8 cursor-pointer items-center rounded-md border px-2 text-xs transition-colors hover:bg-accent">
-                    {enviando === t.id ? (
-                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <FileUp className="mr-1 h-3.5 w-3.5" aria-hidden />
-                    )}
-                    Enviar
-                  </span>
-                </label>
-              </div>
-            )
-          })}
-        </div>
+        <>
+          {/*
+            O OBRIGATÓRIO EM DESTAQUE, E COM O "OU" ESCRITO. O sacado quase sempre manda as
+            demonstrações financeiras num PDF só; quem recebeu balanço e DRE separados manda
+            os dois. Qualquer um dos caminhos fecha o checklist e move a análise.
+          */}
+          <div
+            className={
+              obrigatorioCompleto
+                ? 'space-y-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3'
+                : 'space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/5 p-3'
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium">Obrigatório — envie um dos dois</p>
+              {obrigatorioCompleto ? (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  Completo
+                </span>
+              ) : (
+                <span className="text-xs text-amber-700 dark:text-amber-400">Pendente</span>
+              )}
+            </div>
+            <div className="space-y-1.5">{linha(TIPO_DF)}</div>
+            <p className="text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              ou
+            </p>
+            <div className="space-y-1.5">{TIPOS_PAR.map(linha)}</div>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground">Outros documentos (opcionais)</p>
+            {TIPOS_OPCIONAIS.map(linha)}
+          </div>
+        </>
       )}
       <p className="text-[0.8rem] text-muted-foreground">
         Enviado é enviado: apagar documento é do Crédito, porque é prova de decisão. Se subiu
         errado, mande o certo e avise no card.
       </p>
+    </div>
+  )
+}
+
+function LinhaDoc({
+  label,
+  enviados,
+  enviando,
+  bloqueado,
+  onArquivo,
+}: {
+  label: string
+  enviados: number
+  enviando: boolean
+  bloqueado: boolean
+  onArquivo: (arquivo: File) => Promise<void>
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background p-2">
+      <span className="min-w-32 flex-1 text-sm">{label}</span>
+      {enviados > 0 && (
+        <Badge variant="outline" className="text-[10px]">
+          {enviados} enviado{enviados > 1 ? 's' : ''}
+        </Badge>
+      )}
+      <label className="shrink-0">
+        <input
+          type="file"
+          className="hidden"
+          disabled={bloqueado}
+          onChange={async (e) => {
+            const arquivo = e.target.files?.[0]
+            if (!arquivo) return
+            await onArquivo(arquivo)
+            e.target.value = ''
+          }}
+        />
+        <span className="inline-flex h-8 cursor-pointer items-center rounded-md border px-2 text-xs transition-colors hover:bg-accent">
+          {enviando ? (
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <FileUp className="mr-1 h-3.5 w-3.5" aria-hidden />
+          )}
+          Enviar
+        </span>
+      </label>
     </div>
   )
 }

@@ -1042,6 +1042,7 @@ export function motivoObrigatorio(quadrante: Quadrante | null, decisao: DecisaoF
 // ─── §3 A extração, do lado de cá ───────────────────────────────────────────
 
 export const TIPOS_DOC_CONTABEIS = [
+  'demonstracoes_financeiras',
   'balanco_patrimonial',
   'dre',
   'balancete',
@@ -1060,6 +1061,7 @@ export const TIPOS_DOC_CONTABEIS = [
 export type TipoDocContabil = (typeof TIPOS_DOC_CONTABEIS)[number]
 
 export const TIPO_DOC_LABELS: Record<TipoDocContabil, string> = {
+  demonstracoes_financeiras: 'Demonstrações financeiras (DF)',
   balanco_patrimonial: 'Balanço patrimonial',
   dre: 'DRE',
   balancete: 'Balancete',
@@ -1083,8 +1085,35 @@ export const DOCS_ESSENCIAIS: TipoDocContabil[] = [
   'faturamento_declarado',
 ]
 
+/**
+ * Documento que vale por outros.
+ *
+ * O sacado quase nunca manda balanço e DRE em arquivos separados: manda as
+ * DEMONSTRAÇÕES FINANCEIRAS, um PDF só com as duas peças (e às vezes DFC e notas). O
+ * comercial anexava esse PDF duas vezes, uma como balanço e outra como DRE, só para o
+ * checklist fechar. Agora a DF é tipo próprio e cobre os dois.
+ *
+ * O gatilho da esteira (0282) lê a mesma equivalência do catálogo `credito_config.docs`
+ * (campo `substitui`). Esta constante é a cópia do lado de cá, para a API e as telas
+ * dizerem o mesmo que o banco.
+ */
+export const DOCS_SUBSTITUEM: Partial<Record<TipoDocContabil, readonly TipoDocContabil[]>> = {
+  demonstracoes_financeiras: ['balanco_patrimonial', 'dre'],
+}
+
+/** Os tipos que os recebidos cobrem: eles mesmos e os que cada um substitui. */
+export function docsCobertos(recebidos: Iterable<string>): Set<string> {
+  const cobertos = new Set<string>()
+  for (const t of recebidos) {
+    cobertos.add(t)
+    for (const s of DOCS_SUBSTITUEM[t as TipoDocContabil] ?? []) cobertos.add(s)
+  }
+  return cobertos
+}
+
 /** Só estes tipos vão ao modelo na extração — certidão e contrato social não têm número. */
 export const DOCS_EXTRAIVEIS: TipoDocContabil[] = [
+  'demonstracoes_financeiras',
   'balanco_patrimonial',
   'dre',
   'balancete',

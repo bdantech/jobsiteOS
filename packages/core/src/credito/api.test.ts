@@ -45,6 +45,13 @@ test('o checklist diz o que falta, e é ele que decide o estágio de nascimento'
   assert.equal(estagioInicial([]), 'docs_recebidos')
 })
 
+test('a DF vale pelo balanço e pela DRE; sozinha, nenhuma das duas peças fecha o par', () => {
+  const obrigatorios = ['balanco_patrimonial', 'dre']
+  assert.deepEqual(documentosFaltantes(['demonstracoes_financeiras'], obrigatorios), [])
+  assert.deepEqual(documentosFaltantes(['balanco_patrimonial', 'dre'], obrigatorios), [])
+  assert.deepEqual(documentosFaltantes(['dre', 'outros'], obrigatorios), ['balanco_patrimonial'])
+})
+
 test('o backoff cresce e ACABA — a sexta tentativa é a última', () => {
   const agora = new Date('2026-09-02T12:00:00Z')
   const minutos = (n: number): number => {
