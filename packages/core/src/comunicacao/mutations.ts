@@ -62,6 +62,13 @@ export async function ignorarConversa(supabase: Supabase, input: unknown) {
   if (error) throw new Error(error.message)
 }
 
+/** O desfazer do ignorar: a linha volta a `pendente` e reaparece na fila de quem atendeu. */
+export async function reabrirConversa(supabase: Supabase, input: unknown) {
+  const dados = idSchema.parse(input)
+  const { error } = await supabase.rpc('app_conversa_reabrir', { p: dados as unknown as Json })
+  if (error) throw new Error(error.message)
+}
+
 /**
  * OCULTAR é silêncio pessoal, não resolução.
  *

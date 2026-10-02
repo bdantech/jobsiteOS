@@ -19223,6 +19223,7 @@ export type Database = {
       app_conversa_ignorar: { Args: { p: Json }; Returns: undefined }
       app_conversa_marcar_lida: { Args: { p: Json }; Returns: undefined }
       app_conversa_ocultar: { Args: { p: Json }; Returns: undefined }
+      app_conversa_reabrir: { Args: { p: Json }; Returns: undefined }
       app_conversa_reexibir: { Args: { p: Json }; Returns: undefined }
       app_conversa_vincular: {
         Args: { p: Json }

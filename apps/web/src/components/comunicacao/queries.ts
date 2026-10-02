@@ -194,7 +194,7 @@ export async function meuVendedorId(): Promise<string | null> {
 }
 
 /**
- * A fila de identificação DE UMA PESSOA.
+ * A fila de identificação.
  *
  * ── O que "minha" quer dizer aqui ───────────────────────────────────────────
  * Estas conversas CHEGARAM de um número desconhecido; ninguém as iniciou do
@@ -207,19 +207,51 @@ export async function meuVendedorId(): Promise<string | null> {
  * fila inteira, e continua podendo. O filtro existe para a tela não despejar a
  * fila da empresa sobre quem só precisa da própria. Para IMPEDIR a leitura, e
  * não só escondê-la, o lugar é a policy.
+ *
+ * ── O recorte: a fila de UMA pessoa, ou a de TODOS ─────────────────────────
+ * "Todos" só o Admin oferece, e inclui as linhas sem `vendedor_sugerido_id`, que
+ * nenhuma fila individual mostra — é o único lugar onde elas aparecem.
  */
-export async function buscarNaoVinculadas(vendedorId: string | null): Promise<NaoVinculada[]> {
-  if (!vendedorId) return []
+export type EscopoIdentificacao = { todos: true } | { todos: false; vendedorId: string | null }
+
+/** A linha da fila com o nome de quem atendeu e, no ignorado, de quem ignorou. */
+export type LinhaIdentificacao = NaoVinculada & {
+  vendedor: { nome: string } | null
+  resolvedor: { nome: string } | null
+}
+
+export async function listarIdentificacao(
+  escopo: EscopoIdentificacao,
+  status: 'pendente' | 'ignorada',
+): Promise<LinhaIdentificacao[]> {
+  if (!escopo.todos && !escopo.vendedorId) return []
   const supabase = createClient()
-  const { data, error } = await supabase
+  let q = supabase
     .from('conversas_nao_vinculadas')
-    .select('*')
-    .eq('status', 'pendente')
-    .eq('vendedor_sugerido_id', vendedorId)
-    .order('ultima_mensagem_em', { ascending: false })
-    .limit(100)
+    .select('*, vendedor:vendedores!conversas_nao_vinculadas_vendedor_sugerido_id_fkey(nome), resolvedor:usuarios!conversas_nao_vinculadas_resolvida_por_fkey(nome)')
+    .eq('status', status)
+    .order(status === 'ignorada' ? 'resolvida_em' : 'ultima_mensagem_em', { ascending: false })
+    .limit(200)
+  if (!escopo.todos) q = q.eq('vendedor_sugerido_id', escopo.vendedorId as string)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
-  return data ?? []
+  return (data ?? []) as LinhaIdentificacao[]
+}
+
+export async function contarIdentificacao(
+  escopo: EscopoIdentificacao,
+  status: 'pendente' | 'ignorada',
+): Promise<number> {
+  if (!escopo.todos && !escopo.vendedorId) return 0
+  const supabase = createClient()
+  let q = supabase
+    .from('conversas_nao_vinculadas')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', status)
+  if (!escopo.todos) q = q.eq('vendedor_sugerido_id', escopo.vendedorId as string)
+  const { count, error } = await q
+  if (error) throw new Error(error.message)
+  return count ?? 0
 }
 
 /** O contador das tarjas e do menu. Mesmo escopo da lista, pelo mesmo motivo. */

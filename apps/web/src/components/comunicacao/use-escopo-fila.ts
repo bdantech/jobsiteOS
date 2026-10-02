@@ -5,7 +5,7 @@ import * as React from 'react'
 
 import { createClient } from '@/lib/supabase/client'
 
-import { buscarNaoVinculadas, contarNaoVinculadas, meuVendedorId } from './queries'
+import { contarNaoVinculadas, meuVendedorId } from './queries'
 
 export interface VendedorVisivel {
   id: string
@@ -62,14 +62,6 @@ export function useEscopoFila() {
     temFilaPropria,
     podeTrocar: visiveis.length > 1 || (visiveis.length === 1 && !temFilaPropria),
   }
-}
-
-/** A lista, já no escopo resolvido. */
-export function useNaoVinculadas(vendedorId: string | null) {
-  return useQuery({
-    queryKey: ['comunicacao', 'nao-vinculadas', vendedorId],
-    queryFn: () => buscarNaoVinculadas(vendedorId),
-  })
 }
 
 /** O contador das tarjas e do menu, no mesmo escopo da lista. */
