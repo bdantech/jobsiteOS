@@ -175,7 +175,7 @@ export const empresasModule: AppModule = {
   name: 'Empresas',
   icon: 'building-2',
   route: '/empresas',
-  group: 'operacoes',
+  group: 'base',
   tools: [
     {
       id: 'certificados.status_geral',

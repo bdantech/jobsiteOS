@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { PainelDeAtividade } from '@/components/comunicacao/atividade'
 
-export const metadata: Metadata = { title: 'Atividade — Comunicação' }
+export const metadata: Metadata = { title: 'Painel — Comunicação' }
 
 export default function AtividadePage() {
   return (

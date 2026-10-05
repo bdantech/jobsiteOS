@@ -34,10 +34,18 @@ export interface ModuleTool<TInput = unknown, TOutput = unknown> {
 
 /**
  * Agrupamento do módulo na sidebar. Responde "por que este item está aqui?" antes
- * de a pessoa clicar: `inteligencia` é onde se descobre com quem falar, `operacoes`
- * é onde o dinheiro anda, `outros` é o que não é trabalho do dia.
+ * de a pessoa clicar, e as seções seguem a jornada do dinheiro:
+ *
+ *   base        o cadastro que todos os outros abrem (Empresas). Sem rótulo, no topo.
+ *   prospeccao  onde se descobre com quem falar.
+ *   vendas      onde se fala, se vende e a nota vira antecipação.
+ *   risco       quanto o cliente sustenta, e o que fazer quando ele não paga.
+ *   sistema     o que não é trabalho do dia.
+ *
+ * "Operações" juntava oito dos doze módulos, e uma seção que contém quase tudo não
+ * ajuda a achar nada.
  */
-export type ModuleGroup = 'inteligencia' | 'operacoes' | 'outros'
+export type ModuleGroup = 'base' | 'prospeccao' | 'vendas' | 'risco' | 'sistema'
 
 export interface AppModule {
   /** Matches perfil_modulos.modulo_id in the database. */
@@ -55,4 +63,9 @@ export interface AppModule {
    * mobile route guard must refuse it even if a deep link points there.
    */
   webOnly?: boolean
+  /**
+   * O módulo existe (rota, permissão, grid "Mais" do mobile), mas não ganha item na
+   * sidebar web porque o shell já tem outra porta para ele — Notificações é o sino.
+   */
+  foraDaSidebar?: boolean
 }

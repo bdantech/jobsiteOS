@@ -175,7 +175,7 @@ export const juridicoModule: AppModule = {
   route: '/juridico',
   // `operacoes` e não `outros`: aqui é dinheiro que já saiu e está sendo perseguido de
   // volta. Um processo de execução é a última etapa do mesmo funil que começa no Mercado.
-  group: 'operacoes',
+  group: 'risco',
   tools: [
     {
       id: 'juridico.processos_empresa',

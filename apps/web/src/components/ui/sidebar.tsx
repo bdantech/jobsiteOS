@@ -587,6 +587,40 @@ const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenuButtonP
 )
 SidebarMenuButton.displayName = 'SidebarMenuButton'
 
+interface SidebarMenuActionProps extends React.ComponentPropsWithoutRef<'button'> {
+  asChild?: boolean
+  /** Só aparece com o mouse sobre o item (ou com foco nele) — no toque, sempre. */
+  showOnHover?: boolean
+}
+
+/**
+ * O botão secundário colado à direita de um item (o alfinete de "fixar"). O
+ * SidebarMenuButton já reserva o espaço dele (`group-has-[[data-sidebar=menu-action]]`).
+ * Some no trilho de ícones: lá não há largura para dois alvos de clique por linha.
+ */
+const SidebarMenuAction = React.forwardRef<HTMLButtonElement, SidebarMenuActionProps>(
+  ({ className, asChild = false, showOnHover = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : 'button'
+    return (
+      <Comp
+        ref={ref}
+        data-sidebar="menu-action"
+        className={cn(
+          'absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/65 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 [&>svg]:size-3.5 [&>svg]:shrink-0',
+          // Alvo de toque maior no mobile, sem mudar o desenho.
+          'after:absolute after:-inset-2 after:md:hidden',
+          'group-data-[collapsible=icon]:hidden',
+          showOnHover &&
+            'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0',
+          className,
+        )}
+        {...props}
+      />
+    )
+  },
+)
+SidebarMenuAction.displayName = 'SidebarMenuAction'
+
 const SidebarMenuBadge = React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<'div'>>(
   ({ className, ...props }, ref) => (
     <div
@@ -642,6 +676,7 @@ export {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,

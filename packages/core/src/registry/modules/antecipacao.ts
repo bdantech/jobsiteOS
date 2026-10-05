@@ -284,7 +284,7 @@ export const antecipacaoModule: AppModule = {
   name: 'Antecipação',
   icon: 'banknote',
   route: '/antecipacao',
-  group: 'operacoes',
+  group: 'vendas',
   tools: [
     /*
      * As tools do funil de Sacados por NF (04r) moram em arquivo próprio e entram aqui.

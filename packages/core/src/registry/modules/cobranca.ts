@@ -419,7 +419,7 @@ export const cobrancaModule: AppModule = {
   name: 'Cobrança',
   icon: 'wallet',
   route: '/cobranca',
-  group: 'operacoes',
+  group: 'risco',
   tools: [
     {
       id: 'cobranca.listar',

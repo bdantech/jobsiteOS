@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
-import { isAdmin, requireSessionContext } from '@/lib/auth'
+import { requireSessionContext } from '@/lib/auth'
 import { ComunicacaoNav } from '@/components/comunicacao/comunicacao-nav'
 
 /**
@@ -24,7 +24,7 @@ export default async function ComunicacaoLayout({ children }: { children: ReactN
 
   return (
     <div>
-      <ComunicacaoNav ehAdmin={isAdmin(context)} />
+      <ComunicacaoNav />
       {children}
     </div>
   )

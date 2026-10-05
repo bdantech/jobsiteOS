@@ -13,7 +13,7 @@ export const adminModule: AppModule = {
   name: 'Administração',
   icon: 'shield',
   route: '/admin',
-  group: 'outros',
+  group: 'sistema',
   webOnly: true,
   tools: [],
 }

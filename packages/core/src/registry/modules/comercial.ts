@@ -196,7 +196,7 @@ export const comercialModule: AppModule = {
   name: 'Comercial',
   icon: 'handshake',
   route: '/comercial',
-  group: 'operacoes',
+  group: 'vendas',
   tools: [
     {
       id: 'comercial.meu_resumo',

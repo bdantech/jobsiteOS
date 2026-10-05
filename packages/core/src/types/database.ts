@@ -13008,6 +13008,7 @@ export type Database = {
       usuarios: {
         Row: {
           ativo: boolean
+          atalhos_fixados: string[]
           criado_em: string
           email: string
           expo_push_tokens: Json
@@ -13020,6 +13021,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean
+          atalhos_fixados?: string[]
           criado_em?: string
           email: string
           expo_push_tokens?: Json
@@ -13032,6 +13034,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean
+          atalhos_fixados?: string[]
           criado_em?: string
           email?: string
           expo_push_tokens?: Json

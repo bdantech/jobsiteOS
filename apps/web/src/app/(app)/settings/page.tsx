@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { prefsNotificacoesSchema, type PrefsNotificacoes } from '@jobsiteos/core'
-import { requireSessionContext } from '@/lib/auth'
+import { isAdmin, requireSessionContext } from '@/lib/auth'
+import { contextoComercial } from '@/lib/comercial'
+import type { VisaoDoUsuario } from '@/components/shell/abas-dos-modulos'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   Card,
@@ -10,6 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { AparenciaCard } from './aparencia-card'
+import { AtalhosCard } from './atalhos-card'
 import { NotificacoesCard } from './notificacoes-card'
 import { SenhaCard } from './senha-card'
 
@@ -38,16 +41,29 @@ async function carregarPrefs(userId: string): Promise<PrefsNotificacoes> {
   return parsed.success ? parsed.data : prefsNotificacoesSchema.parse({})
 }
 
+/**
+ * Quem a pessoa é para as barras de abas — a mesma régua que cada módulo aplica, para a
+ * lista de "o que dá para fixar" não oferecer aba que ela não vê. O contexto comercial
+ * só é resolvido para quem tem o módulo: para os outros, nenhuma aba dele aparece.
+ */
+async function visaoDasAbas(): Promise<VisaoDoUsuario> {
+  const context = await requireSessionContext()
+  const base = { ehAdmin: isAdmin(context), modulos: context.grantedModuleIds }
+  if (!context.grantedModuleIds.includes('comercial')) return { ...base, ehGestor: false, tipo: null }
+  const { vendedor, ehGestor } = await contextoComercial()
+  return { ...base, ehGestor, tipo: vendedor?.tipo ?? null }
+}
+
 export default async function SettingsPage() {
   const context = await requireSessionContext()
-  const prefs = await carregarPrefs(context.user.id)
+  const [prefs, visao] = await Promise.all([carregarPrefs(context.user.id), visaoDasAbas()])
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
         <p className="text-sm text-muted-foreground">
-          Gerencie sua conta, aparência e notificações.
+          Gerencie sua conta, aparência, barra lateral e notificações.
         </p>
       </header>
 
@@ -70,6 +86,7 @@ export default async function SettingsPage() {
 
       <SenhaCard />
       <AparenciaCard />
+      <AtalhosCard visao={visao} />
       {/* PushToggle (inside) reads NEXT_PUBLIC_VAPID_PUBLIC_KEY itself. */}
       <NotificacoesCard prefsIniciais={prefs} />
     </div>

@@ -71,25 +71,64 @@ export function grantedModules(grantedIds: readonly string[]): AppModule[] {
  * Ordem e rótulos das seções da sidebar. É esta lista que manda, não a ordem do
  * MODULES: um módulo novo aparece na seção que declarar, no lugar que a seção
  * ocupa aqui.
+ *
+ * `label: null` é a seção sem cabeçalho. A `base` (Empresas) é o cadastro que todos
+ * os outros módulos abrem, e um rótulo "Cadastros" em cima de um item só seria ruído.
  */
-export const MODULE_GROUPS: readonly { id: ModuleGroup; label: string }[] = [
-  { id: 'inteligencia', label: 'Inteligência' },
-  { id: 'operacoes', label: 'Operações' },
-  { id: 'outros', label: 'Outros' },
+export const MODULE_GROUPS: readonly { id: ModuleGroup; label: string | null }[] = [
+  { id: 'base', label: null },
+  { id: 'prospeccao', label: 'Prospecção' },
+  { id: 'vendas', label: 'Vendas' },
+  { id: 'risco', label: 'Risco e recuperação' },
+  { id: 'sistema', label: 'Sistema' },
 ]
+
+/**
+ * Ordem dos módulos DENTRO de cada seção da sidebar.
+ *
+ * Não é a ordem do MODULES porque aquela tem outro dono: o mobile monta a tab bar
+ * com ela, e o primeiro módulo liberado é a tela em que o app abre. Reordenar o
+ * array para arrumar a sidebar mudaria a tela inicial de quem usa o celular.
+ *
+ * Um módulo que não estiver aqui não some — vai para o fim da seção dele.
+ */
+const ORDEM_NA_SIDEBAR: readonly string[] = [
+  'empresas',
+  'mercado',
+  'radar',
+  // Comercial antes da Antecipação: é a porta do dia do time (Meu Dia), e a
+  // Antecipação é para onde a venda leva a nota.
+  'comercial',
+  'antecipacao',
+  'comunicacao',
+  'agentes',
+  // A ordem do tempo: quanto o cliente sustenta, cobrar o que venceu, processar o
+  // que a cobrança não trouxe.
+  'credito',
+  'cobranca',
+  'juridico',
+  'admin',
+]
+
+function posicaoNaSidebar(id: string): number {
+  const i = ORDEM_NA_SIDEBAR.indexOf(id)
+  return i === -1 ? ORDEM_NA_SIDEBAR.length : i
+}
 
 /**
  * Os módulos liberados, já quebrados em seções e na ordem do MODULE_GROUPS.
  * Seções sem nenhum módulo liberado saem do resultado — um cabeçalho sozinho é
- * pior que a ausência dele.
+ * pior que a ausência dele. Módulos `foraDaSidebar` ficam de fora.
  */
 export function grantedModuleGroups(
   grantedIds: readonly string[],
-): { id: ModuleGroup; label: string; modules: AppModule[] }[] {
-  const granted = grantedModules(grantedIds)
+): { id: ModuleGroup; label: string | null; modules: AppModule[] }[] {
+  const granted = grantedModules(grantedIds).filter((m) => !m.foraDaSidebar)
   return MODULE_GROUPS.map((g) => ({
     ...g,
-    modules: granted.filter((m) => m.group === g.id),
+    modules: granted
+      .filter((m) => m.group === g.id)
+      .sort((a, b) => posicaoNaSidebar(a.id) - posicaoNaSidebar(b.id)),
   })).filter((g) => g.modules.length > 0)
 }
 

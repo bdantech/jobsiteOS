@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
-import { isAdmin, requireSessionContext } from '@/lib/auth'
+import { requireSessionContext } from '@/lib/auth'
 import { MercadoNav } from '@/components/mercado/mercado-nav'
 
 /**
@@ -11,9 +11,9 @@ import { MercadoNav } from '@/components/mercado/mercado-nav'
  * item de sidebar por módulo. Dentro de um módulo com várias telas, alguém precisa
  * ligá-las, e esse alguém é este layout.
  *
- * `ehAdmin` é resolvido aqui, no servidor, e não dentro do componente de nav: a tela
- * de Camadas redireciona não-admins para /sem-acesso, então oferecer o link a eles
- * seria oferecer uma porta que bate na cara. A decisão de autorização continua
+ * Quem é admin é resolvido no servidor, uma vez, pelo layout de (app), e chega à nav
+ * pelo AtalhosProvider: a tela de Camadas redireciona não-admins para /sem-acesso,
+ * então oferecer o link a eles seria oferecer uma porta que bate na cara. A decisão de autorização continua
  * sendo da página (e do RLS) — isto só evita mostrar o que não vai abrir.
  */
 export default async function MercadoLayout({ children }: { children: ReactNode }) {
@@ -22,7 +22,7 @@ export default async function MercadoLayout({ children }: { children: ReactNode 
 
   return (
     <div>
-      <MercadoNav ehAdmin={isAdmin(context)} />
+      <MercadoNav />
       {children}
     </div>
   )

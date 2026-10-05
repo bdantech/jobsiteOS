@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { contextoComercial } from '@/lib/comercial'
 import { AnaliseDoFunilTela } from '@/components/comercial/analise-tela'
 
-export const metadata: Metadata = { title: 'Análise do funil — Comercial' }
+export const metadata: Metadata = { title: 'Métricas do funil — Comercial' }
 
 export const dynamic = 'force-dynamic'
 

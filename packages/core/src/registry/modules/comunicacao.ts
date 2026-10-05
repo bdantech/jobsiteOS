@@ -242,7 +242,7 @@ export const comunicacaoModule: AppModule = {
   route: '/comunicacao',
   // `operacoes`: é onde a conversa acontece. Mercado acha a empresa, Radar acha o
   // contato — aqui é onde alguém fala com ele.
-  group: 'operacoes',
+  group: 'vendas',
   tools: [
     {
       id: 'comunicacao.historico_empresa',

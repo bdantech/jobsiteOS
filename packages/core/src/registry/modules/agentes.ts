@@ -163,7 +163,7 @@ export const agentesModule: AppModule = {
   name: 'Agentes',
   icon: 'bot',
   route: '/agentes',
-  group: 'operacoes',
+  group: 'vendas',
   tools: [
     {
       id: 'agentes.estado',

@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { canAccessRoute } from '@jobsiteos/core'
-import { isAdmin, requireSessionContext } from '@/lib/auth'
+import { requireSessionContext } from '@/lib/auth'
 import { RadarNav } from '@/components/radar/radar-nav'
 
 /**
  * Casca do módulo Radar: navegação entre as telas (Painel, Lotes, Clientes,
- * Supressão, Configurações). ehAdmin é resolvido no servidor — Config só é oferecida
- * a admins (a página também guarda). A autorização de verdade continua na página + RLS.
+ * Supressão, Configurações). Quem é admin é resolvido no servidor pelo layout de (app)
+ * — Config só é oferecida a admins (a página também guarda). A autorização de verdade continua na página + RLS.
  */
 export default async function RadarLayout({ children }: { children: ReactNode }) {
   const context = await requireSessionContext()
@@ -15,7 +15,7 @@ export default async function RadarLayout({ children }: { children: ReactNode })
 
   return (
     <div>
-      <RadarNav ehAdmin={isAdmin(context)} />
+      <RadarNav />
       {children}
     </div>
   )
