@@ -85,6 +85,11 @@ test('tokens viram centavos pela tabela da config', () => {
   // 10k de entrada a US$3/MTok + 2k de saída a US$15/MTok = US$ 0,06 × 5,5 = R$ 0,33
   assert.equal(custoTokensCentavos({ entrada: 10_000, saida: 2_000 }, CONFIG_AGENTES_PADRAO.precos), 33)
   assert.equal(custoTokensCentavos({ entrada: 0, saida: 0 }, CONFIG_AGENTES_PADRAO.precos), 0)
+  // Cache: 10 mil de entrada, 8 mil lidos do cache → custa como 2.800 comuns.
+  assert.equal(
+    custoTokensCentavos({ entrada: 10_000, saida: 0, cacheLida: 8_000 }, CONFIG_AGENTES_PADRAO.precos),
+    custoTokensCentavos({ entrada: 2_800, saida: 0 }, CONFIG_AGENTES_PADRAO.precos),
+  )
 })
 
 test('saldo e alertas: 100% é sempre um limiar, e cada um sai uma vez', () => {

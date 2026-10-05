@@ -130,3 +130,60 @@ async function registrarDiscagem(corpo: Record<string, unknown>): Promise<Result
   if (!rows.length) logger.info({ id_externo: idExterno, ligacao_id: ligacaoId }, 'ligacao.iniciada sem ligação enviada correspondente.')
   return { ok: true, access_key: rows[0]?.id_externo ?? idExterno ?? ligacaoId ?? '', status: 'em_curso' }
 }
+
+// ─── O rastro de toda entrega (0275) ────────────────────────────────────────
+
+/** O corpo cru guardado tem teto: o endpoint é público e não pode virar depósito. */
+const MAX_CORPO = 200_000
+
+export interface WebhookGuardado {
+  id: string | null
+  evento: string | null
+  idExterno: string | null
+}
+
+/**
+ * Grava a requisição ANTES de validar qualquer coisa — inclusive a de assinatura inválida,
+ * que é justamente a que precisa ficar visível. Falhar aqui não pode derrubar o webhook:
+ * sem o rastro, a entrega segue como seguia.
+ */
+export async function guardarWebhookDeVoz(e: { assinaturaOk: boolean; cru: string; temAssinatura: boolean }): Promise<WebhookGuardado> {
+  let corpo: Record<string, unknown> | null = null
+  try {
+    const lido = JSON.parse(e.cru) as unknown
+    if (lido && typeof lido === 'object' && !Array.isArray(lido)) corpo = lido as Record<string, unknown>
+  } catch {
+    corpo = null
+  }
+  const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null)
+  const evento = texto(corpo?.evento)
+  const idExterno = texto(corpo?.id_externo)
+  try {
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into voz_webhooks (assinatura_ok, evento, id_externo, ligacao_id, corpo, corpo_texto, erro)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7) returning id`,
+      [
+        e.assinaturaOk,
+        evento,
+        idExterno,
+        texto(corpo?.ligacao_id),
+        corpo && e.cru.length <= MAX_CORPO ? JSON.stringify(corpo) : null,
+        corpo ? null : e.cru.slice(0, MAX_CORPO),
+        e.temAssinatura ? null : 'sem cabeçalho de assinatura',
+      ],
+    )
+    return { id: rows[0]?.id ?? null, evento, idExterno }
+  } catch (erro) {
+    logger.warn({ erro: String(erro) }, 'Não foi possível guardar o webhook da voz.')
+    return { id: null, evento, idExterno }
+  }
+}
+
+export async function fecharWebhookDeVoz(id: string | null, status: number, erro: string | null): Promise<void> {
+  if (!id) return
+  try {
+    await pool.query('update voz_webhooks set status_http = $2, erro = coalesce($3, erro) where id = $1', [id, status, erro?.slice(0, 1000) ?? null])
+  } catch (falha) {
+    logger.warn({ erro: String(falha) }, 'Não foi possível fechar o registro do webhook da voz.')
+  }
+}

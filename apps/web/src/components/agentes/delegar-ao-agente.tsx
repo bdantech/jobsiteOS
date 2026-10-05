@@ -338,7 +338,7 @@ export function DelegarAoAgenteDialog({
               <Input id="delegar-acoes" inputMode="numeric" value={maxAcoes} onChange={(e) => setMaxAcoes(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="delegar-prazo">Prazo (dias)</Label>
+              <Label htmlFor="delegar-prazo">Prazo (dias úteis)</Label>
               <Input id="delegar-prazo" inputMode="numeric" value={prazoDias} onChange={(e) => setPrazoDias(e.target.value)} />
             </div>
             <div className="space-y-1.5">

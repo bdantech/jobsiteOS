@@ -3,6 +3,7 @@ import { ferramentasDisponiveis, type IdFerramenta } from '../../../../../packag
 import { executarCiclo, type AcaoDoCiclo } from '../../../../../packages/core/src/agentes/loop.js'
 import { custoTokensCentavos } from '../../../../../packages/core/src/agentes/orcamento.js'
 import { montarSystemPrompt } from '../../../../../packages/core/src/agentes/prompt.js'
+import { deveDormirSemNovidade, proximaAcaoDoMandato } from '../../../../../packages/core/src/agentes/ritmo.js'
 import type { ConfigAgentes } from '../../../../../packages/core/src/agentes/schemas.js'
 import type { StatusVoz } from '../../../../../packages/core/src/agentes/voz-adapter.js'
 import { aplicarTrancas, TRANCA_LABELS } from '../../../../../packages/core/src/agentes/trancas.js'
@@ -244,6 +245,22 @@ async function processarMandato(
     return { tranca: 'escalacao_guardrail', acoes: 1, custo: 0 }
   }
 
+  /*
+   * ── ESPERANDO, E NADA MUDOU ─────────────────────────────────────────────────
+   * O ritmo novo acorda o mandato em minutos (`proximaAcaoDoMandato`). Quando o plano diz que
+   * ele está esperando uma resposta ou o resultado de uma ligação e nada chegou desde o
+   * último ciclo, não há o que o modelo decidir: reagenda sem gastar um ciclo (~R$ 1). A
+   * paciência tem teto (`espera_sem_novidade_max_min`); passado ele, o modelo roda e decide
+   * o próximo passo — outro canal, outro contato.
+   */
+  const ultimoCicloEm = await ultimoCicloDoMandato(m.id)
+  const novidade = ultimoCicloEm ? await houveNovidadeDesde(m, ultimoCicloEm) : true
+  if (deveDormirSemNovidade({ agora, plano: m.plano, ultimoCicloEm, houveNovidade: novidade, geral: cfg.geral })) {
+    const proxima = proximaAcaoDoMandato({ agora, plano: null, marcado: null, expiraEm: new Date(m.expira_em), geral: cfg.geral })
+    await supabaseAdmin.from('mandatos').update({ proxima_acao_em: proxima.em.toISOString() }).eq('id', m.id)
+    return { tranca: 'aguardando_sem_novidade', acoes: 0, custo: 0 }
+  }
+
   if (m.estado === 'aberto') {
     await supabaseAdmin.from('mandatos').update({ estado: 'em_andamento' }).eq('id', m.id)
     await evento(m, 'mandato.iniciado', `${agente.nome} começou a trabalhar: ${m.objetivo}`)
@@ -361,19 +378,44 @@ async function processarMandato(
 }
 
 /**
- * Quando o mandato acorda de novo: a primeira próxima ação do plano; nunca no passado e
- * nunca antes do próximo ciclo. Sem plano (erro), recua 30 minutos — um ciclo que falha não
- * pode ocupar a fila a cada 5 minutos.
+ * Quando o mandato acorda de novo: as regras de ritmo do core (`proximaAcaoDoMandato`) —
+ * em minutos, salvo pedido do cliente, nunca depois da validade. Ciclo que falhou recua 30
+ * minutos: um erro não pode ocupar a fila a cada 5.
  */
 function proximaAcao(m: MandatoCarregado, erro: string | null, cfg: ConfigAgentes): Date {
-  const minimo = Date.now() + cfg.geral.intervalo_ciclo_min * 60_000
   if (erro && erro !== 'tempo_esgotado') return new Date(Date.now() + 30 * 60_000)
-  // `agendar_ligacao` pode ter marcado um horário: ele vale se vier antes do plano.
-  const marcado = m.proxima_acao_em ? new Date(m.proxima_acao_em).getTime() : Number.NaN
-  const doPlano = m.plano?.proximas_acoes?.[0]?.quando ? Date.parse(m.plano.proximas_acoes[0].quando) : Number.NaN
-  const candidatos = [marcado, doPlano].filter((t) => Number.isFinite(t) && t > Date.now())
-  const alvo = candidatos.length ? Math.min(...candidatos) : Date.now() + 24 * 3_600_000
-  return new Date(Math.max(alvo, minimo))
+  return proximaAcaoDoMandato({
+    agora: new Date(),
+    plano: m.plano,
+    marcado: m.proxima_acao_em ? new Date(m.proxima_acao_em) : null,
+    expiraEm: new Date(m.expira_em),
+    geral: cfg.geral,
+  }).em
+}
+
+/** O último ciclo em que o modelo rodou (`ultimo_ciclo_em` não está no mandato carregado). */
+async function ultimoCicloDoMandato(id: string): Promise<Date | null> {
+  const { data } = await supabaseAdmin.from('mandatos').select('ultimo_ciclo_em').eq('id', id).maybeSingle()
+  return data?.ultimo_ciclo_em ? new Date(data.ultimo_ciclo_em) : null
+}
+
+/**
+ * Chegou algo que o modelo precisa ver desde `desde`? Resposta do cliente na empresa,
+ * mudança numa ligação do mandato (discou, terminou) ou desfecho consumido. Na dúvida (erro
+ * de consulta), diz que sim: rodar um ciclo a mais é melhor que dormir sobre uma resposta.
+ */
+async function houveNovidadeDesde(m: MandatoCarregado, desde: Date): Promise<boolean> {
+  const t = desde.toISOString()
+  const [entrada, ligacoes, desfechos] = await Promise.all([
+    supabaseAdmin.from('comunicacoes').select('id', { count: 'exact', head: true })
+      .eq('empresa_id', m.empresa_id).eq('direcao', 'entrada').gt('criado_em', t),
+    supabaseAdmin.from('voz_ligacoes').select('id', { count: 'exact', head: true })
+      .eq('mandato_id', m.id).gt('atualizada_em', t),
+    supabaseAdmin.from('mandato_acoes').select('id', { count: 'exact', head: true })
+      .eq('mandato_id', m.id).eq('ferramenta', 'desfecho_ligacao').gt('executada_em', t),
+  ])
+  if (entrada.error || ligacoes.error || desfechos.error) return true
+  return (entrada.count ?? 0) + (ligacoes.count ?? 0) + (desfechos.count ?? 0) > 0
 }
 
 async function aplicarVeredito(

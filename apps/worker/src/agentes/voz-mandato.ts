@@ -112,6 +112,20 @@ export async function consumirDesfechoNoMandato(idExterno: string, corpo: unknow
   // agenda do closer agora, e não daqui a meia hora.
   await liberarJanelas(oferecidas, confirmada)
 
+  // A tentativa daquele contato passa a dizer o que aconteceu, e não "ligação na fila da
+  // Ana" para sempre — é o que o agente lê para decidir se insiste no mesmo contato.
+  if (lig.contato_id) {
+    await pool.query(
+      `update mandatos m set contatos_tentados = (
+         select coalesce(jsonb_agg(case when t ->> 'contato_id' = $2
+                                        then t || jsonb_build_object('ultimo_resultado', $3::text, 'resultado_em', now())
+                                        else t end), '[]'::jsonb)
+           from jsonb_array_elements(m.contatos_tentados) t)
+        where m.id = $1`,
+      [m.id, lig.contato_id, `ligação terminou: ${lig.outcome ?? d.tipo}`],
+    )
+  }
+
   const reuniaoFalhou = d.tipo === 'reuniao_agendada' && !confirmada
   const { error } = await supabaseAdmin
     .from('mandato_acoes')

@@ -192,6 +192,22 @@ async function listarMateriais(a: Args): Promise<ResultadoFerramenta> {
 
 async function buscarApollo(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerramenta> {
   if (!ctx.empresa?.dominio) return falha('A empresa não tem domínio resolvido. Use buscar_dominio_empresa antes.')
+  /*
+   * Domínio CHUTADO não vai para o Apollo. No primeiro mandato a heurística deu `formas.com`
+   * para a Formas Comunicação Visual: a busca paga roda sobre a empresa errada e volta vazia
+   * (ou, pior, com gente de outra empresa). Só domínio da Receita, do site ou validado.
+   */
+  const { data: dom } = await supabaseAdmin
+    .from('empresas')
+    .select('dominio_origem, dominio_confianca, dominio_validado_em')
+    .eq('id', ctx.mandato.empresa_id)
+    .maybeSingle()
+  if (!dom?.dominio_validado_em && (dom?.dominio_origem === 'heuristica' || dom?.dominio_confianca === 'baixa')) {
+    return falha(
+      `O domínio ${ctx.empresa.dominio} é um palpite (${dom?.dominio_origem ?? 'origem desconhecida'}), não serve para o Apollo. ` +
+        'Use enriquecer_telefone pelo CNPJ ou outro caminho.',
+    )
+  }
   const antes = new Date().toISOString()
   try {
     const r = await contatosEmpresa({ empresaId: ctx.mandato.empresa_id, revelarTelefone: true })
@@ -260,7 +276,48 @@ async function enriquecerTelefone(ctx: ContextoExecucao): Promise<ResultadoFerra
       .maybeSingle()
     if (novo) criados.push({ id: novo.id, nome: novo.nome, telefone: tel.formatado ?? tel.e164, procon })
   }
-  return ok({ contatos_novos: criados, descartados_pela_base: r.descartados ?? 0 })
+  /*
+   * E-MAIL dos sócios, quando a Nova Vida traz: sem ele o canal de e-mail nunca abria (nos
+   * primeiros mandatos nenhum contato achado tinha e-mail). O e-mail vai para o contato da
+   * mesma pessoa, se existir sem e-mail; senão vira um contato só de e-mail.
+   */
+  const emails: string[] = []
+  for (const c of r.contatos.filter((x) => x.tipo === 'email')) {
+    const email = (c.valor ?? '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+    const { data: jaTem } = await supabaseAdmin
+      .from('contatos')
+      .select('id')
+      .eq('empresa_id', ctx.mandato.empresa_id)
+      .eq('email', email)
+      .limit(1)
+      .maybeSingle()
+    if (jaTem) continue
+    const { data: mesmaPessoa } = c.nome_pessoa
+      ? await supabaseAdmin
+          .from('contatos')
+          .select('id')
+          .eq('empresa_id', ctx.mandato.empresa_id)
+          .ilike('nome', c.nome_pessoa)
+          .is('email', null)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+    if (mesmaPessoa) {
+      await supabaseAdmin.from('contatos').update({ email }).eq('id', mesmaPessoa.id)
+    } else {
+      await supabaseAdmin.from('contatos').insert({
+        empresa_id: ctx.mandato.empresa_id,
+        nome: c.nome_pessoa ?? `${ctx.empresa?.razao_social ?? 'Empresa'} (e-mail)`,
+        cargo: c.cargo,
+        email,
+        origem: 'novavida',
+        ...baseLegalDeAdocao(ctx, 'Nova Vida', c.evidencia),
+      })
+    }
+    emails.push(email)
+  }
+  return ok({ contatos_novos: criados, emails_novos: emails, descartados_pela_base: r.descartados ?? 0 })
 }
 
 async function buscarDominio(ctx: ContextoExecucao): Promise<ResultadoFerramenta> {
@@ -550,8 +607,24 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
   if (trava) return falha(trava)
 
   const objetivo = a.objetivo as ObjetivoLigacao
+  let motivo = String(a.motivo)
   const cfgVoz = await lerConfigVoz()
   if (!cfgVoz.ligada) return falha('A voz está desligada na configuração — use WhatsApp ou e-mail.')
+
+  /*
+   * UMA LIGAÇÃO ABERTA POR VEZ NO MANDATO. Nos primeiros mandatos o agente pedia o fixo 2
+   * com o fixo 1 ainda sem resultado, e tentava o 3: a empresa receberia três ligações da
+   * mesma Ana em minutos. A trava do banco era por contato; agora é por mandato (0275), e
+   * aqui ela vira um erro que o modelo lê antes de gastar a reserva.
+   */
+  const { count: abertas } = await supabaseAdmin
+    .from('voz_ligacoes')
+    .select('id', { count: 'exact', head: true })
+    .eq('mandato_id', ctx.mandato.id)
+    .in('status', ['a_enviar', 'enviada'])
+  if ((abertas ?? 0) > 0) {
+    return falha('Já há uma ligação deste mandato na fila ou em curso. Espere o resultado (ele acorda o mandato) ou use outro canal.')
+  }
 
   // Checagem ANTECIPADA do adapter, com a oferta montada agora: o agente descobre neste
   // passo, e não daqui a meia hora, que a v1 não liga para agendar reunião.
@@ -559,8 +632,29 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
   if (objetivo === 'ofertar_antecipacao') {
     if (!ctx.mandato.nota_access_key) return falha('Ofertar antecipação exige a NF do mandato.')
     const fresco = await remontarPedidoDaNota({ accessKey: ctx.mandato.nota_access_key, contatoId: c.id, telefone: tel.e164, cfg: cfgVoz })
-    if (!fresco.ok) return falha(`A oferta não pode ser dita ao telefone agora: ${fresco.motivo}.`)
+    if (!fresco.ok) {
+      return falha(
+        `A oferta não pode ser dita ao telefone agora: ${fresco.motivo}. Você pode ligar com objetivo "qualificar" ` +
+          'para descobrir quem decide e o melhor contato, sem oferta, ou seguir por WhatsApp/e-mail.',
+      )
+    }
     pedidoV1 = fresco.pedido
+  } else if (ctx.mandato.tipo === 'originacao_nf') {
+    /*
+     * ORIGINAÇÃO COM OUTRO OBJETIVO. A ligação de um mandato de NF é de oferta. Quando a
+     * oferta pode ser dita, outro objetivo é desvio e é recusado. Quando ela está bloqueada
+     * (vencimento estimado, 83% do piloto), sobra uma ligação legítima: achar quem decide.
+     * O roteiro de qualificação da Ana pergunta fit e volume; o briefing passa a dizer, com
+     * todas as letras, que não há oferta e qual é o objetivo — sem isso ela conduzia uma
+     * qualificação genérica para quem tem uma NF concreta.
+     */
+    if (objetivo !== 'qualificar') return falha('Num mandato de originação, a ligação é de oferta ("ofertar_antecipacao") ou, com a oferta bloqueada, de "qualificar".')
+    if (!ctx.mandato.nota_access_key) return falha('Mandato de originação sem NF.')
+    const fresco = await remontarPedidoDaNota({ accessKey: ctx.mandato.nota_access_key, contatoId: c.id, telefone: tel.e164, cfg: cfgVoz })
+    if (fresco.ok) return falha('A oferta desta NF pode ser dita ao telefone: ligue com objetivo "ofertar_antecipacao".')
+    motivo =
+      'Esta ligação NÃO tem oferta de valores. Objetivo: descobrir quem decide sobre antecipação de recebíveis na ' +
+      `empresa e o melhor contato dessa pessoa (nome, cargo, celular ou e-mail). Contexto do agente: ${motivo}`
   }
 
   /*
@@ -613,7 +707,7 @@ async function ligar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrament
     contato: { id: c.id, nome: c.nome ?? 'responsável', telefone_e164: tel.e164, email: c.email },
     empresa: { razao_social: ctx.empresa?.razao_social ?? '—', cnpj: ctx.empresa?.cnpj ?? null },
     persona: { nome: ctx.agente.persona.nome_exibicao, voz_conta_id: ctx.agente.voz_conta_id },
-    motivo: String(a.motivo),
+    motivo,
     identificacao: ctx.cfg.geral.identificacao,
     ...(janelas ? { janelas } : {}),
   }

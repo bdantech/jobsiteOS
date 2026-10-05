@@ -135,7 +135,12 @@ import {
 } from './jobs/comunicacao/webhooks.js'
 import { autorizarWebhookWasender, segredoResendValido } from './comunicacao/webhook-auth.js'
 import { cancelarNaAna } from './jobs/voz/varrer-orfas.js'
-import { assinaturaDaVozConfere, registrarResultadoDaLigacao } from './voz/webhook.js'
+import {
+  assinaturaDaVozConfere,
+  fecharWebhookDeVoz,
+  guardarWebhookDeVoz,
+  registrarResultadoDaLigacao,
+} from './voz/webhook.js'
 
 /**
  * The worker's HTTP surface. Small on purpose: it starts jobs and reports health.
@@ -375,28 +380,38 @@ app.post('/webhooks/resend', async (req: Request, res: Response) => {
  * Fica aqui em cima, com os outros webhooks públicos: quem chama é um serviço
  * externo que não tem o `WORKER_SECRET` — ele prova quem é assinando o corpo.
  *
- * Responde 200 para o que foi gravado E para o que recusamos de vez (corpo
- * ilegível, ligação que não conhecemos): a Ana reenvia até receber 2xx, e
- * insistir num corpo que nunca vai ser aceito só enche a fila dela. O que pode
- * melhorar sozinho — banco fora do ar — devolve 503 e é reenviado.
+ * TODA requisição é gravada em `voz_webhooks` antes de qualquer validação (0275), com o
+ * status que devolvemos. Nos primeiros mandatos nenhum resultado entrou e não havia como
+ * saber se a Ana não mandava, se a assinatura falhava ou se o corpo era descartado.
+ *
+ * Status: 200 gravado; 401 assinatura; 422 corpo que não entendemos ou ligação que não
+ * conhecemos (antes era 200 calado — a Ana achava que tinha entregado); 503 o que pode
+ * melhorar sozinho (banco fora do ar), e a Ana reenvia.
  */
 app.post('/webhooks/voz', async (req: Request, res: Response) => {
   const assinatura = req.headers['x-onepay-assinatura']
   const cru = (req as RequisicaoComCorpoCru).corpoCru ?? ''
-  if (!assinaturaDaVozConfere(cru, typeof assinatura === 'string' ? assinatura : null)) {
-    res.status(401).json({ erro: 'Não autorizado.' })
+  const assinaturaOk = assinaturaDaVozConfere(cru, typeof assinatura === 'string' ? assinatura : null)
+  const registro = await guardarWebhookDeVoz({ assinaturaOk, cru, temAssinatura: typeof assinatura === 'string' })
+  const responder = async (status: number, corpo: Record<string, unknown>, erro: string | null) => {
+    logger.info({ status, evento: registro.evento, id_externo: registro.idExterno, erro }, 'Webhook da voz respondido.')
+    await fecharWebhookDeVoz(registro.id, status, erro)
+    res.status(status).json(corpo)
+  }
+  if (!assinaturaOk) {
+    await responder(401, { erro: 'Não autorizado.' }, typeof assinatura === 'string' ? 'assinatura não confere' : 'sem cabeçalho x-onepay-assinatura')
     return
   }
   try {
     const r = await registrarResultadoDaLigacao(req.body)
     if (r.ok) {
-      res.status(200).json({ ok: true, access_key: r.access_key })
+      await responder(200, { ok: true, access_key: r.access_key }, null)
       return
     }
-    res.status(r.recusar ? 200 : 503).json({ ok: false, erro: r.erro })
+    await responder(r.recusar ? 422 : 503, { ok: false, erro: r.erro }, r.erro)
   } catch (erro) {
     logger.error({ erro: String(erro) }, 'Webhook da voz falhou ao processar.')
-    res.status(503).json({ ok: false })
+    await responder(503, { ok: false }, String(erro))
   }
 })
 

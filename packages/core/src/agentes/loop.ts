@@ -7,7 +7,7 @@ import {
   type IdFerramenta,
 } from './ferramentas.js'
 import type { SinalAcao } from './disjuntor.js'
-import { custoTokensCentavos } from './orcamento.js'
+import { custoTokensCentavos, type TokensChamada } from './orcamento.js'
 import type { PrecosAgentes } from './schemas.js'
 
 /**
@@ -45,7 +45,7 @@ export type BlocoModelo =
 export interface RespostaModelo {
   conteudo: BlocoModelo[]
   parada: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | string
-  tokens: { entrada: number; saida: number }
+  tokens: TokensChamada
 }
 
 /**

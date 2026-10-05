@@ -19,11 +19,30 @@ import type { PrecosAgentes } from './schemas.js'
  * As duas implementações precisam concordar; se uma mudar, a outra muda no mesmo commit.
  */
 
+/**
+ * Os tokens de uma chamada. `entrada` é o TOTAL de entrada; `cacheLida` e `cacheEscrita` são
+ * a parte dela que veio do cache de prompt ou foi gravada nele (a API devolve as três
+ * separadas, e quem chama soma).
+ */
+export interface TokensChamada {
+  entrada: number
+  saida: number
+  cacheLida?: number
+  cacheEscrita?: number
+}
+
+/** O que a Anthropic cobra do cache, relativo à entrada comum: ler é 0,1x e gravar é 1,25x. */
+const FATOR_CACHE_LIDA = 0.1
+const FATOR_CACHE_ESCRITA = 1.25
+
 /** Tokens → centavos de real, pela tabela da config (USD por milhão de tokens). */
-export function custoTokensCentavos(tokens: { entrada: number; saida: number }, precos: PrecosAgentes): number {
+export function custoTokensCentavos(tokens: TokensChamada, precos: PrecosAgentes): number {
+  const lida = Math.max(0, tokens.cacheLida ?? 0)
+  const escrita = Math.max(0, tokens.cacheEscrita ?? 0)
+  const comum = Math.max(0, tokens.entrada - lida - escrita)
+  const entradaEquivalente = comum + lida * FATOR_CACHE_LIDA + escrita * FATOR_CACHE_ESCRITA
   const usd =
-    (Math.max(0, tokens.entrada) * precos.modelo_entrada_usd_mtok +
-      Math.max(0, tokens.saida) * precos.modelo_saida_usd_mtok) /
+    (entradaEquivalente * precos.modelo_entrada_usd_mtok + Math.max(0, tokens.saida) * precos.modelo_saida_usd_mtok) /
     1_000_000
   return Math.ceil(usd * precos.cambio_usd_brl * 100)
 }

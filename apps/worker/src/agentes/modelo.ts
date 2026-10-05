@@ -17,7 +17,12 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 interface RespostaApi {
   content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>
   stop_reason?: string
-  usage?: { input_tokens?: number; output_tokens?: number }
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
+  }
 }
 
 export function modeloAnthropic(): ChamadaModelo | null {
@@ -31,6 +36,10 @@ export function modeloAnthropic(): ChamadaModelo | null {
       body: {
         model: AI_MODEL,
         max_tokens: 1500,
+        // Cache automático do prefixo (instruções, ferramentas e o contexto do mandato). Num
+        // ciclo de até 8 passos o mesmo prefixo é reenviado a cada passo; lido do cache ele
+        // custa 0,1x. Era o grosso da conta: ~49 mil tokens de entrada por ciclo.
+        cache_control: { type: 'ephemeral' },
         system,
         tools: ferramentas,
         messages: mensagens,
@@ -39,6 +48,7 @@ export function modeloAnthropic(): ChamadaModelo | null {
       timeoutMs: 60_000,
     })
 
+    const u = resposta.usage
     const conteudo: BlocoModelo[] = []
     for (const b of resposta.content ?? []) {
       if (b.type === 'text' && typeof b.text === 'string') conteudo.push({ type: 'text', text: b.text })
@@ -47,7 +57,13 @@ export function modeloAnthropic(): ChamadaModelo | null {
     return {
       conteudo,
       parada: resposta.stop_reason ?? 'end_turn',
-      tokens: { entrada: resposta.usage?.input_tokens ?? 0, saida: resposta.usage?.output_tokens ?? 0 },
+      tokens: {
+        // A API separa o que veio do cache; `entrada` é o total, para o registro de tokens.
+        entrada: (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0),
+        saida: u?.output_tokens ?? 0,
+        cacheLida: u?.cache_read_input_tokens ?? 0,
+        cacheEscrita: u?.cache_creation_input_tokens ?? 0,
+      },
     }
   }
 }

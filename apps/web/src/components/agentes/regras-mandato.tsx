@@ -239,7 +239,7 @@ export function RegrasMandato({ onAbrirPlaybooks }: { onAbrirPlaybooks: () => vo
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Agente: {agente?.nome ?? 'nenhum (a regra não cria nada)'} · {brlCentavos(regra.orcamento_centavos)} por
-                      mandato · {regra.max_acoes} ações · {regra.prazo_dias} dias · prioridade {regra.prioridade}
+                      mandato · {regra.max_acoes} ações · {regra.prazo_dias} dias úteis · prioridade {regra.prioridade}
                       {regra.teto_mandatos_ativos ? ` · teto ${regra.teto_mandatos_ativos} ativos` : ''}
                     </p>
                     {p ? (
@@ -405,7 +405,7 @@ function RegraEditor({
     playbook_id: regra?.playbook_id ?? null,
     filtro: filtroInicial.arvore,
     objetivo_template: regra?.objetivo_template ?? '',
-    orcamento: textoDeCentavos(regra?.orcamento_centavos ?? 2000),
+    orcamento: textoDeCentavos(regra?.orcamento_centavos ?? 4000),
     max_acoes: String(regra?.max_acoes ?? 15),
     prazo_dias: String(regra?.prazo_dias ?? 14),
     teto: regra?.teto_mandatos_ativos ? String(regra.teto_mandatos_ativos) : '',
@@ -445,7 +445,7 @@ function RegraEditor({
     const prioridade = Number(r.prioridade)
     const teto = r.teto.trim() === '' ? null : Number(r.teto)
     if (!Number.isInteger(maxAcoes) || maxAcoes < 1 || maxAcoes > 500) return void toast.error('Máximo de ações: 1 a 500.')
-    if (!Number.isInteger(prazo) || prazo < 1 || prazo > 180) return void toast.error('Prazo: 1 a 180 dias.')
+    if (!Number.isInteger(prazo) || prazo < 1 || prazo > 180) return void toast.error('Prazo: 1 a 180 dias úteis.')
     if (!Number.isInteger(prioridade) || prioridade < 0 || prioridade > 100) return void toast.error('Prioridade: 0 a 100.')
     if (teto !== null && (!Number.isInteger(teto) || teto < 1)) return void toast.error('Teto de mandatos ativos: inteiro positivo, ou vazio.')
 
@@ -625,7 +625,7 @@ function RegraEditor({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="r-prazo" className="text-xs">Prazo (dias)</Label>
+              <Label htmlFor="r-prazo" className="text-xs">Prazo (dias úteis)</Label>
               <Input
                 id="r-prazo"
                 inputMode="numeric"

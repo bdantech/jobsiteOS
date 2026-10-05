@@ -93,6 +93,25 @@ cobrança e pedido expresso de uma pessoa escalam.
 
 ---
 
+## O ritmo (desde 05/10/2026)
+
+Os primeiros mandatos andavam um passo por dia: o ciclo acordava no horário que o modelo
+escrevia no plano, e o modelo escrevia "amanhã às 10h" por hábito. A regra agora é do código
+(`core/agentes/ritmo.ts`), e o prompt a explica:
+
+| Situação | Quando o mandato acorda |
+| --- | --- |
+| Há um próximo passo possível | Em até `espera_maxima_min` (10 min), mesmo que o plano diga "amanhã" |
+| Esperando resposta ou ligação (`aguarda` no plano) | No mesmo ritmo, mas sem chamar o modelo enquanto nada mudou, até `espera_sem_novidade_max_min` (2 h). A resposta e o resultado da ligação acordam na hora |
+| O cliente pediu outro horário (`pedido_do_cliente` no plano, com o trecho da conversa) | No horário dele |
+| Qualquer caso | Nunca depois da validade do mandato, que é contada em dias úteis (0275) |
+
+Outras travas que vieram da mesma análise: uma ligação aberta por mandato (não por contato);
+num mandato de NF, ligar com outro objetivo que não a oferta só quando a oferta está
+bloqueada, e aí o briefing diz que não há valores e que o objetivo é achar quem decide; o
+Apollo só busca com domínio da Receita, do site ou validado; o cache de prompt corta o custo
+do modelo por ciclo. Todo webhook da Ana fica em `voz_webhooks`, com o status devolvido.
+
 ## As ferramentas
 
 Ferramenta paga com orçamento insuficiente, fora do playbook ou com a cota do dia esgotada

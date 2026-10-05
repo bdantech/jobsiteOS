@@ -286,7 +286,8 @@ export async function montarContexto(e: EntradaContexto): Promise<BlocoContexto[
   linhas.push('')
   linhas.push(`── Mandato ${m.codigo ?? m.id} — ${TIPO_MANDATO_LABELS[m.tipo]}`)
   linhas.push(`Objetivo: ${m.objetivo}`)
-  linhas.push(`Estado: ${m.estado}. Prazo: ${hora(m.expira_em)}. Ações: ${m.acoes_executadas}/${m.max_acoes}.`)
+  const horasRestantes = Math.max(0, Math.round((Date.parse(m.expira_em) - e.agora.getTime()) / 3_600_000))
+  linhas.push(`Estado: ${m.estado}. Prazo: ${hora(m.expira_em)} (faltam ${horasRestantes}h). Ações: ${m.acoes_executadas}/${m.max_acoes}.`)
   linhas.push(`Orçamento restante que este ciclo pode gastar: R$ ${(e.saldoCentavos / 100).toFixed(2)}.`)
   linhas.push(
     `Cotas de hoje que ainda restam ao agente: ${e.cotasRestantes.ligacoes} ligações, ${e.cotasRestantes.mensagens} WhatsApp, ${e.cotasRestantes.emails} e-mails. ` +

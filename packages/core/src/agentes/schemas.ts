@@ -106,11 +106,23 @@ export type OrigemMandato = (typeof ORIGENS_MANDATO)[number]
  * mensagem por mensagem — e `atualizar_plano` é ferramenta OBRIGATÓRIA de todo ciclo.
  */
 export const proximaAcaoPlanoSchema = z.object({
-  acao: z.string().min(1).max(60),
+  // 120, não 60: com 60 o modelo estourava o limite em quase todo plano e gastava um passo
+  // refazendo a chamada (dois em sete ciclos dos primeiros mandatos).
+  acao: z.string().min(1).max(120),
   quando: z.string().min(1),
   contato: z.string().max(120).nullable().optional(),
   por_que: z.string().min(1).max(400),
   condicao: z.string().max(300).nullable().optional(),
+  /**
+   * O que esta ação ESPERA, quando é uma espera: a resposta de uma mensagem ou o resultado de
+   * uma ligação. Os dois chegam sozinhos e acordam o mandato; o horário é só o teto.
+   */
+  aguarda: z.enum(['resposta', 'ligacao']).nullable().optional(),
+  /**
+   * O trecho da conversa em que o CLIENTE pediu este horário ("me liga amanhã às 10h"). É a
+   * única coisa que autoriza uma espera maior que `espera_maxima_min` (regras de ritmo).
+   */
+  pedido_do_cliente: z.string().max(300).nullable().optional(),
 })
 
 export const planoSchema = z.object({
@@ -234,6 +246,18 @@ export const configGeralSchema = z.object({
   reuniao_buffer_min: z.number().int().min(0).max(120).default(15),
   reserva_janela_min: z.number().int().min(5).max(240).default(30),
   voz_timeout_minutos: z.number().int().min(5).max(600).default(30),
+  /**
+   * RITMO: a próxima ação nasce em até isto (minutos) a partir do fim do ciclo, salvo quando
+   * o cliente pediu outro horário (`pedido_do_cliente` no plano). Antes, o modelo marcava
+   * "amanhã às 10h" por hábito, e um mandato andava um passo por dia.
+   */
+  espera_maxima_min: z.number().int().min(2).max(240).default(10),
+  /**
+   * Esperando resposta ou ligação SEM novidade, o ciclo acorda no ritmo acima mas não chama o
+   * modelo — até passar isto (minutos) desde o último ciclo de verdade. A novidade (resposta,
+   * resultado de ligação) acorda o mandato na hora de qualquer jeito.
+   */
+  espera_sem_novidade_max_min: z.number().int().min(10).max(1440).default(120),
   /** §3.3: `carteira` implementado e desligado — é uma flag, não um projeto. */
   modo_carteira_habilitado: z.boolean().default(false),
   /** Hora (São Paulo) do digest diário por agente. */
@@ -378,11 +402,16 @@ export const criarMandatoSchema = z.object({
 export type CriarMandatoInput = z.infer<typeof criarMandatoSchema>
 
 /** Os padrões do botão "Delegar ao agente", por tipo — o gestor ajusta na hora. */
+/*
+ * `prazo_dias` é em DIAS ÚTEIS (0275). O orçamento subiu depois dos primeiros mandatos: R$ 15
+ * acabava no primeiro dia (enriquecimento R$ 1,65 + duas ligações R$ 7,00 + quatro ciclos de
+ * modelo ~R$ 4), e o mandato parava sem ter falado com ninguém.
+ */
 export const PADROES_MANDATO_MANUAL: Record<TipoMandato, { orcamento_centavos: number; max_acoes: number; prazo_dias: number }> = {
-  originacao_nf: { orcamento_centavos: 1500, max_acoes: 12, prazo_dias: 10 },
-  agendamento_reuniao: { orcamento_centavos: 2500, max_acoes: 20, prazo_dias: 21 },
-  reativacao: { orcamento_centavos: 1500, max_acoes: 12, prazo_dias: 21 },
-  qualificacao: { orcamento_centavos: 2000, max_acoes: 15, prazo_dias: 14 },
+  originacao_nf: { orcamento_centavos: 4000, max_acoes: 20, prazo_dias: 10 },
+  agendamento_reuniao: { orcamento_centavos: 5000, max_acoes: 25, prazo_dias: 15 },
+  reativacao: { orcamento_centavos: 4000, max_acoes: 20, prazo_dias: 15 },
+  qualificacao: { orcamento_centavos: 4000, max_acoes: 20, prazo_dias: 10 },
 }
 
 // ─── Disjuntor ──────────────────────────────────────────────────────────────
