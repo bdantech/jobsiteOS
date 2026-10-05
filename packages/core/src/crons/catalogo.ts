@@ -358,6 +358,46 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/comunicacao/sessoes',
   },
   {
+    path: '/api/cron/qualidade-vigiar',
+    nome: 'Vigia da gravação de reuniões',
+    moduloId: 'comercial',
+    descricao:
+      'A cada 5 minutos: reunião que começou há mais de N minutos (config, padrão 5) e o Fireflies não entrou vira alerta para quem conduz; reunião que acabou há horas sem transcrição vira "sem captura". Envia os pedidos de "Chamar o bot agora" respeitando o limite do Fireflies (3 a cada 20 minutos) e retoma webhooks que não fecharam. Sem ele, a falha de gravação só aparece quando alguém procura o transcript e não acha.',
+    destino: 'POST /jobs/qualidade/vigiar',
+  },
+  {
+    path: '/api/cron/qualidade-processar',
+    nome: 'Análise das conversas',
+    moduloId: 'comercial',
+    descricao:
+      'Drena a fila de interações a analisar (reuniões transcritas, ligações concluídas, janelas de conversa fechadas): Jev em todos os itens, Claude só nos reprovados e na banda cinzenta, nota aritmética e pendências. O webhook do Fireflies já dispara a fila quando a transcrição chega; este cron é a garantia de que nada fica parado.',
+    destino: 'POST /jobs/qualidade/processar',
+  },
+  {
+    path: '/api/cron/qualidade-janelas',
+    nome: 'Janelas de conversa',
+    moduloId: 'comercial',
+    descricao:
+      'Uma vez por dia fecha a janela de cada conversa de WhatsApp e e-mail com mensagens novas desde a última análise (mínimo de mensagens e horas de silêncio são config) e põe na fila de análise. Conversa parada não gera análise nova. Também expurga transcrições mais velhas que a retenção configurada (padrão: manter).',
+    destino: 'POST /jobs/qualidade/janelas',
+  },
+  {
+    path: '/api/cron/qualidade-recalibrar',
+    nome: 'Recalibração das rubricas',
+    moduloId: 'comercial',
+    descricao:
+      'Recalibra o limiar de cada item das rubricas que pediram: botão na tela, versão nova ativada, N contestações rotuladas desde a última (config, padrão 15) ou rubrica em sombra que já tem rótulos suficientes. Reaproveita os rótulos pela chave do item e pergunta de novo ao classificador só o que falta.',
+    destino: 'POST /jobs/qualidade/recalibrar',
+  },
+  {
+    path: '/api/cron/qualidade-vinculacao',
+    nome: 'Vinculação de contas a empresas',
+    moduloId: 'comunicacao',
+    descricao:
+      'Passa a fila de conversas não vinculadas pela cascata: domínio e telefone já cadastrados (grátis), nomes parecidos pontuados pelo Jev, banda cinzenta para o Claude, o resto para a fila humana com as candidatas ordenadas por valor. E-mail pessoal e domínio compartilhado nunca vinculam sozinhos. Cada conta é tentada no máximo uma vez por semana.',
+    destino: 'POST /jobs/qualidade/vinculacao',
+  },
+  {
     path: '/api/cron/agente-decidir',
     nome: 'Agente: decidir o próximo passo',
     moduloId: 'comunicacao',

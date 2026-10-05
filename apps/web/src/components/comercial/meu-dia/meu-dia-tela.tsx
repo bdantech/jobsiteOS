@@ -18,6 +18,7 @@ import {
   type MeuDia,
 } from '@jobsiteos/core'
 import { concluirTarefaAction, ocultarItemAction } from '@/actions/meu-dia'
+import { resolverPendenciaAction } from '@/actions/qualidade'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -112,7 +113,11 @@ export function MeuDiaTela({ dia, visiveis }: MeuDiaTelaProps) {
   }
 
   async function concluir(item: ItemMeuDia) {
-    const r = await concluirTarefaAction(String(item.meta.tarefa_id))
+    // Pendência das conversas (05C §7) resolve pela RPC da qualidade: é ela que tira o
+    // item daqui e da aba Feedback ao mesmo tempo.
+    const r = item.meta.pendencia_id
+      ? await resolverPendenciaAction({ id: String(item.meta.pendencia_id) })
+      : await concluirTarefaAction(String(item.meta.tarefa_id))
     if (!r.ok) return toast.error(r.message)
     toast.success('Feito.')
     router.refresh()

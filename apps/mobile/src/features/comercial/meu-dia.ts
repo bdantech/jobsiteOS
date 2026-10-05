@@ -138,3 +138,18 @@ export function useConcluirTarefa() {
     onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.todos() }),
   })
 }
+
+/**
+ * Resolve uma pendência das conversas (05C §7) pela mesma RPC da web: é ela que confere
+ * se a pendência é de alguém cujo dia a pessoa abre, e que a tira também da aba Feedback.
+ */
+export function useResolverPendencia() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('app_qualidade_resolver_pendencia' as never, { p: { id } } as never)
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: meuDiaKeys.todos() }),
+  })
+}

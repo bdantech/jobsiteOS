@@ -36,6 +36,9 @@ export * from './transportes/index.js'
 export * from './voz/index.js'
 // Agentes (09) depois da voz: a ferramenta `ligar` do agente fala com a fila dela.
 export * from './agentes/index.js'
+// Inteligência de Conversas (05C) depois dos agentes: julga reunião, ligação e conversa —
+// inclusive as do agente — na mesma régua.
+export * from './analise/index.js'
 export * from './notificacoes/regras.js'
 export * from './constants.js'
 export type {

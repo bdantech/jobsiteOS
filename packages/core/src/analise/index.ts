@@ -1,0 +1,12 @@
+// Inteligência de Conversas (Prompt 05C): captura, rubrica, nota e calibração.
+export * from './tipos.js'
+export * from './classificador.js'
+export * from './rubrica.js'
+export * from './revisao.js'
+export * from './calibracao.js'
+export * from './vinculacao.js'
+export * from './fireflies.js'
+export * from './estado.js'
+export * from './schemas.js'
+export * from './mutations.js'
+export * from './leituras.js'

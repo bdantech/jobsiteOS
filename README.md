@@ -883,6 +883,37 @@ aprovasse tornaria essa coluna uma ficção.
 não prova de causa. Sem grupo de controle não dá para afirmar mais que isso, e a tela diz isso
 em voz alta em vez de mostrar um número que parece maior do que é.
 
+## Inteligência de Conversas (05C)
+
+Captura de reuniões pelo Fireflies, rubrica versionada, nota explicável e feedback automático.
+Detalhes em [`docs/qualidade.md`](docs/qualidade.md); aqui o que muda o comportamento do resto da casa.
+
+### Toda reunião nova convida o gravador
+
+O gatilho em `vendedor_eventos` cria a captura (`reunioes`, 1:1 com o evento), e o job que
+escreve no Google acrescenta `admin@oneos.com.br` e `fred@fireflies.ai` ao convite. Reunião
+dispensada (não gravar, presencial, pessoa com captura desligada) sai sem os dois. A captura
+nasce **desligada** e só liga com as credenciais do Fireflies cadastradas.
+
+### A transcrição volta pelo evento do Google, não pelo título
+
+O `client_reference_id` não existe para reunião em que o bot entra pelo calendário. O
+casamento é pelo `cal_id` (que é o nosso `google_evento_id`) ou pelo link da conferência.
+Transcrição que não casa com reunião da plataforma é descartada, e o texto não entra.
+
+### A nota é aritmética e nasce em sombra
+
+O Jev responde perguntas tipadas e o Claude só revisa reprovados e banda cinzenta. A nota é
+Σ(peso × atendido)/Σ(peso) sobre itens aplicáveis, e nula, nunca zero, quando nada se
+aplica. Nenhuma nota chega a vendedor antes da calibração (rótulos humanos → limiar por F1
+item a item). O Jev nunca é o único juiz de um item que reprova.
+
+### A dependência do plano do Fireflies
+
+Webhook de **time** exige Enterprise + Super Admin; este desenho não depende dele, porque
+a conta central é dona das reuniões (está no convite). Todas as transcrições caem nesse
+assento: confira o teto do plano antes de ligar para o time inteiro.
+
 ## Agentes comerciais de IA (Prompt 09)
 
 Mandatos, personas e o loop autônomo. Detalhes em [`docs/agentes.md`](docs/agentes.md); aqui

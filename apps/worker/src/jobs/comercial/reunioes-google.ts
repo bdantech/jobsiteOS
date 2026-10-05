@@ -5,6 +5,7 @@ import {
   type ReuniaoParaGoogle,
 } from '../../../../../packages/core/src/transportes/index.js'
 import { contaGmailDoUsuario, accessTokenGmail } from '../../comunicacao/transportes.js'
+import { convidadosDaCaptura } from '../../qualidade/captura.js'
 import { supabaseAdmin } from '../../db.js'
 import { logger } from '../../logger.js'
 
@@ -285,6 +286,14 @@ async function montarReuniao(ev: EventoPendente, emailAnfitriao: string): Promis
     const email = v?.email ?? null
     if (email && email !== emailAnfitriao) {
       convidados.push({ email, nome: v?.nome ?? null, interno: true })
+    }
+  }
+
+  // A gravação (05C §1.1): a conta central do Fireflies e o notetaker. Fica fora quando a
+  // reunião foi dispensada — e, como o PUT reescreve os convidados, sai do convite também.
+  for (const c of await convidadosDaCaptura(ev.id)) {
+    if (c.email !== emailAnfitriao.toLowerCase() && !convidados.some((x) => x.email.toLowerCase() === c.email)) {
+      convidados.push(c)
     }
   }
 

@@ -21,6 +21,7 @@ import {
 import { moverLeadSdr, moverVenda } from '../../comercial/mutations.js'
 import type { AppModule, ToolContext } from '../types.js'
 import { campanhasTools } from './campanhas-tools.js'
+import { qualidadeTools } from './qualidade-tools.js'
 import { fornecedoresTools } from './fornecedores-tools.js'
 
 /**
@@ -247,6 +248,8 @@ export const comercialModule: AppModule = {
     // aprovação existe para ter um dono humano com nome, e uma tool que
     // aprovasse tornaria `aprovada_por` uma ficção.
     ...campanhasTools,
+    // Inteligência de Conversas (05C): só leitura.
+    ...qualidadeTools,
   ],
 }
 

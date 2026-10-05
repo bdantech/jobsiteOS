@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ChartPie,
   Circle,
+  ClipboardCheck,
   Clock,
   Coins,
   Compass,
@@ -30,6 +31,7 @@ import {
   MailCheck,
   Megaphone,
   MessageCircle,
+  MessageSquareQuote,
   MessageSquareWarning,
   PackageSearch,
   Percent,
@@ -180,6 +182,11 @@ export const ABAS_DOS_MODULOS: Record<string, readonly Aba[]> = {
      * que responde "o que eu faço agora".
      */
     { href: '/comercial/meu-dia', label: 'Meu Dia', icon: Sunrise, bloco: 'dia' },
+    /*
+     * Feedback (05C §7) ao lado do Meu Dia: é o retorno automático sobre as próprias
+     * conversas, e o vendedor só confia nele se o encontrar sem procurar.
+     */
+    { href: '/comercial/feedback', label: 'Feedback', icon: MessageSquareQuote, bloco: 'dia' },
     { href: '/comercial/sdr', label: 'Reuniões', icon: Target, tipos: ['sdr', 'vendedor'], bloco: 'dia' },
     { href: '/comercial/vendas', label: 'Vendas', icon: Users, tipos: ['vendedor'], bloco: 'dia' },
     /*
@@ -231,6 +238,8 @@ export const ABAS_DOS_MODULOS: Record<string, readonly Aba[]> = {
 
     { href: '/comercial/fila', label: 'Fila sem Dono', icon: Inbox, somenteGestor: true, bloco: 'gestao' },
     { href: '/comercial/painel', label: 'Painel', icon: LayoutDashboard, somenteGestor: true, bloco: 'gestao' },
+    // Qualidade (05C §8): a régua das conversas, a calibração e a fila de contestação.
+    { href: '/comercial/qualidade', label: 'Qualidade', icon: ClipboardCheck, somenteGestor: true, bloco: 'gestao' },
     /*
      * Relatórios (04q) responde a pergunta do Painel num zoom diferente: o Painel é o mês
      * de UM vendedor, e o Relatório é a semana da casa inteira — com o desempenho nominal

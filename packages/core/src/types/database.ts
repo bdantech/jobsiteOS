@@ -558,6 +558,77 @@ export type Database = {
           },
         ]
       }
+      analise_contestacoes: {
+        Row: {
+          analise_id: string
+          analise_item_id: string
+          contestado_por: string
+          criada_em: string
+          id: string
+          justificativa: string | null
+          resposta_gestor: string | null
+          revisada_em: string | null
+          revisada_por: string | null
+          rotulo_humano: string | null
+          veredito: string | null
+        }
+        Insert: {
+          analise_id: string
+          analise_item_id: string
+          contestado_por: string
+          criada_em?: string
+          id?: string
+          justificativa?: string | null
+          resposta_gestor?: string | null
+          revisada_em?: string | null
+          revisada_por?: string | null
+          rotulo_humano?: string | null
+          veredito?: string | null
+        }
+        Update: {
+          analise_id?: string
+          analise_item_id?: string
+          contestado_por?: string
+          criada_em?: string
+          id?: string
+          justificativa?: string | null
+          resposta_gestor?: string | null
+          revisada_em?: string | null
+          revisada_por?: string | null
+          rotulo_humano?: string | null
+          veredito?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_contestacoes_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_contestacoes_analise_item_id_fkey"
+            columns: ["analise_item_id"]
+            isOneToOne: false
+            referencedRelation: "analise_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_contestacoes_contestado_por_fkey"
+            columns: ["contestado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_contestacoes_revisada_por_fkey"
+            columns: ["revisada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analise_docs: {
         Row: {
           analise_id: string
@@ -631,6 +702,186 @@ export type Database = {
           },
         ]
       }
+      analise_itens: {
+        Row: {
+          analise_id: string
+          aplicabilidade_prob: number | null
+          aplicavel: boolean
+          atendido: boolean | null
+          atendido_original: boolean | null
+          banda_cinzenta: boolean
+          chave: string
+          citacao: string | null
+          contestado: boolean
+          corrigido_em: string | null
+          divergente: boolean
+          em_sombra: boolean
+          id: string
+          item_id: string
+          limiar_usado: number | null
+          orientacao: string | null
+          peso: number
+          prob_atendido: number | null
+          probabilidade: number | null
+          provedor: string | null
+          resultado: string | null
+          revisao_pendente: boolean
+        }
+        Insert: {
+          analise_id: string
+          aplicabilidade_prob?: number | null
+          aplicavel: boolean
+          atendido?: boolean | null
+          atendido_original?: boolean | null
+          banda_cinzenta?: boolean
+          chave: string
+          citacao?: string | null
+          contestado?: boolean
+          corrigido_em?: string | null
+          divergente?: boolean
+          em_sombra?: boolean
+          id?: string
+          item_id: string
+          limiar_usado?: number | null
+          orientacao?: string | null
+          peso: number
+          prob_atendido?: number | null
+          probabilidade?: number | null
+          provedor?: string | null
+          resultado?: string | null
+          revisao_pendente?: boolean
+        }
+        Update: {
+          analise_id?: string
+          aplicabilidade_prob?: number | null
+          aplicavel?: boolean
+          atendido?: boolean | null
+          atendido_original?: boolean | null
+          banda_cinzenta?: boolean
+          chave?: string
+          citacao?: string | null
+          contestado?: boolean
+          corrigido_em?: string | null
+          divergente?: boolean
+          em_sombra?: boolean
+          id?: string
+          item_id?: string
+          limiar_usado?: number | null
+          orientacao?: string | null
+          peso?: number
+          prob_atendido?: number | null
+          probabilidade?: number | null
+          provedor?: string | null
+          resultado?: string | null
+          revisao_pendente?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_itens_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_itens_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "rubrica_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analise_fila: {
+        Row: {
+          analise_id: string | null
+          conversa_id: string | null
+          criada_em: string
+          erro: string | null
+          escopo: string
+          id: string
+          janela_fim: string | null
+          janela_inicio: string | null
+          janela_mensagens: number | null
+          processada_em: string | null
+          reuniao_id: string | null
+          status: string
+          tentar_apos: string
+          tentativas: number
+          voz_ligacao_id: string | null
+        }
+        Insert: {
+          analise_id?: string | null
+          conversa_id?: string | null
+          criada_em?: string
+          erro?: string | null
+          escopo: string
+          id?: string
+          janela_fim?: string | null
+          janela_inicio?: string | null
+          janela_mensagens?: number | null
+          processada_em?: string | null
+          reuniao_id?: string | null
+          status?: string
+          tentar_apos?: string
+          tentativas?: number
+          voz_ligacao_id?: string | null
+        }
+        Update: {
+          analise_id?: string | null
+          conversa_id?: string | null
+          criada_em?: string
+          erro?: string | null
+          escopo?: string
+          id?: string
+          janela_fim?: string | null
+          janela_inicio?: string | null
+          janela_mensagens?: number | null
+          processada_em?: string | null
+          reuniao_id?: string | null
+          status?: string
+          tentar_apos?: string
+          tentativas?: number
+          voz_ligacao_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analise_fila_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_fila_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_fila_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_fila_reuniao_id_fkey"
+            columns: ["reuniao_id"]
+            isOneToOne: false
+            referencedRelation: "reunioes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analise_fila_voz_ligacao_id_fkey"
+            columns: ["voz_ligacao_id"]
+            isOneToOne: false
+            referencedRelation: "voz_ligacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analise_parametros: {
         Row: {
           ativa: boolean
@@ -662,6 +913,201 @@ export type Database = {
             columns: ["criada_por"]
             isOneToOne: false
             referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analises: {
+        Row: {
+          agente_id: string | null
+          analisada_em: string
+          caiu_para_claude: boolean
+          contato_id: string | null
+          conversa_id: string | null
+          custo_centavos: number
+          custo_claude_centavos: number
+          custo_jev_centavos: number
+          empresa_id: string | null
+          escopo: string
+          explicacao: string | null
+          id: string
+          itens_aplicaveis: number | null
+          itens_atendidos: number | null
+          janela_fim: string | null
+          janela_inicio: string | null
+          janela_mensagens: number | null
+          modo: string
+          provedor: string
+          publicada_em: string | null
+          reuniao_id: string | null
+          rubrica_id: string
+          rubrica_versao: number
+          score: number | null
+          score_sombra: number | null
+          tokens_entrada: number | null
+          tokens_saida: number | null
+          vendedor_id: string | null
+          voz_ligacao_id: string | null
+        }
+        Insert: {
+          agente_id?: string | null
+          analisada_em?: string
+          caiu_para_claude?: boolean
+          contato_id?: string | null
+          conversa_id?: string | null
+          custo_centavos?: number
+          custo_claude_centavos?: number
+          custo_jev_centavos?: number
+          empresa_id?: string | null
+          escopo: string
+          explicacao?: string | null
+          id?: string
+          itens_aplicaveis?: number | null
+          itens_atendidos?: number | null
+          janela_fim?: string | null
+          janela_inicio?: string | null
+          janela_mensagens?: number | null
+          modo?: string
+          provedor: string
+          publicada_em?: string | null
+          reuniao_id?: string | null
+          rubrica_id: string
+          rubrica_versao: number
+          score?: number | null
+          score_sombra?: number | null
+          tokens_entrada?: number | null
+          tokens_saida?: number | null
+          vendedor_id?: string | null
+          voz_ligacao_id?: string | null
+        }
+        Update: {
+          agente_id?: string | null
+          analisada_em?: string
+          caiu_para_claude?: boolean
+          contato_id?: string | null
+          conversa_id?: string | null
+          custo_centavos?: number
+          custo_claude_centavos?: number
+          custo_jev_centavos?: number
+          empresa_id?: string | null
+          escopo?: string
+          explicacao?: string | null
+          id?: string
+          itens_aplicaveis?: number | null
+          itens_atendidos?: number | null
+          janela_fim?: string | null
+          janela_inicio?: string | null
+          janela_mensagens?: number | null
+          modo?: string
+          provedor?: string
+          publicada_em?: string | null
+          reuniao_id?: string | null
+          rubrica_id?: string
+          rubrica_versao?: number
+          score?: number | null
+          score_sombra?: number | null
+          tokens_entrada?: number | null
+          tokens_saida?: number | null
+          vendedor_id?: string | null
+          voz_ligacao_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analises_agente_id_fkey"
+            columns: ["agente_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "agentes_empresas_alvo"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "analises_reuniao_id_fkey"
+            columns: ["reuniao_id"]
+            isOneToOne: false
+            referencedRelation: "reunioes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_voz_ligacao_id_fkey"
+            columns: ["voz_ligacao_id"]
+            isOneToOne: false
+            referencedRelation: "voz_ligacoes"
             referencedColumns: ["id"]
           },
         ]
@@ -1751,6 +2197,160 @@ export type Database = {
           usuario_id?: string | null
         }
         Relationships: []
+      }
+      calibracao_rotulos: {
+        Row: {
+          analise_id: string
+          aplicavel: boolean
+          atendido: boolean | null
+          chave: string
+          contestacao_id: string | null
+          id: string
+          origem: string
+          resultado: string | null
+          rotulado_em: string
+          rotulado_por: string | null
+          tipo_interacao: string
+        }
+        Insert: {
+          analise_id: string
+          aplicavel: boolean
+          atendido?: boolean | null
+          chave: string
+          contestacao_id?: string | null
+          id?: string
+          origem: string
+          resultado?: string | null
+          rotulado_em?: string
+          rotulado_por?: string | null
+          tipo_interacao: string
+        }
+        Update: {
+          analise_id?: string
+          aplicavel?: boolean
+          atendido?: boolean | null
+          chave?: string
+          contestacao_id?: string | null
+          id?: string
+          origem?: string
+          resultado?: string | null
+          rotulado_em?: string
+          rotulado_por?: string | null
+          tipo_interacao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibracao_rotulos_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calibracao_rotulos_contestacao_id_fkey"
+            columns: ["contestacao_id"]
+            isOneToOne: false
+            referencedRelation: "analise_contestacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calibracao_rotulos_rotulado_por_fkey"
+            columns: ["rotulado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calibracao_execucoes: {
+        Row: {
+          custo_centavos: number
+          executada_em: string
+          executada_por: string | null
+          gatilho: string
+          id: string
+          resultado: Json
+          rubrica_id: string
+          saiu_de_sombra: boolean
+        }
+        Insert: {
+          custo_centavos?: number
+          executada_em?: string
+          executada_por?: string | null
+          gatilho: string
+          id?: string
+          resultado: Json
+          rubrica_id: string
+          saiu_de_sombra?: boolean
+        }
+        Update: {
+          custo_centavos?: number
+          executada_em?: string
+          executada_por?: string | null
+          gatilho?: string
+          id?: string
+          resultado?: Json
+          rubrica_id?: string
+          saiu_de_sombra?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibracao_execucoes_executada_por_fkey"
+            columns: ["executada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calibracao_execucoes_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calibracao_amostras: {
+        Row: {
+          analise_id: string
+          criada_em: string
+          item_id: string
+          prob_aplicavel: number | null
+          prob_atendido: number | null
+          provedor: string
+        }
+        Insert: {
+          analise_id: string
+          criada_em?: string
+          item_id: string
+          prob_aplicavel?: number | null
+          prob_atendido?: number | null
+          provedor: string
+        }
+        Update: {
+          analise_id?: string
+          criada_em?: string
+          item_id?: string
+          prob_aplicavel?: number | null
+          prob_atendido?: number | null
+          provedor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibracao_amostras_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calibracao_amostras_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "rubrica_itens"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       camada_regras: {
         Row: {
@@ -4110,6 +4710,7 @@ export type Database = {
           nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
+          origem_interacao: Json | null
           ponto_focal: boolean
           senioridade: string | null
           telefone: string | null
@@ -4133,6 +4734,7 @@ export type Database = {
           nao_e_o_decisor?: boolean
           nome?: string | null
           origem?: string | null
+          origem_interacao?: Json | null
           ponto_focal?: boolean
           senioridade?: string | null
           telefone?: string | null
@@ -4156,6 +4758,7 @@ export type Database = {
           nao_e_o_decisor?: boolean
           nome?: string | null
           origem?: string | null
+          origem_interacao?: Json | null
           ponto_focal?: boolean
           senioridade?: string | null
           telefone?: string | null
@@ -5084,6 +5687,115 @@ export type Database = {
           },
         ]
       }
+      empresa_sugestoes_cadastro: {
+        Row: {
+          analise_id: string | null
+          campo: string
+          contato_id: string | null
+          criada_em: string
+          decidida_em: string | null
+          decidida_por: string | null
+          empresa_id: string
+          id: string
+          origem: string
+          status: string
+          valor_atual: string | null
+          valor_sugerido: string
+        }
+        Insert: {
+          analise_id?: string | null
+          campo: string
+          contato_id?: string | null
+          criada_em?: string
+          decidida_em?: string | null
+          decidida_por?: string | null
+          empresa_id: string
+          id?: string
+          origem?: string
+          status?: string
+          valor_atual?: string | null
+          valor_sugerido: string
+        }
+        Update: {
+          analise_id?: string | null
+          campo?: string
+          contato_id?: string | null
+          criada_em?: string
+          decidida_em?: string | null
+          decidida_por?: string | null
+          empresa_id?: string
+          id?: string
+          origem?: string
+          status?: string
+          valor_atual?: string | null
+          valor_sugerido?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_decidida_por_fkey"
+            columns: ["decidida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "agentes_empresas_alvo"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_sugestoes_cadastro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           atualizado_em: string
@@ -5587,6 +6299,113 @@ export type Database = {
             columns: ["criada_por"]
             isOneToOne: false
             referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fireflies_webhooks: {
+        Row: {
+          assinatura_ok: boolean
+          chave: string | null
+          client_reference_id: string | null
+          conhecido: boolean
+          corpo: Json | null
+          corpo_texto: string | null
+          erro: string | null
+          evento: string | null
+          id: string
+          meeting_id: string | null
+          processado_em: string | null
+          recebido_em: string
+          reuniao_id: string | null
+          status_http: number | null
+          tentativas: number
+        }
+        Insert: {
+          assinatura_ok: boolean
+          chave?: string | null
+          client_reference_id?: string | null
+          conhecido?: boolean
+          corpo?: Json | null
+          corpo_texto?: string | null
+          erro?: string | null
+          evento?: string | null
+          id?: string
+          meeting_id?: string | null
+          processado_em?: string | null
+          recebido_em?: string
+          reuniao_id?: string | null
+          status_http?: number | null
+          tentativas?: number
+        }
+        Update: {
+          assinatura_ok?: boolean
+          chave?: string | null
+          client_reference_id?: string | null
+          conhecido?: boolean
+          corpo?: Json | null
+          corpo_texto?: string | null
+          erro?: string | null
+          evento?: string | null
+          id?: string
+          meeting_id?: string | null
+          processado_em?: string | null
+          recebido_em?: string
+          reuniao_id?: string | null
+          status_http?: number | null
+          tentativas?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fireflies_webhooks_reuniao_id_fkey"
+            columns: ["reuniao_id"]
+            isOneToOne: false
+            referencedRelation: "reunioes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fireflies_resgates: {
+        Row: {
+          enviado_em: string | null
+          erro: string | null
+          id: string
+          pedido_em: string
+          pedido_por: string | null
+          reuniao_id: string
+          status: string
+        }
+        Insert: {
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          pedido_em?: string
+          pedido_por?: string | null
+          reuniao_id: string
+          status?: string
+        }
+        Update: {
+          enviado_em?: string | null
+          erro?: string | null
+          id?: string
+          pedido_em?: string
+          pedido_por?: string | null
+          reuniao_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fireflies_resgates_pedido_por_fkey"
+            columns: ["pedido_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fireflies_resgates_reuniao_id_fkey"
+            columns: ["reuniao_id"]
+            isOneToOne: false
+            referencedRelation: "reunioes"
             referencedColumns: ["id"]
           },
         ]
@@ -10905,6 +11724,249 @@ export type Database = {
           },
         ]
       }
+      qualidade_segredos: {
+        Row: {
+          chave: string
+          definido_em: string
+          definido_por: string | null
+          secret_id: string
+        }
+        Insert: {
+          chave: string
+          definido_em?: string
+          definido_por?: string | null
+          secret_id: string
+        }
+        Update: {
+          chave?: string
+          definido_em?: string
+          definido_por?: string | null
+          secret_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualidade_segredos_definido_por_fkey"
+            columns: ["definido_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qualidade_pessoas: {
+        Row: {
+          analise_ativa: boolean
+          atualizado_em: string
+          atualizado_por: string | null
+          captura_ativa: boolean
+          vendedor_id: string
+        }
+        Insert: {
+          analise_ativa?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          captura_ativa?: boolean
+          vendedor_id: string
+        }
+        Update: {
+          analise_ativa?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          captura_ativa?: boolean
+          vendedor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualidade_pessoas_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pessoas_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: true
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qualidade_pendencias: {
+        Row: {
+          analise_id: string
+          analise_item_id: string | null
+          citacao: string | null
+          conversa_id: string | null
+          criada_em: string
+          descricao: string
+          empresa_id: string | null
+          id: string
+          prazo_em: string | null
+          resolvida_em: string | null
+          resolvida_por: string | null
+          reuniao_id: string | null
+          status: string
+          tipo: string
+          vendedor_id: string
+        }
+        Insert: {
+          analise_id: string
+          analise_item_id?: string | null
+          citacao?: string | null
+          conversa_id?: string | null
+          criada_em?: string
+          descricao: string
+          empresa_id?: string | null
+          id?: string
+          prazo_em?: string | null
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          reuniao_id?: string | null
+          status?: string
+          tipo: string
+          vendedor_id: string
+        }
+        Update: {
+          analise_id?: string
+          analise_item_id?: string | null
+          citacao?: string | null
+          conversa_id?: string | null
+          criada_em?: string
+          descricao?: string
+          empresa_id?: string | null
+          id?: string
+          prazo_em?: string | null
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          reuniao_id?: string | null
+          status?: string
+          tipo?: string
+          vendedor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualidade_pendencias_analise_id_fkey"
+            columns: ["analise_id"]
+            isOneToOne: false
+            referencedRelation: "analises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_analise_item_id_fkey"
+            columns: ["analise_item_id"]
+            isOneToOne: false
+            referencedRelation: "analise_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "agentes_empresas_alvo"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_resolvida_por_fkey"
+            columns: ["resolvida_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_reuniao_id_fkey"
+            columns: ["reuniao_id"]
+            isOneToOne: false
+            referencedRelation: "reunioes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualidade_pendencias_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qualidade_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave: string
+          valor: Json
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          chave?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualidade_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       radar_config: {
         Row: {
           atualizado_em: string
@@ -11210,6 +12272,339 @@ export type Database = {
             columns: ["duplicado_de"]
             isOneToOne: false
             referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rubricas: {
+        Row: {
+          ativa: boolean
+          ativada_em: string | null
+          calibrada_em: string | null
+          criada_em: string
+          criada_por: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          recalibrar_pedido_em: string | null
+          tipo_interacao: string
+          versao: number
+        }
+        Insert: {
+          ativa?: boolean
+          ativada_em?: string | null
+          calibrada_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          recalibrar_pedido_em?: string | null
+          tipo_interacao: string
+          versao: number
+        }
+        Update: {
+          ativa?: boolean
+          ativada_em?: string | null
+          calibrada_em?: string | null
+          criada_em?: string
+          criada_por?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          recalibrar_pedido_em?: string | null
+          tipo_interacao?: string
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rubricas_criada_por_fkey"
+            columns: ["criada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rubrica_itens: {
+        Row: {
+          atende: string[] | null
+          ativo: boolean
+          calibracao: Json | null
+          calibrado_em: string | null
+          chave: string
+          condicao_aplicabilidade: string | null
+          etapa: string | null
+          f1: number | null
+          gera_pendencia: string | null
+          id: string
+          limiar: number | null
+          limiar_origem: string | null
+          limiar_override_em: string | null
+          limiar_override_motivo: string | null
+          limiar_override_por: string | null
+          n_amostras: number | null
+          opcoes: Json | null
+          ordem: number
+          orientacao: string
+          pergunta: string
+          peso: number
+          precisa_revisao: boolean
+          precisao: number | null
+          recall: number | null
+          rotulo: string
+          rubrica_id: string
+          status_calibracao: string
+          tipo_resposta: string
+        }
+        Insert: {
+          atende?: string[] | null
+          ativo?: boolean
+          calibracao?: Json | null
+          calibrado_em?: string | null
+          chave: string
+          condicao_aplicabilidade?: string | null
+          etapa?: string | null
+          f1?: number | null
+          gera_pendencia?: string | null
+          id?: string
+          limiar?: number | null
+          limiar_origem?: string | null
+          limiar_override_em?: string | null
+          limiar_override_motivo?: string | null
+          limiar_override_por?: string | null
+          n_amostras?: number | null
+          opcoes?: Json | null
+          ordem: number
+          orientacao: string
+          pergunta: string
+          peso?: number
+          precisa_revisao?: boolean
+          precisao?: number | null
+          recall?: number | null
+          rotulo: string
+          rubrica_id: string
+          status_calibracao?: string
+          tipo_resposta: string
+        }
+        Update: {
+          atende?: string[] | null
+          ativo?: boolean
+          calibracao?: Json | null
+          calibrado_em?: string | null
+          chave?: string
+          condicao_aplicabilidade?: string | null
+          etapa?: string | null
+          f1?: number | null
+          gera_pendencia?: string | null
+          id?: string
+          limiar?: number | null
+          limiar_origem?: string | null
+          limiar_override_em?: string | null
+          limiar_override_motivo?: string | null
+          limiar_override_por?: string | null
+          n_amostras?: number | null
+          opcoes?: Json | null
+          ordem?: number
+          orientacao?: string
+          pergunta?: string
+          peso?: number
+          precisa_revisao?: boolean
+          precisao?: number | null
+          recall?: number | null
+          rotulo?: string
+          rubrica_id?: string
+          status_calibracao?: string
+          tipo_resposta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rubrica_itens_limiar_override_por_fkey"
+            columns: ["limiar_override_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rubrica_itens_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reunioes: {
+        Row: {
+          agente_id: string | null
+          alerta_sem_bot_em: string | null
+          atualizada_em: string
+          bot_entrou_em: string | null
+          captura_status: string
+          contato_id: string | null
+          criada_em: string
+          dispensada_motivo: string | null
+          dispensada_por: string | null
+          duracao_s: number | null
+          empresa_id: string | null
+          evento_id: string
+          fireflies_client_reference_id: string | null
+          fireflies_meeting_id: string | null
+          id: string
+          mandato_id: string | null
+          participantes_detectados: Json | null
+          proximos_passos: Json
+          resumo: string | null
+          resumo_origem: string | null
+          resumo_recebido_em: string | null
+          transcricao: string | null
+          transcricao_expurgada_em: string | null
+          transcricao_recebida_em: string | null
+          transcricao_segmentos: Json | null
+          url_fireflies: string | null
+          vendedor_id: string | null
+        }
+        Insert: {
+          agente_id?: string | null
+          alerta_sem_bot_em?: string | null
+          atualizada_em?: string
+          bot_entrou_em?: string | null
+          captura_status?: string
+          contato_id?: string | null
+          criada_em?: string
+          dispensada_motivo?: string | null
+          dispensada_por?: string | null
+          duracao_s?: number | null
+          empresa_id?: string | null
+          evento_id: string
+          fireflies_client_reference_id?: string | null
+          fireflies_meeting_id?: string | null
+          id?: string
+          mandato_id?: string | null
+          participantes_detectados?: Json | null
+          proximos_passos?: Json
+          resumo?: string | null
+          resumo_origem?: string | null
+          resumo_recebido_em?: string | null
+          transcricao?: string | null
+          transcricao_expurgada_em?: string | null
+          transcricao_recebida_em?: string | null
+          transcricao_segmentos?: Json | null
+          url_fireflies?: string | null
+          vendedor_id?: string | null
+        }
+        Update: {
+          agente_id?: string | null
+          alerta_sem_bot_em?: string | null
+          atualizada_em?: string
+          bot_entrou_em?: string | null
+          captura_status?: string
+          contato_id?: string | null
+          criada_em?: string
+          dispensada_motivo?: string | null
+          dispensada_por?: string | null
+          duracao_s?: number | null
+          empresa_id?: string | null
+          evento_id?: string
+          fireflies_client_reference_id?: string | null
+          fireflies_meeting_id?: string | null
+          id?: string
+          mandato_id?: string | null
+          participantes_detectados?: Json | null
+          proximos_passos?: Json
+          resumo?: string | null
+          resumo_origem?: string | null
+          resumo_recebido_em?: string | null
+          transcricao?: string | null
+          transcricao_expurgada_em?: string | null
+          transcricao_recebida_em?: string | null
+          transcricao_segmentos?: Json | null
+          url_fireflies?: string | null
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reunioes_agente_id_fkey"
+            columns: ["agente_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_dispensada_por_fkey"
+            columns: ["dispensada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "agentes_empresas_alvo"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "reunioes_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: true
+            referencedRelation: "vendedor_eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_mandato_id_fkey"
+            columns: ["mandato_id"]
+            isOneToOne: false
+            referencedRelation: "mandatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reunioes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
             referencedColumns: ["id"]
           },
         ]
@@ -13644,6 +15039,114 @@ export type Database = {
             columns: ["whatsapp_conta_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vinculacao_tentativas: {
+        Row: {
+          aplicada: boolean
+          auditada_em: string | null
+          auditada_por: string | null
+          auditoria_correta: boolean | null
+          candidatas: Json
+          criada_em: string
+          custo_centavos: number
+          empresa_id: string | null
+          etapa: string
+          id: string
+          motivo: string | null
+          nao_resolvivel: boolean
+          nao_vinculada_id: string
+          probabilidade: number | null
+        }
+        Insert: {
+          aplicada?: boolean
+          auditada_em?: string | null
+          auditada_por?: string | null
+          auditoria_correta?: boolean | null
+          candidatas?: Json
+          criada_em?: string
+          custo_centavos?: number
+          empresa_id?: string | null
+          etapa: string
+          id?: string
+          motivo?: string | null
+          nao_resolvivel?: boolean
+          nao_vinculada_id: string
+          probabilidade?: number | null
+        }
+        Update: {
+          aplicada?: boolean
+          auditada_em?: string | null
+          auditada_por?: string | null
+          auditoria_correta?: boolean | null
+          candidatas?: Json
+          criada_em?: string
+          custo_centavos?: number
+          empresa_id?: string | null
+          etapa?: string
+          id?: string
+          motivo?: string | null
+          nao_resolvivel?: boolean
+          nao_vinculada_id?: string
+          probabilidade?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vinculacao_tentativas_auditada_por_fkey"
+            columns: ["auditada_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "agentes_empresas_alvo"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "analises_sem_cadastro"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "antecipacao_fornecedores_sem_interesse"
+            referencedColumns: ["fornecedor_empresa_id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "credito_carteira"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "ex_clientes"
+            referencedColumns: ["empresa_id"]
+          },
+          {
+            foreignKeyName: "vinculacao_tentativas_nao_vinculada_id_fkey"
+            columns: ["nao_vinculada_id"]
+            isOneToOne: false
+            referencedRelation: "conversas_nao_vinculadas"
             referencedColumns: ["id"]
           },
         ]
@@ -17245,6 +18748,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app__qualidade_writeback: { Args: { p: Json }; Returns: Json }
+      app__qualidade_gravar_analise: { Args: { p: Json }; Returns: string }
+      app__qualidade_janelas_candidatas: {
+        Args: { p_horas: number; p_limite: number }
+        Returns: {
+          conversa_id: string
+          mensagens: string[]
+          ultima_janela_fim: string
+        }[]
+      }
+      app__qualidade_vigiar: { Args: never; Returns: Json }
+      app__qualidade_segredo: { Args: { p_chave: string }; Returns: string }
+      app__qualidade_recalcular: {
+        Args: { p_analise: string }
+        Returns: undefined
+      }
+      app__qualidade_exige_gestor: { Args: never; Returns: undefined }
+      app__qualidade_ve_analise: {
+        Args: { p_vendedor_id: string }
+        Returns: boolean
+      }
+      app__qualidade_captura_ligada: { Args: never; Returns: boolean }
+      app__qualidade_cfg: { Args: { p_chave: string }; Returns: Json }
       app__registrar_toque: {
         Args: {
           p_ator: string
@@ -17254,6 +18780,11 @@ export type Database = {
           p_extra: Json
         }
         Returns: undefined
+      }
+      app__reuniao_por_fireflies: { Args: { p: Json }; Returns: string }
+      app__reuniao_visivel: {
+        Args: { p_ev: Database["public"]["Tables"]["vendedor_eventos"]["Row"] }
+        Returns: boolean
       }
       app__rp_carteira: {
         Args: { p_fim: string; p_inicio: string; p_retrato: string }
@@ -17355,6 +18886,42 @@ export type Database = {
       }
       app__telefone_e164: { Args: { p: string }; Returns: string }
       app__uuid_ou_nulo: { Args: { p: string }; Returns: string }
+      app__vinc_candidatas_nome: {
+        Args: { p_limite: number; p_nome: string }
+        Returns: {
+          cnpj: string
+          dominio: string
+          empresa_id: string
+          nome_fantasia: string
+          razao_social: string
+          uf: string
+          valor: number
+        }[]
+      }
+      app__vinc_candidatas_telefone: {
+        Args: { p_digitos: string }
+        Returns: {
+          cnpj: string
+          dominio: string
+          empresa_id: string
+          nome_fantasia: string
+          razao_social: string
+          uf: string
+          valor: number
+        }[]
+      }
+      app__vinc_candidatas_dominio: {
+        Args: { p_dominio: string }
+        Returns: {
+          cnpj: string
+          dominio: string
+          empresa_id: string
+          nome_fantasia: string
+          razao_social: string
+          uf: string
+          valor: number
+        }[]
+      }
       app__vincular_notas_da_empresa: {
         Args: { p_cnpj: string; p_empresa: string }
         Returns: undefined
@@ -19842,6 +21409,7 @@ export type Database = {
           nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
+          origem_interacao: Json | null
           ponto_focal: boolean
           senioridade: string | null
           telefone: string | null
@@ -19962,6 +21530,30 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_empresa_sugestao_decidir: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string | null
+          campo: string
+          contato_id: string | null
+          criada_em: string
+          decidida_em: string | null
+          decidida_por: string | null
+          empresa_id: string
+          id: string
+          origem: string
+          status: string
+          valor_atual: string | null
+          valor_sugerido: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_sugestoes_cadastro"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_empresa_sugestoes: { Args: { p: Json }; Returns: Json }
       app_empresas_do_meu_funil: { Args: never; Returns: string[] }
       app_enviar_analise_manualmente: {
         Args: { p: Json }
@@ -20028,6 +21620,7 @@ export type Database = {
           nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
+          origem_interacao: Json | null
           ponto_focal: boolean
           senioridade: string | null
           telefone: string | null
@@ -20819,6 +22412,7 @@ export type Database = {
           nao_e_o_decisor: boolean
           nome: string | null
           origem: string | null
+          origem_interacao: Json | null
           ponto_focal: boolean
           senioridade: string | null
           telefone: string | null
@@ -21406,6 +23000,265 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_qualidade_auditar_vinculo: {
+        Args: { p: Json }
+        Returns: {
+          aplicada: boolean
+          auditada_em: string | null
+          auditada_por: string | null
+          auditoria_correta: boolean | null
+          candidatas: Json
+          criada_em: string
+          custo_centavos: number
+          empresa_id: string | null
+          etapa: string
+          id: string
+          motivo: string | null
+          nao_resolvivel: boolean
+          nao_vinculada_id: string
+          probabilidade: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vinculacao_tentativas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_vinculacao: { Args: { p: Json }; Returns: Json }
+      app_qualidade_agregado: { Args: { p: Json }; Returns: Json }
+      app_qualidade_resolver_pendencia: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string
+          analise_item_id: string | null
+          citacao: string | null
+          conversa_id: string | null
+          criada_em: string
+          descricao: string
+          empresa_id: string | null
+          id: string
+          prazo_em: string | null
+          resolvida_em: string | null
+          resolvida_por: string | null
+          reuniao_id: string | null
+          status: string
+          tipo: string
+          vendedor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "qualidade_pendencias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_override_limiar: {
+        Args: { p: Json }
+        Returns: {
+          atende: string[] | null
+          ativo: boolean
+          calibracao: Json | null
+          calibrado_em: string | null
+          chave: string
+          condicao_aplicabilidade: string | null
+          etapa: string | null
+          f1: number | null
+          gera_pendencia: string | null
+          id: string
+          limiar: number | null
+          limiar_origem: string | null
+          limiar_override_em: string | null
+          limiar_override_motivo: string | null
+          limiar_override_por: string | null
+          n_amostras: number | null
+          opcoes: Json | null
+          ordem: number
+          orientacao: string
+          pergunta: string
+          peso: number
+          precisa_revisao: boolean
+          precisao: number | null
+          recall: number | null
+          rotulo: string
+          rubrica_id: string
+          status_calibracao: string
+          tipo_resposta: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rubrica_itens"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_pedir_recalibracao: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          ativada_em: string | null
+          calibrada_em: string | null
+          criada_em: string
+          criada_por: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          recalibrar_pedido_em: string | null
+          tipo_interacao: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rubricas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_ativar_rubrica: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          ativada_em: string | null
+          calibrada_em: string | null
+          criada_em: string
+          criada_por: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          recalibrar_pedido_em: string | null
+          tipo_interacao: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rubricas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_salvar_rubrica: {
+        Args: { p: Json }
+        Returns: {
+          ativa: boolean
+          ativada_em: string | null
+          calibrada_em: string | null
+          criada_em: string
+          criada_por: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          recalibrar_pedido_em: string | null
+          tipo_interacao: string
+          versao: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rubricas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_rotular: { Args: { p: Json }; Returns: number }
+      app_qualidade_para_rotular: { Args: { p: Json }; Returns: Json }
+      app_qualidade_decidir_contestacao: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string
+          analise_item_id: string
+          contestado_por: string
+          criada_em: string
+          id: string
+          justificativa: string | null
+          resposta_gestor: string | null
+          revisada_em: string | null
+          revisada_por: string | null
+          rotulo_humano: string | null
+          veredito: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analise_contestacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_contestacoes: { Args: { p: Json }; Returns: Json }
+      app_qualidade_contestar: {
+        Args: { p: Json }
+        Returns: {
+          analise_id: string
+          analise_item_id: string
+          contestado_por: string
+          criada_em: string
+          id: string
+          justificativa: string | null
+          resposta_gestor: string | null
+          revisada_em: string | null
+          revisada_por: string | null
+          rotulo_humano: string | null
+          veredito: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "analise_contestacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_feedback: { Args: { p: Json }; Returns: Json }
+      app_qualidade_selo: { Args: { p: Json }; Returns: Json }
+      app_qualidade_analise: { Args: { p: Json }; Returns: Json }
+      app_qualidade_salvar_pessoa: {
+        Args: { p: Json }
+        Returns: {
+          analise_ativa: boolean
+          atualizado_em: string
+          atualizado_por: string | null
+          captura_ativa: boolean
+          vendedor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "qualidade_pessoas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_qualidade_pessoas: {
+        Args: never
+        Returns: {
+          analise_ativa: boolean
+          captura_ativa: boolean
+          is_ia: boolean
+          nome: string
+          tipo: string
+          vendedor_id: string
+        }[]
+      }
+      app_qualidade_segredos: {
+        Args: never
+        Returns: {
+          chave: string
+          definido_em: string
+          definido_por: string
+        }[]
+      }
+      app_qualidade_salvar_segredo: { Args: { p: Json }; Returns: Json }
+      app_qualidade_salvar_config: {
+        Args: { p: Json }
+        Returns: {
+          atualizado_em: string
+          atualizado_por: string | null
+          chave: string
+          valor: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "qualidade_config"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       app_rank_origem_metrica: { Args: { p_origem: string }; Returns: number }
       app_reenviar_entrega: {
         Args: { p: Json }
@@ -21630,6 +23483,46 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_reuniao_chamar_bot: { Args: { p: Json }; Returns: Json }
+      app_reuniao_dispensar_captura: {
+        Args: { p: Json }
+        Returns: {
+          agente_id: string | null
+          alerta_sem_bot_em: string | null
+          atualizada_em: string
+          bot_entrou_em: string | null
+          captura_status: string
+          contato_id: string | null
+          criada_em: string
+          dispensada_motivo: string | null
+          dispensada_por: string | null
+          duracao_s: number | null
+          empresa_id: string | null
+          evento_id: string
+          fireflies_client_reference_id: string | null
+          fireflies_meeting_id: string | null
+          id: string
+          mandato_id: string | null
+          participantes_detectados: Json | null
+          proximos_passos: Json
+          resumo: string | null
+          resumo_origem: string | null
+          resumo_recebido_em: string | null
+          transcricao: string | null
+          transcricao_expurgada_em: string | null
+          transcricao_recebida_em: string | null
+          transcricao_segmentos: Json | null
+          url_fireflies: string | null
+          vendedor_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reunioes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_reuniao_captura: { Args: { p: Json }; Returns: Json }
       app_reuniao_do_card: { Args: { p: Json }; Returns: Json }
       app_reverter_fornecedor_sem_interesse: {
         Args: { p: Json }

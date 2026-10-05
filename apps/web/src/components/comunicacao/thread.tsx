@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { buscarThread, buscarThreadDaEmpresa, type MensagemThread } from './queries'
 import { dataHora } from './format'
+import { SeloNota } from '@/components/qualidade/nota'
 
 /**
  * A thread, e é a mesma em todos os lugares: no inbox, na aba "Comunicação" do card
@@ -281,6 +282,11 @@ export function Thread({
 
   return (
     <div className={cn('overflow-y-auto pr-1', alturaClasse)}>
+      {/*
+        A nota da última janela analisada desta conversa (05C §6), no topo do histórico.
+        Só com a conversa: a thread da EMPRESA já tem o selo na ficha, ao lado do nome.
+      */}
+      {conversaId ? <SeloNota alvo={{ conversa_id: conversaId }} moldura="mb-2 flex justify-end" /> : null}
       <ul className="space-y-3">
         {mensagens.map((m) => (
           <Bolha key={m.id} m={m} destacada={Boolean(funilCardId && m.funil_card_id === funilCardId)} />

@@ -38,6 +38,11 @@ import {
 } from './comercial/comissoes-v2.js'
 import { resumoMeuDiaJob } from './comercial/meu-dia-resumo.js'
 import { sincronizarReunioesGoogle } from './comercial/reunioes-google.js'
+import { processarFila } from '../qualidade/analisar.js'
+import { recalibrar } from '../qualidade/calibrar.js'
+import { fecharJanelas } from '../qualidade/janelas.js'
+import { vigiarCaptura } from '../qualidade/vigiar.js'
+import { resolverVinculacoes } from '../qualidade/vinculacao.js'
 import {
   gerarReportSemanal, materializarSeriesReport, type OpcoesReport,
 } from './reports/semanal.js'
@@ -252,6 +257,11 @@ export type TipoJob =
   | 'cobranca-atualizar-titulos'
   | 'cobranca-relogio'
   | 'cobranca-lembretes'
+  | 'qualidade-vigiar'
+  | 'qualidade-processar'
+  | 'qualidade-janelas'
+  | 'qualidade-recalibrar'
+  | 'qualidade-vinculacao'
 
 /** Single-flight, per job kind. Two concurrent Receita runs would COPY the same
  *  2M rows into the same tables and fight over the staging temp tables. */
@@ -2082,4 +2092,31 @@ export function dispararRelogioCobranca(): string {
 /** Reiteração devida, documento complementar perto do prazo, protesto a retirar. */
 export function dispararLembretesCobranca(): string {
   return dispararAvulso('cobranca-lembretes', async () => lembretesCobranca())
+}
+
+// ─── Inteligência de Conversas (05C) ────────────────────────────────────────
+
+/** A cada 5 min: alerta de bot que não entrou, resgates na fila, webhooks pendentes. */
+export function dispararQualidadeVigiar(): string {
+  return dispararAvulso('qualidade-vigiar', async () => vigiarCaptura())
+}
+
+/** A fila de análise. Disparada pelo webhook (transcrição pronta) e pelo cron de garantia. */
+export function dispararQualidadeProcessar(limite?: number): string {
+  return dispararAvulso('qualidade-processar', async () => processarFila(limite))
+}
+
+/** Uma vez por dia: fecha as janelas de conversa e expurga transcrição vencida. */
+export function dispararQualidadeJanelas(): string {
+  return dispararAvulso('qualidade-janelas', async () => fecharJanelas())
+}
+
+/** Recalibra as rubricas que pediram (botão, versão nova, contestações). */
+export function dispararQualidadeRecalibrar(): string {
+  return dispararAvulso('qualidade-recalibrar', async () => recalibrar())
+}
+
+/** A cascata de vinculação sobre a fila de não vinculados. */
+export function dispararQualidadeVinculacao(limite?: number): string {
+  return dispararAvulso('qualidade-vinculacao', async () => resolverVinculacoes(limite))
 }

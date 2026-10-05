@@ -92,6 +92,10 @@ export function destinoDoItem(
       return meta.conversa_id ? `/comunicacao/${meta.conversa_id}` : '/comunicacao'
     case 'vincular_conversa':
       return '/comunicacao/nao-vinculadas'
+    /* Pendência das conversas (05C §7): a conversa onde nasceu. Sem ela (reunião,
+       ligação), não há tela no app — o toque resolve, como numa tarefa. */
+    case 'resolver_pendencia':
+      return meta.conversa_id ? `/comunicacao/${meta.conversa_id}` : null
     default:
       return null
   }
@@ -126,13 +130,18 @@ export function ItemMeuDiaCard({ item, bloco, onAdiar, onDescartar, onConcluir }
   const cat = blocoCatalogado(bloco)
   const rota = destinoDoItem(bloco, item, rotaDaEmpresa)
   const ehTarefa = cat?.acao === 'concluir_tarefa'
+  // Pendência: o arrasto para a direita RESOLVE (em vez de adiar), e o toque abre a
+  // conversa quando ela existe. Sem conversa, o toque também resolve.
+  const ehPendencia = cat?.acao === 'resolver_pendencia'
+  const arrastoConclui = ehTarefa || ehPendencia
 
   const fechar = useCallback(() => swipeRef.current?.close(), [])
 
   const abrir = useCallback(() => {
     if (ehTarefa) return onConcluir()
     if (rota) router.push(rota)
-  }, [ehTarefa, onConcluir, rota, router])
+    else if (ehPendencia) onConcluir()
+  }, [ehTarefa, ehPendencia, onConcluir, rota, router])
 
   return (
     <>
@@ -146,8 +155,8 @@ export function ItemMeuDiaCard({ item, bloco, onAdiar, onDescartar, onConcluir }
           <AcaoSwipe
             progresso={progresso}
             lado="direita"
-            rotulo={ehTarefa ? 'Concluir' : 'Adiar'}
-            Icone={ehTarefa ? Check : CalendarClock}
+            rotulo={ehTarefa ? 'Concluir' : ehPendencia ? 'Resolver' : 'Adiar'}
+            Icone={arrastoConclui ? Check : CalendarClock}
             cor={colors.primary}
           />
         )}
@@ -163,7 +172,7 @@ export function ItemMeuDiaCard({ item, bloco, onAdiar, onDescartar, onConcluir }
         onSwipeableOpen={(direcao) => {
           fechar()
           if (direcao === 'left') {
-            if (ehTarefa) onConcluir()
+            if (arrastoConclui) onConcluir()
             else setAdiarAberto(true)
           } else {
             onDescartar()

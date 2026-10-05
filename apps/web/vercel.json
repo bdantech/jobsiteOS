@@ -154,6 +154,26 @@
       "schedule": "*/10 10-23 * * 1-6"
     },
     {
+      "path": "/api/cron/qualidade-vigiar",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/qualidade-processar",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/qualidade-janelas",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/qualidade-recalibrar",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/qualidade-vinculacao",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/agente-decidir",
       "schedule": "30 * * * *"
     },

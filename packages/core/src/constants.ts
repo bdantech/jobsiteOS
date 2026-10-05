@@ -385,6 +385,22 @@ export const EVENTO_TIPOS = {
   REUNIAO_AGENDADA_POR_IA: 'reuniao.agendada_por_ia',
   VOZ_DESFECHO_ESTRUTURADO: 'voz.desfecho_estruturado',
   AGENTES_SEM_JANELA: 'agentes.sem_janela',
+
+  // Inteligência de Conversas (05C)
+  REUNIAO_AGENDADA: 'reuniao.agendada',
+  REUNIAO_BOT_ENTROU: 'reuniao.bot_entrou',
+  REUNIAO_SEM_CAPTURA: 'reuniao.sem_captura',
+  REUNIAO_TRANSCRITA: 'reuniao.transcrita',
+  ANALISE_CONCLUIDA: 'analise.concluida',
+  ANALISE_PUBLICADA: 'analise.publicada',
+  ANALISE_CONTESTADA: 'analise.contestada',
+  ANALISE_CONTESTACAO_RESOLVIDA: 'analise.contestacao_resolvida',
+  QUALIDADE_PENDENCIA_DETECTADA: 'qualidade.pendencia_detectada',
+  RUBRICA_VERSIONADA: 'rubrica.versionada',
+  RUBRICA_CALIBRADA: 'rubrica.calibrada',
+  RUBRICA_SAIU_DE_SOMBRA: 'rubrica.saiu_de_sombra',
+  VINCULACAO_RESOLVIDA_AUTOMATICAMENTE: 'vinculacao.resolvida_automaticamente',
+  VINCULACAO_ENVIADA_PARA_HUMANO: 'vinculacao.enviada_para_humano',
 } as const
 
 export type EventoTipo = (typeof EVENTO_TIPOS)[keyof typeof EVENTO_TIPOS]
@@ -590,6 +606,20 @@ export const EVENTO_LABELS: Record<string, string> = {
   'agentes.proposta_pendente': 'Proposta de mandato aguardando aprovação',
   'agentes.digest': 'Resumo diário do agente',
   'reuniao.agendada_por_ia': 'Reunião marcada por um agente',
+  'reuniao.agendada': 'Gravação da reunião agendada',
+  'reuniao.bot_entrou': 'Gravador entrou na reunião',
+  'reuniao.sem_captura': 'Gravador não entrou na reunião',
+  'reuniao.transcrita': 'Reunião transcrita',
+  'analise.concluida': 'Interação analisada',
+  'analise.publicada': 'Feedback publicado',
+  'analise.contestada': 'Item de análise contestado',
+  'analise.contestacao_resolvida': 'Contestação revisada',
+  'qualidade.pendencia_detectada': 'Pendência detectada numa conversa',
+  'rubrica.versionada': 'Rubrica versionada',
+  'rubrica.calibrada': 'Rubrica calibrada',
+  'rubrica.saiu_de_sombra': 'Rubrica saiu de sombra',
+  'vinculacao.resolvida_automaticamente': 'Conversa vinculada automaticamente',
+  'vinculacao.enviada_para_humano': 'Conversa enviada para vinculação manual',
   'voz.desfecho_estruturado': 'Ligação consumida pelo mandato',
   'agentes.sem_janela': 'Interesse sem janela do closer',
 }

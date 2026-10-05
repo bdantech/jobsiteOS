@@ -29,7 +29,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { useVendedoresVisiveis } from '@/features/comercial'
 import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
-import { useConcluirTarefa, useMeuDia, useOcultarItem } from '@/features/comercial/meu-dia'
+import { useConcluirTarefa, useMeuDia, useOcultarItem, useResolverPendencia } from '@/features/comercial/meu-dia'
 import { ItemMeuDiaCard, destinoDoItem } from '@/features/comercial/components/item-meu-dia'
 import {
   BarrasMobile, BolhasMobile, PizzaMobile, TreemapCarteira, Widget,
@@ -80,6 +80,7 @@ export default function MeuDiaScreen() {
   const vendedores = useVendedoresVisiveis()
   const ocultar = useOcultarItem()
   const concluir = useConcluirTarefa()
+  const resolverPendencia = useResolverPendencia()
 
   /** A largura útil de um gráfico dentro do cartão: tela − padding da lista − padding do cartão. */
   const larguraGrafico = Math.max(width - 32 - 32, 220)
@@ -324,7 +325,12 @@ export default function MeuDiaScreen() {
             largura={larguraGrafico}
             onAdiar={(item, dias) => adiar(bloco.tipo, item, dias)}
             onDescartar={(item) => descartar(bloco.tipo, item)}
-            onConcluir={(item) => concluir.mutate(String(item.meta.tarefa_id))}
+            onConcluir={(item) =>
+              // Pendência das conversas (05C §7) resolve pela RPC da qualidade; o resto é tarefa.
+              item.meta.pendencia_id
+                ? resolverPendencia.mutate(String(item.meta.pendencia_id))
+                : concluir.mutate(String(item.meta.tarefa_id))
+            }
           />
         ))
       )}

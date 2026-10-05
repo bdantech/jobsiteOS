@@ -65,6 +65,7 @@ export const BLOCOS_MEU_DIA = [
   'conversas_paradas',
   'conversas_aguardando_resposta',
   'proximos_passos_agente',
+  'pendencias_conversas',
   'tarefas_manuais',
 ] as const
 
@@ -86,6 +87,7 @@ export type AcaoMeuDia =
   | 'vincular_conversa'
   | 'decidir_aceite'
   | 'concluir_tarefa'
+  | 'resolver_pendencia'
 
 /**
  * O agrupamento serve ao GRÁFICO de composição, e é a única razão de ele existir.
@@ -477,6 +479,19 @@ export const CATALOGO_MEU_DIA: readonly BlocoCatalogado[] = [
     maxPadrao: 10,
     limiaresPadrao: { confianca_minima: 0 },
     limiarRotulos: { confianca_minima: 'Confiança mínima da sugestão (0 a 100)' },
+  },
+  {
+    tipo: 'pendencias_conversas',
+    rotulo: 'Pendências das conversas',
+    descricao:
+      'O que a análise das conversas achou parado do nosso lado: pergunta sem resposta, '
+      + 'retorno fora do prazo, compromisso combinado. Só aparece com a rubrica calibrada.',
+    cargos: ['originador', 'sdr', 'vendedor'],
+    grupo: 'conversa',
+    acao: 'resolver_pendencia',
+    acaoRotulo: 'Abrir a conversa',
+    maxPadrao: 10,
+    limiaresPadrao: {},
   },
   {
     tipo: 'tarefas_manuais',

@@ -125,7 +125,13 @@ import {
   dispararAtualizarTitulosCobranca,
   dispararRelogioCobranca,
   dispararLembretesCobranca,
+  dispararQualidadeVigiar,
+  dispararQualidadeProcessar,
+  dispararQualidadeJanelas,
+  dispararQualidadeRecalibrar,
+  dispararQualidadeVinculacao,
 } from './jobs/index.js'
+import { processarWebhook, receberWebhookFireflies } from './qualidade/fireflies.js'
 import { documentosCobrancaSchema, gerarDocumentosCobranca } from './jobs/cobranca/documentos.js'
 import { gerarDossieSinistro } from './jobs/cobranca/dossie.js'
 import { envioSeguradora, seguradoraSchema } from './jobs/cobranca/seguradora.js'
@@ -413,6 +419,38 @@ app.post('/webhooks/voz', async (req: Request, res: Response) => {
     logger.error({ erro: String(erro) }, 'Webhook da voz falhou ao processar.')
     await responder(503, { ok: false }, String(erro))
   }
+})
+
+// ─── Webhook do Fireflies (público: assinado com HMAC no X-Hub-Signature) ─────
+/*
+ * 05C §1.3. Toda requisição é gravada em `fireflies_webhooks` antes de validar, com o
+ * status que devolvemos; entrega repetida bate no índice único de (evento, reunião) e
+ * responde 200 sem refazer nada. O trabalho (buscar a transcrição na GraphQL, amarrar à
+ * reunião, enfileirar a análise) acontece DEPOIS da resposta: o Fireflies desiste em 30 s
+ * e não reenvia o que foi respondido tarde. O que falhar ali o vigia retoma.
+ */
+app.post('/webhooks/fireflies', async (req: Request, res: Response) => {
+  const cru = (req as RequisicaoComCorpoCru).corpoCru ?? ''
+  const assinatura = req.headers['x-hub-signature']
+  let r: Awaited<ReturnType<typeof receberWebhookFireflies>>
+  try {
+    r = await receberWebhookFireflies(cru, typeof assinatura === 'string' ? assinatura : null)
+  } catch (erro) {
+    logger.error({ erro: String(erro) }, 'Webhook do Fireflies falhou ao registrar.')
+    res.status(503).json({ ok: false })
+    return
+  }
+  res.status(r.status).json(r.corpo)
+  if (!r.id) return
+  void processarWebhook(r.id).then((x) => {
+    if (!x.ok) return
+    try {
+      dispararQualidadeProcessar()
+    } catch (erro) {
+      // Já há uma rodada da fila em curso: ela (ou a próxima) pega esta transcrição.
+      if (!(erro instanceof JobEmExecucaoError)) logger.error({ erro: String(erro) }, 'Falha ao disparar a análise.')
+    }
+  })
 })
 
 app.use(exigirSegredo)
@@ -1705,6 +1743,52 @@ app.post('/jobs/comunicacao/plantao', (_req: Request, res: Response, next: NextF
 app.post('/jobs/comunicacao/sessoes', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararVerificarSessoes(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+// ─── Inteligência de Conversas (05C) ────────────────────────────────────────
+
+const limiteQualidadeSchema = z.object({ limite: z.number().int().min(1).max(500).optional() })
+
+app.post('/jobs/qualidade/vigiar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararQualidadeVigiar(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/qualidade/processar', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteQualidadeSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararQualidadeProcessar(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/qualidade/janelas', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararQualidadeJanelas(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/qualidade/recalibrar', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararQualidadeRecalibrar(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/qualidade/vinculacao', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteQualidadeSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararQualidadeVinculacao(limite), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

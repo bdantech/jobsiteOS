@@ -92,6 +92,14 @@ export function destinoDoItem(bloco: string, item: ItemMeuDia): string | null {
     case 'abrir_conversa':
     case 'enviar_sugestao':
       return meta.conversa_id ? `/comunicacao/${meta.conversa_id}` : '/comunicacao'
+    /* A pendência que a análise achou (05C §7): a conversa onde ela nasceu, que é onde se
+       resolve. Sem conversa (reunião, ligação), a própria análise, com a citação. */
+    case 'resolver_pendencia':
+      return meta.conversa_id
+        ? `/comunicacao/${meta.conversa_id}`
+        : meta.analise_id
+          ? `/comercial/feedback?analise=${meta.analise_id}`
+          : null
     default:
       return null
   }
@@ -119,6 +127,8 @@ export function LinhaItem({
   const cat = blocoCatalogado(bloco)
   const href = destinoDoItem(bloco, item)
   const ehTarefa = cat?.acao === 'concluir_tarefa'
+  // A pendência tem DUAS saídas: abrir onde ela nasceu e dar como resolvida aqui mesmo.
+  const ehPendencia = cat?.acao === 'resolver_pendencia'
 
   return (
     <div className="flex items-start gap-2 py-1.5">
@@ -150,6 +160,11 @@ export function LinhaItem({
             <LinkEmAba href={href} tituloDaAba={item.titulo} aria-label={cat?.acaoRotulo}>
               <ExternalLink className="h-3 w-3" aria-hidden />
             </LinkEmAba>
+          </Button>
+        ) : null}
+        {ehPendencia ? (
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={onConcluir}>
+            Resolver
           </Button>
         ) : null}
 

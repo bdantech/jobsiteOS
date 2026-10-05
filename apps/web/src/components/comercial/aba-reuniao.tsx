@@ -33,6 +33,7 @@ import {
   type AceiteDaReuniao,
   type ReuniaoDoCard,
 } from './queries'
+import { CapturaReuniao } from '@/components/qualidade/captura-reuniao'
 
 /**
  * A aba Reunião, nos dois funis.
@@ -154,6 +155,9 @@ export function AbaReuniao({ vendaId, sdrLeadId, empresaId }: AbaReuniaoProps) {
           <CancelarReuniao r={r} aoCancelar={recarregar} />
         </div>
       )}
+
+      {/* Gravação, transcrição e análise (05C §6): o DEPOIS da reunião, abaixo do antes. */}
+      <CapturaReuniao eventoId={r.id} />
     </div>
   )
 }

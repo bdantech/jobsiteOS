@@ -45,6 +45,8 @@ import { EmpresaNotas } from './empresa-notas'
 import { AbaConversas } from './aba-conversas'
 import { EmpresaTimeline } from './empresa-timeline'
 import { buscarEmpresa, empresasKeys } from './queries'
+import { SeloNota } from '@/components/qualidade/nota'
+import { SugestoesCadastro } from '@/components/qualidade/sugestoes-cadastro'
 
 /**
  * O esqueleto desenha o CARD de identidade, não um cabeçalho solto: se ele mostrar um
@@ -267,6 +269,8 @@ export function EmpresaDetalhe({
                       Ex-cliente desde {formatData(data.ex_cliente_desde)}
                     </Badge>
                   ) : null}
+                  {/* A nota da última conversa analisada: some quando não há (05C §6). */}
+                  <SeloNota alvo={{ empresa_id: data.id }} />
                   {data.teve_analise_sem_cadastro ? (
                     <Badge
                       variant="outline"
@@ -398,6 +402,11 @@ export function EmpresaDetalhe({
                     revisaoPosInadimplencia={data.credito_revisao_pos_inadimplencia}
                   />
                 ) : null}
+                {/*
+                 * Logo acima do formulário: o que a análise das conversas achou diferente
+                 * do cadastro (05C §11). Só aparece quando há o que decidir.
+                 */}
+                <SugestoesCadastro empresaId={data.id} />
                 <EmpresaForm empresa={data} somenteDominio={!podeEditarDados} />
               </TabsContent>
 

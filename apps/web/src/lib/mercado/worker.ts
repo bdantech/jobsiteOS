@@ -1280,3 +1280,25 @@ export async function dispararAtualizarTitulosCobranca(
 ): Promise<DispararJobResultado> {
   return postar('/jobs/cobranca/atualizar-titulos', { modo }, 'cobranca-atualizar-titulos')
 }
+
+// ─── Inteligência de Conversas (05C) ────────────────────────────────────────
+
+export async function dispararQualidadeVigiar(): Promise<DispararJobResultado> {
+  return postar('/jobs/qualidade/vigiar', {}, 'qualidade-vigiar')
+}
+
+export async function dispararQualidadeProcessar(): Promise<DispararJobResultado> {
+  return postar('/jobs/qualidade/processar', {}, 'qualidade-processar')
+}
+
+export async function dispararQualidadeJanelas(): Promise<DispararJobResultado> {
+  return postar('/jobs/qualidade/janelas', {}, 'qualidade-janelas')
+}
+
+export async function dispararQualidadeRecalibrar(): Promise<DispararJobResultado> {
+  return postar('/jobs/qualidade/recalibrar', {}, 'qualidade-recalibrar')
+}
+
+export async function dispararQualidadeVinculacao(): Promise<DispararJobResultado> {
+  return postar('/jobs/qualidade/vinculacao', {}, 'qualidade-vinculacao')
+}
