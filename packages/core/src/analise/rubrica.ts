@@ -265,6 +265,7 @@ export function explicarNota(n: Nota, rotulos: ReadonlyMap<string, string>): str
   if (n.score === null) return 'Sem avaliação aplicável.'
   const faltas = n.memoria.filter((l) => !l.atendido && l.peso > 0).map((l) => rotulos.get(l.chave) ?? l.chave)
   const nota = n.score.toFixed(2).replace('.', ',')
+  if (faltas.length === 0 && n.itens_aplicaveis === 1) return `${nota} — o único item aplicável foi atendido.`
   if (faltas.length === 0) return `${nota} — todos os ${n.itens_aplicaveis} itens aplicáveis atendidos.`
   return `${nota} porque faltou: ${juntar(faltas)}.`
 }
