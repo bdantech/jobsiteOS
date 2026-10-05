@@ -985,6 +985,30 @@ async function escalar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerrame
 
 async function encerrar(ctx: ContextoExecucao, a: Args): Promise<ResultadoFerramenta> {
   const sucesso = Boolean(a.sucesso)
+  /*
+   * "CONTATOS ESGOTADOS" PRECISA SER VERDADE. No mandato da CBX o modelo encerrou por esse
+   * motivo com o fixo da empresa sem nenhuma tentativa, contando como feitas ligações que
+   * nunca tiveram resultado — e lendo como decisão a "última tentativa" que ele mesmo tinha
+   * escrito numa mensagem. Esgotado é: todo contato alcançável (telefone, WhatsApp ou e-mail,
+   * e que não seja "não é o decisor") chegou ao limite de tentativas.
+   */
+  if (!sucesso && String(a.motivo) === 'contatos_esgotados') {
+    const { data: contatos } = await supabaseAdmin
+      .from('contatos')
+      .select('id, nome, telefone, whatsapp, email, nao_e_o_decisor')
+      .eq('empresa_id', ctx.mandato.empresa_id)
+    const limite = ctx.agente.limites.tentativas_por_contato
+    const tentativas = new Map(ctx.mandato.contatos_tentados.map((t) => [t.contato_id, t.tentativas]))
+    const restantes = (contatos ?? []).filter(
+      (c) => (c.telefone || c.whatsapp || c.email) && !c.nao_e_o_decisor && (tentativas.get(c.id) ?? 0) < limite,
+    )
+    if (restantes.length) {
+      return falha(
+        `Ainda há contatos com tentativas disponíveis: ${restantes.slice(0, 5).map((c) => `${c.nome ?? 'sem nome'} (${tentativas.get(c.id) ?? 0}/${limite})`).join(', ')}. ` +
+          'Ligação que ficou na fila sem resultado não conta como contato feito. Tente esses contatos antes de encerrar.',
+      )
+    }
+  }
   await supabaseAdmin
     .from('mandatos')
     .update({
