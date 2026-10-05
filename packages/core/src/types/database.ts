@@ -18511,6 +18511,7 @@ export type Database = {
         Args: { p_conversa: string; p_lid: string }
         Returns: undefined
       }
+      app__conversa_ignorada: { Args: { p_conversa: string }; Returns: boolean }
       app__conversa_minha: { Args: { p_conversa: string }; Returns: boolean }
       app__conversa_oculta: { Args: { p_conversa: string }; Returns: boolean }
       app__conversa_para: {

@@ -114,6 +114,11 @@ O job diário `qualidade-janelas` fecha a janela de cada conversa com pelo menos
 `min_mensagens` mensagens novas (padrão 4) e `horas_silencio` horas sem mensagem (padrão 12).
 Conversa parada não gera análise nova, e conversa acontecendo agora espera o silêncio.
 
+**Contato ignorado não é analisado.** A conversa cujo número ou LID foi ignorado na fila
+de identificação fica fora do recorte das janelas (0286), com a mesma regra que a tira do
+Meu Dia (0278). O worker confere de novo antes de analisar, porque o contato pode ter sido
+ignorado depois de a janela fechar.
+
 Quem é julgado:
 
 - **Reunião:** quem conduz, ou seja, o dono do evento (o closer).

@@ -143,6 +143,9 @@ export async function montarInteracao(alvo: AlvoInteracao): Promise<Montagem> {
     .eq('id', alvo.conversa_id!)
     .maybeSingle()
   if (!c) return { ok: false, motivo: 'conversa não encontrada' }
+  // A janela pode ter fechado antes de alguém ignorar o contato: confere de novo aqui (0286).
+  const { data: ignorada } = await supabaseAdmin.rpc('app__conversa_ignorada', { p_conversa: c.id })
+  if (ignorada) return { ok: false, motivo: 'contato ignorado na fila de identificação' }
   let q = supabaseAdmin
     .from('comunicacoes')
     .select('direcao, canal, corpo, assunto, criado_em, por_ia, vendedor_id')
