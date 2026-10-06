@@ -427,7 +427,9 @@ function LinhaSegredo({
     setEnviando(false)
     if (!r.ok) return void toast.error(r.message)
     setValor('')
-    toast.success(novo ? 'Credencial salva.' : 'Credencial removida.')
+    if (r.data.aviso) toast.warning(r.data.aviso)
+    else if (r.data.conta) toast.success(`Chave conferida com o Fireflies: conta ${r.data.conta}.`)
+    else toast.success(novo ? 'Credencial salva.' : 'Credencial removida.')
     void qc.invalidateQueries({ queryKey: qualidadeGestaoKeys.segredos() })
   }
 

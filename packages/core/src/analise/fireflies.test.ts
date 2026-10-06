@@ -6,6 +6,7 @@ import {
   chaveIdempotencia,
   estadoResgate,
   iguaisTempoConstante,
+  lerConferenciaChave,
   lerWebhookFireflies,
   normalizarLinkReuniao,
   normalizarTranscricao,
@@ -101,4 +102,22 @@ test('transcrição: falas consecutivas viram parágrafo; participantes com e-ma
   assert.equal(t.participantes.find((p) => p.email === 'admin@oneos.com.br')!.falou, false)
   assert.ok(t.participantes.some((p) => p.nome === 'Desconhecido' && p.falou))
   assert.equal(normalizarLinkReuniao(t.meeting_link), 'meet.google.com/xyz-abcd-efg')
+})
+
+test('chave recusada: o Fireflies responde 500 com auth_failed, e isso é recusa, não instabilidade', () => {
+  const corpo = { errors: [{ friendly: true, code: 'auth_failed', extensions: { code: 'auth_failed' } }] }
+  assert.equal(lerConferenciaChave(500, corpo).valida, false)
+  assert.equal(lerConferenciaChave(401, {}).valida, false)
+})
+
+test('chave aceita devolve o e-mail do dono, para a tela mostrar de que conta ela é', () => {
+  assert.deepEqual(lerConferenciaChave(200, { data: { user: { email: 'admin@oneos.com.br', name: 'Admin' } } }), {
+    valida: true,
+    email: 'admin@oneos.com.br',
+  })
+})
+
+test('fora do ar ou resposta estranha não recusa: não dá para saber', () => {
+  assert.equal(lerConferenciaChave(502, null).valida, null)
+  assert.equal(lerConferenciaChave(500, { errors: [{ code: 'internal_server_error' }] }).valida, null)
 })

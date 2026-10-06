@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import {
+  FIREFLIES_GRAPHQL,
   MutationError,
+  QUERY_DONO_DA_CHAVE,
   ativarRubrica,
   auditarVinculo,
   canAccessRoute,
@@ -11,6 +13,7 @@ import {
   decidirContestacao,
   decidirSugestaoCadastro,
   dispensarCaptura,
+  lerConferenciaChave,
   overrideLimiar,
   pedirRecalibracao,
   resolverPendenciaQualidade,
@@ -19,6 +22,7 @@ import {
   salvarPessoaQualidade,
   salvarRubrica,
   salvarSegredoQualidade,
+  type ConferenciaChaveFireflies,
   type FieldErrors,
 } from '@jobsiteos/core'
 import { getSessionContext } from '@/lib/auth'
@@ -91,8 +95,43 @@ export async function salvarConfigQualidadeAction(input: unknown) {
   return executar((s) => salvarConfigQualidade(s, input), ['/comercial/qualidade'])
 }
 
-export async function salvarSegredoQualidadeAction(input: unknown) {
-  return executar((s) => salvarSegredoQualidade(s, input), ['/comercial/qualidade'])
+/**
+ * A chave do Fireflies é conferida com o Fireflies ANTES de ir para o Vault: gravada errada,
+ * ela não falha na tela, falha um dia depois no worker, transcrição por transcrição. Só a
+ * recusa explícita deles impede de salvar; sem resposta, salva e avisa.
+ */
+async function conferirChaveFireflies(chave: string): Promise<ConferenciaChaveFireflies> {
+  try {
+    const r = await fetch(FIREFLIES_GRAPHQL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${chave}` },
+      body: JSON.stringify({ query: QUERY_DONO_DA_CHAVE }),
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
+    })
+    return lerConferenciaChave(r.status, await r.json().catch(() => null))
+  } catch {
+    return { valida: null, motivo: 'O Fireflies não respondeu.' }
+  }
+}
+
+export async function salvarSegredoQualidadeAction(
+  input: unknown,
+): Promise<ActionResult<{ chave: string; definido: boolean; conta?: string | null; aviso?: string }>> {
+  const { chave, valor } = (input ?? {}) as { chave?: unknown; valor?: unknown }
+  let conferencia: ConferenciaChaveFireflies | null = null
+  if (chave === 'fireflies_api_key' && typeof valor === 'string' && valor.trim()) {
+    // Só quem pode gravar faz a chamada sair daqui.
+    const { erro } = await autorizar()
+    if (erro) return erro
+    conferencia = await conferirChaveFireflies(valor.trim())
+    if (conferencia.valida === false) return { ok: false, message: conferencia.motivo, code: 'validation' }
+  }
+  const r = await executar((s) => salvarSegredoQualidade(s, input), ['/comercial/qualidade'])
+  if (!r.ok || !conferencia) return r
+  return conferencia.valida
+    ? { ok: true, data: { ...r.data, conta: conferencia.email } }
+    : { ok: true, data: { ...r.data, aviso: `${conferencia.motivo} A chave foi salva sem conferência.` } }
 }
 
 export async function salvarPessoaQualidadeAction(input: unknown) {

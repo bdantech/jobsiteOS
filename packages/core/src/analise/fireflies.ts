@@ -136,6 +136,51 @@ export const QUERY_TRANSCRIPT = `query Transcricao($id: String!) {
   }
 }`
 
+// ─── Conferir a chave antes de gravar ───────────────────────────────────────
+//
+// A tela aceitava qualquer texto. Em 05/10/2026 ficou gravado um texto que não era chave,
+// e por um dia cada transcrição morreu em `auth_failed` no worker, depois de 5 tentativas,
+// com as reuniões marcadas "sem captura" — o erro só aparecia em `fireflies_webhooks`.
+// Quem diz se a chave vale é o Fireflies: `user` sem id devolve o dono da chave.
+
+export const QUERY_DONO_DA_CHAVE = `query Dono { user { email name } }`
+
+export type ConferenciaChaveFireflies =
+  | { valida: true; email: string | null }
+  | { valida: false; motivo: string }
+  /** Não deu para saber (fora do ar, resposta estranha): quem chama decide, sem recusar. */
+  | { valida: null; motivo: string }
+
+const CODIGOS_CHAVE_RECUSADA = new Set(['auth_failed', 'unauthorized', 'unauthenticated', 'forbidden'])
+
+/**
+ * Lê a resposta de `QUERY_DONO_DA_CHAVE`. Só RECUSA quando o Fireflies disse que a chave
+ * não vale — e ele diz isso com HTTP 500 e `auth_failed` no corpo, não com 401. Instabilidade
+ * do lado deles não pode impedir alguém de cadastrar uma chave certa.
+ */
+export function lerConferenciaChave(status: number, corpo: unknown): ConferenciaChaveFireflies {
+  const o = (corpo && typeof corpo === 'object' ? corpo : {}) as {
+    data?: { user?: { email?: unknown } | null } | null
+    errors?: Array<{ code?: unknown; extensions?: { code?: unknown } | null }> | null
+  }
+  const codigos = (Array.isArray(o.errors) ? o.errors : []).map((e) =>
+    String(e?.extensions?.code ?? e?.code ?? '').toLowerCase(),
+  )
+  if (status === 401 || status === 403 || codigos.some((c) => CODIGOS_CHAVE_RECUSADA.has(c))) {
+    return {
+      valida: false,
+      motivo:
+        'O Fireflies recusou esta chave. Copie de novo em Settings → Developer Settings → API Key, ' +
+        'na conta central, e cole aqui.',
+    }
+  }
+  const user = o.data?.user
+  if (user && typeof user === 'object') {
+    return { valida: true, email: typeof user.email === 'string' && user.email ? user.email : null }
+  }
+  return { valida: null, motivo: `O Fireflies não confirmou a chave (HTTP ${status}).` }
+}
+
 // ─── Transcrição ────────────────────────────────────────────────────────────
 
 const transcriptSchema = z
