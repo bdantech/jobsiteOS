@@ -827,6 +827,29 @@ export async function dispararSyncNfs(): Promise<string> {
       const fontesDoFunil = await sincronizarFontesDoFunil('novidade')
 
       /*
+       * O DONO DAS NFs, AQUI — e não só na corrente diária.
+       *
+       * O funil do originador recorta por `vendedor_id`: NF sem dono é NF que ele não
+       * vê. Este ciclo trazia a nota e não a roteava, então tudo que chegava durante o
+       * dia esperava a madrugada — medido em 07/10/2026: das 1.888 NFs roteadas por
+       * carteira em 30 dias, 86% só ganharam dono no dia seguinte (mediana 11,9 h).
+       * É o mesmo buraco que a 0256 fechou para as fontes novas, do lado das NFs.
+       *
+       * Logo depois do sync e ANTES da promoção: a decisão é de carteira e não lê
+       * faixa nem vencimento, e a promoção leva de trinta a sessenta minutos — atrás
+       * dela, a nota passaria esse tempo invisível, ou um ciclo inteiro se um deploy
+       * matar a corrida no meio. `rotearNotasJob` grava só o que MUDA, então repeti-lo
+       * na diária não custa escrita.
+       */
+      let roteamento: unknown
+      try {
+        roteamento = await rotearNotasJob()
+      } catch (erro) {
+        logger.error({ erro: String(erro) }, 'Roteamento das NFs falhou; o sync de NF segue.')
+        roteamento = { erro: String(erro) }
+      }
+
+      /*
        * A promoção dos resumos, ANTES da reclassificação — e é isso que importa nela.
        *
        * A NFe de material entra como `resNFe` — resumo da SEFAZ, sem itens e sem
@@ -915,7 +938,7 @@ export async function dispararSyncNfs(): Promise<string> {
       }
 
       await anotarMeta(id, {
-        sync, promocao, lookup, reclassificacao: reclass, antecipacoes, outbox,
+        sync, roteamento, promocao, lookup, reclassificacao: reclass, antecipacoes, outbox,
         cobranca_titulos: cobrancaTitulos,
         fontes_do_funil: fontesDoFunil,
         reclassificacao_oportunidades: reclassOportunidades,
