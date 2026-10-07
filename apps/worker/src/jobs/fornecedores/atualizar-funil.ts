@@ -284,6 +284,8 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
   const paraCadastrado: { cnpj: string; empresaId: string | null }[] = []
   const comDonoAutomatico: Record<string, unknown>[] = []
   const semTocarNoDono: Record<string, unknown>[] = []
+  // Os cards NOVOS num lote só deles — ver `gravar`.
+  const linhasNovas: Record<string, unknown>[] = []
   const novos: string[] = []
 
   let candidatos = 0
@@ -340,7 +342,7 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
     if (!qualifica || bloqueados.has(r.fornecedor_cnpj)) continue
 
     novos.push(r.fornecedor_cnpj)
-    comDonoAutomatico.push({
+    linhasNovas.push({
       ...campos(r),
       originador_id: r.originador_id,
       originador_origem: 'automatica',
@@ -417,6 +419,14 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
    * tantos round-trips ao PostgREST levam minutos onde um upsert leva segundos. O
    * limite de 500 por chamada é folgado para caber no payload e pequeno para uma
    * falha não perder a rodada inteira.
+   *
+   * UM FORMATO DE LINHA POR CHAMADA. Num upsert em lote, o supabase-js manda a UNIÃO
+   * das chaves de todos os objetos, e o que falta num objeto vai como NULL. O card
+   * existente não leva `originador_origem` (de propósito, ver acima); o novo leva.
+   * Juntos no mesmo lote, o existente gravava `originador_origem = NULL`, a coluna é
+   * NOT NULL e a rodada inteira caía — de 26/08 a 07/10/2026, em todo ciclo, a partir
+   * do primeiro lote que misturava os dois. Os lotes anteriores passavam, e por isso a
+   * tabela parecia viva.
    */
   const LOTE = 500
   async function gravar(linhas: Record<string, unknown>[]): Promise<void> {
@@ -429,6 +439,7 @@ export async function atualizarFunilFornecedores(): Promise<ResultadoAtualizarFu
   }
 
   await gravar(comDonoAutomatico)
+  await gravar(linhasNovas)
   await gravar(semTocarNoDono)
 
   for (const c of paraCadastrado) {

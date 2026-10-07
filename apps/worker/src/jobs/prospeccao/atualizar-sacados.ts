@@ -459,15 +459,22 @@ export async function atualizarSacadosProspeccao(): Promise<ResultadoAtualizarSa
     if (e.originador_origem === 'manual') semTocarNoDono.push(linha)
     else comDonoAutomatico.push({ ...linha, originador_id: p.originadorId })
   }
-  for (const p of novos) {
-    comDonoAutomatico.push({
-      ...camposDoCard(p),
-      originador_id: p.originadorId,
-      originador_origem: 'automatica',
-      estagio: 'identificado',
-    })
-  }
+  const linhasNovas = novos.map((p) => ({
+    ...camposDoCard(p),
+    originador_id: p.originadorId,
+    originador_origem: 'automatica',
+    estagio: 'identificado',
+  }))
 
+  /*
+   * UM FORMATO DE LINHA POR CHAMADA. Num upsert em lote, o supabase-js manda a UNIÃO
+   * das chaves de todos os objetos, e o que falta num objeto vai como NULL. Com o card
+   * novo e o existente no mesmo lote, o existente gravava `originador_origem = NULL` e
+   * `estagio = NULL` — as duas NOT NULL — e a rodada inteira caía. Foi assim desde a
+   * primeira rodada com cards já na tabela: o funil parou em 22 linhas em 21/09/2026.
+   * (E se as colunas aceitassem nulo seria pior: o NULL em `estagio` é exatamente o
+   * "devolver ao início" que a nota acima proíbe.)
+   */
   const LOTE = 500
   async function gravar(linhas: Record<string, unknown>[]): Promise<void> {
     for (let i = 0; i < linhas.length; i += LOTE) {
@@ -478,6 +485,7 @@ export async function atualizarSacadosProspeccao(): Promise<ResultadoAtualizarSa
     }
   }
   await gravar(comDonoAutomatico)
+  await gravar(linhasNovas)
   await gravar(semTocarNoDono)
 
   // ── A quebra por fornecedor ───────────────────────────────────────────────
