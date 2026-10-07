@@ -21,6 +21,7 @@ import {
   Gauge,
   Gavel,
   HandCoins,
+  HardHat,
   Inbox,
   KanbanSquare,
   Landmark,
@@ -270,8 +271,11 @@ export const ABAS_DOS_MODULOS: Record<string, readonly Aba[]> = {
   antecipacao: [
     { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
     { href: '/antecipacao/sacados', label: 'Por Sacado', icon: Building2 },
-    // Sacados por NF (04r) ABSORVEU a antiga "Sacados a Prospectar".
+    // Sacados por NF (04r): os sacados dos fornecedores SEGUIDOS, como cards com dono.
     { href: '/antecipacao/sacados-por-nf', label: 'Sacados por NF', icon: Sparkles },
+    // A varredura ampla, sem dono: toda construtora que recebe nota e não está na base.
+    // O 04r a tinha absorvida na de cima, mas ela responde outra pergunta e voltou.
+    { href: '/antecipacao/prospectar-sacados', label: 'Sacados a Prospectar', icon: HardHat },
     // Ao lado da irmã de propósito: são a mesma pergunta pelos dois lados da nota —
     // quem RECEBE e não é nosso, quem EMITE para quem já é.
     { href: '/antecipacao/prospectar-fornecedores', label: 'Fornecedores a Prospectar', icon: Factory },

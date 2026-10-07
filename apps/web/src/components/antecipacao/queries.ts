@@ -51,6 +51,8 @@ export const antecipacaoKeys = {
   metricas: () => [...antecipacaoKeys.all, 'metricas'] as const,
   fornecedor: (cnpj: string) => [...antecipacaoKeys.all, 'fornecedor', cnpj] as const,
   sacados: () => [...antecipacaoKeys.all, 'sacados'] as const,
+  prospectarSacados: () => [...antecipacaoKeys.all, 'prospectar-sacados'] as const,
+  sacadosSemCnae: () => [...antecipacaoKeys.all, 'prospectar-sacados', 'sem-cnae'] as const,
   prospectarFornecedores: () => [...antecipacaoKeys.all, 'prospectar-fornecedores'] as const,
   fornecedoresSemInteresse: () =>
     [...antecipacaoKeys.all, 'prospectar-fornecedores', 'sem-interesse'] as const,
@@ -686,14 +688,68 @@ export async function buscarSacados(): Promise<SacadoFunil[]> {
 }
 
 /*
- * A LISTA "sacados a prospectar" SAIU DAQUI (04r).
+ * "Sacados a prospectar" — a lista AMPLA, de volta (07/10/2026).
  *
- * Ela era uma tabela ordenada por valor recebido, sem dono, sem estágio e sem ação —
- * e foi absorvida pela aba Sacados por NF, cujas leituras vivem em
- * `prospeccao-queries.ts`. A VIEW continua de pé e continua sendo lida: a ficha do
- * sacado (`/antecipacao/sacados/[cnpj]`) usa `SacadoProspectar` para o bloco de quem
- * ainda não é cliente.
+ * O 04r a tinha absorvido na aba Sacados por NF, que é outra pergunta: ela só olha
+ * notas de fornecedores SEGUIDOS por algum originador e transforma cada sacado num
+ * card com dono e estágio (≈200 construtoras). Esta é a lista inteira — toda
+ * construtora que recebe nota dos nossos fornecedores e não está na base (≈1.900) —,
+ * sem dono, para quem quer varrer o mercado. As duas convivem.
+ *
+ * A ficha do sacado (`/antecipacao/sacados/[cnpj]`) também lê esta view, para o bloco
+ * de quem ainda não é cliente.
  */
+
+/** Mesmo raciocínio do teto de fornecedores, logo abaixo: trazer tudo, e o teto é rede. */
+export const LIMITE_PROSPECTAR_SACADOS = 3000
+
+/**
+ * Paginada pelo mesmo motivo de `buscarFornecedoresAProspectar` (ver lá): o PostgREST
+ * corta em 1.000 por resposta sem avisar, e a lista passa disso.
+ */
+export async function buscarSacadosAProspectar(): Promise<SacadoProspectar[]> {
+  const supabase = createClient()
+  const linhas: SacadoProspectar[] = []
+  let inicio = 0
+  let paginaCheia = 0
+
+  while (inicio < LIMITE_PROSPECTAR_SACADOS) {
+    const fim = Math.min(inicio + PAGINA_PROSPECTAR, LIMITE_PROSPECTAR_SACADOS) - 1
+    const { data, error } = await supabase
+      .from('antecipacao_sacados_a_prospectar')
+      .select('*')
+      .order('valor_agregado', { ascending: false, nullsFirst: false })
+      // Desempate obrigatório: sem ele a paginação repete e pula linhas.
+      .order('sacado_cnpj', { ascending: true })
+      .range(inicio, fim)
+    if (error) throw error
+
+    const pagina = (data ?? []) as SacadoProspectar[]
+    if (pagina.length === 0) break
+    const ultima = paginaCheia > 0 && pagina.length < paginaCheia
+    linhas.push(...pagina)
+    inicio += pagina.length
+    paginaCheia = Math.max(paginaCheia, pagina.length)
+    if (ultima) break
+  }
+
+  return linhas
+}
+
+/**
+ * Sacados que ainda não têm CNAE: ficam FORA da lista até o lookup cadastral
+ * responder, porque o recorte é por CNAE de construção. A tela diz quantos são — sem
+ * isso, uma lista curta parece "não há oportunidade" quando é "ainda não sabemos".
+ */
+export async function contarSacadosSemCnae(): Promise<number> {
+  const supabase = createClient()
+  const { count } = await supabase
+    .from('cnpj_lookup_fila')
+    .select('cnpj', { count: 'exact', head: true })
+    .eq('motivo', 'sacado_nf')
+    .in('status', ['pendente', 'erro'])
+  return count ?? 0
+}
 
 /**
  * Teto da lista de fornecedores a prospectar. Dimensionado para NÃO morder.
