@@ -17776,6 +17776,7 @@ export type Database = {
           e_ex_cliente: boolean | null
           empresa_id: string | null
           erp_atual: string | null
+          erp_canal: string | null
           erp_detalhes: Json | null
           erp_mrr: number | null
           estagio: string | null

@@ -293,6 +293,15 @@ export const CATALOGO: readonly VariavelCatalogo[] = [
     derivada: derivarErpConhecido,
   },
   {
+    id: 'erp_canal',
+    label: 'Canal do ERP',
+    tipo: 'texto',
+    coluna: 'erp_canal',
+    descricao:
+      'Canal/revenda por onde a empresa comprou o ERP atual (ex: GESCON, NG7, NPU). ' +
+      'Vem das listas importadas — vazio para quem nunca apareceu numa.',
+  },
+  {
     id: 'erp_mrr',
     label: 'MRR do ERP',
     tipo: 'numero',
