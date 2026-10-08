@@ -310,6 +310,14 @@ export const CRONS: readonly CronCatalogado[] = [
     destino: 'POST /jobs/comunicacao/enviar-fila',
   },
   {
+    path: '/api/cron/comunicacao-transcrever',
+    nome: 'Transcrição dos áudios',
+    moduloId: 'comunicacao',
+    descricao:
+      'Transcreve pela ElevenLabs o áudio do WhatsApp que ficou pendente — o webhook já pede a transcrição assim que o arquivo é guardado, e este cron pega o que falhou ou caiu com um deploy (até 3 tentativas). Um minuto antes da triagem de propósito: a triagem espera a fala por até 10 minutos para ler o que o contato disse, e não só "(áudio · 17s)". Só roda com a transcrição ligada em Qualidade → Configurações.',
+    destino: 'POST /jobs/comunicacao/transcrever',
+  },
+  {
     path: '/api/cron/comunicacao-triagem',
     nome: 'Triagem das respostas',
     moduloId: 'comunicacao',

@@ -179,8 +179,49 @@ export const precosQualidadeSchema = z.object({
   jev_entrada_usd_mtok: z.number().min(0).default(0.42),
   claude_entrada_usd_mtok: z.number().min(0).default(3),
   claude_saida_usd_mtok: z.number().min(0).default(15),
+  /** Scribe v2 em lote, por hora de áudio (preço de 10/2026). */
+  elevenlabs_stt_usd_hora: z.number().min(0).default(0.22),
+  /** Acréscimo por hora quando a chamada leva termos-chave. */
+  elevenlabs_termos_usd_hora: z.number().min(0).default(0.05),
 })
 export type PrecosQualidade = z.infer<typeof precosQualidadeSchema>
+
+/**
+ * Transcrição do áudio do WhatsApp (ElevenLabs). Mora aqui, e não na Comunicação, porque a
+ * credencial e o custo são desta tela — e porque o primeiro leitor que precisou dela foi a
+ * análise. Quem mais lê a fala (triagem, agente) lê o resultado, não a configuração.
+ */
+export const transcricaoConfigSchema = z.object({
+  /** Desligada até a chave da ElevenLabs existir: a RPC recusa ligar sem ela. */
+  ligada: z.boolean().default(false),
+  modelo: z.string().trim().min(1).max(40).default('scribe_v2'),
+  /** ISO-639-1 ou 639-3. Fixar o idioma evita o áudio curto ser lido como espanhol. */
+  idioma: z.string().trim().min(2).max(3).default('por'),
+  /**
+   * Palavras que o modelo deve reconhecer, e que ele erraria por serem nossas ou do
+   * mercado. Cada chamada com termos custa um acréscimo por hora; lista vazia não cobra.
+   */
+  termos_chave: z
+    .array(z.string().trim().min(1).max(49))
+    .max(200)
+    .default([
+      'OnePay',
+      'antecipação',
+      'recebíveis',
+      'sacado',
+      'cedente',
+      'duplicata',
+      'deságio',
+      'TAC',
+      'Sienge',
+      'pré-autorização',
+      'nota fiscal',
+      'medição',
+    ]),
+  /** Acima disto o áudio não é transcrito: é aula, não conversa, e custa como tal. */
+  max_segundos: z.number().int().min(10).max(3600).default(900),
+})
+export type TranscricaoConfig = z.infer<typeof transcricaoConfigSchema>
 
 export const CHAVES_CONFIG_QUALIDADE = [
   'captura',
@@ -190,6 +231,7 @@ export const CHAVES_CONFIG_QUALIDADE = [
   'retencao',
   'vinculacao',
   'precos',
+  'transcricao',
 ] as const
 export type ChaveConfigQualidade = (typeof CHAVES_CONFIG_QUALIDADE)[number]
 
@@ -201,6 +243,7 @@ export interface ConfigQualidade {
   retencao: RetencaoConfig
   vinculacao: VinculacaoConfig
   precos: PrecosQualidade
+  transcricao: TranscricaoConfig
 }
 
 export const CONFIG_QUALIDADE_PADRAO: ConfigQualidade = {
@@ -211,6 +254,7 @@ export const CONFIG_QUALIDADE_PADRAO: ConfigQualidade = {
   retencao: retencaoConfigSchema.parse({}),
   vinculacao: vinculacaoConfigSchema.parse({}),
   precos: precosQualidadeSchema.parse({}),
+  transcricao: transcricaoConfigSchema.parse({}),
 }
 
 const SCHEMAS_CONFIG: Record<ChaveConfigQualidade, z.ZodTypeAny> = {
@@ -221,6 +265,7 @@ const SCHEMAS_CONFIG: Record<ChaveConfigQualidade, z.ZodTypeAny> = {
   retencao: retencaoConfigSchema,
   vinculacao: vinculacaoConfigSchema,
   precos: precosQualidadeSchema,
+  transcricao: transcricaoConfigSchema,
 }
 
 /** Cada chave cai no padrão sozinha: um override inválido não derruba as outras. */
@@ -251,4 +296,10 @@ export function custoClaudeCentavos(t: { entrada: number; saida: number }, preco
     (Math.max(0, t.entrada) * precos.claude_entrada_usd_mtok + Math.max(0, t.saida) * precos.claude_saida_usd_mtok) /
     1_000_000
   return usd * precos.cambio_usd_brl * 100
+}
+
+/** O custo de uma transcrição, gravado na linha da mensagem com o preço do dia. */
+export function custoTranscricaoCentavos(segundos: number, comTermos: boolean, precos: PrecosQualidade): number {
+  const porHora = precos.elevenlabs_stt_usd_hora + (comTermos ? precos.elevenlabs_termos_usd_hora : 0)
+  return (Math.max(0, segundos) / 3600) * porHora * precos.cambio_usd_brl * 100
 }

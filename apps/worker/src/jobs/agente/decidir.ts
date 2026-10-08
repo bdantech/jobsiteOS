@@ -4,6 +4,7 @@ import {
   aplicarGuardrails,
   decisaoAgenteSchema,
   proximoPassoDaCadencia,
+  textoDaMensagem,
   validarDecisao,
   type AcaoAgente,
   type ConfigComunicacao,
@@ -319,11 +320,12 @@ interface MensagemHistorico {
 async function ultimasMensagens(conversaId: string): Promise<MensagemHistorico[]> {
   const { data } = await supabaseAdmin
     .from('comunicacoes')
-    .select('direcao, corpo, preview, por_ia, triagem, criado_em')
+    .select('direcao, corpo, preview, transcricao, por_ia, triagem, criado_em')
     .eq('conversa_id', conversaId)
     .order('criado_em', { ascending: false })
     .limit(20)
-  return (data ?? []) as MensagemHistorico[]
+  // O áudio entra com a fala (0292): é o que os guardrails e o modelo leem como `corpo`.
+  return (data ?? []).map(({ transcricao, ...m }) => ({ ...m, corpo: textoDaMensagem({ corpo: m.corpo, transcricao }) }))
 }
 
 async function consultarModelo(

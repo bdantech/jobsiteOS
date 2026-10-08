@@ -13,13 +13,19 @@ export const salvarConfigQualidadeSchema = z.object({
   valor: z.record(z.string(), z.unknown()),
 })
 
-export const SEGREDOS_QUALIDADE = ['fireflies_api_key', 'fireflies_webhook_secret', 'jev_api_key'] as const
+export const SEGREDOS_QUALIDADE = [
+  'fireflies_api_key',
+  'fireflies_webhook_secret',
+  'jev_api_key',
+  'elevenlabs_api_key',
+] as const
 export type SegredoQualidade = (typeof SEGREDOS_QUALIDADE)[number]
 
 export const SEGREDO_LABELS: Record<SegredoQualidade, string> = {
   fireflies_api_key: 'Chave da API do Fireflies',
   fireflies_webhook_secret: 'Segredo do webhook do Fireflies',
   jev_api_key: 'Chave da API do Jev (TypeSafe)',
+  elevenlabs_api_key: 'Chave da API da ElevenLabs (transcrição de áudio)',
 }
 
 export const salvarSegredoQualidadeSchema = z.object({

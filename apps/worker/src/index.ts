@@ -105,6 +105,7 @@ import {
   executarBuscaAprofundada,
   dispararEnviarFila,
   dispararTriagem,
+  dispararTranscrever,
   dispararGmailSync,
   dispararLembretesReuniao,
   dispararReunioesGoogle,
@@ -1702,6 +1703,15 @@ app.post('/jobs/comunicacao/triagem', (req: Request, res: Response, next: NextFu
   try {
     const { limite } = limiteSchema.parse(req.body ?? {})
     res.status(202).json({ job_id: dispararTriagem(limite), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/comunicacao/transcrever', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limite } = limiteSchema.parse(req.body ?? {})
+    res.status(202).json({ job_id: dispararTranscrever(limite), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

@@ -9,6 +9,7 @@ import {
   type PlanoMandato,
   type TipoMandato,
 } from '../../../../packages/core/src/agentes/schemas.js'
+import { textoDaMensagem } from '../../../../packages/core/src/comunicacao/transcricao.js'
 import { supabaseAdmin } from '../db.js'
 import { logger } from '../logger.js'
 
@@ -197,6 +198,7 @@ interface MensagemCtx {
   canal: string
   corpo: string | null
   preview: string | null
+  transcricao: string | null
   por_ia: boolean
   triagem: unknown
   anexos: unknown
@@ -228,7 +230,7 @@ export async function montarContexto(e: EntradaContexto): Promise<BlocoContexto[
   // Últimas 30 mensagens de TODAS as conversas do mandato; sem conversa ainda, as da empresa.
   const base = supabaseAdmin
     .from('comunicacoes')
-    .select('id, direcao, canal, corpo, preview, por_ia, triagem, anexos, contato_id, conversa_id, criado_em')
+    .select('id, direcao, canal, corpo, preview, transcricao, por_ia, triagem, anexos, contato_id, conversa_id, criado_em')
     .order('criado_em', { ascending: false })
     .limit(30)
   const { data: msgs } = conversas.length
@@ -348,7 +350,7 @@ export async function montarContexto(e: EntradaContexto): Promise<BlocoContexto[
   for (const msg of mensagens) {
     const quem = msg.direcao === 'entrada' ? 'ELES' : msg.por_ia ? 'NÓS (IA)' : 'NÓS (equipe)'
     const t = msg.triagem as { intencao?: string } | null
-    linhas.push(`${hora(msg.criado_em)} ${quem} [${msg.canal}]${t?.intencao ? ` [${t.intencao}]` : ''}: ${(msg.corpo ?? msg.preview ?? '(sem texto)').slice(0, 600)}`)
+    linhas.push(`${hora(msg.criado_em)} ${quem} [${msg.canal}]${t?.intencao ? ` [${t.intencao}]` : ''}: ${(textoDaMensagem(msg) ?? '(sem texto)').slice(0, 600)}`)
   }
   if (!mensagens.length) linhas.push('(nenhuma mensagem ainda)')
 

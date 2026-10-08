@@ -11,6 +11,7 @@ import {
 } from '../../../../../packages/core/src/transportes/index.js'
 import type { ContaDoWebhook } from '../../comunicacao/webhook-auth.js'
 import { anexarNoLedger, baixarEGuardarMidia, legendaDaMidia } from '../../comunicacao/midia.js'
+import { pedirTranscricao } from '../../comunicacao/transcrever.js'
 import {
   absorverLid,
   conversaPara,
@@ -172,7 +173,11 @@ async function registrarEntrada(
   // existe com "(áudio)" escrito e um erro no log — e não some junto do arquivo.
   if (m.midia && comunicacaoId) {
     const anexo = await baixarEGuardarMidia({ midia: m.midia, conversaId, comunicacaoId })
-    if (anexo) await anexarNoLedger(comunicacaoId, anexo)
+    if (anexo) {
+      await anexarNoLedger(comunicacaoId, anexo)
+      // Antes da triagem: ela espera a fala para ler o que o contato disse (0292).
+      await pedirTranscricao(comunicacaoId, anexo)
+    }
   }
 
   if (conversaId) {
@@ -291,7 +296,11 @@ async function registrarEnvioPeloCelular(
 
   if (e.midia && comunicacaoId) {
     const anexo = await baixarEGuardarMidia({ midia: e.midia, conversaId, comunicacaoId })
-    if (anexo) await anexarNoLedger(comunicacaoId, anexo)
+    if (anexo) {
+      await anexarNoLedger(comunicacaoId, anexo)
+      // O áudio do vendedor também: a análise julga o que ele disse (0292).
+      await pedirTranscricao(comunicacaoId, anexo)
+    }
   }
 
   if (conversaId) {

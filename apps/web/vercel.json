@@ -134,6 +134,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/comunicacao-transcrever",
+      "schedule": "1-59/5 * * * *"
+    },
+    {
       "path": "/api/cron/comunicacao-triagem",
       "schedule": "2-59/5 * * * *"
     },

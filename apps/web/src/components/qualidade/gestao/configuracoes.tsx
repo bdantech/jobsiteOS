@@ -15,7 +15,9 @@ import {
   classificacaoConfigSchema,
   janelaConfigSchema,
   precosQualidadeSchema,
+  normalizarTermosChave,
   retencaoConfigSchema,
+  transcricaoConfigSchema,
   vinculacaoConfigSchema,
   type ChaveConfigQualidade,
   type ConfigQualidade,
@@ -28,6 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import {
   processarFilaAction,
   salvarConfigQualidadeAction,
@@ -69,6 +72,7 @@ export function Configuracoes({ urlWebhookFireflies }: { urlWebhookFireflies: st
     <div className="space-y-4">
       <Fireflies urlWebhook={urlWebhookFireflies} />
       <Captura config={c} />
+      <TranscricaoAudio config={c} />
       <ProcessarFila />
       <Pessoas />
 
@@ -140,7 +144,7 @@ export function Configuracoes({ urlWebhookFireflies }: { urlWebhookFireflies: st
         <Secao
           chave="precos"
           titulo="Preços"
-          descricao="Para o custo do painel. Tokens em dólar por milhão; o câmbio converte para reais."
+          descricao="Para o custo do painel. Tokens em dólar por milhão, transcrição em dólar por hora de áudio; o câmbio converte para reais."
           schema={precosQualidadeSchema}
           valor={c.precos}
           campos={[
@@ -148,6 +152,8 @@ export function Configuracoes({ urlWebhookFireflies }: { urlWebhookFireflies: st
             { chave: 'jev_entrada_usd_mtok', rotulo: 'Jev — entrada (US$/Mtok)', tipo: 'dec', nota: 'A saída do Jev não é cobrada.' },
             { chave: 'claude_entrada_usd_mtok', rotulo: 'Claude — entrada (US$/Mtok)', tipo: 'dec' },
             { chave: 'claude_saida_usd_mtok', rotulo: 'Claude — saída (US$/Mtok)', tipo: 'dec' },
+            { chave: 'elevenlabs_stt_usd_hora', rotulo: 'ElevenLabs — transcrição (US$/hora)', tipo: 'dec' },
+            { chave: 'elevenlabs_termos_usd_hora', rotulo: 'ElevenLabs — termos-chave (US$/hora)', tipo: 'dec', nota: 'Acréscimo cobrado só quando a chamada leva termos-chave.' },
           ]}
         />
       </div>
@@ -156,7 +162,7 @@ export function Configuracoes({ urlWebhookFireflies }: { urlWebhookFireflies: st
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Subprocessadores</CardTitle>
           <CardDescription>
-            Este módulo manda conversa de cliente para mais dois fornecedores, que precisam constar na lista de
+            Este módulo manda conversa de cliente para mais três fornecedores, que precisam constar na lista de
             subprocessadores (§12):
           </CardDescription>
         </CardHeader>
@@ -169,6 +175,10 @@ export function Configuracoes({ urlWebhookFireflies }: { urlWebhookFireflies: st
             <li>
               <strong>TypeSafe AI (Jev)</strong> — classifica o texto das interações item a item. Recebe texto, não
               devolve texto.
+            </li>
+            <li>
+              <strong>ElevenLabs</strong> — transcreve os áudios do WhatsApp, quando a transcrição está ligada. Recebe o
+              arquivo de áudio; o arquivo continua guardado aqui, e a fala fica ao lado da mensagem.
             </li>
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -429,6 +439,7 @@ function LinhaSegredo({
     setValor('')
     if (r.data.aviso) toast.warning(r.data.aviso)
     else if (r.data.conta) toast.success(`Chave conferida com o Fireflies: conta ${r.data.conta}.`)
+    else if (r.data.conferida) toast.success('Chave conferida e salva.')
     else toast.success(novo ? 'Credencial salva.' : 'Credencial removida.')
     void qc.invalidateQueries({ queryKey: qualidadeGestaoKeys.segredos() })
   }
@@ -549,6 +560,123 @@ function Captura({ config }: { config: ConfigQualidade }) {
         ]}
       />
     </div>
+  )
+}
+
+// ─── Transcrição de áudio ───────────────────────────────────────────────────
+
+/**
+ * O áudio do WhatsApp vira texto pela ElevenLabs (0292). O switch salva na hora, como o da
+ * captura, e a RPC recusa ligar sem a chave. Ligar vale só para os áudios que chegarem
+ * DEPOIS: os antigos continuam como estão.
+ */
+function TranscricaoAudio({ config }: { config: ConfigQualidade }) {
+  const salvar = useSalvarConfig()
+  const [ligando, setLigando] = React.useState(false)
+  const ligada = config.transcricao.ligada
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Transcrição de áudio (WhatsApp)</CardTitle>
+              <CardDescription>
+                Ligada, todo áudio que chegar ou sair pelo WhatsApp é transcrito pela ElevenLabs. A fala aparece embaixo
+                do áudio na conversa, e a triagem, o agente e a análise passam a ler o que foi dito.
+              </CardDescription>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={ligada}
+                disabled={ligando}
+                aria-label="Transcrição ligada"
+                onCheckedChange={async (b) => {
+                  setLigando(true)
+                  await salvar('transcricao', { ligada: b }, b ? 'Transcrição ligada.' : 'Transcrição desligada.')
+                  setLigando(false)
+                }}
+              />
+              {ligada ? 'Ligada' : 'Desligada'}
+            </label>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">
+            Vale para os áudios novos; os que já estão na conversa não são transcritos. A triagem espera a transcrição por
+            até 10 minutos antes de classificar um áudio.
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Secao
+          chave="transcricao"
+          titulo="Modelo e limites"
+          descricao="O modelo e o idioma vão em cada chamada. Áudio acima do teto não é transcrito."
+          schema={transcricaoConfigSchema.pick({ modelo: true, idioma: true, max_segundos: true })}
+          valor={config.transcricao}
+          campos={[
+            { chave: 'modelo', rotulo: 'Modelo', tipo: 'texto', nota: 'Padrão: scribe_v2.' },
+            { chave: 'idioma', rotulo: 'Idioma', tipo: 'texto', nota: 'Código ISO, ex.: por. Fixar evita áudio curto ser lido como espanhol.' },
+            { chave: 'max_segundos', rotulo: 'Duração máxima (segundos)', tipo: 'int' },
+          ]}
+        />
+        <TermosChave termos={config.transcricao.termos_chave} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Uma lista não cabe na `Secao` (que edita campos soltos): um termo por linha, e o que a
+ * ElevenLabs recusaria (repetido, 50+ caracteres, mais de 5 palavras) sai antes de salvar.
+ */
+function TermosChave({ termos }: { termos: string[] }) {
+  const salvar = useSalvarConfig()
+  const inicial = termos.join('\n')
+  const [texto, setTexto] = React.useState(inicial)
+  React.useEffect(() => setTexto(inicial), [inicial])
+  const [salvando, setSalvando] = React.useState(false)
+  const lista = normalizarTermosChave(texto.split('\n'))
+  const descartados = texto.split('\n').filter((t) => t.trim()).length - lista.length
+
+  async function gravar() {
+    const val = transcricaoConfigSchema.pick({ termos_chave: true }).safeParse({ termos_chave: lista })
+    if (!val.success) return void toast.error(`Termos-chave: ${traduzirIssue(val.error.issues[0])}`)
+    setSalvando(true)
+    await salvar('transcricao', { termos_chave: lista }, 'Termos-chave salvos.')
+    setSalvando(false)
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Termos-chave</CardTitle>
+        <CardDescription>
+          Palavras que o modelo deve reconhecer — nomes nossos, de clientes e do mercado. Com a lista vazia, o acréscimo
+          por hora não é cobrado.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Textarea
+          aria-label="Termos-chave, um por linha"
+          rows={8}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder={'OnePay\nantecipação\nsacado'}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            {lista.length} termo(s){descartados > 0 ? ` · ${descartados} ignorado(s): repetido, com 50+ caracteres ou mais de 5 palavras` : ''}
+          </p>
+          <Button size="sm" disabled={texto === inicial || salvando} onClick={() => void gravar()}>
+            {salvando ? 'Salvando…' : 'Salvar'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

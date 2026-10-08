@@ -109,7 +109,7 @@ export async function buscarConversas(
 }
 
 const COLUNAS_THREAD =
-  'id, conversa_id, empresa_id, contato_id, canal, direcao, por_ia, assunto, corpo, preview, anexos, provedor, conta_remetente, status_envio, erro, origem, funil, funil_card_id, triagem, criado_em, enviado_em, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, usuario_nome, vendedor_nome, vendedor_is_ia'
+  'id, conversa_id, empresa_id, contato_id, canal, direcao, por_ia, assunto, corpo, preview, anexos, provedor, conta_remetente, status_envio, erro, origem, funil, funil_card_id, triagem, criado_em, enviado_em, empresa_cnpj, empresa_nome, contato_nome, contato_cargo, usuario_nome, vendedor_nome, vendedor_is_ia, transcricao, transcricao_status'
 
 /**
  * O teto corta as MAIS ANTIGAS, nunca as mais recentes.

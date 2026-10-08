@@ -137,6 +137,7 @@ import { enviarFila } from './comunicacao/enviar-fila.js'
 import { sincronizarGmail, renovarWatches } from './comunicacao/gmail-sync.js'
 import { lembretesDeReuniao } from './comunicacao/lembretes-reuniao.js'
 import { triarEntradas } from './comunicacao/triagem.js'
+import { varrerTranscricoes } from '../comunicacao/transcrever.js'
 import { avancarSequencias } from './campanhas/avancar-sequencia.js'
 import { executarCampanhas } from './campanhas/executar.js'
 import { varrerSaudeDasCampanhas } from './campanhas/metricas.js'
@@ -245,6 +246,7 @@ export type TipoJob =
   | 'comunicacao-fila'
   | 'comunicacao-gmail'
   | 'comunicacao-triagem'
+  | 'comunicacao-transcrever'
   | 'comunicacao-lembretes'
   | 'comunicacao-plantao'
   | 'comunicacao-sessoes'
@@ -2023,6 +2025,11 @@ export function dispararEnviarFila(limite?: number): string {
 
 export function dispararTriagem(limite?: number): string {
   return dispararAvulso('comunicacao-triagem', async () => triarEntradas(limite))
+}
+
+/** A garantia da transcrição dos áudios (0292): o disparo imediato pelo webhook é o caminho normal. */
+export function dispararTranscrever(limite?: number): string {
+  return dispararAvulso('comunicacao-transcrever', async () => varrerTranscricoes(limite))
 }
 
 export function dispararGmailSync(): string {

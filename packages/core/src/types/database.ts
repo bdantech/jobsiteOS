@@ -4271,6 +4271,15 @@ export type Database = {
           template_id: string | null
           tentativas: number
           thread_externa: string | null
+          transcricao: string | null
+          transcricao_custo_centavos: number | null
+          transcricao_em: string | null
+          transcricao_erro: string | null
+          transcricao_modelo: string | null
+          transcricao_segundos: number | null
+          transcricao_status: string | null
+          transcricao_tentar_apos: string | null
+          transcricao_tentativas: number
           triagem: Json | null
           usuario_id: string | null
           vendedor_id: string | null
@@ -4301,6 +4310,15 @@ export type Database = {
           template_id?: string | null
           tentativas?: number
           thread_externa?: string | null
+          transcricao?: string | null
+          transcricao_custo_centavos?: number | null
+          transcricao_em?: string | null
+          transcricao_erro?: string | null
+          transcricao_modelo?: string | null
+          transcricao_segundos?: number | null
+          transcricao_status?: string | null
+          transcricao_tentar_apos?: string | null
+          transcricao_tentativas?: number
           triagem?: Json | null
           usuario_id?: string | null
           vendedor_id?: string | null
@@ -4331,6 +4349,15 @@ export type Database = {
           template_id?: string | null
           tentativas?: number
           thread_externa?: string | null
+          transcricao?: string | null
+          transcricao_custo_centavos?: number | null
+          transcricao_em?: string | null
+          transcricao_erro?: string | null
+          transcricao_modelo?: string | null
+          transcricao_segundos?: number | null
+          transcricao_status?: string | null
+          transcricao_tentar_apos?: string | null
+          transcricao_tentativas?: number
           triagem?: Json | null
           usuario_id?: string | null
           vendedor_id?: string | null
@@ -16508,6 +16535,8 @@ export type Database = {
           preview: string | null
           provedor: string | null
           status_envio: string | null
+          transcricao: string | null
+          transcricao_status: string | null
           triagem: Json | null
           usuario_nome: string | null
           vendedor_is_ia: boolean | null

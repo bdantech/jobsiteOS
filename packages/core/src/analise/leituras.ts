@@ -110,6 +110,8 @@ export interface MensagemJanelaLida {
   direcao: 'entrada' | 'saida'
   corpo: string | null
   assunto: string | null
+  /** A fala do áudio (0292b): quem rotula lê o mesmo texto que o classificador leu. */
+  transcricao?: string | null
   criado_em: string
   por_ia: boolean
 }

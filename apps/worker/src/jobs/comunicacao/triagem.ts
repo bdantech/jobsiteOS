@@ -3,6 +3,7 @@ import {
   PRIMEIRO_CONTATO_MOVE,
   ehOptOut,
   precisaEscalar,
+  textoDaMensagem,
   triagemSchema,
   triarPorRegra,
   type Funil,
@@ -66,11 +67,19 @@ export async function triarEntradas(limite = 50): Promise<ResultadoTriagem> {
     cards_movidos: 0,
   }
 
+  /*
+   * O ÁUDIO ESPERA A FALA (0292). Triar "(áudio · 17s)" dá "outro" sempre — e um pedido
+   * de descadastro dito em voz passaria batido. A mensagem com transcrição pendente fica
+   * fora do lote por até 10 minutos; depois disso a triagem segue com o que tiver, porque
+   * a ElevenLabs fora do ar não pode segurar a conversa (nem o agente que a triagem acorda).
+   */
+  const esperaAte = new Date(Date.now() - 10 * 60_000).toISOString()
   const { data, error } = await supabaseAdmin
     .from('comunicacoes')
-    .select('id, conversa_id, empresa_id, contato_id, corpo, canal, funil, funil_card_id')
+    .select('id, conversa_id, empresa_id, contato_id, corpo, transcricao, canal, funil, funil_card_id')
     .eq('direcao', 'entrada')
     .is('triagem', null)
+    .or(`transcricao_status.is.null,transcricao_status.neq.pendente,criado_em.lt.${esperaAte}`)
     .order('criado_em', { ascending: true })
     .limit(limite)
   if (error) {
@@ -78,7 +87,11 @@ export async function triarEntradas(limite = 50): Promise<ResultadoTriagem> {
     return acc
   }
 
-  const pendentes = (data ?? []) as Pendente[]
+  // Daqui em diante `corpo` é o texto que se lê: o rótulo do áudio com a fala ao lado.
+  const pendentes: Pendente[] = (data ?? []).map(({ transcricao, ...p }) => ({
+    ...p,
+    corpo: textoDaMensagem({ corpo: p.corpo, transcricao }),
+  }))
   acc.candidatas = pendentes.length
 
   for (const p of pendentes) {

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import {
+  ELEVENLABS_USER_URL,
   FIREFLIES_GRAPHQL,
   MutationError,
   QUERY_DONO_DA_CHAVE,
@@ -14,6 +15,7 @@ import {
   decidirSugestaoCadastro,
   dispensarCaptura,
   lerConferenciaChave,
+  lerConferenciaChaveElevenLabs,
   overrideLimiar,
   pedirRecalibracao,
   resolverPendenciaQualidade,
@@ -22,6 +24,7 @@ import {
   salvarPessoaQualidade,
   salvarRubrica,
   salvarSegredoQualidade,
+  type ConferenciaChaveElevenLabs,
   type ConferenciaChaveFireflies,
   type FieldErrors,
 } from '@jobsiteos/core'
@@ -115,23 +118,45 @@ async function conferirChaveFireflies(chave: string): Promise<ConferenciaChaveFi
   }
 }
 
+async function conferirChaveElevenLabs(chave: string): Promise<ConferenciaChaveElevenLabs> {
+  try {
+    const r = await fetch(ELEVENLABS_USER_URL, {
+      headers: { 'xi-api-key': chave },
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
+    })
+    return lerConferenciaChaveElevenLabs(r.status, await r.json().catch(() => null))
+  } catch {
+    return { valida: null, motivo: 'A ElevenLabs não respondeu.' }
+  }
+}
+
 export async function salvarSegredoQualidadeAction(
   input: unknown,
-): Promise<ActionResult<{ chave: string; definido: boolean; conta?: string | null; aviso?: string }>> {
+): Promise<ActionResult<{ chave: string; definido: boolean; conta?: string | null; aviso?: string; conferida?: boolean }>> {
   const { chave, valor } = (input ?? {}) as { chave?: unknown; valor?: unknown }
-  let conferencia: ConferenciaChaveFireflies | null = null
-  if (chave === 'fireflies_api_key' && typeof valor === 'string' && valor.trim()) {
+  const novo = typeof valor === 'string' ? valor.trim() : ''
+  let conferencia: ConferenciaChaveFireflies | ConferenciaChaveElevenLabs | null = null
+  let conta: string | null = null
+  if (novo && (chave === 'fireflies_api_key' || chave === 'elevenlabs_api_key')) {
     // Só quem pode gravar faz a chamada sair daqui.
     const { erro } = await autorizar()
     if (erro) return erro
-    conferencia = await conferirChaveFireflies(valor.trim())
+    if (chave === 'fireflies_api_key') {
+      const c = await conferirChaveFireflies(novo)
+      if (c.valida) conta = c.email
+      conferencia = c
+    } else {
+      conferencia = await conferirChaveElevenLabs(novo)
+    }
     if (conferencia.valida === false) return { ok: false, message: conferencia.motivo, code: 'validation' }
   }
   const r = await executar((s) => salvarSegredoQualidade(s, input), ['/comercial/qualidade'])
   if (!r.ok || !conferencia) return r
-  return conferencia.valida
-    ? { ok: true, data: { ...r.data, conta: conferencia.email } }
-    : { ok: true, data: { ...r.data, aviso: `${conferencia.motivo} A chave foi salva sem conferência.` } }
+  if (conferencia.valida === null) {
+    return { ok: true, data: { ...r.data, aviso: `${conferencia.motivo} A chave foi salva sem conferência.` } }
+  }
+  return { ok: true, data: { ...r.data, conferida: true, conta } }
 }
 
 export async function salvarPessoaQualidadeAction(input: unknown) {

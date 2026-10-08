@@ -105,6 +105,34 @@ dispensou, mas nunca a que uma pessoa dispensou.
 Áudio e vídeo **não são copiados**. Guardamos o link (`url_fireflies`), a transcrição, o
 resumo e a análise.
 
+## Transcrição do áudio do WhatsApp (0292)
+
+Até 10/2026 um áudio era, para todo leitor de máquina, o texto `(áudio · 17s)`. Os 690
+áudios recebidos tinham saído da triagem como "outro", inclusive qualquer pedido de
+descadastro dito em voz, e um terço das janelas analisadas tinha áudio que ninguém leu.
+
+- **Quem transcreve:** ElevenLabs, modelo `scribe_v2`, com idioma fixo e termos-chave. A
+  chave fica no Vault (Qualidade → Configurações), e o salvamento confere a chave com a
+  ElevenLabs antes de gravar.
+- **Quando:** o webhook do WhatsApp pede a transcrição assim que o arquivo vai para o bucket
+  `comunicacao-midia`, na entrada e na saída pelo celular. O cron `comunicacao-transcrever`
+  (de 5 em 5 minutos, um minuto antes da triagem) retoma o que falhou. São até 3 tentativas,
+  com arrendamento em `transcricao_tentar_apos` para que os dois caminhos não paguem duas vezes.
+- **Onde fica:** em `comunicacoes.transcricao`, ao lado do corpo. **O corpo não muda**: a
+  bolha continua tocando o áudio e mostra a fala embaixo, marcada como automática. A prévia
+  do inbox (`preview`) passa a ter o começo da fala.
+- **Quem lê:** triagem, agente (contexto e decisão), análise de janela e calibração. Todos
+  leem por `textoDaMensagem` (core), que devolve `(áudio · 17s) «fala»`. Um leitor novo que
+  leia só `corpo` volta a ver o rótulo.
+- **A triagem espera** a transcrição pendente por até 10 minutos. Depois disso, segue com o
+  rótulo, porque a ElevenLabs fora do ar não pode segurar a conversa.
+- **Status:** `pendente`, `feita`, `vazia` (só barulho), `falhou` (3 tentativas, ou arquivo
+  ausente) e `ignorada` (acima de `max_segundos`, padrão 900). Nulo quer dizer "não pedida":
+  os áudios anteriores a 08/10/2026 ficaram de fora por decisão.
+- **Custo:** `transcricao_segundos` (o que a ElevenLabs diz ter ouvido) e
+  `transcricao_custo_centavos`, com o preço por hora de `precos` no dia. A referência de
+  10/2026 é ~1.000 áudios e ~7 h por mês, menos de R$ 10.
+
 ## A interação como unidade de análise
 
 Reunião e ligação da Ana se analisam inteiras. WhatsApp e e-mail se analisam por **janela**:
@@ -322,9 +350,9 @@ Os **toggles por pessoa** ficam em Qualidade → Configurações:
 **Expurgo**: `retencao.dias_transcricao` (padrão nulo = manter). O texto sai; a análise, o
 resumo e o link ficam.
 
-**Subprocessadores.** Fireflies (gravação e transcrição) e TypeSafe AI (classificação Jev)
-recebem conversa de cliente e precisam constar da lista de subprocessadores da OnePay, ao
-lado da Anthropic.
+**Subprocessadores.** Fireflies (gravação e transcrição), TypeSafe AI (classificação Jev) e
+ElevenLabs (transcrição dos áudios do WhatsApp) recebem conversa de cliente e precisam constar
+da lista de subprocessadores da OnePay, ao lado da Anthropic.
 
 ## Configurar do zero
 

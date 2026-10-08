@@ -10,7 +10,7 @@ import { logger } from '../logger.js'
  * (1 min): uma chave trocada na tela vale na próxima rodada, não no próximo restart.
  */
 
-export type ChaveSegredo = 'fireflies_api_key' | 'fireflies_webhook_secret' | 'jev_api_key'
+export type ChaveSegredo = 'fireflies_api_key' | 'fireflies_webhook_secret' | 'jev_api_key' | 'elevenlabs_api_key'
 
 const TTL_MS = 60_000
 const cacheSegredo = new Map<ChaveSegredo, { valor: string | null; em: number }>()

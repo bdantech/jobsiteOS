@@ -4,6 +4,7 @@ import {
   type ResultadoComQueda,
 } from '../../../../packages/core/src/analise/classificador.js'
 import { estadoDaJanela, estadoDaLigacao } from '../../../../packages/core/src/analise/estado.js'
+import { textoDaMensagem } from '../../../../packages/core/src/comunicacao/transcricao.js'
 import { limitarEstado, type RevisaoClaude } from '../../../../packages/core/src/analise/revisao.js'
 import {
   aplicarRevisao,
@@ -148,7 +149,7 @@ export async function montarInteracao(alvo: AlvoInteracao): Promise<Montagem> {
   if (ignorada) return { ok: false, motivo: 'contato ignorado na fila de identificação' }
   let q = supabaseAdmin
     .from('comunicacoes')
-    .select('direcao, canal, corpo, assunto, criado_em, por_ia, vendedor_id')
+    .select('direcao, canal, corpo, transcricao, assunto, criado_em, por_ia, vendedor_id')
     .eq('conversa_id', c.id)
     .in('canal', ['whatsapp', 'email'])
     .lte('criado_em', alvo.janela_fim!)
@@ -166,7 +167,8 @@ export async function montarInteracao(alvo: AlvoInteracao): Promise<Montagem> {
     (msgs ?? []).map((m) => ({
       direcao: m.direcao as 'entrada' | 'saida',
       canal: m.canal,
-      corpo: m.corpo,
+      // O áudio é julgado pelo que foi dito, não pelo rótulo "(áudio · 17s)" (0292).
+      corpo: textoDaMensagem(m),
       assunto: m.assunto,
       criado_em: m.criado_em,
       por_ia: m.por_ia,

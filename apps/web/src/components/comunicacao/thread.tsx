@@ -15,6 +15,7 @@ import {
   Download,
   FileText,
 } from 'lucide-react'
+import { STATUS_TRANSCRICAO_LABELS, type StatusTranscricao } from '@jobsiteos/core'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -116,6 +117,7 @@ function Bolha({ m, destacada }: { m: MensagemThread; destacada: boolean }) {
         </p>
 
         <Anexos m={m} />
+        <Transcricao m={m} />
 
         {m.origem === 'app_toque' ? (
           <p className="mt-1 text-[11px] italic text-muted-foreground">
@@ -233,6 +235,28 @@ function Anexos({ m }: { m: MensagemThread }) {
   )
 }
 
+/**
+ * A FALA DO ÁUDIO (0292), embaixo do player.
+ *
+ * O texto não substitui o áudio: a transcrição erra nome próprio e número, e quem precisa
+ * ter certeza do que foi combinado ouve. Por isso ela vem marcada como automática e a
+ * bolha continua mostrando o "(áudio · 17s)" que chegou.
+ */
+function Transcricao({ m }: { m: MensagemThread }) {
+  const status = m.transcricao_status as StatusTranscricao | null
+  if (!status) return null
+  if (status === 'feita' && m.transcricao) {
+    return (
+      <div className="mt-2 border-l-2 border-muted-foreground/30 pl-2">
+        <p className="text-[11px] text-muted-foreground">Transcrição automática</p>
+        <p className="whitespace-pre-wrap break-words text-sm">{m.transcricao}</p>
+      </div>
+    )
+  }
+  if (status === 'feita') return null
+  return <p className="mt-1 text-[11px] italic text-muted-foreground">{STATUS_TRANSCRICAO_LABELS[status]}</p>
+}
+
 export function Thread({
   conversaId,
   empresaId,
@@ -251,6 +275,9 @@ export function Thread({
     queryFn: () =>
       conversaId ? buscarThread(conversaId) : empresaId ? buscarThreadDaEmpresa(empresaId) : Promise.resolve([]),
     enabled: Boolean(conversaId || empresaId),
+    // Enquanto um áudio está sendo transcrito, a fala chega em segundos: reler até ela
+    // aparecer, e parar quando não houver mais nada pendente.
+    refetchInterval: (q) => (q.state.data?.some((m) => m.transcricao_status === 'pendente') ? 10_000 : false),
   })
 
   const fim = React.useRef<HTMLDivElement>(null)

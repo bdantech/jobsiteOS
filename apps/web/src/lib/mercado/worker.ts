@@ -1079,6 +1079,12 @@ export async function dispararTriagemComunicacao(
   return postar('/jobs/comunicacao/triagem', input, 'comunicacao-triagem')
 }
 
+export async function dispararTranscreverComunicacao(
+  input: { limite?: number } = {},
+): Promise<DispararJobResultado> {
+  return postar('/jobs/comunicacao/transcrever', input, 'comunicacao-transcrever')
+}
+
 export async function dispararGmailSync(): Promise<DispararJobResultado> {
   return postar('/jobs/comunicacao/gmail-sync', {}, 'comunicacao-gmail')
 }

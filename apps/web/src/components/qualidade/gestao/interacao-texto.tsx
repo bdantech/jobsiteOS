@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { estadoDaLigacao, type AnaliseDetalhe } from '@jobsiteos/core'
+import { estadoDaLigacao, textoDaMensagem, type AnaliseDetalhe } from '@jobsiteos/core'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { dataHora } from './formato'
@@ -81,7 +81,7 @@ function linhasDaInteracao(d: AnaliseDetalhe): Linha[] {
       .map((m) => ({
         quem: m.direcao === 'entrada' ? 'Cliente' : `Vendedor${m.por_ia ? ' (IA)' : ''}`,
         quando: dataHora(m.criado_em),
-        texto: [m.assunto ? `[${m.assunto}]` : null, (m.corpo ?? '').trim()].filter(Boolean).join(' '),
+        texto: [m.assunto ? `[${m.assunto}]` : null, (textoDaMensagem(m) ?? '').trim()].filter(Boolean).join(' '),
         nosso: m.direcao === 'saida',
       }))
   }
