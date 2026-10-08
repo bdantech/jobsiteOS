@@ -42,7 +42,7 @@ export async function generateMetadata({
 export default async function EmpresaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const { grantedModuleIds } = await requireSessionContext()
+  const { grantedModuleIds, usuario } = await requireSessionContext()
   if (!canAccessRoute(`/empresas/${id}`, grantedModuleIds)) redirect('/sem-acesso')
 
   // A non-uuid id is a 404, not a query: PostgREST would answer `.eq('id', 'abc')`
@@ -60,9 +60,21 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
    * que `app_atualizar_empresa` aplica na hora de gravar (0188). Uma segunda régua
    * escrita aqui divergiria da que recusa, e a tela passaria a oferecer campos que o
    * banco devolve com erro.
+   *
+   * O originador é restrito para ESCREVER, mas LÊ a Inteligência de ERP: o ERP que a
+   * construtora usa e quanto paga por ele é a conversa dele com ela. Os dados já
+   * chegavam ao navegador (a ficha lê `empresas` inteira); só o cartão era escondido.
    */
   const supabase = await createClient()
-  const { data: restrito } = await supabase.rpc('app_vendedor_restrito' as never)
+  const [{ data: restrito }, { data: vendedor }] = await Promise.all([
+    supabase.rpc('app_vendedor_restrito' as never),
+    supabase
+      .from('vendedores')
+      .select('tipo')
+      .eq('usuario_id', usuario.id)
+      .eq('ativo', true)
+      .maybeSingle(),
+  ])
 
   return (
     <EmpresaDetalhe
@@ -70,6 +82,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
       podeAbrirJuridico={grantedModuleIds.includes('juridico')}
       podeVerCobranca={grantedModuleIds.includes('cobranca')}
       podeEditarDados={restrito !== true}
+      podeVerErp={vendedor?.tipo === 'originador'}
     />
   )
 }

@@ -132,6 +132,7 @@ export function EmpresaDetalhe({
   podeAbrirJuridico = false,
   podeVerCobranca = false,
   podeEditarDados = true,
+  podeVerErp = false,
 }: {
   empresaId: string
   /** Se o usuário tem o módulo `juridico` — decide se a seção Jurídico linka (08 §8). */
@@ -143,6 +144,11 @@ export function EmpresaDetalhe({
    * Quem recusa de verdade é `app_atualizar_empresa` (0188); isto só evita oferecer.
    */
   podeEditarDados?: boolean
+  /**
+   * Vendedor não gestor que mesmo assim LÊ a Inteligência de ERP (hoje, o originador).
+   * Só leitura: a escrita continua sendo de quem tem `podeEditarDados`.
+   */
+  podeVerErp?: boolean
 }) {
   // Controlado (e não `defaultValue`) só por causa do atalho "Ver quadro societário":
   // um botão que leva a uma aba precisa poder escolhê-la.
@@ -407,7 +413,11 @@ export function EmpresaDetalhe({
                  * do cadastro (05C §11). Só aparece quando há o que decidir.
                  */}
                 <SugestoesCadastro empresaId={data.id} />
-                <EmpresaForm empresa={data} somenteDominio={!podeEditarDados} />
+                <EmpresaForm
+                  empresa={data}
+                  somenteDominio={!podeEditarDados}
+                  verErpSomenteLeitura={!podeEditarDados && podeVerErp}
+                />
               </TabsContent>
 
               {/* Contatos + curadoria do ponto focal (Antecipação §3.2). */}

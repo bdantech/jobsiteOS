@@ -115,6 +115,7 @@ function paraFormValues(empresa: Tables<'empresas'>): EmpresaFormValues {
 export function EmpresaForm({
   empresa,
   somenteDominio = false,
+  verErpSomenteLeitura = false,
 }: {
   empresa: Tables<'empresas'>
   /**
@@ -127,6 +128,13 @@ export function EmpresaForm({
    * não oferecer um campo que o banco vai devolver com erro.
    */
   somenteDominio?: boolean
+  /**
+   * Com `somenteDominio`, mostra a Inteligência de ERP travada em vez de escondê-la. É o
+   * originador: o ERP que a construtora usa, quanto paga e por qual canal comprou é a
+   * conversa dele com ela. Editar continua sendo da gestão — os campos vão desabilitados
+   * e o payload de `somenteDominio` nem os leva.
+   */
+  verErpSomenteLeitura?: boolean
 }) {
   const [salvando, setSalvando] = React.useState(false)
   const queryClient = useQueryClient()
@@ -428,17 +436,19 @@ export function EmpresaForm({
         </Card>
 
         {/*
-          Inteligência de ERP é leitura de gestão — MRR, canal, representante. Some
-          inteira para o vendedor em vez de aparecer travada: um cartão de campos
-          cinzentos que ele nunca vai preencher é ruído no meio da ficha.
+          Inteligência de ERP é escrita da gestão — MRR, canal, representante. Para o
+          vendedor ela some inteira em vez de aparecer travada (um cartão de campos
+          cinzentos que ele nunca vai preencher é ruído no meio da ficha), MENOS para o
+          originador, que a lê: é a munição da conversa com a construtora.
         */}
-        {!somenteDominio && (
+        {(!somenteDominio || verErpSomenteLeitura) && (
           <Card>
           <CardHeader>
             <CardTitle>Inteligência de ERP</CardTitle>
             <CardDescription>
               Qual ERP a empresa usa hoje, quanto paga por ele, para quantos usuários e por
               qual canal comprou.
+              {somenteDominio ? ' Só leitura — quem atualiza é a gestão.' : null}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-3">
@@ -449,7 +459,12 @@ export function EmpresaForm({
                 <FormItem>
                   <FormLabel>ERP atual</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" placeholder="Não informado" />
+                    <Input
+                      {...field}
+                      autoComplete="off"
+                      placeholder="Não informado"
+                      disabled={somenteDominio}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -470,6 +485,7 @@ export function EmpresaForm({
                       step="0.01"
                       inputMode="decimal"
                       placeholder="0,00"
+                      disabled={somenteDominio}
                     />
                   </FormControl>
                   <FormDescription>
@@ -487,7 +503,12 @@ export function EmpresaForm({
                 <FormItem>
                   <FormLabel>Canal de venda</FormLabel>
                   <FormControl>
-                    <Input {...field} autoComplete="off" placeholder="Não informado" />
+                    <Input
+                      {...field}
+                      autoComplete="off"
+                      placeholder="Não informado"
+                      disabled={somenteDominio}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
