@@ -145,7 +145,7 @@ export function EmpresaDetalhe({
    */
   podeEditarDados?: boolean
   /**
-   * Vendedor não gestor que mesmo assim LÊ a Inteligência de ERP (hoje, o originador).
+   * Vendedor não gestor que mesmo assim LÊ a Inteligência de ERP (originador, SDR, closer).
    * Só leitura: a escrita continua sendo de quem tem `podeEditarDados`.
    */
   podeVerErp?: boolean

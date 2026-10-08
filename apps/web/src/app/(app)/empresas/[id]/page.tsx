@@ -8,6 +8,9 @@ import { EmpresaDetalhe } from '@/components/empresas/empresa-detalhe'
 
 const uuidSchema = z.string().uuid()
 
+/** Vendedores não gestores que leem (sem editar) a Inteligência de ERP. Ver abaixo. */
+const TIPOS_QUE_LEEM_ERP = new Set(['originador', 'sdr', 'vendedor'])
+
 /**
  * O título da página É o nome da empresa.
  *
@@ -61,9 +64,11 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
    * escrita aqui divergiria da que recusa, e a tela passaria a oferecer campos que o
    * banco devolve com erro.
    *
-   * O originador é restrito para ESCREVER, mas LÊ a Inteligência de ERP: o ERP que a
-   * construtora usa e quanto paga por ele é a conversa dele com ela. Os dados já
-   * chegavam ao navegador (a ficha lê `empresas` inteira); só o cartão era escondido.
+   * Originador, SDR e closer (`vendedor`) são restritos para ESCREVER, mas LEEM a
+   * Inteligência de ERP: o ERP que a construtora usa e quanto paga por ele é munição
+   * da conversa de cada um com ela. Os dados já chegavam ao navegador (a ficha lê
+   * `empresas` inteira); só o cartão era escondido. O auxiliar do closer fica de fora
+   * até alguém pedir.
    */
   const supabase = await createClient()
   const [{ data: restrito }, { data: vendedor }] = await Promise.all([
@@ -82,7 +87,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
       podeAbrirJuridico={grantedModuleIds.includes('juridico')}
       podeVerCobranca={grantedModuleIds.includes('cobranca')}
       podeEditarDados={restrito !== true}
-      podeVerErp={vendedor?.tipo === 'originador'}
+      podeVerErp={TIPOS_QUE_LEEM_ERP.has(vendedor?.tipo ?? '')}
     />
   )
 }

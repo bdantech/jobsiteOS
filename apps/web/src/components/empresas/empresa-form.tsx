@@ -129,10 +129,10 @@ export function EmpresaForm({
    */
   somenteDominio?: boolean
   /**
-   * Com `somenteDominio`, mostra a Inteligência de ERP travada em vez de escondê-la. É o
-   * originador: o ERP que a construtora usa, quanto paga e por qual canal comprou é a
-   * conversa dele com ela. Editar continua sendo da gestão — os campos vão desabilitados
-   * e o payload de `somenteDominio` nem os leva.
+   * Com `somenteDominio`, mostra a Inteligência de ERP travada em vez de escondê-la.
+   * Originador, SDR e closer: o ERP que a construtora usa, quanto paga e por qual canal
+   * comprou é munição da conversa. Editar continua sendo da gestão — os campos vão
+   * desabilitados e o payload de `somenteDominio` nem os leva.
    */
   verErpSomenteLeitura?: boolean
 }) {
@@ -438,8 +438,8 @@ export function EmpresaForm({
         {/*
           Inteligência de ERP é escrita da gestão — MRR, canal, representante. Para o
           vendedor ela some inteira em vez de aparecer travada (um cartão de campos
-          cinzentos que ele nunca vai preencher é ruído no meio da ficha), MENOS para o
-          originador, que a lê: é a munição da conversa com a construtora.
+          cinzentos que ele nunca vai preencher é ruído no meio da ficha), MENOS para
+          originador, SDR e closer, que a leem: é munição da conversa com a construtora.
         */}
         {(!somenteDominio || verErpSomenteLeitura) && (
           <Card>
