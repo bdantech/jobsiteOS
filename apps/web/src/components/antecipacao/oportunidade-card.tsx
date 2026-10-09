@@ -134,6 +134,9 @@ export function OportunidadeCard({
   const { emCobranca } = useEmCobranca()
   const sacadoEmCobranca = emCobranca(item.sacado_cnpj, item.sacado_matriz_cnpj) || emCobranca(conta?.cnpj)
 
+  const documentoSienge =
+    [item.bill_origin, item.bill_document_type].filter(Boolean).join(' · ') || null
+
   const expiraEm = diasParaExpirar(item.relogio)
   const relogioCurto = expiraEm !== null && expiraEm <= 2
 
@@ -254,6 +257,13 @@ export function OportunidadeCard({
                   <ChipDoCard className="max-w-[170px] tabular-nums">
                     <span className="min-w-0 truncate">{item.linha_contexto ?? '—'}</span>
                   </ChipDoCard>
+
+                  {/* Origem e tipo do título no Sienge (0293), CRUS: é o vocabulário
+                      do ERP da construtora, e é por ele que o originador sabe com
+                      quem falar lá dentro. A NF não tem, e o chip some. */}
+                  {documentoSienge ? (
+                    <ChipDoCard className="tabular-nums">{documentoSienge}</ChipDoCard>
+                  ) : null}
 
                   {/* O relógio só existe na pré-autorização, e grita quando é curto. */}
                   {expiraEm !== null ? (
@@ -420,6 +430,18 @@ export function OportunidadeCard({
               <dt className="opacity-70">Identificação</dt>
               <dd className="tabular-nums">{item.linha_contexto ?? '—'}</dd>
             </div>
+            {item.bill_origin ? (
+              <div className="flex justify-between gap-4">
+                <dt className="opacity-70">Origem no Sienge</dt>
+                <dd>{item.bill_origin}</dd>
+              </div>
+            ) : null}
+            {item.bill_document_type ? (
+              <div className="flex justify-between gap-4">
+                <dt className="opacity-70">Tipo de documento</dt>
+                <dd>{item.bill_document_type}</dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-4">
               <dt className="opacity-70">Valor</dt>
               <dd className="tabular-nums">{formatarMoedaExata(item.valor)}</dd>

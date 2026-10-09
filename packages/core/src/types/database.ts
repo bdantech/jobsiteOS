@@ -10346,7 +10346,9 @@ export type Database = {
           sacado_matriz_cnpj: string
           sacado_nome: string | null
           seguro_estimado: number | null
+          sienge_bill_document_type: string | null
           sienge_bill_id: number | null
+          sienge_bill_origin: string | null
           sienge_document_number: string | null
           sienge_installment_id: number | null
           sienge_installment_number: number | null
@@ -10400,7 +10402,9 @@ export type Database = {
           sacado_matriz_cnpj: string
           sacado_nome?: string | null
           seguro_estimado?: number | null
+          sienge_bill_document_type?: string | null
           sienge_bill_id?: number | null
+          sienge_bill_origin?: string | null
           sienge_document_number?: string | null
           sienge_installment_id?: number | null
           sienge_installment_number?: number | null
@@ -10454,7 +10458,9 @@ export type Database = {
           sacado_matriz_cnpj?: string
           sacado_nome?: string | null
           seguro_estimado?: number | null
+          sienge_bill_document_type?: string | null
           sienge_bill_id?: number | null
+          sienge_bill_origin?: string | null
           sienge_document_number?: string | null
           sienge_installment_id?: number | null
           sienge_installment_number?: number | null
@@ -16924,6 +16930,8 @@ export type Database = {
       funil_oportunidades: {
         Row: {
           access_key: string | null
+          bill_document_type: string | null
+          bill_origin: string | null
           conversao_antecipacao_id: number | null
           conversao_em_disputa: boolean | null
           conversao_taxa: number | null
@@ -16996,6 +17004,8 @@ export type Database = {
       funil_oportunidades_nf: {
         Row: {
           access_key: string | null
+          bill_document_type: string | null
+          bill_origin: string | null
           conversao_antecipacao_id: number | null
           conversao_em_disputa: boolean | null
           conversao_taxa: number | null
@@ -17167,6 +17177,8 @@ export type Database = {
       funil_oportunidades_preauth: {
         Row: {
           access_key: string | null
+          bill_document_type: string | null
+          bill_origin: string | null
           conversao_antecipacao_id: number | null
           conversao_em_disputa: boolean | null
           conversao_taxa: number | null
@@ -17331,6 +17343,8 @@ export type Database = {
       funil_oportunidades_titulo: {
         Row: {
           access_key: string | null
+          bill_document_type: string | null
+          bill_origin: string | null
           conversao_antecipacao_id: number | null
           conversao_em_disputa: boolean | null
           conversao_taxa: number | null

@@ -392,6 +392,12 @@ export function OportunidadeModal({
                       </span>
                     </Linha>
                     <Linha rotulo="Identificação">{item.linha_contexto ?? '—'}</Linha>
+                    {item.bill_origin ? (
+                      <Linha rotulo="Origem no Sienge">{item.bill_origin}</Linha>
+                    ) : null}
+                    {item.bill_document_type ? (
+                      <Linha rotulo="Tipo de documento">{item.bill_document_type}</Linha>
+                    ) : null}
                     <Linha rotulo="Entrou em">{formatarData(item.data_base)}</Linha>
                     {item.access_key ? (
                       <Linha rotulo="NF vinculada">
