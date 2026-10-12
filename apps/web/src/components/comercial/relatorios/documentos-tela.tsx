@@ -81,6 +81,11 @@ const STATUS: Record<StatusDocumento, { rotulo: string; explica: string; vivo: b
     explica: 'A mesma operação aparece por outro documento: o título vira a pré-autorização quando a oferta é criada, e a pré-autorização vira a nota quando a nota existe.',
     vivo: true,
   },
+  prazo_longo: {
+    rotulo: 'Vencimento acima de 180 dias',
+    explica: 'Título do Sienge, ou a oferta criada a partir dele, que vence depois de 180 dias. Não entra no Kanban para ninguém; volta a aparecer sozinho quando o vencimento entra na janela.',
+    vivo: true,
+  },
   nao_operavel: {
     rotulo: 'Nota não operável',
     explica: 'Cancelada, abaixo do valor mínimo ou de natureza que não gera crédito (remessa, retorno). Não entra no Kanban para ninguém.',

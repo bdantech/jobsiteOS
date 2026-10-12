@@ -90,6 +90,7 @@ export type StatusDocumento =
   | 'sem_interesse'
   | 'suprimido'
   | 'substituido'
+  | 'prazo_longo'
   | 'nao_operavel'
   | 'convertida'
   | 'perdida'
