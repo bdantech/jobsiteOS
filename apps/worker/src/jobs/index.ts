@@ -695,7 +695,7 @@ export function dispararBaixarDocumento(docId: string): string {
  * dos syncs falhou, porque aí a recomposição é justamente o que devolve à tela o
  * que a corrida anterior havia escondido.
  */
-async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<unknown> {
+async function executarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<Record<string, unknown>> {
   const resultado: Record<string, unknown> = { modo }
 
   const idPre = await abrirIngestao('onepay_pre_autorizacoes', { origem: modo })
@@ -772,9 +772,62 @@ async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<un
   return resultado
 }
 
-/** As duas fontes novas sob demanda — o botão "sincronizar agora" da tela. */
+/**
+ * UMA corrida das fontes do funil por vez, venha de onde vier.
+ *
+ * São quatro entradas — o ciclo de NFs (4h), o diário, o cron de hora em hora e o botão —
+ * e o `reservar` por tipo de job não as enxerga como a mesma coisa: as duas primeiras
+ * chamam este bloco de DENTRO de outro job. Duas corridas juntas pediriam as mesmas
+ * páginas à plataforma e, pior, rodariam duas deduplicações sobre listas pela metade —
+ * e é a dedup que decide quem esconde quem.
+ *
+ * Quem está dentro de uma corrente ESPERA a vez (o resto da corrente depende deste
+ * passo). Quem é disparo avulso desiste na hora — ver `dispararSyncFontesDoFunil`.
+ */
+let fontesEmCurso: Promise<unknown> | null = null
+
+async function sincronizarFontesDoFunil(modo: 'novidade' | 'estado'): Promise<Record<string, unknown>> {
+  while (fontesEmCurso) await fontesEmCurso.catch(() => undefined)
+  const corrida = executarFontesDoFunil(modo)
+  fontesEmCurso = corrida
+  try {
+    return await corrida
+  } finally {
+    if (fontesEmCurso === corrida) fontesEmCurso = null
+  }
+}
+
+/**
+ * As duas fontes novas fora da corrente de NFs: o cron de HORA EM HORA e o botão
+ * "sincronizar agora" da tela.
+ *
+ * ── POR QUE DE HORA EM HORA ─────────────────────────────────────────────────
+ * A NF sincroniza de 4 em 4 horas porque é assim que ela chega em produção. Título e
+ * pré-autorização entram a todo momento — e a pré-autorização tem RELÓGIO de poucos
+ * dias: até quatro horas invisível é uma fatia grande da vida dela.
+ *
+ * ── A RECLASSIFICAÇÃO VEM JUNTO ─────────────────────────────────────────────
+ * A faixa é o que ordena o Kanban. Sem ela aqui, o card novo chegaria sem faixa e
+ * ficaria no fim da fila até o próximo ciclo de NFs — o cron traria o item na hora e
+ * ninguém o veria do mesmo jeito. Best-effort: o que o sync já gravou não se perde por
+ * uma regra de faixa que falhou.
+ *
+ * Já tem corrida em curso (a corrente de NFs ou o diário chegou antes)? Recusa com 409
+ * e o cron registra `pulada` — a corrida em curso está fazendo exatamente este trabalho.
+ */
 export function dispararSyncFontesDoFunil(modo: 'novidade' | 'estado' = 'novidade'): string {
-  return dispararAvulso('funil-sync-fontes', async () => sincronizarFontesDoFunil(modo))
+  if (fontesEmCurso) throw new JobEmExecucaoError('funil-sync-fontes', 'outra corrente')
+  return dispararAvulso('funil-sync-fontes', async (client) => {
+    const fontes = await sincronizarFontesDoFunil(modo)
+    let reclassificacao: unknown
+    try {
+      reclassificacao = await reclassificarOportunidades(client)
+    } catch (erro) {
+      logger.error({ erro: String(erro) }, 'Reclassificação das fontes do funil falhou; o sync fica.')
+      reclassificacao = { erro: String(erro) }
+    }
+    return { ...fontes, reclassificacao_oportunidades: reclassificacao }
+  })
 }
 
 /** A deduplicação sozinha: recompõe o funil sem esperar o ciclo de quatro horas. */

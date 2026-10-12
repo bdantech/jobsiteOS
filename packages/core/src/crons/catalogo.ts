@@ -97,12 +97,25 @@ export const CRONS: readonly CronCatalogado[] = [
       'De 4 em 4 horas: puxa as NFs novas da Onepay, resolve cadastro dos CNPJs desconhecidos e reclassifica o funil.',
     destino: 'POST /jobs/antecipacao/sync-nfs',
     encadeia: [
-      'Pré-autorizações e títulos Sienge (04s), janela curta de 7 dias — as duas fontes novas do MESMO funil. Encadeadas e não em cron próprio porque a faixa é o que ordena o Kanban, e um card que chega sem faixa fica no fim da fila até o diário; para uma pré-autorização isso é pior que para uma NF, porque ela tem RELÓGIO e passaria invisível o primeiro dos poucos dias que tem',
+      'Pré-autorizações e títulos Sienge (04s), janela curta de 7 dias — as duas fontes novas do MESMO funil. Continuam encadeadas aqui (a faixa é o que ordena o Kanban, e a reclassificação desta corrente as cobre), e nas horas entre um ciclo e outro quem as traz é o cron próprio `funil-fontes`',
       'Deduplicação do funil (04s §5) — quem esconde quem, recomposto do zero depois de cada sync',
       'Sync de antecipações (conversão de nota em operação)',
       'Projeção de títulos da Cobrança (07 §14) logo atrás das antecipações — é a leitura delas: quitação vinda da produção, título que regrediu, vencimento prorrogado. Num cron próprio a tela de cobrança mostraria "em aberto" um título que a produção já concluiu horas antes',
       'Funil de cadastro de fornecedores (04l) — a munição dele vem exatamente das notas que acabaram de chegar; num relógio próprio, o card mostraria o volume de até quatro horas atrás e um fornecedor que virou cliente hoje continuaria no kanban como lead',
       'Funil de Sacados por NF (04r) — mesma razão pelo outro lado da nota, e aqui a defasagem seria pior: `valor_operavel` mede quanto de vida a nota AINDA tem, e num relógio próprio o card mostraria por horas um número que já encolheu',
+    ],
+  },
+  {
+    path: '/api/cron/funil-fontes',
+    nome: 'Pré-autorizações e títulos (hora em hora)',
+    moduloId: 'antecipacao',
+    descricao:
+      'De hora em hora, nas horas em que o sync de NFs não roda: puxa pré-autorizações e títulos Sienge da plataforma. A NF chega de 4 em 4 horas em produção; título e pré-autorização entram a todo momento, e a pré-autorização tem relógio de poucos dias. Fica fora das horas do sync de NFs porque aquela corrente já traz as duas fontes — e se outra corrida delas estiver em curso, este disparo é pulado.',
+    destino: 'POST /jobs/funil/sync-fontes',
+    encadeia: [
+      'Deduplicação do funil (04s §5) — quem esconde quem, recomposto depois do sync',
+      'Roteamento das duas fontes — item sem dono é item que o originador não vê',
+      'Reclassificação das duas fontes — sem faixa o card novo ficaria no fim do Kanban até o próximo ciclo de NFs',
     ],
   },
   {

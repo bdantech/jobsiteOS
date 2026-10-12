@@ -608,6 +608,15 @@ export async function dispararSyncNfs(): Promise<DispararJobResultado> {
 }
 
 /**
+ * Pré-autorizações e títulos Sienge, de hora em hora. Enqueue-only como o de NFs: o
+ * worker sincroniza as duas fontes, deduplica, roteia e reclassifica em segundo plano.
+ * 409 quando outra corrida das fontes está em curso — o cron registra `pulada`.
+ */
+export async function dispararSyncFontesDoFunil(): Promise<DispararJobResultado> {
+  return postar('/jobs/funil/sync-fontes', { modo: 'novidade' }, 'funil-sync-fontes')
+}
+
+/**
  * Sync de antecipações + re-matching (04e), sob demanda.
  *
  * No ciclo normal ele roda ENCADEADO ao sync de NFs, e é assim de propósito: o

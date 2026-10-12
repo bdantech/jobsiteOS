@@ -3,7 +3,8 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Download, FileText, Loader2, Settings2 } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowLeft, Download, FileText, Loader2, Settings2 } from 'lucide-react'
 import {
   ETAPA_FUNIL_LABELS,
   brlCurto,
@@ -112,7 +113,13 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Relatórios</h1>
+          <Button asChild variant="ghost" size="sm" className="-ml-2 h-7 px-2 text-xs text-muted-foreground">
+            <Link href="/comercial/relatorios">
+              <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden />
+              Relatórios
+            </Link>
+          </Button>
+          <h1 className="text-xl font-semibold">Report semanal executivo</h1>
           <p className="text-xs text-muted-foreground">
             {r
               ? `Semana ${r.periodo.semana_iso} · ${dm(r.periodo.inicio)} a ${dm(r.periodo.fim)}` +

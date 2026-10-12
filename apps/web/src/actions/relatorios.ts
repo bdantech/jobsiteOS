@@ -67,7 +67,7 @@ export async function salvarConfigReportAction(
     .eq('tipo', 'semanal_executivo')
   if (error) return { ok: false, message: error.message }
 
-  revalidatePath('/comercial/relatorios')
+  revalidatePath('/comercial/relatorios/semanal')
   return { ok: true }
 }
 
@@ -90,7 +90,7 @@ export async function gerarPreviaAction(
   })
   if (!r.ok) return { ok: false, message: r.message }
 
-  revalidatePath('/comercial/relatorios')
+  revalidatePath('/comercial/relatorios/semanal')
   return { ok: true, dados: r.corpo }
 }
 
@@ -110,6 +110,6 @@ export async function enviarTesteAction(email: string): Promise<ResultadoRelator
   })
   if (!r.ok) return { ok: false, message: r.message }
 
-  revalidatePath('/comercial/relatorios')
+  revalidatePath('/comercial/relatorios/semanal')
   return { ok: true, dados: r.corpo }
 }

@@ -2,20 +2,18 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { contextoComercial } from '@/lib/comercial'
-import { RelatoriosTela } from '@/components/comercial/relatorios/relatorios-tela'
+import { ListaRelatorios } from '@/components/comercial/relatorios/lista-relatorios'
 
 export const metadata: Metadata = { title: 'Relatórios' }
 
-// A tela lê a semana fechada e o histórico; renderizar estático congelaria os dois.
 export const dynamic = 'force-dynamic'
 
 /**
- * Guarda na PÁGINA, e não só na navegação — mesmo padrão de /fila, /painel e /admin.
+ * A aba Relatórios é uma LISTA: cada card abre um relatório.
  *
- * A régua é `app_report_gestor()`, a mesma da RLS: tem o módulo Comercial e NÃO é
- * vendedor. `contextoComercial().ehGestor` não serve aqui — ela é `app_gestor_comercial()`,
- * "perfil Admin ou Comercial", e a auxiliar do closer tem perfil Comercial. Este report
- * mostra o desempenho nominal e a comissão de cada pessoa do time.
+ * A guarda é a mesma de cada relatório (`app_report_gestor()`, ver semanal/page.tsx) —
+ * a lista não mostra número nenhum, mas um card que leva a uma tela que redireciona de
+ * volta ensina que a aba está quebrada.
  */
 export default async function Pagina() {
   await contextoComercial()
@@ -23,5 +21,5 @@ export default async function Pagina() {
   const { data } = await supabase.rpc('app_report_gestor')
   if (data !== true) redirect('/comercial')
 
-  return <RelatoriosTela podeGerar />
+  return <ListaRelatorios />
 }

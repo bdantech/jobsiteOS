@@ -108,7 +108,7 @@ export async function gerarReportSemanal(opts: OpcoesReport = {}): Promise<Resul
     await emitirEvento(null, EVENTO_TIPOS.REPORT_GERADO, {
       titulo: `Report semanal ${r.periodo.ano}-S${r.periodo.semana_iso}`,
       resumo: `${brlCurto(r.operacao.kpis.volume_convertido.semana)} convertidos na semana.`,
-      url: '/comercial/relatorios',
+      url: '/comercial/relatorios/semanal',
       execucao_id: execucao.id,
       periodo: janela,
     })
@@ -143,7 +143,7 @@ export async function gerarReportSemanal(opts: OpcoesReport = {}): Promise<Resul
     await emitirEvento(null, EVENTO_TIPOS.REPORT_FALHOU, {
       titulo: 'O report semanal falhou',
       resumo: msg,
-      url: '/comercial/relatorios',
+      url: '/comercial/relatorios/semanal',
       execucao_id: execucao.id,
     })
     logger.error({ erro: msg, janela }, 'Report semanal falhou.')
@@ -175,7 +175,7 @@ function corpoDoEmail(r: ReportSemanal, resumo: string | null, appUrl: string | 
     '',
     'O report completo, com os onze blocos, está no PDF em anexo.',
   ]
-  if (appUrl) linhas.push('', `Abrir no JobsiteOS: ${appUrl}/comercial/relatorios`)
+  if (appUrl) linhas.push('', `Abrir no JobsiteOS: ${appUrl}/comercial/relatorios/semanal`)
   return linhas.join('\n')
 }
 
@@ -250,7 +250,7 @@ async function enviarReport(
   await emitirEvento(null, enviados.length > 0 ? EVENTO_TIPOS.REPORT_ENVIADO : EVENTO_TIPOS.REPORT_FALHOU, {
     titulo: enviados.length > 0 ? 'Report semanal enviado' : 'O envio do report semanal falhou',
     resumo: `${enviados.length} entregue(s), ${falharam.length} falha(s).`,
-    url: '/comercial/relatorios',
+    url: '/comercial/relatorios/semanal',
     execucao_id: execucaoId,
   })
 
