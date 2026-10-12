@@ -40,6 +40,14 @@ const configSchema = z.object({
   horario: z.string().regex(/^\d{2}:\d{2}$/, 'Horário no formato HH:MM.'),
   ativo: z.boolean(),
   assunto_template: z.string().max(200).nullable(),
+  /* 04u §6. O piso existe porque abaixo de 100 o teto corta a segunda página de quase
+     toda lista; o teto, porque acima de 50 mil a navegação deixou de ser leitura. */
+  max_linhas_drilldown: z
+    .number()
+    .int('O teto de linhas é um número inteiro.')
+    .min(100, 'O teto de linhas não pode ser menor que 100.')
+    .max(50_000, 'Acima de 50 mil linhas, exporte o CSV em vez de navegar.'),
+  aquisicao_no_pdf: z.boolean(),
 })
 
 export async function salvarConfigReportAction(
@@ -61,6 +69,8 @@ export async function salvarConfigReportAction(
       horario: parse.data.horario,
       ativo: parse.data.ativo,
       assunto_template: parse.data.assunto_template,
+      max_linhas_drilldown: parse.data.max_linhas_drilldown,
+      aquisicao_no_pdf: parse.data.aquisicao_no_pdf,
       atualizado_por: a.usuarioId,
       atualizado_em: new Date().toISOString(),
     })

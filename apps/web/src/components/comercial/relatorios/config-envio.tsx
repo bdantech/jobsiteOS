@@ -13,7 +13,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { buscarConfigReport, relatoriosKeys, type DestinatarioReport } from './queries'
+import {
+  MAX_LINHAS_PADRAO, buscarConfigReport, relatoriosKeys, type DestinatarioReport,
+} from './queries'
 
 /**
  * Configuração de envio (04q §5).
@@ -43,6 +45,8 @@ export function ConfigEnvio({ aberta, onFechar }: { aberta: boolean; onFechar: (
   const [horario, setHorario] = React.useState('06:00')
   const [ativo, setAtivo] = React.useState(false)
   const [assunto, setAssunto] = React.useState('')
+  const [maxLinhas, setMaxLinhas] = React.useState(String(MAX_LINHAS_PADRAO))
+  const [aquisicaoNoPdf, setAquisicaoNoPdf] = React.useState(true)
   const [novoEmail, setNovoEmail] = React.useState('')
   const [novoNome, setNovoNome] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
@@ -56,6 +60,8 @@ export function ConfigEnvio({ aberta, onFechar }: { aberta: boolean; onFechar: (
     setHorario(cfg.data.horario.slice(0, 5))
     setAtivo(cfg.data.ativo)
     setAssunto(cfg.data.assunto_template ?? '')
+    setMaxLinhas(String(cfg.data.max_linhas_drilldown))
+    setAquisicaoNoPdf(cfg.data.aquisicao_no_pdf)
   }, [cfg.data])
 
   function adicionar() {
@@ -74,6 +80,8 @@ export function ConfigEnvio({ aberta, onFechar }: { aberta: boolean; onFechar: (
     const r = await salvarConfigReportAction({
       destinatarios, dias_semana: dias, horario, ativo,
       assunto_template: assunto.trim() || null,
+      max_linhas_drilldown: Number(maxLinhas),
+      aquisicao_no_pdf: aquisicaoNoPdf,
     })
     setSalvando(false)
     if (!r.ok) return toast.error(r.message)
@@ -167,6 +175,39 @@ export function ConfigEnvio({ aberta, onFechar }: { aberta: boolean; onFechar: (
               />
               <p className="text-[11px] text-muted-foreground">
                 Marcadores: <code>{'{semana}'}</code>, <code>{'{periodo}'}</code>, <code>{'{ano}'}</code>.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={aquisicaoNoPdf}
+                onChange={(e) => setAquisicaoNoPdf(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>
+                Incluir o bloco de Aquisição no PDF
+                <span className="block text-[11px] text-muted-foreground">
+                  Na tela ele aparece sempre. Aqui é só o anexo do e-mail.
+                </span>
+              </span>
+            </label>
+
+            <div className="space-y-1">
+              <Label htmlFor="max-linhas" className="text-xs">Teto de linhas ao abrir um número</Label>
+              <Input
+                id="max-linhas"
+                type="number"
+                min={100}
+                max={50000}
+                step={100}
+                value={maxLinhas}
+                onChange={(e) => setMaxLinhas(e.target.value)}
+                className="w-32"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Até onde a lista de um número pode ser navegada na tela, 50 linhas por página.
+                Acima disso, o CSV traz o conjunto completo.
               </p>
             </div>
 

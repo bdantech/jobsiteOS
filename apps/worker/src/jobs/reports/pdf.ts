@@ -11,6 +11,20 @@ import {
   type IndicadorReport,
   type ReportSemanal,
 } from '../../../../../packages/core/src/reports/semanal.js'
+import {
+  FIT_AQUISICAO_LABELS,
+  ORIGEM_AQUISICAO_LABELS,
+  carimboDaAquisicao,
+  matrizDoBloco,
+  temSemOrigem,
+  totalDoBloco,
+  type BlocoAquisicao,
+} from '../../../../../packages/core/src/reports/aquisicao.js'
+import {
+  NATUREZA_EXPLICA,
+  linkDoDetalhe,
+  type AlvoDetalhe,
+} from '../../../../../packages/core/src/reports/drilldown.js'
 
 /**
  * O PDF do Report Semanal (04q §4), desenhado com pdfkit.
@@ -106,10 +120,25 @@ function corDaDirecao(v: number | null, subirEPior: boolean): string {
   return d === 'melhor' ? COR.up : d === 'pior' ? COR.down : COR.mut2
 }
 
+/**
+ * PDF não clica num modal (04u §4.1): o número ganha um LINK para o report web, que abre
+ * com a lista daquele número já na tela.
+ *
+ * O link é uma anotação sobre a área do número, e não um "ver no sistema" escrito ao lado
+ * de cada um: são mais de cinquenta números em três páginas, e o texto repetido custaria a
+ * página que o padrão editorial protege. A legenda no rodapé diz que eles existem; o bloco
+ * de Aquisição, que é novo e tem espaço, escreve o link por extenso.
+ */
+type Ligar = (alvo: AlvoDetalhe) => string | null
+
+function area(doc: Doc, x: number, y: number, w: number, h: number, url: string | null | undefined): void {
+  if (url) doc.link(x, y, w, h, url)
+}
+
 /** A faixa de quatro KPIs. Número grande, rótulo pequeno, contexto embaixo. */
 function faixaKpis(
   doc: Doc,
-  itens: { rotulo: string; valor: string; contexto: string; cor?: string }[],
+  itens: { rotulo: string; valor: string; contexto: string; cor?: string; link?: string | null }[],
 ): void {
   const y0 = doc.y
   const larg = (CONTEUDO - 6 * (itens.length - 1)) / itens.length
@@ -123,6 +152,7 @@ function faixaKpis(
       .text(k.valor, x + 6, y0 + 16, { width: larg - 12 })
     doc.font(FONTE.normal).fontSize(6.8).fillColor(k.cor ?? COR.mut)
       .text(k.contexto, x + 6, y0 + 33, { width: larg - 12 })
+    area(doc, x, y0, larg, 44, k.link)
   })
   doc.y = y0 + 44
   doc.moveDown(0.8)
@@ -146,7 +176,14 @@ interface Coluna {
  */
 const CALHA = 6
 
-function tabela(doc: Doc, colunas: Coluna[], linhas: Record<string, string>[], max = 12): void {
+function tabela(
+  doc: Doc,
+  colunas: Coluna[],
+  linhas: Record<string, string>[],
+  max = 12,
+  /** O link de cada linha, na mesma ordem. `null` = a linha não tem lista para abrir. */
+  links?: (string | null)[],
+): void {
   const total = colunas.reduce((s, c) => s + c.largura, 0)
   const util = CONTEUDO - CALHA * (colunas.length - 1)
   const escala = util / total
@@ -165,7 +202,8 @@ function tabela(doc: Doc, colunas: Coluna[], linhas: Record<string, string>[], m
   linha(doc, y, COR.line2)
   y += 3
 
-  for (const l of linhas.slice(0, max)) {
+  for (const [i, l] of linhas.slice(0, max).entries()) {
+    area(doc, PAG.lado, y - 1, CONTEUDO, 11, links?.[i])
     x = PAG.lado
     for (const c of colunas) {
       const w = c.largura * escala
@@ -206,7 +244,7 @@ function linhaIndicador(ind: IndicadorReport, formatar: (n: number) => string): 
  * Zerar a margem enquanto se escreve o rodape, e devolve-la em seguida, e a forma
  * suportada de dizer "eu sei onde estou desenhando".
  */
-function rodape(doc: Doc, r: ReportSemanal, pagina: number, de: number): void {
+function rodape(doc: Doc, r: ReportSemanal, pagina: number, de: number, comLinks = false): void {
   const margem = doc.page.margins.bottom
   doc.page.margins.bottom = 0
   const y = PAG.altura - 30
@@ -221,6 +259,11 @@ function rodape(doc: Doc, r: ReportSemanal, pagina: number, de: number): void {
           PAG.lado, y + 5, { width: CONTEUDO * 0.72, lineBreak: false })
     .text(`${pagina} de ${de}`, PAG.lado + CONTEUDO * 0.72, y + 5,
           { width: CONTEUDO * 0.28, align: 'right', lineBreak: false })
+  if (comLinks) {
+    doc.font(FONTE.normal).fontSize(6.5).fillColor(COR.mut2)
+      .text('Ver no sistema: os números deste documento são links — abrem no JobsiteOS a lista que os compõe.',
+            PAG.lado, y + 14, { width: CONTEUDO, lineBreak: false })
+  }
   doc.page.margins.bottom = margem
 }
 
@@ -295,9 +338,104 @@ const mesAno = (iso: string) => {
   return `${nomes[Number(m) - 1] ?? m}/${a?.slice(2) ?? ''}`
 }
 
+// ─── Aquisição (04u §2) ─────────────────────────────────────────────────────
+
+/**
+ * O bloco de Aquisição, com o CARIMBO impresso.
+ *
+ * Na tela ele recalcula a cada abertura; aqui ele é o do instante do envio, e a seção diz
+ * "dados de dd/mm às HH:MM". Sem isso alguém abre o e-mail de segunda na quarta, compara
+ * com a tela — onde mais leads já foram avaliados — e conclui que um dos dois está errado.
+ */
+function blocoAquisicao(doc: Doc, b: BlocoAquisicao, ligar: Ligar): void {
+  secao(doc, 'Aquisição da semana', carimboDaAquisicao(b, false))
+
+  const n = (v: number, p: number | null) => (p === null ? String(v) : `${v} (${pct(p)})`)
+  const matriz = matrizDoBloco(b)
+  tabela(doc,
+    [
+      { chave: 'origem', titulo: 'Origem', largura: 24, alinhar: 'left', forte: true },
+      { chave: 'com_fit', titulo: FIT_AQUISICAO_LABELS.com_fit, largura: 19 },
+      { chave: 'sem_fit', titulo: FIT_AQUISICAO_LABELS.sem_fit, largura: 19 },
+      { chave: 'nao', titulo: FIT_AQUISICAO_LABELS.nao_avaliado, largura: 24 },
+      { chave: 'total', titulo: 'Total', largura: 14 },
+    ],
+    matriz.map((l) => ({
+      origem: ORIGEM_AQUISICAO_LABELS[l.origem],
+      com_fit: n(l.com_fit, l.pct.com_fit),
+      sem_fit: n(l.sem_fit, l.pct.sem_fit),
+      nao: n(l.nao_avaliado, l.pct.nao_avaliado),
+      total: String(l.total),
+    })),
+    4,
+    matriz.map((l) => ligar({ chave: 'aq_leads', params: { origem: l.origem, fit: 'total' } })),
+  )
+
+  const t = totalDoBloco(b)
+  const de = (origem: 'inbound' | 'outbound', campo: 'agendadas' | 'realizadas') =>
+    String(b.origens.find((o) => o.origem === origem)?.[campo] ?? 0)
+  doc.moveDown(0.3)
+  tabela(doc,
+    [
+      { chave: 'k', titulo: 'Reuniões', largura: 30, alinhar: 'left', forte: true },
+      { chave: 'total', titulo: 'Total', largura: 12 },
+      { chave: 'in', titulo: 'Inbound', largura: 12 },
+      { chave: 'out', titulo: 'Outbound', largura: 12 },
+      { chave: 'n', titulo: 'O que conta', largura: 34, alinhar: 'left' },
+    ],
+    [
+      { k: 'Agendadas na semana', total: String(t.agendadas), in: de('inbound', 'agendadas'), out: de('outbound', 'agendadas'), n: 'marcadas nestes dias, aconteçam quando for' },
+      { k: 'Realizadas na semana', total: String(t.realizadas), in: de('inbound', 'realizadas'), out: de('outbound', 'realizadas'), n: 'aconteceram nestes dias, marcadas quando for' },
+    ],
+    2,
+    [
+      ligar({ chave: 'aq_reunioes', params: { fato: 'agendada', origem: 'total' } }),
+      ligar({ chave: 'aq_reunioes', params: { fato: 'realizada', origem: 'total' } }),
+    ],
+  )
+
+  /* A coorte e a ressalva numa linha só. "Ainda não avaliado" não é "sem fit", e agendadas
+     não é denominador de realizadas — as duas confusões que este bloco existe para evitar. */
+  const higiene = [
+    `${t.canceladas} canceladas`, `${t.remarcadas} remarcadas`, `${t.no_shows} no-shows`,
+    ...(t.sem_captura > 0 ? [`${t.sem_captura} realizadas sem captura`] : []),
+    ...(t.sem_desfecho > 0 ? [`${t.sem_desfecho} sem desfecho registrado`] : []),
+  ].join(' · ')
+  doc.font(FONTE.normal).fontSize(6.8).fillColor(COR.mut).text(
+    `${higiene}. Leads: coorte da semana, com o fit de quando este PDF foi gerado — ` +
+    '"ainda não avaliado" não é "sem fit". Agendadas e realizadas são conjuntos diferentes: ' +
+    'uma não é taxa da outra.' +
+    (temSemOrigem(b) ? ' Há registro SEM ORIGEM: é problema de cadastro.' : ''),
+    PAG.lado, doc.y + 1, { width: CONTEUDO },
+  )
+  const url = ligar({ chave: 'aq_leads', params: { origem: 'total', fit: 'total' } })
+  if (url) {
+    doc.font(FONTE.normal).fontSize(6.8).fillColor(COR.accent)
+      .text('ver no sistema', PAG.lado, doc.y + 1, { link: url, underline: true })
+  }
+  doc.moveDown(0.8)
+}
+
 // ─── O documento ────────────────────────────────────────────────────────────
 
-export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Promise<Buffer> {
+export interface OpcoesPdf {
+  /** A execução deste PDF: os links abrem o report web NESTE snapshot. */
+  execucaoId?: string | null
+  /** A base do sistema. Sem ela não há para onde apontar, e o PDF sai sem links. */
+  appUrl?: string | null
+  /** `report_config.aquisicao_no_pdf` (04u §6). */
+  incluirAquisicao?: boolean
+}
+
+export function gerarPdfSemanal(
+  r: ReportSemanal,
+  resumoIa: string | null,
+  opts: OpcoesPdf = {},
+): Promise<Buffer> {
+  const ligar: Ligar = (alvo) =>
+    opts.appUrl ? linkDoDetalhe(opts.appUrl, alvo, opts.execucaoId) : null
+  const comLinks = Boolean(opts.appUrl)
+
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: PAG.topo, bottom: 40, left: PAG.lado, right: PAG.lado },
@@ -337,18 +475,21 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       valor: brlCurto(k.volume_convertido.semana),
       contexto: `${variacaoTexto(k.volume_convertido.var_semana_pct)} vs média semanal`,
       cor: corDaDirecao(k.volume_convertido.var_semana_pct, false),
+      link: ligar({ chave: 'volume_convertido' }),
     },
     {
       rotulo: 'VOP operado',
       valor: brlCurto(k.vop_operado.semana),
       contexto: `${variacaoTexto(k.vop_operado.var_semana_pct)} vs média semanal`,
       cor: corDaDirecao(k.vop_operado.var_semana_pct, false),
+      link: ligar({ chave: 'vop_operado' }),
     },
     {
       rotulo: 'Receita gerada',
       valor: brlCurto(k.receita.semana),
       contexto: `${variacaoTexto(k.receita.var_semana_pct)} vs média semanal`,
       cor: corDaDirecao(k.receita.var_semana_pct, false),
+      link: ligar({ chave: 'receita' }),
     },
     {
       rotulo: 'Limite ocioso',
@@ -357,12 +498,15 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       // diferença entre os dois foi de R$ 2,9 mi em uma semana.
       contexto: `saldo em ${dm(k.limite_ocioso.em)}, sem série`,
       cor: COR.mut,
+      link: ligar({ chave: 'limite_ocioso' }),
     },
   ])
 
   // Funil da semana + o maior vazamento.
   const fs = r.comercial.funil.semana
-  secao(doc, 'Funil comercial da semana')
+  // 04u §1: a regra do funil vai impressa, sempre. É coorte, e a tabela "Comercial" da
+  // página 2 é janela — sem as duas palavras, "Realizados 3" briga com "realizadas 32".
+  secao(doc, 'Funil comercial da semana', NATUREZA_EXPLICA.coorte.toLowerCase())
   if (fs) {
     const etapas = (['distribuidos', 'contatados', 'com_fit', 'agendados', 'realizados', 'ganhos'] as const)
     const maior = Math.max(...etapas.map((e) => fs[e]), 1)
@@ -380,6 +524,7 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
         .text(String(fs[e]), x, base + 3, { width: larg, align: 'center' })
       doc.font(FONTE.normal).fontSize(6).fillColor(COR.mut)
         .text(ETAPA_FUNIL_LABELS[e], x, base + 15, { width: larg, align: 'center' })
+      area(doc, x, base - 34, larg, 58, ligar({ chave: 'funil_etapa', params: { etapa: e } }))
     })
     doc.y = base + 26
 
@@ -426,13 +571,20 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
         regua: `${a.cedentes_semana} cedentes`,
       },
     ],
+    12,
+    [
+      ligar({ chave: 'volume_convertido' }), ligar({ chave: 'vop_operado' }),
+      ligar({ chave: 'receita' }), null, null,
+    ],
   )
 
-  rodape(doc, r, 1, 3)
+  rodape(doc, r, 1, 3, comLinks)
 
   // ── Página 2: funil de NF, comercial e crédito ──────────────────────────
   doc.addPage()
   cabecalho(doc, r)
+
+  if (r.aquisicao && opts.incluirAquisicao !== false) blocoAquisicao(doc, r.aquisicao, ligar)
 
   secao(doc, 'Funil de notas fiscais', 'conversão medida na coorte da janela')
   tabela(doc,
@@ -450,6 +602,8 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       conv: pct(f.conversao_semana_pct),
       conv12: pct(f.conversao_12m_pct),
     })),
+    12,
+    r.operacao.nf.por_faixa.map((f) => ligar({ chave: 'nf_faixa', params: { faixa: f.faixa, serie: 'semana' } })),
   )
   doc.moveDown(0.5)
 
@@ -458,12 +612,12 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
   doc.font(FONTE.normal).fontSize(8).fillColor(COR.ink).text(
     `Expirou sem trabalho: ${brlCurto(exp.semana)} (${variacaoTexto(exp.var_semana_pct)} vs média). ` +
     `Antecipações travadas: ${trav.total}, somando ${brlCurto(trav.valor)}.`,
-    PAG.lado, doc.y, { width: CONTEUDO },
+    PAG.lado, doc.y, { width: CONTEUDO, link: ligar({ chave: 'nf_expiradas' }) ?? undefined },
   )
   doc.moveDown(1)
 
   const c = r.comercial.comercial
-  secao(doc, 'Comercial')
+  secao(doc, 'Comercial', NATUREZA_EXPLICA.janela.toLowerCase())
   tabela(doc,
     [
       { chave: 'k', titulo: 'Indicador', largura: 40, alinhar: 'left', forte: true },
@@ -474,14 +628,26 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       { k: 'Leads distribuídos', v: String(c.leads_semana), n: `${c.leads_inbound} inbound · ${c.leads_outbound} outbound` },
       { k: 'Taxa de fit', v: pct(c.fit_pct), n: `${c.fit_avaliados} avaliados na semana` },
       { k: 'Reuniões agendadas', v: String(c.reunioes_agendadas.semana), n: textoDaRegua(c.reunioes_agendadas) },
-      { k: 'Reuniões realizadas', v: String(c.reunioes_realizadas), n: '' },
+      /* Conta mudanças de estágio, e diz. É o que deixa este número conviver com o
+         "Realizadas na semana" do bloco de Aquisição, que conta reuniões. */
+      { k: 'Reuniões realizadas', v: String(c.reunioes_realizadas), n: 'mudanças de estágio; por reunião, ver Aquisição' },
       { k: 'No-shows não remarcados', v: String(c.no_shows_nao_remarcados), n: 'em aberto, acumulado' },
       { k: 'MOUs', v: String(c.mous), n: '' },
       {
         k: `Ciclo 1º contato ${SETA} 1ª operação`,
         v: c.ciclo_medio_dias === null ? '—' : `${c.ciclo_medio_dias} d`,
-        n: c.ciclo_medio_base === 0 ? 'ninguém completou o ciclo ainda' : `sobre ${c.ciclo_medio_base} negócio(s)`,
+        n: c.ciclo_medio_base === 0 ? 'ninguém completou o ciclo ainda' : `acumulado, sobre ${c.ciclo_medio_base} negócio(s)`,
       },
+    ],
+    12,
+    [
+      ligar({ chave: 'funil_etapa', params: { etapa: 'distribuidos' } }),
+      ligar({ chave: 'fit_avaliados' }),
+      null,
+      ligar({ chave: 'reunioes_realizadas' }),
+      ligar({ chave: 'no_shows' }),
+      ligar({ chave: 'mous' }),
+      c.ciclo_medio_base > 0 ? ligar({ chave: 'ciclo' }) : null,
     ],
   )
   doc.moveDown(0.8)
@@ -512,7 +678,7 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
     ],
   )
 
-  rodape(doc, r, 2, 3)
+  rodape(doc, r, 2, 3, comLinks)
 
   // ── Página 3: carteira, certificados, time e atenção ────────────────────
   doc.addPage()
@@ -522,7 +688,10 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
   secao(doc, 'Carteira')
   faixaKpis(doc, [
     { rotulo: 'Clientes', valor: String(ca.clientes), contexto: `${ca.operaram_semana} operaram na semana` },
-    { rotulo: 'Limite ocioso', valor: brlCurto(ca.limite_ocioso), contexto: `de ${brlCurto(ca.limite_total)}`, cor: COR.warn },
+    {
+      rotulo: 'Limite ocioso', valor: brlCurto(ca.limite_ocioso), contexto: `de ${brlCurto(ca.limite_total)}`,
+      cor: COR.warn, link: ligar({ chave: 'limite_ocioso' }),
+    },
     { rotulo: 'Utilização', valor: pct(ca.utilizacao_pct), contexto: `${ca.inoperantes} inoperantes` },
     { rotulo: 'Movimento', valor: `+${ca.novos_semana} / ${MENOS}${ca.sairam_semana}`, contexto: 'novos / saíram' },
   ])
@@ -542,6 +711,7 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       dias: x.dias_sem_operar === null || x.dias_sem_operar === undefined ? '—' : String(x.dias_sem_operar),
     })),
     8,
+    r.carteira.listas.nao_performando.map(() => ligar({ chave: 'contas_paradas' })),
   )
   doc.moveDown(0.8)
 
@@ -560,6 +730,9 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       .fillColor(COR.warn).rect(PAG.lado + wc, y0, wv, 7).fill()
       .fillColor(COR.line).rect(PAG.lado + wc + wv, y0, CONTEUDO - wc - wv, 7).fill()
       .restore()
+    area(doc, PAG.lado, y0, wc, 7, ligar({ chave: 'cert_balde', params: { balde: 'validos' } }))
+    area(doc, PAG.lado + wc, y0, wv, 7, ligar({ chave: 'cert_balde', params: { balde: 'vencendo' } }))
+    area(doc, PAG.lado + wc + wv, y0, CONTEUDO - wc - wv, 7, ligar({ chave: 'cert_balde', params: { balde: 'sem' } }))
     doc.y = y0 + 11
     doc.font(FONTE.normal).fontSize(7).fillColor(COR.mut).text(
       `${ce.cobertos} válidos · ${ce.vencendo_30d} vencendo em 30 dias · ${ce.sem_certificado} sem certificado   ` +
@@ -595,6 +768,7 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
         inv: brlCurto(Number(x.invisivel_mes)),
       })),
       8,
+      inv.itens.map(() => ligar({ chave: 'cert_topo' })),
     )
   }
   doc.moveDown(0.8)
@@ -614,6 +788,8 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
       vop: brlCurto(v.vop), com: brlCurto(v.comissao),
     })),
     8,
+    r.comercial.time.vendedores.map((v) =>
+      ligar({ chave: 'time_vendedor', params: { vendedor_id: v.vendedor_id, nome: v.nome } })),
   )
   const fi = r.comercial.time.filas
   doc.font(FONTE.normal).fontSize(7.5).fillColor(COR.mut).text(
@@ -640,7 +816,7 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
     /* Só o que é MAIOR QUE ZERO. Uma lista de nove linhas com sete zeros treina o leitor a
        pular a seção inteira — e é justamente a seção que existe para ser lida. */
     const itens = Object.entries(rotulos)
-      .map(([k, rot]) => ({ rot, n: Number(r.carteira.atencao[k] ?? 0) }))
+      .map(([k, rot]) => ({ k, rot, n: Number(r.carteira.atencao[k] ?? 0) }))
       .filter((x) => x.n > 0)
       .sort((a2, b2) => b2.n - a2.n)
 
@@ -654,13 +830,18 @@ export function gerarPdfSemanal(r: ReportSemanal, resumoIa: string | null): Prom
           .text(String(it.n), PAG.lado + 9, y, { width: 22 })
         doc.font(FONTE.normal).fontSize(8).fillColor(COR.ink)
           .text(it.rot, PAG.lado + 33, y, { width: CONTEUDO - 33 })
+        area(doc, PAG.lado, y - 1, CONTEUDO, 11, ligar(
+          it.k === 'antecipacoes_travadas'
+            ? { chave: 'nf_travadas' }
+            : { chave: 'atencao', params: { item: it.k } },
+        ))
         doc.y = y + 12
         linha(doc, doc.y - 3)
       }
     }
   }
 
-  rodape(doc, r, 3, 3)
+  rodape(doc, r, 3, 3, comLinks)
   doc.end()
   return pronto
 }

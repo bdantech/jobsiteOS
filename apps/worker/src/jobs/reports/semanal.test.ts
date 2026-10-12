@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { semanaFechadaEm } from '../../../../../packages/core/src/reports/semanas.js'
 import { semanaFechada } from './janela.js'
 
 /**
@@ -46,5 +47,21 @@ test('a janela começa numa segunda e termina num domingo, sempre', () => {
     const { inicio, fim } = semanaFechada(d)
     assert.equal(new Date(`${inicio}T12:00:00Z`).getUTCDay(), 1, `${inicio} não é segunda`)
     assert.equal(new Date(`${fim}T12:00:00Z`).getUTCDay(), 0, `${fim} não é domingo`)
+  }
+})
+
+/**
+ * 04u §3: o histórico de Aquisição reusa a definição de semana do 04q, e "reusar" precisa
+ * ser verificável. São duas implementações — esta, que o cron usa, e a do core, que a tela
+ * usa — e relatório com duas definições de semana é relatório em que ninguém confia.
+ */
+test('a semana do worker e a do core são a mesma, dia a dia, por dois meses', () => {
+  for (let i = 0; i < 62; i++) {
+    const dia = new Date(Date.UTC(2026, 8, 1 + i, 12))
+    assert.deepEqual(
+      semanaFechada(dia),
+      semanaFechadaEm(dia.toISOString().slice(0, 10)),
+      dia.toISOString().slice(0, 10),
+    )
   }
 })

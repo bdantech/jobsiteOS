@@ -1,7 +1,9 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import type { ReportSemanal } from '@jobsiteos/core'
+import type {
+  AlvoDetalhe, BlocoAquisicao, ReportSemanal, RespostaDetalhe,
+} from '@jobsiteos/core'
 
 /**
  * A aba consome a MESMA estrutura que o PDF e o e-mail (04q §6).
@@ -17,6 +19,10 @@ export const relatoriosKeys = {
     ['relatorios', 'periodo', inicio ?? 'auto', fim ?? 'auto'] as const,
   execucoes: () => ['relatorios', 'execucoes'] as const,
   config: () => ['relatorios', 'config'] as const,
+  aquisicao: (inicio: string, fim: string) => ['relatorios', 'aquisicao', inicio, fim] as const,
+  aquisicaoHistorico: () => ['relatorios', 'aquisicao', 'historico'] as const,
+  detalhe: (alvo: AlvoDetalhe, inicio: string, fim: string, retrato: string, pagina: number) =>
+    ['relatorios', 'detalhe', alvo.chave, alvo.params ?? {}, inicio, fim, retrato, pagina] as const,
 }
 
 /**
@@ -139,21 +145,89 @@ export interface ConfigReport {
   horario: string
   ativo: boolean
   assunto_template: string | null
+  /** Teto de linhas navegáveis num drill-down (04u §4.1). Acima dele, só exportando. */
+  max_linhas_drilldown: number
+  /** O bloco de Aquisição entra no PDF? */
+  aquisicao_no_pdf: boolean
 }
+
+export const MAX_LINHAS_PADRAO = 5000
 
 export async function buscarConfigReport(): Promise<ConfigReport | null> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('report_config')
-    .select('id, destinatarios, dias_semana, horario, ativo, assunto_template')
+    .select(
+      'id, destinatarios, dias_semana, horario, ativo, assunto_template, max_linhas_drilldown, aquisicao_no_pdf',
+    )
     .eq('tipo', 'semanal_executivo')
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
+  const d = data as unknown as ConfigReport
   return {
-    ...data,
-    destinatarios: Array.isArray(data.destinatarios)
-      ? (data.destinatarios as unknown as DestinatarioReport[])
-      : [],
+    ...d,
+    destinatarios: Array.isArray(d.destinatarios) ? d.destinatarios : [],
+    max_linhas_drilldown: d.max_linhas_drilldown ?? MAX_LINHAS_PADRAO,
+    aquisicao_no_pdf: d.aquisicao_no_pdf ?? true,
   }
+}
+
+// ─── 04u: Aquisição e drill-down ────────────────────────────────────────────
+
+/**
+ * O bloco de Aquisição de UMA semana, recalculado a cada chamada (04u §2.3).
+ *
+ * É o que deixa o card mostrar a semana em aberto ao lado da fechada, e o que o histórico
+ * usa para abrir uma semana que não é a do report.
+ */
+export async function buscarAquisicao(inicio: string, fim: string): Promise<BlocoAquisicao> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_report_aquisicao' as never, {
+    p_inicio: inicio, p_fim: fim,
+  } as never)
+  if (error) throw new Error(error.message)
+  return data as unknown as BlocoAquisicao
+}
+
+/**
+ * A série do "Mais detalhes": a semana em aberto primeiro, depois as fechadas.
+ *
+ * As fechadas vêm de `report_aquisicao_semanal`. Somar e tirar média é com o core
+ * (`agregadoDeAquisicao`), que recusa a semana em aberto — esta função só entrega a lista.
+ */
+export async function buscarHistoricoAquisicao(): Promise<{
+  calculado_em: string
+  semanas: BlocoAquisicao[]
+}> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_report_aquisicao_historico' as never, {} as never)
+  if (error) throw new Error(error.message)
+  return data as unknown as { calculado_em: string; semanas: BlocoAquisicao[] }
+}
+
+/**
+ * Os registros que formam um número do report (04u §4).
+ *
+ * `app_report_detalhe` confere o gestor, a mesma régua do report: quem abre a página pode
+ * abrir toda lista dela, e por isso nenhum número aqui fica sem clique por permissão.
+ */
+export async function buscarDetalhe(
+  alvo: AlvoDetalhe,
+  janela: { inicio: string; fim: string; retrato: string },
+  limite: number,
+  offset: number,
+): Promise<RespostaDetalhe> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('app_report_detalhe' as never, {
+    p_chave: alvo.chave,
+    p_inicio: alvo.inicio ?? janela.inicio,
+    p_fim: alvo.fim ?? janela.fim,
+    p_params: alvo.params ?? {},
+    p_limite: limite,
+    p_offset: offset,
+    p_retrato: janela.retrato,
+  } as never)
+  if (error) throw new Error(error.message)
+  return data as unknown as RespostaDetalhe
 }

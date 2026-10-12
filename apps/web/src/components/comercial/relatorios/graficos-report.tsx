@@ -1,12 +1,14 @@
 'use client'
 
 import * as React from 'react'
+import { Info } from 'lucide-react'
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  STATUS_CORES, brlCurto, paletaCategorica, type ETAPAS_FUNIL,
+  RECORTE_DA_SERIE, SERIES_AQUISICAO, SERIE_AQUISICAO_LABELS, STATUS_CORES, brlCurto,
+  paletaCategorica, type ETAPAS_FUNIL, type PontoAquisicao, type SerieAquisicao,
 } from '@jobsiteos/core'
 import { cn } from '@/lib/utils'
 
@@ -138,7 +140,8 @@ const mesCurto = (iso: string) => {
 export function FunilEtapas({
   etapas, onEtapa,
 }: {
-  etapas: { id: string; label: string; valor: number; passagem: number | null }[]
+  /** `regra` é a frase do número de coorte: vai no ícone de informação (04u §1). */
+  etapas: { id: string; label: string; valor: number; passagem: number | null; regra?: string }[]
   onEtapa?: (id: string) => void
 }) {
   const maior = Math.max(...etapas.map((e) => e.valor), 1)
@@ -160,8 +163,14 @@ export function FunilEtapas({
             />
           </div>
           <p className="mt-1 text-base font-semibold tabular-nums">{e.valor}</p>
-          <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
-            {e.label}
+          <p className="flex items-center justify-center gap-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="truncate">{e.label}</span>
+            {e.regra ? (
+              <span title={e.regra} className="shrink-0">
+                <Info className="h-2.5 w-2.5" aria-hidden />
+                <span className="sr-only">{e.regra}</span>
+              </span>
+            ) : null}
           </p>
           {e.passagem !== null ? (
             <p className="text-[10px] text-muted-foreground">
@@ -187,7 +196,8 @@ export function ConversaoPorFaixa({
   faixas, onFaixa,
 }: {
   faixas: { faixa: string; semana: number | null; doze: number | null; entradas: number }[]
-  onFaixa?: (faixa: string) => void
+  /** Cada barra é um recorte: a faixa E a série (semana ou 12 meses). */
+  onFaixa?: (faixa: string, serie: 'semana' | 'doze') => void
 }) {
   const paleta = usePaleta()
   const dados = faixas.map((f) => ({
@@ -231,14 +241,27 @@ export function ConversaoPorFaixa({
             dataKey="semana"
             fill={paleta[0]}
             radius={[3, 3, 0, 0]}
-            onClick={(d) => onFaixa?.((d as unknown as { chave?: string }).chave ?? '')}
+            onClick={(d) => onFaixa?.(chaveDaBarra(d), 'semana')}
             className={onFaixa ? 'cursor-pointer' : undefined}
           />
-          <Bar dataKey="doze" fill={paleta[3]} radius={[3, 3, 0, 0]} fillOpacity={0.55} />
+          <Bar
+            dataKey="doze"
+            fill={paleta[3]}
+            radius={[3, 3, 0, 0]}
+            fillOpacity={0.55}
+            onClick={(d) => onFaixa?.(chaveDaBarra(d), 'doze')}
+            className={onFaixa ? 'cursor-pointer' : undefined}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
   )
+}
+
+/** O recharts entrega a linha de dados no próprio argumento do clique, ou em `payload`. */
+function chaveDaBarra(d: unknown): string {
+  const x = d as { chave?: string; payload?: { chave?: string } }
+  return x.chave ?? x.payload?.chave ?? ''
 }
 
 const FAIXA_LABEL: Record<string, string> = {
@@ -293,7 +316,10 @@ export function OciosoPorGestor({
           <Bar
             dataKey="ocioso"
             radius={[0, 3, 3, 0]}
-            onClick={(d) => onGestor?.((d as unknown as { gestor?: string }).gestor ?? '')}
+            onClick={(d) => {
+              const x = d as unknown as { gestor?: string; payload?: { gestor?: string } }
+              onGestor?.(x.gestor ?? x.payload?.gestor ?? '')
+            }}
             className={onGestor ? 'cursor-pointer' : undefined}
           >
             {dados.map((d) => (
@@ -310,36 +336,56 @@ export function OciosoPorGestor({
 
 // ─── Cobertura de certificados ──────────────────────────────────────────────
 
+export type BaldeCertificado = 'validos' | 'vencendo' | 'sem'
+
+/**
+ * Três baldes DISJUNTOS que somam o universo.
+ *
+ * `cobertos` (do report) é quem tem folga de mais de 30 dias; `sem` é quem não tem essa
+ * folga — e por isso JÁ INCLUI os que estão vencendo. A versão anterior subtraía os
+ * vencendo dos válidos, que não os contêm, e deixava-os dentro de "sem certificado": com
+ * 2 vencendo, a legenda dizia 21 válidos e 1.020 sem, e nenhuma lista de CNPJs tinha esses
+ * tamanhos. Os números do report não mudaram; mudou a conta que a legenda fazia com eles.
+ */
 export function BarraCobertura({
-  cobertos, vencendo, sem, total,
+  cobertos, vencendo, sem, total, onBalde,
 }: {
   cobertos: number
   vencendo: number
   sem: number
   total: number
+  onBalde?: (balde: BaldeCertificado, n: number) => void
 }) {
   const t = Math.max(total, 1)
-  const seg = [
-    { rotulo: 'Válidos', n: cobertos - vencendo, cor: STATUS_CORES.operating_normally! },
-    { rotulo: 'Vencendo em 30 dias', n: vencendo, cor: STATUS_CORES.low_operation! },
-    { rotulo: 'Sem certificado', n: sem, cor: '#e4e4e7' },
-  ].filter((s) => s.n > 0)
+  const seg: { balde: BaldeCertificado; rotulo: string; n: number; cor: string }[] = [
+    { balde: 'validos', rotulo: 'Válidos', n: cobertos, cor: STATUS_CORES.operating_normally! },
+    { balde: 'vencendo', rotulo: 'Vencendo em 30 dias', n: vencendo, cor: STATUS_CORES.low_operation! },
+    { balde: 'sem', rotulo: 'Sem certificado', n: sem - vencendo, cor: '#e4e4e7' },
+  ]
+  const visiveis = seg.filter((s) => s.n > 0)
 
   return (
     <div className="space-y-2">
       <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
-        {seg.map((s) => (
+        {visiveis.map((s) => (
           <div key={s.rotulo} style={{ width: `${(s.n / t) * 100}%`, backgroundColor: s.cor }} />
         ))}
       </div>
       {/* A legenda repete o NÚMERO em texto: a faixa cinza de "sem certificado" fica
-          abaixo de 3:1 contra o fundo, e a regra de alívio do método exige o rótulo. */}
+          abaixo de 3:1 contra o fundo, e a regra de alívio do método exige o rótulo. É
+          também onde se clica — a faixa de 2,5px de altura não é alvo para dedo nenhum. */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-        {seg.map((s) => (
-          <span key={s.rotulo} className="flex items-center gap-1.5">
+        {visiveis.map((s) => (
+          <button
+            key={s.rotulo}
+            type="button"
+            onClick={() => onBalde?.(s.balde, s.n)}
+            disabled={!onBalde}
+            className="flex items-center gap-1.5 enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: s.cor }} aria-hidden />
             {s.rotulo} · <span className="tabular-nums text-foreground">{s.n.toLocaleString('pt-BR')}</span>
-          </span>
+          </button>
         ))}
       </div>
     </div>
@@ -387,3 +433,95 @@ export function RankingTime({
 }
 
 export type EtapaId = (typeof ETAPAS_FUNIL)[number]
+
+// ─── Aquisição: a série semanal (04u §3) ────────────────────────────────────
+
+const semanaCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+
+/**
+ * Quatro linhas, duas dimensões, dois canais: a COR é a origem e o TRAÇO é o fit.
+ *
+ * Quatro cores soltas obrigariam a ir à legenda a cada leitura. Assim a pergunta que o
+ * gráfico responde — "qual canal traz lead bom?" — se lê comparando a linha cheia com a
+ * tracejada da mesma cor.
+ *
+ * A semana em aberto entra como último ponto, com o rótulo dizendo o que ela é: omiti-la
+ * esconderia a semana que o gestor mais quer ver, e desenhá-la sem aviso faria toda
+ * segunda-feira parecer uma queda.
+ */
+export function SerieAquisicaoChart({
+  pontos, onPonto,
+}: {
+  pontos: PontoAquisicao[]
+  onPonto?: (ponto: PontoAquisicao, serie: SerieAquisicao) => void
+}) {
+  const paleta = usePaleta()
+  if (pontos.length === 0) return null
+  const cor = (s: SerieAquisicao) => (RECORTE_DA_SERIE[s].origem === 'inbound' ? paleta[0] : paleta[1])
+
+  return (
+    <div className="h-[240px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={pontos} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+          <XAxis
+            dataKey="inicio"
+            tick={{ fontSize: 10 }}
+            stroke="currentColor"
+            className="text-muted-foreground"
+            tickFormatter={(v: string) => semanaCurta(v)}
+          />
+          <YAxis
+            tick={{ fontSize: 10 }}
+            width={28}
+            allowDecimals={false}
+            stroke="currentColor"
+            className="text-muted-foreground"
+          />
+          <Tooltip
+            content={({ payload }) => {
+              const d = payload?.[0]?.payload as PontoAquisicao | undefined
+              return d ? (
+                <Dica>
+                  <p className="font-medium">
+                    {semanaCurta(d.inicio)} a {semanaCurta(d.fim)}
+                    {d.em_aberto ? ' · em aberto (parcial)' : ''}
+                  </p>
+                  {SERIES_AQUISICAO.map((s) => (
+                    <p key={s} className="tabular-nums text-muted-foreground">
+                      {SERIE_AQUISICAO_LABELS[s]}: {d[s]}
+                    </p>
+                  ))}
+                  {onPonto ? <p className="text-muted-foreground">clique no ponto para ver os leads</p> : null}
+                </Dica>
+              ) : null
+            }}
+          />
+          <Legend
+            wrapperStyle={{ fontSize: 11 }}
+            formatter={(v: string) => SERIE_AQUISICAO_LABELS[v as SerieAquisicao] ?? v}
+          />
+          {SERIES_AQUISICAO.map((s) => (
+            <Line
+              key={s}
+              type="monotone"
+              dataKey={s}
+              stroke={cor(s)}
+              strokeWidth={2}
+              strokeDasharray={RECORTE_DA_SERIE[s].fit === 'sem_fit' ? '5 4' : undefined}
+              dot={{ r: 2.5 }}
+              activeDot={{
+                r: 5,
+                cursor: onPonto ? 'pointer' : undefined,
+                onClick: (_e: unknown, alvo: unknown) => {
+                  const p = (alvo as { payload?: PontoAquisicao } | undefined)?.payload
+                  if (p) onPonto?.(p, s)
+                },
+              }}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}

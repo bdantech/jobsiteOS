@@ -17,6 +17,7 @@ descobre a divergência é sempre a pessoa para quem ele foi feito.
 | Peça | Onde |
 |---|---|
 | Tipos + lógica derivada | `packages/core/src/reports/semanal.ts` (20 testes) |
+| Aquisição e drill-down (04u) | ver a seção própria, no fim |
 | Agregadores | `app__rp_operacao` / `_comercial` / `_carteira` no banco |
 | Porta autorizada | `app_report_semanal(inicio, fim)` |
 | Mecânica sem sessão (worker) | `app__rp_montar(inicio, fim)` |
@@ -251,7 +252,191 @@ cliente ter saído da carteira. Recalcular ao abrir mostraria um passado que nun
 O histórico da aba **não** traz `dados` na listagem: cinquenta semanas ficariam com 1,5 MB
 para mostrar cinco colunas. Quem abre um report antigo pede o snapshot daquele.
 
+## Aquisição e drill-down (04u)
+
+Um bloco novo — **Aquisição da semana**, acima do funil — e uma regra para o report
+inteiro: **clicou num número, abre a lista dos registros que o formam.** Nenhum cálculo que
+já existia mudou; `app__rp_operacao`, `_comercial` e `_carteira` não foram tocadas.
+
+| Peça | Onde |
+|---|---|
+| Matriz, totais, carimbo, série | `packages/core/src/reports/aquisicao.ts` |
+| Agendadas × realizadas | `packages/core/src/reports/reunioes-janela.ts` |
+| Semana, fechada × em aberto | `packages/core/src/reports/semanas.ts` |
+| Catálogo do drill-down, deep link, CSV | `packages/core/src/reports/drilldown.ts` |
+| Registros e agregado da Aquisição | `app__rp_aq_leads` / `_aq_reunioes` / `_aq_linhas` / `_aquisicao` |
+| Série materializada | `report_aquisicao_semanal` + `app_report_materializar_aquisicao()` |
+| Portas autorizadas | `app_report_aquisicao` · `app_report_aquisicao_historico` · `app_report_detalhe` |
+| Mecânica do drill-down | `app__rp_detalhe(chave, inicio, fim, retrato, params, limite, offset)` |
+| Conferência agregado × lista | `app__rp_conferir(inicio, fim, retrato)` |
+| Card e histórico | `apps/web/src/components/comercial/relatorios/bloco-aquisicao.tsx` |
+| Modal único | `apps/web/src/components/comercial/relatorios/drilldown-modal.tsx` |
+
+### A semana
+
+**Segunda a domingo. Fechada é a que o último dia já passou** — num domingo, a semana ainda
+está correndo. É a definição do 04q, e não há outra: `app_report_semanal` no banco,
+`janela.ts` no worker e `semanas.ts` no core fazem a mesma conta, e o teste do worker compara
+as duas implementações em TypeScript dia a dia por dois meses.
+
+**Uma semana pertence ao mês em que FECHA.** A de 28/09 a 04/10 é de outubro, inteira. Sem
+isso a soma dos meses deixa de bater com a soma das semanas.
+
+**A semana em aberto nunca entra em média nem em total.** Ela aparece — no topo, tracejada,
+com o selo "em aberto" —, mas toda soma do histórico passa por `agregarSemanas()`, que a
+recusa. Semana parcial comparada com semanas inteiras é a forma mais comum de enganar um
+gestor com dado correto: três dias de leads ao lado de sete parecem uma queda de 60%.
+
+### Coorte × janela × estoque
+
+Todo número do report declara o que é.
+
+| | O que é | Exemplo |
+|---|---|---|
+| **Coorte** | um grupo fixado pela data de ENTRADA, acompanhado até hoje | o funil; a matriz de Aquisição; a conversão de NF |
+| **Janela** | o que ACONTECEU no período, de gente de qualquer época | taxa de fit; reuniões; volume; MOUs |
+| **Estoque** | o que EXISTE num instante — não tem "o da semana", tem "o de tal dia" | limite ocioso; no-shows não remarcados; certificados |
+
+O funil mostra `Realizados 3` e a linha de baixo, `Reuniões realizadas 32`. Os dois estão
+certos: o primeiro é coorte (dos leads distribuídos nesta semana, 3 já tiveram reunião), o
+segundo é janela (32 na semana, de leads de qualquer época). Sem a palavra ao lado, qualquer
+gestor conclui que o report está quebrado — por isso o subtítulo do funil é permanente, e
+não um hover.
+
+**E "Reuniões realizadas" conta mudanças de estágio, não reuniões.** O número vem de
+`funil_transicoes` para `reuniao_realizada` OU `qualificada`: o lead que passa pelas duas na
+mesma semana conta duas vezes. Na semana 41 foram 32 transições de 19 leads. O 04u não mexe
+no cálculo — só passou a dizer isso na tela e no PDF, e a lista que o número abre é de
+transições, para bater. A contagem por reunião é o "Realizadas na semana" da Aquisição.
+
+### "Ainda não avaliado" não é "sem fit"
+
+A matriz é origem × qualificação, e a terceira coluna é obrigatória. `fit` no banco é
+booleano **com nulo**: `true`, `false` e `null` já são os três estados, e nulo é "ninguém
+avaliou". O lead que entrou na quinta e ninguém trabalhou não foi reprovado por ninguém; se
+caísse em "sem fit", a semana corrente pareceria sempre pior que as fechadas, e alguém
+tomaria decisão de canal em cima disso.
+
+**O lead conta na semana em que ENTROU, com o fit que tem hoje.** Entrou na semana 40 e foi
+avaliado na 42: aparece na 40, como "com fit". A pergunta é "do que entrou naquela semana, o
+que se mostrou bom". Consequência: a linha de uma semana fechada **amadurece**, e é por isso
+que a materialização reescreve as treze semanas, e não só a que acabou de fechar.
+
+**Outbound é tudo que não é inbound** — `distribuicao` e `manual` em `sdr_leads.origem`, a
+mesma leitura do "45 in · 53 out" que o report já fazia. A coluna é NOT NULL; a linha "Sem
+origem" existe para a reunião sem lead e para o dia em que isso deixar de ser verdade, e só
+aparece quando tem alguma coisa.
+
+Dos não avaliados, o card diz quantos **expiraram sem contato**: voltaram ao pool e não
+serão avaliados neste ciclo. Estão na coluna certa — ninguém os avaliou —, mas não são
+"ainda".
+
+### Agendadas e realizadas são conjuntos diferentes
+
+| | Conta no dia em que | De onde |
+|---|---|---|
+| **Agendada** | foi MARCADA | `vendedor_eventos.criado_em` |
+| **Realizada** | ACONTECEU | `vendedor_eventos.inicio_em`, com evidência |
+| Cancelada | foi cancelada | `cancelado_em` |
+| Remarcada | foi remarcada | evento `sdr.reuniao_agendada` com `remarcada = true` |
+| No-show | o lead foi marcado | transição para `no_show` |
+
+Quem marcou na sexta realiza na semana seguinte. Agendadas mede o esforço de prospecção;
+realizadas, o que o time executou. **Nenhuma taxa sai dividindo uma pela outra**, e o módulo
+não tem função que faça isso.
+
+A reunião é UMA linha de `vendedor_eventos`, e remarcar **atualiza** essa linha (0201). É o
+que faz uma remarcação não contar duas vezes como agendada — e é também um limite: a reunião
+conta como realizada na data em que o evento está HOJE, porque não há histórico de
+`inicio_em`.
+
+**Realizada exige evidência**: a transcrição do Fireflies chegou, ou o último desfecho do
+lead é reunião realizada / qualificada. Evento cuja hora passou sem nada registrado não é
+contado como realizado — vai para **"sem desfecho"**, uma contagem discreta que é fila de
+higiene. Contar por "a hora passou" inflaria o número justamente com as reuniões de que
+ninguém sabe dizer se houve.
+
+**"Realizadas sem captura"** é reunião realizada sem transcrição e sem `bot_entrou_em`. Só
+conta a partir de 05/10/2026, quando a captura (05C) começou: antes disso toda reunião é
+"sem captura", e o indicador nasceria em 100% para depois parecer que melhorou sozinho.
+
+### As duas vidas do bloco
+
+Na **tela** ele recalcula a cada abertura e diz "atualizado agora, às HH:MM". No **PDF e no
+e-mail** ele é o snapshot do envio, com "dados de dd/mm às HH:MM" impresso. Sem o carimbo,
+alguém abre o e-mail de segunda na quarta — quando mais leads já foram avaliados —, compara
+com a tela e conclui que um dos dois está errado.
+
+O card da tela oferece a **semana em aberto** ao lado da fechada, com o aviso de que "ainda
+não avaliado" é grande ali por definição.
+
+### O drill-down
+
+Um modal só, para tudo. O cabeçalho repete a regra do número — coorte, janela ou estoque, e
+de qual período — para que a lista possa ser conferida contra o total. Nunca troca de página.
+
+- **50 linhas por página, até `max_linhas_drilldown`** (5.000 por padrão). Acima do teto a
+  tela mostra o teto e o **CSV traz o conjunto completo**, buscado em lotes de mil enquanto a
+  pessoa continua lendo. Separador `;` e vírgula decimal, com BOM: é o que o Excel em pt-BR
+  abre sem assistente.
+- **O total do modal tem de bater com o número clicado.** O número viaja para o modal, e se a
+  lista devolver outro, o modal DIZ — em vez de mostrar a lista como se nada fosse. Valor em
+  reais confere pela soma, centavo a centavo; contagem confere pelo total de linhas.
+- **`app__rp_conferir()` é o teste.** Para cada número clicável ela compara o que o report
+  exibe com o que `app__rp_detalhe` devolve: 78 checagens por semana. `bate = false` é bug.
+  Mora no banco porque é onde os dois lados moram — um teste no core só compararia um mock
+  com outro. Rode depois de mexer em qualquer agregador:
+
+  ```sql
+  select * from app__rp_conferir('2026-10-05', '2026-10-11', '2026-10-11') where not bate;
+  ```
+
+  Cada ramo de `app__rp_detalhe` repete o `where` do agregador correspondente. Quem altera
+  um, altera o outro.
+- **Permissão.** O report é só de gestor (`app_report_gestor()`), e o drill-down usa a mesma
+  régua. Não existe número que alguém veja e cuja lista não possa abrir — por isso nenhum
+  ficou sem clique. Vendedor não entra na página.
+- **PDF não clica.** Cada número é um link (anotação sobre a área do número) para
+  `/comercial/relatorios/semanal?execucao=…&detalhe=…&p.origem=…`, que abre o report web
+  **naquele snapshot** com o modal já aberto. O rodapé diz que os links existem. Depende de
+  `APP_BASE_URL` no worker; sem ela o PDF sai sem links.
+
+Dois ajustes de apresentação que o drill-down obrigou, e nenhum de cálculo:
+
+- **Certificados.** A legenda subtraía os "vencendo" dos válidos (que não os contêm) e os
+  deixava dentro de "sem certificado". Agora são três baldes disjuntos que somam o universo,
+  e cada um abre a sua lista. Os números do report são os mesmos.
+- **Receita.** O prompt pedia a receita decomposta em juros, TAC e demais. A plataforma só
+  envia o spread total (`totalSpreadAmount`); a lista mostra spread, taxa a.m., retenção e
+  líquido, e o cabeçalho diz que a decomposição não existe na origem.
+
+### A materialização
+
+`report_aquisicao_semanal` guarda as treze semanas fechadas mais recentes, uma linha por
+origem. O cron `/api/cron/reports-series` (04:30 UTC) a reescreve **direto no banco**, sem
+passar pelo worker.
+
+`app_report_aquisicao_historico()` confere, antes de ler, se algum lead, evento ou transição
+mudou depois da última materialização, e reescreve se mudou. São quatro `max` contra
+recalcular treze semanas a cada abertura — e é o que mantém a célula do histórico igual à
+lista que ela abre, que é sempre ao vivo.
+
+### Permissões das funções internas
+
+As `app__rp_*` são mecânica: `security definer`, sem checagem de sessão, feitas para o
+worker. A 0192 as deixou com o grant padrão do Supabase — **EXECUTE para `anon`** —, e
+`rpc/app__rp_montar` devolvia o report inteiro, com a comissão de cada vendedor, a quem
+tivesse a chave pública do projeto. A 0297c revogou de `public`, `anon` e `authenticated`
+em todas, antigas e novas. Só o worker (service role) as chama; a tela usa as portas
+`app_report_*`, que conferem o gestor.
+
+### Configuração
+
+Em **Configurar envio**: o teto de linhas do drill-down e se o bloco de Aquisição entra no
+PDF. Destinatários e dias de envio não mudaram.
+
 ## Fora de escopo
 
 Relatórios customizáveis, exportação para Excel, report por vendedor individual e comparação
-com metas.
+com metas. Do 04u: CAC e origem por campanha, comparação entre vendedores dentro da
+Aquisição, e drill-down em tela que não seja o report.

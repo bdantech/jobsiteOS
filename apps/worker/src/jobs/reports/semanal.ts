@@ -6,6 +6,10 @@ import {
   variacaoTexto,
   type ReportSemanal,
 } from '../../../../../packages/core/src/reports/semanal.js'
+import {
+  carimboDaAquisicao,
+  totalDoBloco,
+} from '../../../../../packages/core/src/reports/aquisicao.js'
 import { supabaseAdmin } from '../../db.js'
 import { env } from '../../env.js'
 import { logger } from '../../logger.js'
@@ -88,8 +92,21 @@ export async function gerarReportSemanal(opts: OpcoesReport = {}): Promise<Resul
     if (erroDados) throw new Error(`Falha ao montar o report: ${erroDados.message}`)
     const r = bruto as unknown as ReportSemanal
 
+    /* 04u §6: o bloco de Aquisição entra no PDF se a configuração disser. Lida aqui, uma
+       vez, para a mesma decisão valer no anexo e no corpo do e-mail. */
+    const { data: cfgPdf } = await supabaseAdmin
+      .from('report_config')
+      .select('aquisicao_no_pdf')
+      .eq('tipo', 'semanal_executivo')
+      .maybeSingle()
+    const incluirAquisicao = (cfgPdf as { aquisicao_no_pdf?: boolean } | null)?.aquisicao_no_pdf !== false
+
     const resumo = await gerarResumoSemanal(r)
-    const pdf = await gerarPdfSemanal(r, resumo)
+    /* `execucaoId` vai para os links: "ver no sistema" abre ESTE snapshot, e não a semana
+       fechada do dia em que alguém resolver clicar. */
+    const pdf = await gerarPdfSemanal(r, resumo, {
+      execucaoId: execucao.id, appUrl: env.APP_BASE_URL ?? null, incluirAquisicao,
+    })
 
     // ── O arquivo ──────────────────────────────────────────────────────────
     const nome = nomeDoArquivo(r.periodo)
@@ -126,7 +143,9 @@ export async function gerarReportSemanal(opts: OpcoesReport = {}): Promise<Resul
     }
 
     // ── O envio ────────────────────────────────────────────────────────────
-    const envio = await enviarReport(execucao.id, r, resumo, pdf, nome, opts.destinatariosTeste)
+    const envio = await enviarReport(
+      execucao.id, r, resumo, pdf, nome, opts.destinatariosTeste, incluirAquisicao,
+    )
     return {
       execucao_id: execucao.id,
       periodo: janela,
@@ -160,8 +179,15 @@ export async function gerarReportSemanal(opts: OpcoesReport = {}): Promise<Resul
  * e-mail que exige abrir o anexo para saber qualquer coisa é um e-mail que não é lido — e
  * os três parágrafos já são a leitura executiva inteira.
  */
-function corpoDoEmail(r: ReportSemanal, resumo: string | null, appUrl: string | null): string {
+function corpoDoEmail(
+  r: ReportSemanal,
+  resumo: string | null,
+  appUrl: string | null,
+  incluirAquisicao: boolean,
+): string {
   const k = r.operacao.kpis
+  const aq = incluirAquisicao && r.aquisicao ? r.aquisicao : null
+  const t = aq ? totalDoBloco(aq) : null
   const linhas = [
     `Semana ${r.periodo.semana_iso} · ${r.periodo.inicio} a ${r.periodo.fim}`,
     '',
@@ -172,6 +198,17 @@ function corpoDoEmail(r: ReportSemanal, resumo: string | null, appUrl: string | 
     `VOP operado: ${brlCurto(k.vop_operado.semana)} (${variacaoTexto(k.vop_operado.var_semana_pct)})`,
     `Receita gerada: ${brlCurto(k.receita.semana)} (${variacaoTexto(k.receita.var_semana_pct)})`,
     `Limite ocioso hoje: ${brlCurto(k.limite_ocioso.foto)}`,
+    /* O carimbo viaja no e-mail também: o fit amadurece, e quem lê na quarta o texto de
+       segunda precisa saber de quando é o número. */
+    ...(aq && t
+      ? [
+          '',
+          `— Aquisição (${carimboDaAquisicao(aq, false)}) —`,
+          `Leads da semana: ${t.com_fit + t.sem_fit + t.nao_avaliado} — ${t.com_fit} com fit, ` +
+            `${t.sem_fit} sem fit, ${t.nao_avaliado} ainda não avaliados`,
+          `Reuniões: ${t.agendadas} agendadas na semana · ${t.realizadas} realizadas na semana`,
+        ]
+      : []),
     '',
     'O report completo, com os onze blocos, está no PDF em anexo.',
   ]
@@ -186,6 +223,7 @@ async function enviarReport(
   pdf: Buffer,
   nome: string,
   teste?: Destinatario[],
+  incluirAquisicao = true,
 ): Promise<{ enviados: number; falhas: number; motivo?: string }> {
   /*
    * O report é INTERNO: sai pelo remetente interno quando ele existe, e cai no do
@@ -219,7 +257,7 @@ async function enviarReport(
   }
 
   const assunto = assuntoDoEmail(cfg?.assunto_template ?? null, r.periodo)
-  const corpo = corpoDoEmail(r, resumo, env.APP_BASE_URL ?? null)
+  const corpo = corpoDoEmail(r, resumo, env.APP_BASE_URL ?? null, incluirAquisicao)
   const anexo = { filename: nome, content: pdf.toString('base64') }
 
   const enviados: string[] = []

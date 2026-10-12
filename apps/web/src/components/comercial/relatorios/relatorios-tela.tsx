@@ -6,13 +6,20 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import { AlertTriangle, ArrowLeft, Download, FileText, Loader2, Settings2 } from 'lucide-react'
 import {
+  ATENCAO_LABELS,
+  ETAPAS_FUNIL,
   ETAPA_FUNIL_LABELS,
+  NATUREZA_EXPLICA,
   brlCurto,
   direcaoDa,
+  esperadoNoReport,
+  linkDoDetalhe,
   maiorVazamento,
   textoDaRegua,
   textoDoRetrato,
   variacaoTexto,
+  type AlvoDetalhe,
+  type EtapaFunil,
   type IndicadorReport,
   type ItemLista,
   type ReportSemanal,
@@ -29,7 +36,9 @@ import { cn } from '@/lib/utils'
 import {
   BarraCobertura, ConversaoPorFaixa, FunilEtapas, OciosoPorGestor, RankingTime,
 } from './graficos-report'
+import { CardAquisicao } from './bloco-aquisicao'
 import { ConfigEnvio } from './config-envio'
+import { DrilldownModal, type AlvoAberto } from './drilldown-modal'
 import {
   buscarExecucao, buscarExecucoes, buscarReport, nomeDoPdf, relatoriosKeys, urlDoPdf,
 } from './queries'
@@ -46,12 +55,34 @@ import {
  * Quem está lendo o report está montando um raciocínio sobre a semana; trocar a página
  * embaixo dessa pessoa a obriga a reconstruir de onde veio. Do modal, o link para a ficha
  * abre numa aba do sistema — aí sim ela sai, porque decidiu sair.
+ *
+ * ─── TODO NÚMERO ABRE A SUA LISTA (04u §4) ──────────────────────────────────
+ * Um modal só, `DrilldownModal`, para o report inteiro: os registros vêm do banco
+ * (`app_report_detalhe`), e o número clicado viaja junto para ser conferido contra o total
+ * da lista. Não há número sem clique por permissão — a página inteira já é só de gestor, e
+ * a lista usa a mesma régua.
+ *
+ * `ModalLista` continua para o que NÃO é lista de registros: o quadro de crédito e as
+ * filas, que são meia dúzia de indicadores e não têm o que detalhar.
  */
 
-export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
+export interface LinkInicial {
+  execucaoId: string | null
+  alvo: AlvoDetalhe | null
+}
+
+export function RelatoriosTela({
+  podeGerar, linkInicial,
+}: {
+  podeGerar: boolean
+  /** O deep link do PDF (04u §4.1): a execução e o modal que já abrem prontos. */
+  linkInicial?: LinkInicial
+}) {
   const qc = useQueryClient()
-  const [execucaoId, setExecucaoId] = React.useState<string | null>(null)
+  const [execucaoId, setExecucaoId] = React.useState<string | null>(linkInicial?.execucaoId ?? null)
   const [modal, setModal] = React.useState<{ titulo: string; nota?: string; itens: ItemLista[] } | null>(null)
+  const [alvo, setAlvo] = React.useState<AlvoAberto | null>(null)
+  const linkPendente = React.useRef<AlvoDetalhe | null>(linkInicial?.alvo ?? null)
   const [configAberta, setConfigAberta] = React.useState(false)
   const [gerando, setGerando] = React.useState(false)
 
@@ -77,6 +108,34 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
   const r = execucaoId === null ? aoVivo.data : historico.data
   const carregando = execucaoId === null ? aoVivo.isPending : historico.isPending
   const erro = execucaoId === null ? aoVivo.error : historico.error
+
+  /*
+   * A URL acompanha o modal: é o mesmo endereço que o PDF imprime em "ver no sistema", e
+   * quem copia a barra de endereço com uma lista aberta manda a lista, não a página.
+   * `replaceState`, e não `push`: abrir um número não é navegar, e o "voltar" do navegador
+   * não deve passar por dez modais.
+   */
+  const abrir = React.useCallback(
+    (novo: AlvoDetalhe, esperado?: number | null) => {
+      if (!r) return
+      setAlvo({ ...novo, esperado: esperado === undefined ? esperadoNoReport(r, novo) : esperado })
+      window.history.replaceState(null, '', linkDoDetalhe('', novo, execucaoId))
+    },
+    [r, execucaoId],
+  )
+  const fechar = React.useCallback(() => {
+    setAlvo(null)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  // O deep link abre UMA vez, quando o report daquele link terminou de carregar.
+  React.useEffect(() => {
+    if (r && linkPendente.current) {
+      const pendente = linkPendente.current
+      linkPendente.current = null
+      abrir(pendente)
+    }
+  }, [r, abrir])
 
   async function gerarPdf() {
     setGerando(true)
@@ -184,15 +243,18 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
 
           <Resumo r={r} execucaoId={execucaoId} execucoes={execucoes.data ?? []} />
 
-          <FaixaKpis r={r} onAbrir={setModal} />
+          <FaixaKpis r={r} onDetalhe={abrir} />
+
+          {/* 04u §2: acima do funil comercial. */}
+          <CardAquisicao r={r} aoVivo={execucaoId === null} onAbrir={abrir} />
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <BlocoFunil r={r} onAbrir={setModal} />
-            <BlocoNf r={r} onAbrir={setModal} />
-            <BlocoCarteira r={r} onAbrir={setModal} />
-            <BlocoCertificados r={r} onAbrir={setModal} />
-            <BlocoTime r={r} onAbrir={setModal} />
-            <BlocoAtencao r={r} />
+            <BlocoFunil r={r} onAbrir={setModal} onDetalhe={abrir} />
+            <BlocoNf r={r} onDetalhe={abrir} />
+            <BlocoCarteira r={r} onDetalhe={abrir} />
+            <BlocoCertificados r={r} onDetalhe={abrir} />
+            <BlocoTime r={r} onAbrir={setModal} onDetalhe={abrir} />
+            <BlocoAtencao r={r} onDetalhe={abrir} />
           </div>
 
           <Historico
@@ -204,6 +266,14 @@ export function RelatoriosTela({ podeGerar }: { podeGerar: boolean }) {
       )}
 
       <ModalLista aberto={modal} onFechar={() => setModal(null)} />
+      {r && (
+        <DrilldownModal
+          alvo={alvo}
+          janela={{ inicio: r.periodo.inicio, fim: r.periodo.fim, retrato: r.periodo.retrato_em }}
+          snapshot={execucaoId !== null}
+          onFechar={fechar}
+        />
+      )}
       <ConfigEnvio aberta={configAberta} onFechar={() => setConfigAberta(false)} />
     </div>
   )
@@ -269,35 +339,43 @@ function Resumo({
 // ─── KPIs ───────────────────────────────────────────────────────────────────
 
 type AbrirModal = (m: { titulo: string; nota?: string; itens: ItemLista[] }) => void
+/** Abre a lista de um número. Sem `esperado`, ele sai do próprio report. */
+type AbrirDetalhe = (alvo: AlvoDetalhe, esperado?: number | null) => void
 
-function FaixaKpis({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+function FaixaKpis({ r, onDetalhe }: { r: ReportSemanal; onDetalhe: AbrirDetalhe }) {
   const k = r.operacao.kpis
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Kpi
         ind={k.volume_convertido}
         rotulo="Volume convertido"
-        onClick={() =>
-          onAbrir({
-            titulo: 'Cedentes que operaram na semana',
-            nota: `${r.operacao.antecipacao.operacoes_semana} operações de ${r.operacao.antecipacao.cedentes_semana} cedentes.`,
-            itens: r.operacao.antecipacao.top_cedentes,
-          })
-        }
+        nota={`${r.operacao.antecipacao.operacoes_semana} operações`}
+        onClick={() => onDetalhe({ chave: 'volume_convertido' })}
       />
-      <Kpi ind={k.vop_operado} rotulo="VOP operado" nota="a base de comissão" />
-      <Kpi ind={k.receita} rotulo="Receita gerada" />
-      <Card>
+      <Kpi
+        ind={k.vop_operado}
+        rotulo="VOP operado"
+        nota="a base de comissão"
+        onClick={() => onDetalhe({ chave: 'vop_operado' })}
+      />
+      <Kpi ind={k.receita} rotulo="Receita gerada" onClick={() => onDetalhe({ chave: 'receita' })} />
+      <Card className="transition-colors hover:border-primary/50">
         <CardContent className="p-3">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Limite ocioso</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums">{brlCurto(k.limite_ocioso.foto)}</p>
-          {/* Sem variação, e o rótulo diz por quê: a plataforma sobrescreve o estado a cada
-              sincronização, e inventar uma série que não existe é pior que não ter. A DATA
-              está aqui porque o mesmo campo carrega o saldo de agora na tela e o do fim da
-              janela no PDF — os dois certos, e nada além disto dizendo qual é qual. */}
-          <p className="text-[11px] text-muted-foreground">
-            saldo em {dm(k.limite_ocioso.em)}, sem série
-          </p>
+          <button
+            type="button"
+            onClick={() => onDetalhe({ chave: 'limite_ocioso' })}
+            className="w-full text-left focus-visible:outline-none"
+          >
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Limite ocioso</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{brlCurto(k.limite_ocioso.foto)}</p>
+            {/* Sem variação, e o rótulo diz por quê: a plataforma sobrescreve o estado a cada
+                sincronização, e inventar uma série que não existe é pior que não ter. A DATA
+                está aqui porque o mesmo campo carrega o saldo de agora na tela e o do fim da
+                janela no PDF — os dois certos, e nada além disto dizendo qual é qual. */}
+            <p className="text-[11px] text-muted-foreground">
+              saldo em {dm(k.limite_ocioso.em)}, sem série
+            </p>
+          </button>
         </CardContent>
       </Card>
     </div>
@@ -349,7 +427,23 @@ function Kpi({
 
 // ─── Blocos ─────────────────────────────────────────────────────────────────
 
-function BlocoFunil({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+/** A frase de cada número de coorte do funil (04u §1). */
+const REGRA_ETAPA: Record<EtapaFunil, string> = {
+  distribuidos: 'Leads distribuídos nesta semana.',
+  contatados: 'Dos distribuídos nesta semana, os que já saíram de "a contatar".',
+  com_fit: 'Dos distribuídos nesta semana, os que têm fit confirmado hoje. A taxa é sobre os contatados.',
+  agendados: 'Dos distribuídos nesta semana, os que têm reunião marcada, para qualquer data.',
+  realizados: 'Dos distribuídos nesta semana, os que já chegaram a reunião realizada ou qualificada.',
+  ganhos: 'Dos distribuídos nesta semana, os que já viraram negócio ganho.',
+}
+
+function BlocoFunil({
+  r, onAbrir, onDetalhe,
+}: {
+  r: ReportSemanal
+  onAbrir: AbrirModal
+  onDetalhe: AbrirDetalhe
+}) {
   const f = r.comercial.funil.semana
   const c = r.comercial.comercial
   const vaz = f ? maiorVazamento(f, r.comercial.funil.doze) : null
@@ -358,21 +452,22 @@ function BlocoFunil({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">Funil comercial da semana</CardTitle>
-        <CardDescription className="text-[11px]">
-          Coorte da janela: dos leads distribuídos na semana, quantos avançaram
-        </CardDescription>
+        {/* Sempre visível, e não no hover: é o que impede "Realizados 3" de brigar com
+            "Reuniões realizadas 32" logo abaixo. Os dois estão certos e medem coisas
+            diferentes. */}
+        <CardDescription className="text-[11px]">{NATUREZA_EXPLICA.coorte}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {f ? (
           <FunilEtapas
-            etapas={[
-              { id: 'distribuidos', label: ETAPA_FUNIL_LABELS.distribuidos, valor: f.distribuidos, passagem: null },
-              { id: 'contatados', label: ETAPA_FUNIL_LABELS.contatados, valor: f.contatados, passagem: f.passagem.contato_pct },
-              { id: 'com_fit', label: ETAPA_FUNIL_LABELS.com_fit, valor: f.com_fit, passagem: f.passagem.fit_pct },
-              { id: 'agendados', label: ETAPA_FUNIL_LABELS.agendados, valor: f.agendados, passagem: f.passagem.agenda_pct },
-              { id: 'realizados', label: ETAPA_FUNIL_LABELS.realizados, valor: f.realizados, passagem: f.passagem.realiza_pct },
-              { id: 'ganhos', label: ETAPA_FUNIL_LABELS.ganhos, valor: f.ganhos, passagem: f.passagem.ganho_pct },
-            ]}
+            onEtapa={(id) => onDetalhe({ chave: 'funil_etapa', params: { etapa: id } })}
+            etapas={ETAPAS_FUNIL.map((id) => ({
+              id,
+              label: ETAPA_FUNIL_LABELS[id],
+              valor: f[id],
+              passagem: id === 'distribuidos' ? null : f.passagem[PASSAGEM_DA_ETAPA[id]],
+              regra: REGRA_ETAPA[id],
+            }))}
           />
         ) : (
           <p className="text-xs text-muted-foreground">Nenhum lead distribuído nesta semana.</p>
@@ -386,19 +481,50 @@ function BlocoFunil({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
           </p>
         )}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <Linha rotulo="Leads" valor={`${c.leads_semana} (${c.leads_inbound} in · ${c.leads_outbound} out)`} />
-          <Linha rotulo="Taxa de fit" valor={c.fit_pct === null ? '—' : `${c.fit_pct}%`} />
-          <Linha rotulo="Reuniões realizadas" valor={String(c.reunioes_realizadas)} />
-          <Linha rotulo="No-shows não remarcados" valor={String(c.no_shows_nao_remarcados)} />
-          <Linha rotulo="MOUs" valor={String(c.mous)} />
-          <Linha
-            rotulo="Ciclo 1º contato → 1ª operação"
-            valor={c.ciclo_medio_dias === null
-              ? 'ninguém completou ainda'
-              : `${c.ciclo_medio_dias} d (base ${c.ciclo_medio_base})`}
-          />
-        </dl>
+        <div className="space-y-1.5 border-t pt-2">
+          <p className="text-[11px] font-medium text-muted-foreground">{NATUREZA_EXPLICA.janela}</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <Linha
+              rotulo="Leads"
+              valor={`${c.leads_semana} (${c.leads_inbound} in · ${c.leads_outbound} out)`}
+              onClick={() => onDetalhe({ chave: 'funil_etapa', params: { etapa: 'distribuidos' } }, c.leads_semana)}
+            />
+            <Linha
+              rotulo="Taxa de fit"
+              valor={c.fit_pct === null ? '—' : `${c.fit_pct}% de ${c.fit_avaliados}`}
+              onClick={() => onDetalhe({ chave: 'fit_avaliados' })}
+            />
+            <Linha
+              rotulo="Reuniões realizadas"
+              valor={String(c.reunioes_realizadas)}
+              onClick={() => onDetalhe({ chave: 'reunioes_realizadas' })}
+            />
+            <Linha rotulo="MOUs" valor={String(c.mous)} onClick={() => onDetalhe({ chave: 'mous' })} />
+          </dl>
+          {/* O número conta mudanças de estágio, e dizer isso é o que o deixa conviver com
+              "Realizadas na semana" do card de Aquisição, que conta reuniões. */}
+          <p className="text-[11px] text-muted-foreground">
+            “Reuniões realizadas” conta mudanças de estágio — o lead que passa por realizada e por
+            qualificada na mesma semana conta duas vezes. A contagem por reunião está em Aquisição.
+          </p>
+          <p className="pt-1 text-[11px] font-medium text-muted-foreground">
+            Acumulado até {dm(r.periodo.retrato_em)} — não é só da semana
+          </p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <Linha
+              rotulo="No-shows não remarcados"
+              valor={String(c.no_shows_nao_remarcados)}
+              onClick={() => onDetalhe({ chave: 'no_shows' })}
+            />
+            <Linha
+              rotulo="Ciclo 1º contato → 1ª operação"
+              valor={c.ciclo_medio_dias === null
+                ? 'ninguém completou ainda'
+                : `${c.ciclo_medio_dias} d (base ${c.ciclo_medio_base})`}
+              onClick={c.ciclo_medio_base > 0 ? () => onDetalhe({ chave: 'ciclo' }) : undefined}
+            />
+          </dl>
+        </div>
         <button
           type="button"
           className="text-[11px] underline text-muted-foreground"
@@ -423,18 +549,28 @@ function BlocoFunil({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
   )
 }
 
-function BlocoNf({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+/** A taxa de passagem que chega em cada etapa. */
+const PASSAGEM_DA_ETAPA: Record<Exclude<EtapaFunil, 'distribuidos'>, keyof NonNullable<ReportSemanal['comercial']['funil']['semana']>['passagem']> = {
+  contatados: 'contato_pct',
+  com_fit: 'fit_pct',
+  agendados: 'agenda_pct',
+  realizados: 'realiza_pct',
+  ganhos: 'ganho_pct',
+}
+
+function BlocoNf({ r, onDetalhe }: { r: ReportSemanal; onDetalhe: AbrirDetalhe }) {
   const nf = r.operacao.nf
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">Funil de notas fiscais</CardTitle>
         <CardDescription className="text-[11px]">
-          Conversão da semana contra a de 12 meses, por faixa
+          Coorte — das notas capturadas no período, quantas já converteram. Semana contra 12 meses.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ConversaoPorFaixa
+          onFaixa={(faixa, serie) => faixa && onDetalhe({ chave: 'nf_faixa', params: { faixa, serie } })}
           faixas={nf.por_faixa.map((f) => ({
             faixa: f.faixa,
             semana: f.conversao_semana_pct,
@@ -443,24 +579,23 @@ function BlocoNf({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
           }))}
         />
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <Linha rotulo="Capturadas" valor={`${nf.capturadas.semana} (${variacaoTexto(nf.capturadas.var_semana_pct)})`} />
+          <Linha
+            rotulo="Capturadas"
+            valor={`${nf.capturadas.semana} (${variacaoTexto(nf.capturadas.var_semana_pct)})`}
+            onClick={() => onDetalhe({ chave: 'nf_capturadas' })}
+          />
           <Linha
             rotulo="Expirou sem trabalho"
             valor={`${brlCurto(nf.valor_expirado.semana)} (${variacaoTexto(nf.valor_expirado.var_semana_pct)})`}
             /* Subir aqui é PIOR — a cor segue o significado, não o sinal. */
             ruim={direcaoDa(nf.valor_expirado.var_semana_pct, true) === 'pior'}
+            onClick={() => onDetalhe({ chave: 'nf_expiradas' })}
           />
         </div>
         <button
           type="button"
           className="text-[11px] underline text-muted-foreground"
-          onClick={() =>
-            onAbrir({
-              titulo: 'Antecipações travadas',
-              nota: `${nf.travadas.total} paradas, somando ${brlCurto(nf.travadas.valor)}. O cedente abriu e não concluiu.`,
-              itens: nf.travadas.itens,
-            })
-          }
+          onClick={() => onDetalhe({ chave: 'nf_travadas' })}
         >
           ver as {nf.travadas.total} antecipações travadas
         </button>
@@ -469,7 +604,7 @@ function BlocoNf({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
   )
 }
 
-function BlocoCarteira({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+function BlocoCarteira({ r, onDetalhe }: { r: ReportSemanal; onDetalhe: AbrirDetalhe }) {
   const ca = r.carteira.carteira
   const lista = r.carteira.listas.nao_performando as {
     cliente?: string; gestor?: string | null; ocioso?: number
@@ -483,17 +618,14 @@ function BlocoCarteira({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <OciosoPorGestor clientes={lista.map((c) => ({ gestor: c.gestor ?? null, ocioso: Number(c.ocioso ?? 0) }))} />
+        <OciosoPorGestor
+          clientes={lista.map((c) => ({ gestor: c.gestor ?? null, ocioso: Number(c.ocioso ?? 0) }))}
+          onGestor={(gestor) => gestor && onDetalhe({ chave: 'carteira_gestor', params: { gestor } })}
+        />
         <button
           type="button"
           className="text-[11px] underline text-muted-foreground"
-          onClick={() =>
-            onAbrir({
-              titulo: 'Carteiras que não estão performando',
-              nota: 'Limite ocioso acima de R$ 50 mil, com 30 dias sem operar ou apontamento do temperature report.',
-              itens: r.carteira.listas.nao_performando,
-            })
-          }
+          onClick={() => onDetalhe({ chave: 'contas_paradas' })}
         >
           ver as {lista.length} contas paradas
         </button>
@@ -502,7 +634,7 @@ function BlocoCarteira({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }
   )
 }
 
-function BlocoCertificados({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+function BlocoCertificados({ r, onDetalhe }: { r: ReportSemanal; onDetalhe: AbrirDetalhe }) {
   const ce = r.carteira.certificados
   const inv = ce.invisivel
   return (
@@ -520,6 +652,7 @@ function BlocoCertificados({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirMod
           vencendo={ce.vencendo_30d}
           sem={ce.sem_certificado}
           total={ce.cnpjs}
+          onBalde={(balde, n) => onDetalhe({ chave: 'cert_balde', params: { balde } }, n)}
         />
         {inv.razao !== null && (
           <div className="space-y-1">
@@ -537,13 +670,7 @@ function BlocoCertificados({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirMod
             <button
               type="button"
               className="text-[11px] underline text-muted-foreground"
-              onClick={() =>
-                onAbrir({
-                  titulo: 'Contas sem certificado, pelo que escondem',
-                  nota: 'O valor é estimado a partir do faturamento, com a razão medida nos clientes que já têm certificado.',
-                  itens: inv.itens,
-                })
-              }
+              onClick={() => onDetalhe({ chave: 'cert_topo' })}
             >
               ver a lista nominal
             </button>
@@ -554,16 +681,28 @@ function BlocoCertificados({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirMod
   )
 }
 
-function BlocoTime({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
+function BlocoTime({
+  r, onAbrir, onDetalhe,
+}: {
+  r: ReportSemanal
+  onAbrir: AbrirModal
+  onDetalhe: AbrirDetalhe
+}) {
   const t = r.comercial.time
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">Time</CardTitle>
-        <CardDescription className="text-[11px]">Por VOP atribuído na semana</CardDescription>
+        <CardDescription className="text-[11px]">Janela — por VOP atribuído na semana</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <RankingTime vendedores={t.vendedores} />
+        <RankingTime
+          vendedores={t.vendedores}
+          onVendedor={(id) => {
+            const v = t.vendedores.find((x) => x.vendedor_id === id)
+            onDetalhe({ chave: 'time_vendedor', params: { vendedor_id: id, nome: v?.nome ?? '' } })
+          }}
+        />
         <button
           type="button"
           className="text-[11px] underline text-muted-foreground"
@@ -586,23 +725,11 @@ function BlocoTime({ r, onAbrir }: { r: ReportSemanal; onAbrir: AbrirModal }) {
   )
 }
 
-const ROTULO_ATENCAO: Record<string, string> = {
-  limites_reduzidos: 'Limites reduzidos pela seguradora',
-  protestos_novos: 'Protestos novos em clientes',
-  certificados_vencendo_30d: 'Certificados vencendo em 30 dias',
-  processos_com_movimento: 'Processos com movimentação relevante',
-  lotes_aguardando: 'Lotes de enriquecimento aguardando aprovação',
-  sugestoes_perfil_pendentes: 'Sugestões do Perfil pendentes',
-  ex_clientes_sem_motivo: 'Ex-clientes sem motivo registrado',
-  fornecedores_sem_contato: 'Fornecedores sem contato',
-  antecipacoes_travadas: 'Antecipações travadas',
-}
-
-function BlocoAtencao({ r }: { r: ReportSemanal }) {
+function BlocoAtencao({ r, onDetalhe }: { r: ReportSemanal; onDetalhe: AbrirDetalhe }) {
   /* Só o que é MAIOR QUE ZERO. Nove linhas com sete zeros treinam o leitor a pular a
      seção — e é justamente a seção que existe para ser lida. */
-  const itens = Object.entries(ROTULO_ATENCAO)
-    .map(([k, rot]) => ({ rot, n: Number(r.carteira.atencao[k] ?? 0) }))
+  const itens = Object.entries(ATENCAO_LABELS)
+    .map(([k, rot]) => ({ k, rot, n: Number(r.carteira.atencao[k] ?? 0) }))
     .filter((i) => i.n > 0)
     .sort((a, b) => b.n - a.n)
 
@@ -617,13 +744,25 @@ function BlocoAtencao({ r }: { r: ReportSemanal }) {
         ) : (
           <ul className="divide-y">
             {itens.map((i) => (
-              <li key={i.rot} className="flex items-baseline gap-2 py-1.5">
-                <span
-                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', i.n > 20 ? 'bg-destructive' : 'bg-amber-500')}
-                  aria-hidden
-                />
-                <span className="w-8 shrink-0 text-xs font-semibold tabular-nums">{i.n}</span>
-                <span className="text-xs">{i.rot}</span>
+              <li key={i.k}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    /* As travadas são a mesma lista do funil de NF: uma chave só, para os
+                       dois lugares abrirem exatamente o mesmo conjunto. */
+                    i.k === 'antecipacoes_travadas'
+                      ? onDetalhe({ chave: 'nf_travadas' }, i.n)
+                      : onDetalhe({ chave: 'atencao', params: { item: i.k } })
+                  }
+                  className="flex w-full items-baseline gap-2 py-1.5 text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span
+                    className={cn('h-1.5 w-1.5 shrink-0 rounded-full', i.n > 20 ? 'bg-destructive' : 'bg-amber-500')}
+                    aria-hidden
+                  />
+                  <span className="w-8 shrink-0 text-xs font-semibold tabular-nums">{i.n}</span>
+                  <span className="text-xs">{i.rot}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -633,11 +772,31 @@ function BlocoAtencao({ r }: { r: ReportSemanal }) {
   )
 }
 
-function Linha({ rotulo, valor, ruim = false }: { rotulo: string; valor: string; ruim?: boolean }) {
+function Linha({
+  rotulo, valor, ruim = false, onClick,
+}: {
+  rotulo: string
+  valor: string
+  ruim?: boolean
+  /** Abre a lista que forma o número. Sem ele, o valor é só texto. */
+  onClick?: () => void
+}) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <dt className="truncate text-muted-foreground">{rotulo}</dt>
-      <dd className={cn('shrink-0 font-medium tabular-nums', ruim && 'text-destructive')}>{valor}</dd>
+      <dd className={cn('shrink-0 font-medium tabular-nums', ruim && 'text-destructive')}>
+        {onClick ? (
+          <button
+            type="button"
+            onClick={onClick}
+            className="underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {valor}
+          </button>
+        ) : (
+          valor
+        )}
+      </dd>
     </div>
   )
 }

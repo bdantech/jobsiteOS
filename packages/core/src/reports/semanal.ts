@@ -11,6 +11,8 @@
  * maior vazamento do funil, o texto da régua, e o resumo numérico que vai para o modelo.
  */
 
+import type { BlocoAquisicao } from './aquisicao.js'
+
 // ─── A régua de três janelas (§1) ───────────────────────────────────────────
 
 /*
@@ -324,6 +326,11 @@ export interface ReportSemanal {
     }
     atencao: Record<string, number>
   }
+  /**
+   * O bloco de Aquisição (04u). Opcional: os snapshots gerados antes dele não o têm, e um
+   * report de agosto aberto hoje tem de continuar abrindo.
+   */
+  aquisicao?: BlocoAquisicao
 }
 
 // ─── O que vai para o modelo (§2, resumo de IA) ─────────────────────────────

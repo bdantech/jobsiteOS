@@ -12119,9 +12119,64 @@ export type Database = {
           },
         ]
       }
+      report_aquisicao_semanal: {
+        Row: {
+          agendadas: number
+          atualizado_em: string
+          canceladas: number
+          com_fit: number
+          expirados_sem_avaliar: number
+          nao_avaliado: number
+          no_shows: number
+          origem: string
+          realizadas: number
+          remarcadas: number
+          sem_captura: number
+          sem_desfecho: number
+          sem_fit: number
+          semana_fim: string
+          semana_inicio: string
+        }
+        Insert: {
+          agendadas?: number
+          atualizado_em?: string
+          canceladas?: number
+          com_fit?: number
+          expirados_sem_avaliar?: number
+          nao_avaliado?: number
+          no_shows?: number
+          origem: string
+          realizadas?: number
+          remarcadas?: number
+          sem_captura?: number
+          sem_desfecho?: number
+          sem_fit?: number
+          semana_fim: string
+          semana_inicio: string
+        }
+        Update: {
+          agendadas?: number
+          atualizado_em?: string
+          canceladas?: number
+          com_fit?: number
+          expirados_sem_avaliar?: number
+          nao_avaliado?: number
+          no_shows?: number
+          origem?: string
+          realizadas?: number
+          remarcadas?: number
+          sem_captura?: number
+          sem_desfecho?: number
+          sem_fit?: number
+          semana_fim?: string
+          semana_inicio?: string
+        }
+        Relationships: []
+      }
       report_config: {
         Row: {
           assunto_template: string | null
+          aquisicao_no_pdf: boolean
           ativo: boolean
           atualizado_em: string
           atualizado_por: string | null
@@ -12129,11 +12184,13 @@ export type Database = {
           dias_semana: number[]
           horario: string
           id: string
+          max_linhas_drilldown: number
           timezone: string
           tipo: string
         }
         Insert: {
           assunto_template?: string | null
+          aquisicao_no_pdf?: boolean
           ativo?: boolean
           atualizado_em?: string
           atualizado_por?: string | null
@@ -12141,11 +12198,13 @@ export type Database = {
           dias_semana?: number[]
           horario?: string
           id?: string
+          max_linhas_drilldown?: number
           timezone?: string
           tipo?: string
         }
         Update: {
           assunto_template?: string | null
+          aquisicao_no_pdf?: boolean
           ativo?: boolean
           atualizado_em?: string
           atualizado_por?: string | null
@@ -12153,6 +12212,7 @@ export type Database = {
           dias_semana?: number[]
           horario?: string
           id?: string
+          max_linhas_drilldown?: number
           timezone?: string
           tipo?: string
         }
@@ -13314,6 +13374,7 @@ export type Database = {
           estagio: string
           fit: boolean | null
           fit_definido_em: string | null
+          fit_definido_por: string | null
           id: string
           origem: string
           reuniao_em: string | null
@@ -13331,6 +13392,7 @@ export type Database = {
           estagio?: string
           fit?: boolean | null
           fit_definido_em?: string | null
+          fit_definido_por?: string | null
           id?: string
           origem: string
           reuniao_em?: string | null
@@ -13348,6 +13410,7 @@ export type Database = {
           estagio?: string
           fit?: boolean | null
           fit_definido_em?: string | null
+          fit_definido_por?: string | null
           id?: string
           origem?: string
           reuniao_em?: string | null
@@ -18983,6 +19046,33 @@ export type Database = {
         }
         Returns: Json
       }
+      app__rp_aquisicao: {
+        Args: { p_fim: string; p_inicio: string }
+        Returns: Json
+      }
+      app__rp_conferir: {
+        Args: { p_fim?: string; p_inicio?: string; p_retrato?: string }
+        Returns: {
+          agregado: number
+          bate: boolean
+          chave: string
+          detalhe: number
+          medida: string
+          params: Json
+        }[]
+      }
+      app__rp_detalhe: {
+        Args: {
+          p_chave: string
+          p_fim: string
+          p_inicio: string
+          p_limite?: number
+          p_offset?: number
+          p_params?: Json
+          p_retrato: string
+        }
+        Returns: Json
+      }
       app__rp_montar: {
         Args: { p_fim: string; p_inicio: string; p_retrato?: string }
         Returns: Json
@@ -22366,6 +22456,7 @@ export type Database = {
           estagio: string
           fit: boolean | null
           fit_definido_em: string | null
+          fit_definido_por: string | null
           id: string
           origem: string
           reuniao_em: string | null
@@ -23589,7 +23680,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_report_aquisicao: {
+        Args: { p_fim?: string; p_inicio?: string }
+        Returns: Json
+      }
+      app_report_aquisicao_historico: {
+        Args: { p_semanas?: number }
+        Returns: Json
+      }
+      app_report_detalhe: {
+        Args: {
+          p_chave: string
+          p_fim: string
+          p_inicio: string
+          p_limite?: number
+          p_offset?: number
+          p_params?: Json
+          p_retrato?: string
+        }
+        Returns: Json
+      }
       app_report_gestor: { Args: never; Returns: boolean }
+      app_report_materializar_aquisicao: {
+        Args: { p_semanas?: number }
+        Returns: Json
+      }
       app_report_materializar_series: {
         Args: { p_meses?: number }
         Returns: Json
