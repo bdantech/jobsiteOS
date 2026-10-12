@@ -82,10 +82,10 @@ test('faltasNaAgenda: antes do início do monitoramento não se acusa nada', () 
   assert.deepEqual(faltasNaAgenda(agendados, new Map(), utc('2026-09-28T12:00:00'), utc('2026-09-28T11:00:00')), [])
 })
 
-test('faltasNaAgenda: rotina sem disparo nenhum depois do início é falta', () => {
-  const agendados = [{ path: '/api/cron/heartbeat', schedule: '0 8 * * *' }]
-  const faltas = faltasNaAgenda(agendados, new Map(), utc('2026-09-29T09:00:00'), utc('2026-09-28T19:00:00'))
-  assert.deepEqual(faltas, [{ path: '/api/cron/heartbeat', esperado_em: utc('2026-09-29T08:00:00') }])
+test('faltasNaAgenda: rotina que nunca disparou não é acusada — pode ter acabado de entrar na agenda', () => {
+  const agendados = [{ path: '/api/cron/funil-fontes', schedule: '30 12 * * *' }]
+  // 12/10: a agenda entrou no deploy das 14:01 UTC; o horário das 12:30 é anterior a ela.
+  assert.deepEqual(faltasNaAgenda(agendados, new Map(), utc('2026-10-12T14:05:00'), utc('2026-09-28T19:00:00')), [])
 })
 
 test('faltasNaAgenda: expressão inválida é ignorada, não derruba o monitor', () => {

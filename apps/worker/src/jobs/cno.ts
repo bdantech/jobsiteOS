@@ -91,6 +91,19 @@ const COLS = [
   'raw',
 ] as const
 
+/** What `metragem_m2 numeric(12,2)` can hold. */
+const METRAGEM_MAX = 9_999_999_999.99
+
+/**
+ * The area, or null when the source value cannot be a real one. The dump carries typos
+ * with a dozen digits, and a single value past the column's range aborts the COPY —
+ * one bad obra would cost the month's whole ingestion. The original stays in `raw`.
+ */
+function metragem(v: string | undefined): number | null {
+  const n = L.numeroPonto(v)
+  return n !== null && n >= 0 && n <= METRAGEM_MAX ? n : null
+}
+
 /**
  * The obras we care about: those whose responsible party shares a CNPJ raiz with
  * something already in the universe or in `empresas`. Everything else is the other
@@ -189,7 +202,7 @@ export async function ingerirCno(
         L.texto(campo(registro, 'destinacao')),
         L.texto(campo(registro, 'categoria')),
         L.texto(campo(registro, 'tipo_obra')),
-        L.numeroPonto(campo(registro, 'metragem_m2')),
+        metragem(campo(registro, 'metragem_m2')),
         L.texto(campo(registro, 'cno_vinculado')),
         // The full source record. When a field we ignored today turns out to
         // matter, it is already here and nobody re-downloads 3 GB.

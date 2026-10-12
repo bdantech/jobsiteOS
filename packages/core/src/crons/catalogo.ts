@@ -136,6 +136,9 @@ export const CRONS: readonly CronCatalogado[] = [
     descricao:
       'Limpa supressões vencidas, consome a fila de lookup cadastral, reclassifica com expiração e regenera a outbox. É o job que impede o funil de apodrecer — as notas não mudam, o calendário muda. Roda antes do primeiro sync do dia.',
     destino: 'POST /jobs/antecipacao/diario',
+    // Em outubro de 2026 a corrida passou de 4h30 para quase 7h, e o padrão de 6h a
+    // dava por perdida todo dia enquanto ela ainda rodava.
+    limiteSemRetornoHoras: 12,
     encadeia: [
       'Varredura de ESTADO das pré-autorizações e títulos Sienge (04s §3), 92 dias — e ela NÃO é opcional. Os dois endpoints filtram por data de ENTRADA, nunca de atualização: uma oferta criada há vinte dias que expirou hoje, ou um título que saiu de `ready_to_create` para `offer_created`, jamais apareceriam na janela curta de 7 dias do ciclo de 4h. Sem esta passada o funil congela no estado do dia em que cada item entrou e segue oferecendo o que já morreu',
       'Roteamento das fontes novas — e não é cosmético: a RLS das duas tabelas recorta por `vendedor_id`, então um item sem dono não é um item na fila do gestor, é um item que o originador LITERALMENTE não consegue ver',

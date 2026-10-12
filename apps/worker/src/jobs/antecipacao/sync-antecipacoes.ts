@@ -97,6 +97,9 @@ function autorizacao(): Record<string, string> {
 
 const PAGE_SIZE = 200
 
+/** O maior intervalo que o endpoint aceita entre `start_date` e `end_date`. */
+const TETO_JANELA_DIAS = 92
+
 /**
  * A querystring do período.
  *
@@ -136,7 +139,12 @@ export async function sincronizarAntecipacoes(
   const cfg = await lerConfigConversao()
   const dias = diasJanela ?? cfg.janela_sync_dias
   const agora = new Date()
-  const de = dia(new Date(agora.getTime() - dias * 86_400_000))
+  /*
+   * O endpoint conta o intervalo com as DUAS pontas: 92 dias é de hoje até 91 dias
+   * atrás. Recuar 92 pede 93, e a resposta é 400 — a varredura diária falhou assim
+   * todo dia, sem ler nada. Mesma conta de `janelaSyncFunil`.
+   */
+  const de = dia(new Date(agora.getTime() - (Math.min(dias, TETO_JANELA_DIAS) - 1) * 86_400_000))
   const ate = dia(agora)
   const base = urlBase()
 

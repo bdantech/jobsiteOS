@@ -101,6 +101,11 @@ export interface FaltaNaAgenda {
  * disparo registrado desde então, é falta. `monitoradoDesde` é o primeiro disparo que
  * a tabela já viu: antes dele não havia registro, e acusar a rotina mensal de não ter
  * rodado no mês passado seria acusar o sistema de não existir ainda.
+ *
+ * O mesmo vale por rotina: a que NUNCA disparou não é acusada. Uma rotina recém-posta
+ * na agenda tem um horário previsto anterior ao deploy que a criou, e esse horário não
+ * podia ter rodado — foi o aviso falso de 12/10/2026, na estreia da sincronização de
+ * hora em hora. Ela aparece como "Sem registro" na tela até o primeiro disparo.
  */
 export function faltasNaAgenda(
   agendados: readonly { path: string; schedule: string }[],
@@ -123,6 +128,7 @@ export function faltasNaAgenda(
     if (!esperado || esperado < monitoradoDesde) continue
 
     const ultimo = ultimoDisparoPorPath.get(a.path)
+    if (!ultimo) continue
     // Um minuto de tolerância para relógio adiantado de um lado ou de outro.
     if (ultimo && ultimo.getTime() >= esperado.getTime() - 60_000) continue
 

@@ -906,6 +906,10 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
    * (papel, origem_tipo, origem_id, vendedor_id) usa o id do ACEITE, então reavaliar o
    * fit dez vezes continua sendo uma penalidade só. É a mesma trava que impede o
    * lançamento da reunião de duplicar.
+   *
+   * `a.id::text`: `origem_id` é texto (guarda id de cessão, de aceite, de venda) e o id
+   * do aceite é uuid. Sem o cast o Postgres recusa a consulta inteira — e foi assim que
+   * este passo falhou de hora em hora, sem nunca cobrar penalidade nenhuma.
    */
   const { rows: semFit } = await pool.query<{
     id: string
@@ -926,7 +930,7 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
      join lateral (
        select sum(c.valor) as valor
          from comissao_lancamentos_v2 c
-        where c.origem_tipo = 'sdr_reuniao' and c.origem_id = a.id and c.vendedor_id = a.sdr_id
+        where c.origem_tipo = 'sdr_reuniao' and c.origem_id = a.id::text and c.vendedor_id = a.sdr_id
      ) pago on true
      where a.status = 'aceita'
        and l.fit is false
@@ -934,7 +938,7 @@ export async function processarAceitesSdrJob(): Promise<ResultadoAceitesSdr> {
        and not exists (
          select 1 from comissao_lancamentos_v2 p
           where p.origem_tipo = 'sdr_penalidade_sem_fit'
-            and p.origem_id = a.id and p.vendedor_id = a.sdr_id
+            and p.origem_id = a.id::text and p.vendedor_id = a.sdr_id
        )`,
   )
 
