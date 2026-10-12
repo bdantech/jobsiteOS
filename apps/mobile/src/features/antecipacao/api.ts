@@ -53,7 +53,7 @@ const COLUNAS_CARD =
  * app mostrava como trabalho a fazer 259 notas que já foram antecipadas.
  */
 const COLUNAS_OPORTUNIDADE =
-  'tipo, id, access_key, valor, vencimento, dias_para_vencimento, data_base, numero_exibicao, linha_contexto, estado_origem, relogio, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, operavel, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa'
+  'tipo, id, access_key, valor, vencimento, dias_para_vencimento, data_base, numero_exibicao, linha_contexto, estado_origem, relogio, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, operavel, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_tipagem, fornecedor_tem_protesto, fornecedor_suprimido, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, entrou_funil_em, reentrou_funil_em, reentrou_funil_motivo, novidade_em'
 
 export const PAGINA_FUNIL = 30
 
@@ -99,6 +99,11 @@ export async function fetchFunil(filtros: FiltrosFunil, pagina = 0): Promise<Pag
     if (filtros.vendedorId) q = q.eq('vendedor_id', filtros.vendedorId)
     if (filtros.faixa) q = q.eq('faixa', filtros.faixa)
     if (filtros.tipagem) q = q.eq('fornecedor_tipagem', filtros.tipagem)
+
+    // NOVIDADES (04t): mais um predicado, que compõe com os de cima. `novidade_em` é
+    // a entrada (ou a volta) do item no funil — não a emissão da nota.
+    if (filtros.novidadeDe) q = q.gte('novidade_em', filtros.novidadeDe)
+    if (filtros.novidadeAte) q = q.lt('novidade_em', filtros.novidadeAte)
 
     const termo = (filtros.termo ?? '').replace(/[,()%*\\]/g, ' ').trim()
     if (termo) {

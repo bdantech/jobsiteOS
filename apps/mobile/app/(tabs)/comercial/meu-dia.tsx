@@ -30,6 +30,7 @@ import { Text } from '@/components/ui/text'
 import { useVendedoresVisiveis } from '@/features/comercial'
 import { SeletorVendedor } from '@/features/comercial/components/seletor-vendedor'
 import { useConcluirTarefa, useMeuDia, useOcultarItem, useResolverPendencia } from '@/features/comercial/meu-dia'
+import { CardNovidades } from '@/features/comercial/components/card-novidades'
 import { ItemMeuDiaCard, destinoDoItem } from '@/features/comercial/components/item-meu-dia'
 import {
   BarrasMobile, BolhasMobile, PizzaMobile, TreemapCarteira, Widget,
@@ -223,6 +224,15 @@ export default function MeuDiaScreen() {
               }`}
         </Text>
       </View>
+
+      {/*
+        As novidades do funil, para o originador (04t §7): na segunda de manhã a
+        informação vai até ele, em vez de depender de lembrar de filtrar. Tocar abre o
+        funil já filtrado.
+      */}
+      {data.tipo === 'originador' && (data.dados_vendedor_id ?? data.vendedor_id) ? (
+        <CardNovidades vendedorId={(data.dados_vendedor_id ?? data.vendedor_id) as string} />
+      ) : null}
 
       {/* A agenda ABRE a tela no celular — é a primeira pergunta de quem acorda. */}
       {compromissos.length > 0 ? (

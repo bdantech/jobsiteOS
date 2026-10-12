@@ -29,6 +29,10 @@ export interface FiltrosFunil {
   termo?: string
   /** Só as notas roteadas para esta carteira — o funil de NFs do originador. */
   vendedorId?: string
+  /** Novidades (04t): só o que entrou no funil a partir deste instante (ISO). */
+  novidadeDe?: string
+  /** Fim da janela, exclusivo. Só o intervalo personalizado fecha esta ponta. */
+  novidadeAte?: string
 }
 
 /** Oportunidades + contexto de fornecedor, numa leitura só (nunca N+1 no celular). */

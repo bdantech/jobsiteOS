@@ -145,6 +145,14 @@ export interface FiltrosFunil {
   vendedorId?: string
   /** As notas que não foram roteadas para ninguém. É a fila de distribuição do gestor. */
   semDono?: boolean
+  /**
+   * NOVIDADES (04t): só o que ENTROU no funil a partir deste instante (ISO). Lê
+   * `novidade_em` — a entrada ou a reentrada do item —, não a emissão da nota: a NF de
+   * três dias atrás que o certificado capturou hoje é novidade hoje.
+   */
+  novidadeDe?: string
+  /** Fim da janela, EXCLUSIVO. Só o intervalo personalizado fecha esta ponta. */
+  novidadeAte?: string
   ordem?: OrdemFunil
   /** Padrão: decrescente nas quatro ordenações. */
   ordemAsc?: boolean
@@ -291,7 +299,7 @@ export async function buscarFunil(
  * parser — o resultado degrada em silêncio para `GenericStringError`.
  */
 const COLUNAS_OPORTUNIDADE =
-  'tipo, id, access_key, numero, serie, numero_exibicao, linha_contexto, valor, data_base, emitida_em, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, relogio, estado_origem, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, liquido_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem, bill_origin, bill_document_type'
+  'tipo, id, access_key, numero, serie, numero_exibicao, linha_contexto, valor, data_base, emitida_em, vencimento, vencimento_origem, natureza_operacao, operavel, nao_operavel_motivo, dias_para_vencimento, relogio, estado_origem, receita_esperada, taxa_usada, tac_estimada, seguro_estimado, liquido_estimado, faixa, faixa_motivo, estagio_funil, perda_motivo, credor_pessoa_fisica, fornecedor_cnpj, fornecedor_nome, fornecedor_empresa_id, fornecedor_cadastrado, fornecedor_tipagem, fornecedor_uf, fornecedor_tem_protesto, fornecedor_protesto_valor, fornecedor_protesto_em, fornecedor_suprimido, fornecedor_sem_interesse, sacado_cnpj, sacado_nome, sacado_matriz_cnpj, sacado_empresa_id, sacado_credito_status, sacado_limite_disponivel, sacado_limite_cobre_valor, pre_autorizacao_id, pre_autorizacao_status, pre_autorizacao_em, conversao_antecipacao_id, conversao_em_disputa, conversao_valor, conversao_taxa, vendedor_id, vendedor_origem, bill_origin, bill_document_type, entrou_funil_em, reentrou_funil_em, reentrou_funil_motivo, novidade_em'
 
 export interface PaginaOportunidades {
   oportunidades: Oportunidade[]
@@ -381,6 +389,10 @@ export async function buscarOportunidades(
       if (filtros.emissaoAte) query = query.lt('data_base', diaSeguinte(filtros.emissaoAte))
       if (filtros.vencimentoDe) query = query.gte('vencimento', filtros.vencimentoDe)
       if (filtros.vencimentoAte) query = query.lte('vencimento', filtros.vencimentoAte)
+
+      // Mais um predicado no `where`, e só isso: compõe com todos os de cima.
+      if (filtros.novidadeDe) query = query.gte('novidade_em', filtros.novidadeDe)
+      if (filtros.novidadeAte) query = query.lt('novidade_em', filtros.novidadeAte)
 
       if (filtros.termo?.trim()) {
         const t = `*${filtros.termo.trim()}*`

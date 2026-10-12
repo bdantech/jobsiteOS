@@ -57,6 +57,7 @@ import {
   validarContatosJob,
 } from './fornecedores/index.js'
 import { atualizarSacadosProspeccao } from './prospeccao/atualizar-sacados.js'
+import { importarFeriadosJob } from './calendario/importar-feriados.js'
 import { sincronizarSeguidos } from './prospeccao/sincronizar-seguidos.js'
 import { sugerirPassivosJob } from './comercial/passivos.js'
 import {
@@ -187,6 +188,7 @@ export type TipoJob =
   | 'reports-gerar-semanal'
   | 'reports-materializar-series'
   | 'comercial-rotear'
+  | 'calendario-importar-feriados'
   | 'fornecedores-funil'
   | 'fornecedores-descoberta'
   | 'fornecedores-clique'
@@ -1935,6 +1937,11 @@ export async function executarAplicarDeriva(
 /** Roteia as NFs vivas para os originadores. Encadeado no diário da Antecipação. */
 export function dispararRotearNotas(): string {
   return dispararAvulso('comercial-rotear', async () => rotearNotasJob())
+}
+
+/** Feriados nacionais → `dias_nao_uteis` (04t). Anual, e pelo botão de Configurações. */
+export function dispararImportarFeriados(): string {
+  return dispararAvulso('calendario-importar-feriados', async () => importarFeriadosJob())
 }
 
 export { aplicarDecisaoCreditoEmVendas }

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  CheckCheck,
   Loader2,
   RefreshCw,
   Search,
@@ -17,13 +18,17 @@ import {
   ESTAGIO_FUNIL_LABELS,
   FAIXAS,
   FAIXA_LABELS,
+  OPCAO_NOVIDADES_LABELS,
+  OPCOES_NOVIDADES,
   TIPAGENS,
   TIPAGEM_LABELS,
   TIPOS_OPORTUNIDADE,
   TIPO_OPORTUNIDADE_DESCRICOES,
   TIPO_OPORTUNIDADE_LABELS,
+  descreverJanela,
   type EstagioFunil,
   type Faixa,
+  type OpcaoNovidades,
   type Tipagem,
   type TipoOportunidade,
 } from '@jobsiteos/core'
@@ -67,6 +72,7 @@ import {
   type FornecedorFunil,
   type OrdemFunil,
 } from './queries'
+import { useJanelaNovidades, useVisitaAoFunil } from './use-novidades'
 
 /**
  * O Kanban do funil (§5).
@@ -103,6 +109,8 @@ const TITULO_COLUNA: Record<string, string> = {
 /** Sentinelas do filtro por originador, para caberem num `<Select>` de strings. */
 const TODOS = '__todos__'
 const SEM_DONO = '__sem_dono__'
+/** O filtro de novidades desligado, para caber no mesmo `<Select>` das opções. */
+const TUDO = '__tudo__'
 
 /** A preferência de ORIGEM do funil, por navegador. Ver o estado `tipos`. */
 const CHAVE_TIPOS = 'jobsiteos:funil:tipos'
@@ -124,7 +132,14 @@ export function FunilKanban({
   vendedorId,
   ehGestor = false,
   padraoComercial = false,
-}: { vendedorId?: string; ehGestor?: boolean; padraoComercial?: boolean } = {}) {
+  novidadesInicial,
+}: {
+  vendedorId?: string
+  ehGestor?: boolean
+  padraoComercial?: boolean
+  /** Abre já com o filtro de novidades ligado — é como o card do Meu Dia chega aqui. */
+  novidadesInicial?: OpcaoNovidades
+} = {}) {
   const qc = useQueryClient()
   const [termo, setTermo] = React.useState('')
   const [atribuindo, setAtribuindo] = React.useState<string | null>(null)
@@ -149,6 +164,33 @@ export function FunilKanban({
    * sumiu?"), não para trabalhar.
    */
   const [incluirSuprimidos, setIncluirSuprimidos] = React.useState(false)
+
+  /*
+   * NOVIDADES (04t) — "o que entrou desde a última vez que eu trabalhei".
+   *
+   * Desligado por padrão: o funil é a fila inteira, e a novidade é um recorte dela.
+   * Ligado, a opção default é "desde meu último expediente", que na segunda de manhã
+   * traz desde sexta às 18h sem ninguém precisar lembrar que houve um fim de semana.
+   *
+   * Não persiste entre sessões, de propósito: um filtro de tempo que sobrevive ao
+   * reload é um funil que amanhece vazio sem ninguém saber por quê.
+   */
+  const [novidades, setNovidades] = React.useState<OpcaoNovidades | null>(novidadesInicial ?? null)
+  const [novidadeDe, setNovidadeDe] = React.useState('')
+  const [novidadeAte, setNovidadeAte] = React.useState('')
+  const intervalo = React.useMemo(
+    () => ({
+      de: novidadeDe ? new Date(novidadeDe) : null,
+      ate: novidadeAte ? new Date(novidadeAte) : null,
+    }),
+    [novidadeDe, novidadeAte],
+  )
+  const { janela, agora } = useJanelaNovidades(novidades, intervalo)
+  const novidadeDeIso = janela?.de.toISOString()
+  const novidadeAteIso = janela?.ate?.toISOString()
+
+  // §6: abrir o funil é uma visita. O selo "novo" compara com a visita ANTERIOR.
+  const { vistoAnterior, marcarTudo } = useVisitaAoFunil()
 
   /*
    * O filtro por ORIGEM (04s §8), persistido por usuário.
@@ -275,10 +317,14 @@ export function FunilKanban({
       vencimentoDe: vencDe || undefined,
       vencimentoAte: vencAte || undefined,
       incluirSuprimidos: incluirSuprimidos || undefined,
+      novidadeDe: novidadeDeIso,
+      novidadeAte: novidadeAteIso,
       ordem,
       ordemAsc,
     }),
     [
+      novidadeDeIso,
+      novidadeAteIso,
       incluirSuprimidos,
       termoDebounced,
       tipos,
@@ -332,6 +378,7 @@ export function FunilKanban({
       tipagem ||
       tipos.length > 0 ||
       intervalosAtivos ||
+      novidades ||
       (!travadoNoVendedor && originador !== TODOS),
   )
 
@@ -363,6 +410,9 @@ export function FunilKanban({
     setVencDe('')
     setVencAte('')
     setIncluirSuprimidos(false)
+    setNovidades(null)
+    setNovidadeDe('')
+    setNovidadeAte('')
     if (!travadoNoVendedor) setOriginador(TODOS)
   }
 
@@ -445,6 +495,30 @@ export function FunilKanban({
           </Button>
         ))}
       </div>
+
+      {/*
+        NOVIDADES ao lado da faixa: é mais um recorte do dia a dia, e compõe com
+        todos os outros — origem, faixa, originador, valor e datas continuam valendo.
+      */}
+      <Select
+        value={novidades ?? TUDO}
+        onValueChange={(v) => setNovidades(v === TUDO ? null : (v as OpcaoNovidades))}
+      >
+        <SelectTrigger
+          className={cn('h-9 w-[15.5rem]', novidades && 'border-primary text-foreground')}
+          aria-label="Filtrar pelo que entrou no funil"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TUDO}>Novidades: tudo</SelectItem>
+          {OPCOES_NOVIDADES.map((o) => (
+            <SelectItem key={o} value={o}>
+              {OPCAO_NOVIDADES_LABELS[o]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Ordenação: o critério e o sentido são dois controles porque são duas
           decisões. "Vencimento, do maior para o menor" e "vencimento, do mais
@@ -607,8 +681,94 @@ export function FunilKanban({
         <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden />
         Atualizar
       </Button>
+
+      {/*
+        O controle explícito do selo "novo" (§6). Só aparece quando há uma visita
+        anterior com que comparar — antes disso não existe selo nenhum para apagar.
+      */}
+      {vistoAnterior ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          title="Apaga o selo “Novo” de todos os cards"
+          onClick={() => {
+            void marcarTudo().catch(() => toast.error('Não foi possível marcar como visto.'))
+          }}
+        >
+          <CheckCheck className="mr-1 h-3.5 w-3.5" aria-hidden />
+          Marcar tudo como visto
+        </Button>
+      ) : null}
     </div>
   )
+
+  /*
+   * A JANELA POR EXTENSO. Janela calculada em silêncio é janela em que ninguém
+   * confia; escrita assim, o originador confere sozinho se a conta bate — e vê
+   * quando o calendário de feriados não foi considerado.
+   */
+  const faixaDeNovidades = novidades ? (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+      role="status"
+    >
+      {novidades === 'personalizado' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="novidade-de" className="text-xs text-muted-foreground">
+            Entrou de
+          </Label>
+          <Input
+            id="novidade-de"
+            type="datetime-local"
+            value={novidadeDe}
+            onChange={(e) => setNovidadeDe(e.target.value)}
+            className="h-8 w-[13rem]"
+          />
+          <Label htmlFor="novidade-ate" className="text-xs text-muted-foreground">
+            até
+          </Label>
+          <Input
+            id="novidade-ate"
+            type="datetime-local"
+            value={novidadeAte}
+            onChange={(e) => setNovidadeAte(e.target.value)}
+            className="h-8 w-[13rem]"
+          />
+        </div>
+      ) : null}
+
+      <p className="min-w-0 flex-1">
+        {janela
+          ? descreverJanela(janela, agora, totalConhecido ? totalGeral : null)
+          : novidadeDe && novidadeAte
+            ? 'O fim do intervalo precisa ser depois do início.'
+            : 'Escolha a partir de quando — o fim é opcional, e vazio vale até agora.'}
+      </p>
+
+      {janela && !janela.feriadosConsiderados ? (
+        <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Feriados podem não estar considerados: o calendário deste período não foi importado.
+        </p>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7"
+        onClick={() => {
+          setNovidades(null)
+          setNovidadeDe('')
+          setNovidadeAte('')
+        }}
+      >
+        <X className="mr-1 h-3.5 w-3.5" aria-hidden />
+        Ver tudo
+      </Button>
+    </div>
+  ) : null
 
   /*
    * As colunas em DUAS formas, e a diferença é só a moldura.
@@ -644,6 +804,7 @@ export function FunilKanban({
           minimoOperavel={minimoOperavel}
           onTotal={anotarTotal}
           mostrarDono={!vendedorEfetivo}
+          vistoAnterior={vistoAnterior}
           nomePorId={nomePorId}
           ehGestor={ehGestor}
           atribuindo={atribuindo}
@@ -670,6 +831,7 @@ export function FunilKanban({
         </CardHeader>
         <CardContent className="space-y-3">
           {filtros}
+          {faixaDeNovidades}
           {grade}
         </CardContent>
       </Card>
@@ -679,6 +841,7 @@ export function FunilKanban({
   return (
     <div className="space-y-4">
       {filtros}
+      {faixaDeNovidades}
       {grade}
     </div>
   )
@@ -702,6 +865,7 @@ function ColunaFunil({
   minimoOperavel,
   onTotal,
   mostrarDono,
+  vistoAnterior,
   nomePorId,
   ehGestor,
   atribuindo,
@@ -717,6 +881,8 @@ function ColunaFunil({
   minimoOperavel: number
   onTotal: (estagio: string, total: number | null) => void
   mostrarDono: boolean
+  /** O marcador da visita anterior ao funil: o que entrou depois leva o selo "Novo". */
+  vistoAnterior: string | null
   nomePorId: Map<string, string>
   ehGestor: boolean
   atribuindo: string | null
@@ -917,6 +1083,7 @@ function ColunaFunil({
                 item={nota}
                 fornecedor={nota.fornecedor_cnpj ? porCnpj.get(nota.fornecedor_cnpj) : undefined}
                 minimoOperavel={minimoOperavel}
+                vistoAnterior={vistoAnterior}
                 dono={
                   // Só quando a lista não está recortada num originador: ali o nome
                   // repetiria em cada card o que o filtro no topo já diz.

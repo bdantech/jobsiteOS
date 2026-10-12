@@ -22,6 +22,7 @@ import { VendedorForm } from './vendedor-form'
 import { ConfigMeuDia } from './meu-dia/config-meu-dia'
 import { Parametros } from './comissao/parametros'
 import { ConfigFornecedores } from './fornecedores/config'
+import { ConfigNovidades } from './config-novidades'
 
 /**
  * Configurações do Comercial: quem vende, com qual território, por quanto.
@@ -318,6 +319,9 @@ export function ConfigComercial() {
 
         {/* ── Funil ────────────────────────────────────────────────────────── */}
         <TabsContent value="funil" className="mt-0 space-y-4">
+          {/* O expediente e o calendário que a janela de novidades do funil lê (04t). */}
+          <ConfigNovidades />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Distribuição semanal</CardTitle>

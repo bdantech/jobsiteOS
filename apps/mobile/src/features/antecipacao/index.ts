@@ -20,5 +20,6 @@ export {
   useSacadosQuery,
   useSacadosSemCnaeQuery,
 } from './queries'
+export { novidadesKeys, useJanelaNovidades, useResumoNovidades, useVisitaAoFunil } from './novidades'
 export * from './format'
 export type * from './types'

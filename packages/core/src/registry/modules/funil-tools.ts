@@ -8,6 +8,13 @@ import {
   type PreauthsExpirandoInput,
   type TipoOportunidade,
 } from '../../funil/schemas.js'
+import {
+  descreverJanela,
+  novidadesFunilSchema,
+  resolverJanelaNovidades,
+  type NovidadesFunilInput,
+} from '../../funil/janela-novidades.js'
+import { buscarContextoNovidades, buscarResumoNovidades } from '../../funil/novidades-dados.js'
 import type { ModuleTool, ToolContext } from '../types.js'
 
 /**
@@ -117,6 +124,45 @@ async function preauthsExpirando(input: PreauthsExpirandoInput, ctx: ToolContext
   }
 }
 
+/**
+ * "O que entrou desde sexta?" (04t §8).
+ *
+ * A janela é a MESMA do seletor do funil — mesmo expediente, mesmo calendário — e o
+ * resumo sai do mesmo RPC que alimenta o contador da aba. Uma segunda conta aqui seria
+ * o agente respondendo um número e a tela mostrando outro.
+ */
+async function novidades(input: NovidadesFunilInput, ctx: ToolContext) {
+  const agora = new Date()
+  const { cfg, calendario } = await buscarContextoNovidades(ctx.supabase)
+
+  const janela = input.desde
+    ? { opcao: 'personalizado' as const, de: new Date(input.desde), ate: null, feriadosConsiderados: true }
+    : resolverJanelaNovidades(input.janela, agora, calendario, cfg)
+  if (!janela) throw new Error('Janela de novidades inválida.')
+
+  const resumo = await buscarResumoNovidades(ctx.supabase, janela)
+
+  return {
+    janela: {
+      de: janela.de.toISOString(),
+      ate: janela.ate ? janela.ate.toISOString() : null,
+      descricao: descreverJanela(janela, agora, resumo.total),
+    },
+    total: resumo.total,
+    valor_total: resumo.valor,
+    por_tipo: resumo.por_tipo.map((t) => ({
+      ...t,
+      label: TIPO_OPORTUNIDADE_LABELS[t.tipo as TipoOportunidade] ?? t.tipo,
+    })),
+    // Por carteira: para o originador é uma linha só (a dele); o gestor vê a divisão.
+    por_carteira: resumo.por_vendedor.map((v) => ({ ...v, nome: v.nome ?? 'Sem dono' })),
+    aviso: janela.feriadosConsiderados
+      ? null
+      : 'Os feriados deste período não estão importados: a janela considerou só fins de semana e o que foi cadastrado à mão.',
+    route: '/comercial/nfs',
+  }
+}
+
 export const funilTools: ModuleTool[] = [
   {
     id: 'funil.oportunidades',
@@ -141,5 +187,18 @@ export const funilTools: ModuleTool[] = [
     inputSchema: preauthsExpirandoSchema,
     mutates: false,
     execute: (input, ctx) => preauthsExpirando(input as PreauthsExpirandoInput, ctx),
+  },
+  {
+    id: 'funil.novidades',
+    name: 'Novidades do funil',
+    description:
+      'O que ENTROU no funil de antecipação numa janela de tempo, quebrado por origem (NF, ' +
+      'pré-autorização, título) e por carteira, com o valor somado. A janela padrão é "desde o fim ' +
+      'do último expediente útil": numa segunda de manhã traz tudo desde sexta às 18h, e depois de ' +
+      'feriado emendado volta até o último dia trabalhado. Conta a data em que o item apareceu no ' +
+      'funil, não a emissão da nota. Responde "o que entrou desde sexta?" e "o que chegou hoje?".',
+    inputSchema: novidadesFunilSchema,
+    mutates: false,
+    execute: (input, ctx) => novidades(input as NovidadesFunilInput, ctx),
   },
 ]

@@ -6,7 +6,9 @@ import { CartaoDeMenu } from '@/components/shell/module-grid'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
+import { useJanelaNovidades, useResumoNovidades } from '@/features/antecipacao'
 import { itensDoMenu, useContextoComercial } from '@/features/comercial/menu'
+import { useSession } from '@/lib/auth'
 
 /**
  * A porta do Comercial: a grade das telas do módulo, no desenho da aba "Mais".
@@ -20,6 +22,20 @@ export default function ComercialScreen() {
   const router = useRouter()
   const recuo = useRecuoDoCabecalho()
   const { data, isPending, isError, refetch, isRefetching } = useContextoComercial()
+
+  /*
+   * O contador do Funil de NFs (04t): o que entrou desde o último expediente, no MESMO
+   * recorte da tela que o cartão abre — o originador travado na própria carteira, os
+   * outros pelo que a RLS lhes dá. Sem o módulo Antecipação não há nota para contar.
+   */
+  const { grantedModuleIds } = useSession()
+  const { janela } = useJanelaNovidades('expediente')
+  const novidades = useResumoNovidades(
+    janela,
+    data?.vendedor?.tipo === 'originador' ? data.vendedor.id : null,
+    Boolean(data) && grantedModuleIds.includes('antecipacao'),
+  )
+  const novas = novidades.data?.total ?? 0
 
   if (isError) {
     return (
@@ -51,9 +67,15 @@ export default function ComercialScreen() {
               titulo={item.titulo}
               onPress={() => router.push(item.href)}
               rodape={
-                <Text numberOfLines={1} className="text-xs text-muted-foreground">
-                  {item.descricao}
-                </Text>
+                item.href === '/comercial/nfs' && novas > 0 ? (
+                  <Text numberOfLines={1} className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                    {novas > 99 ? '99+' : novas} {novas === 1 ? 'novidade' : 'novidades'} desde o expediente
+                  </Text>
+                ) : (
+                  <Text numberOfLines={1} className="text-xs text-muted-foreground">
+                    {item.descricao}
+                  </Text>
+                )
               }
             />
           ))}

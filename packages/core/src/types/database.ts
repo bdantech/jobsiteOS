@@ -9400,8 +9400,41 @@ export type Database = {
           },
         ]
       }
+      dias_nao_uteis: {
+        Row: {
+          criado_em: string | null
+          data: string
+          escopo: string
+          municipio: string | null
+          nome: string
+          origem: string
+          uf: string | null
+        }
+        Insert: {
+          criado_em?: string | null
+          data: string
+          escopo?: string
+          municipio?: string | null
+          nome: string
+          origem?: string
+          uf?: string | null
+        }
+        Update: {
+          criado_em?: string | null
+          data?: string
+          escopo?: string
+          municipio?: string | null
+          nome?: string
+          origem?: string
+          uf?: string | null
+        }
+        Relationships: []
+      }
       notas_fiscais: {
         Row: {
+          entrou_funil_em: string
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string
           atualizada_em: string
           bilateral: boolean
@@ -9467,6 +9500,9 @@ export type Database = {
           xml_resumo: boolean
         }
         Insert: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           access_key: string
           atualizada_em?: string
           bilateral?: boolean
@@ -9532,6 +9568,9 @@ export type Database = {
           xml_resumo?: boolean
         }
         Update: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           access_key?: string
           atualizada_em?: string
           bilateral?: boolean
@@ -10311,6 +10350,9 @@ export type Database = {
       }
       pre_autorizacoes: {
         Row: {
+          entrou_funil_em: string
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           anticipation_id_externo: number | null
           credit_status: string | null
           criada_em: string | null
@@ -10367,6 +10409,9 @@ export type Database = {
           vendedor_origem: string | null
         }
         Insert: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           anticipation_id_externo?: number | null
           credit_status?: string | null
           criada_em?: string | null
@@ -10423,6 +10468,9 @@ export type Database = {
           vendedor_origem?: string | null
         }
         Update: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           anticipation_id_externo?: number | null
           credit_status?: string | null
           criada_em?: string | null
@@ -13424,6 +13472,9 @@ export type Database = {
       }
       sienge_titulos: {
         Row: {
+          entrou_funil_em: string
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           anticipation_id_externo: number | null
           anticipation_net: number | null
           anticipation_status: string | null
@@ -13498,6 +13549,9 @@ export type Database = {
           write_back_status: string | null
         }
         Insert: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           anticipation_id_externo?: number | null
           anticipation_net?: number | null
           anticipation_status?: string | null
@@ -13572,6 +13626,9 @@ export type Database = {
           write_back_status?: string | null
         }
         Update: {
+          entrou_funil_em?: string
+          reentrou_funil_em?: string | null
+          reentrou_funil_motivo?: string | null
           anticipation_id_externo?: number | null
           anticipation_net?: number | null
           anticipation_status?: string | null
@@ -14435,6 +14492,8 @@ export type Database = {
       }
       usuarios: {
         Row: {
+          funil_visto_anterior: string | null
+          funil_visto_em: string | null
           ativo: boolean
           atalhos_fixados: string[]
           criado_em: string
@@ -14448,6 +14507,8 @@ export type Database = {
           web_push_subscriptions: Json
         }
         Insert: {
+          funil_visto_anterior?: string | null
+          funil_visto_em?: string | null
           ativo?: boolean
           atalhos_fixados?: string[]
           criado_em?: string
@@ -14461,6 +14522,8 @@ export type Database = {
           web_push_subscriptions?: Json
         }
         Update: {
+          funil_visto_anterior?: string | null
+          funil_visto_em?: string | null
           ativo?: boolean
           atalhos_fixados?: string[]
           criado_em?: string
@@ -16929,6 +16992,10 @@ export type Database = {
       }
       funil_oportunidades: {
         Row: {
+          entrou_funil_em: string | null
+          novidade_em: string | null
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string | null
           bill_document_type: string | null
           bill_origin: string | null
@@ -17003,6 +17070,10 @@ export type Database = {
       }
       funil_oportunidades_nf: {
         Row: {
+          entrou_funil_em: string | null
+          novidade_em: string | null
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string | null
           bill_document_type: string | null
           bill_origin: string | null
@@ -17176,6 +17247,10 @@ export type Database = {
       }
       funil_oportunidades_preauth: {
         Row: {
+          entrou_funil_em: string | null
+          novidade_em: string | null
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string | null
           bill_document_type: string | null
           bill_origin: string | null
@@ -17342,6 +17417,10 @@ export type Database = {
       }
       funil_oportunidades_titulo: {
         Row: {
+          entrou_funil_em: string | null
+          novidade_em: string | null
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string | null
           bill_document_type: string | null
           bill_origin: string | null
@@ -17925,6 +18004,10 @@ export type Database = {
       }
       notas_funil: {
         Row: {
+          entrou_funil_em: string | null
+          novidade_em: string | null
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string | null
           bilateral: boolean | null
           cancelada_em: string | null
@@ -18281,6 +18364,31 @@ export type Database = {
       }
     }
     Functions: {
+      app_funil_marcar_visita: { Args: { p_tudo?: boolean }; Returns: Json }
+      app_remover_dia_nao_util: { Args: { p_data: string }; Returns: undefined }
+      app_salvar_dia_nao_util: {
+        Args: { p: Json }
+        Returns: {
+          criado_em: string | null
+          data: string
+          escopo: string
+          municipio: string | null
+          nome: string
+          origem: string
+          uf: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "dias_nao_uteis"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      app_salvar_funil_novidades_config: { Args: { p: Json }; Returns: Json }
+      funil_novidades_resumo: {
+        Args: { p_ate?: string | null; p_desde: string; p_vendedor_id?: string | null }
+        Returns: Json
+      }
       analise_propria_painel: {
         Args: { p_analise_credito_id: string }
         Returns: Json
@@ -22173,6 +22281,9 @@ export type Database = {
       app_mover_estagio_nf: {
         Args: { p: Json }
         Returns: {
+          entrou_funil_em: string
+          reentrou_funil_em: string | null
+          reentrou_funil_motivo: string | null
           access_key: string
           atualizada_em: string
           bilateral: boolean

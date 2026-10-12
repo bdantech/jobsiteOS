@@ -1,4 +1,5 @@
-import { Stack } from 'expo-router'
+import { OPCOES_NOVIDADES, type OpcaoNovidades } from '@jobsiteos/core'
+import { Stack, useLocalSearchParams } from 'expo-router'
 import { View } from 'react-native'
 
 import { AbaixoDoCabecalho } from '@/components/shell/cabecalho-de-vidro'
@@ -24,6 +25,15 @@ import { useSession } from '@/lib/auth'
 export default function FunilNfsScreen() {
   const { grantedModuleIds } = useSession()
   const contexto = useContextoComercial()
+  /*
+   * O card de novidades do Meu Dia (04t §7) chega aqui com o filtro já escolhido, e —
+   * quando o gestor está olhando o dia de outra pessoa — com a carteira dela. São só
+   * filtros: quem decide o que cada um enxerga continua sendo a RLS.
+   */
+  const params = useLocalSearchParams<{ novidades?: string; vendedor?: string }>()
+  const novidadesInicial = (OPCOES_NOVIDADES as readonly string[]).includes(params.novidades ?? '')
+    ? (params.novidades as OpcaoNovidades)
+    : undefined
 
   if (!grantedModuleIds.includes('antecipacao')) {
     return (
@@ -60,7 +70,7 @@ export default function FunilNfsScreen() {
   }
 
   const { vendedor } = contexto.data
-  const recorte = vendedor?.tipo === 'originador' ? vendedor.id : undefined
+  const recorte = vendedor?.tipo === 'originador' ? vendedor.id : params.vendedor || undefined
 
   return (
     <>
@@ -70,7 +80,7 @@ export default function FunilNfsScreen() {
         apareceriam sem título e sem a seta de voltar.
       */}
       <Stack.Screen options={{ headerShown: false }} />
-      <FunilNotas titulo="Funil de NFs" vendedorId={recorte} />
+      <FunilNotas titulo="Funil de NFs" vendedorId={recorte} novidadesInicial={novidadesInicial} />
     </>
   )
 }

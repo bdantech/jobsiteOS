@@ -8,7 +8,10 @@ import {
   TIPAGEM_LABELS,
   TIPO_OPORTUNIDADE_LABELS,
   STATUS_PRE_AUTORIZACAO_LABELS,
+  ehNovoDesdeAVisita,
   speDoSacado,
+  textoDeEntrada,
+  textoDeReentrada,
   urgenciaDe,
   valorLiquidoEstimado,
   type ContaDoSacadoResolvida,
@@ -31,7 +34,14 @@ import { NotaModal } from './documento/nota-modal'
 import { OportunidadeModal } from './oportunidade-modal'
 import { AbaEmpresa } from '@/components/comercial/aba-empresa'
 import { AbaMensagens } from '@/components/comercial/modal-card'
-import { creditoBadge, formatarData, formatarMoedaExata, labelCredito, textoPrazo } from './format'
+import {
+  creditoBadge,
+  formatarData,
+  formatarDataHora,
+  formatarMoedaExata,
+  labelCredito,
+  textoPrazo,
+} from './format'
 import type { FornecedorFunil, Oportunidade } from './queries'
 
 /**
@@ -98,6 +108,7 @@ export function OportunidadeCard({
   compacto = false,
   dono,
   conta,
+  vistoAnterior,
 }: {
   item: Oportunidade
   fornecedor?: FornecedorFunil
@@ -105,6 +116,8 @@ export function OportunidadeCard({
   compacto?: boolean
   conta?: ContaDoSacadoResolvida | null
   dono?: React.ReactNode
+  /** O marcador da visita anterior ao funil (04t §6). Sem ele não há selo "novo". */
+  vistoAnterior?: string | null
 }) {
   const [aberta, setAberta] = React.useState(false)
   const [aba, setAba] = React.useState('documento')
@@ -139,6 +152,16 @@ export function OportunidadeCard({
 
   const expiraEm = diasParaExpirar(item.relogio)
   const relogioCurto = expiraEm !== null && expiraEm <= 2
+
+  /*
+   * O CARIMBO DE ENTRADA (04t): quando o item apareceu no funil — que não é a emissão.
+   * Quem VOLTOU ao funil diz o motivo: uma nota de emissão antiga aparecendo como nova
+   * sem explicação parece bug, e o motivo é o que a faz parecer o que é.
+   */
+  const agora = new Date()
+  const entrada = textoDeEntrada(item.novidade_em, agora)
+  const reentrada = textoDeReentrada(item.reentrou_funil_em, item.reentrou_funil_motivo)
+  const novo = ehNovoDesdeAVisita(item.novidade_em, vistoAnterior)
 
   /*
    * QUAL modal abre — e todo card abre algum.
@@ -208,6 +231,11 @@ export function OportunidadeCard({
                       </span>
                     </span>
                   ) : null}
+                  {entrada ? (
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      {reentrada ? `${reentrada} · ${entrada.replace(/^entrou /, '')}` : entrada}
+                    </span>
+                  ) : null}
                 </span>
               }
               score={
@@ -229,6 +257,14 @@ export function OportunidadeCard({
                   <ChipDoCard forte tom={TOM_DO_SELO[tipo]}>
                     {TIPO_OPORTUNIDADE_LABELS[tipo]}
                   </ChipDoCard>
+
+                  {/* "Novo" = entrou depois da visita ANTERIOR ao funil. Compara com o
+                      marcador anterior para não sumir no primeiro refresh da sessão. */}
+                  {novo ? (
+                    <ChipDoCard tom="destaque" forte>
+                      Novo
+                    </ChipDoCard>
+                  ) : null}
 
                   {/* O selo da cobrança logo depois do tipo: muda o que se pode FAZER
                       com o card, e por isso vem antes de qualquer descrição. */}
@@ -456,6 +492,19 @@ export function OportunidadeCard({
               <dt className="opacity-70">Entrada</dt>
               <dd className="tabular-nums">{formatarData(item.data_base)}</dd>
             </div>
+            <div className="flex justify-between gap-4">
+              <dt className="opacity-70">No funil desde</dt>
+              <dd className="tabular-nums">{formatarDataHora(item.entrou_funil_em)}</dd>
+            </div>
+            {item.reentrou_funil_em ? (
+              <div className="flex justify-between gap-4">
+                <dt className="opacity-70">Voltou ao funil</dt>
+                <dd className="tabular-nums">
+                  {formatarDataHora(item.reentrou_funil_em)}
+                  {reentrada ? ` — ${reentrada.replace(/^voltou ao funil:? ?/, '')}` : ''}
+                </dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-4">
               <dt className="opacity-70">Vencimento</dt>
               <dd className="tabular-nums">{formatarData(item.vencimento)}</dd>

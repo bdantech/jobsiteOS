@@ -105,8 +105,11 @@ export interface Aba {
   tipos?: readonly string[]
   /** Rótulo diferente por tipo, quando a mesma tela responde a perguntas diferentes. */
   labelPorTipo?: Record<string, string>
-  /** Aba que carrega contador próprio. Hoje só a fila de identificação tem um. */
-  contador?: 'nao_vinculadas'
+  /**
+   * Aba que carrega contador próprio: a fila de identificação e o funil, que mostra
+   * quantos itens entraram desde o último expediente (04t).
+   */
+  contador?: 'nao_vinculadas' | 'novidades_funil'
   /** Exige OUTRO módulo além do dono da aba (os clientes Onepay são dados do Radar). */
   requerModulo?: string
 }
@@ -202,6 +205,7 @@ export const ABAS_DOS_MODULOS: Record<string, readonly Aba[]> = {
       tipos: ['originador', 'vendedor'],
       labelPorTipo: { originador: 'Minhas NFs' },
       bloco: 'dia',
+      contador: 'novidades_funil',
     },
     // Do originador pela carteira dele, e do closer pelo time abaixo: capturar
     // certificado é o trabalho que destrava a ingestão das NFs de qualquer um dos dois.
@@ -269,7 +273,7 @@ export const ABAS_DOS_MODULOS: Record<string, readonly Aba[]> = {
    * faixa reclassifica o funil de todo mundo. Ver o funil e os sacados é para todo o time.
    */
   antecipacao: [
-    { href: '/antecipacao', label: 'Funil', icon: KanbanSquare },
+    { href: '/antecipacao', label: 'Funil', icon: KanbanSquare, contador: 'novidades_funil' },
     { href: '/antecipacao/sacados', label: 'Por Sacado', icon: Building2 },
     // Sacados por NF (04r): os sacados dos fornecedores SEGUIDOS, como cards com dono.
     { href: '/antecipacao/sacados-por-nf', label: 'Sacados por NF', icon: Sparkles },

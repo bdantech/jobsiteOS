@@ -15,7 +15,12 @@ export default async function ComercialLayout({ children }: { children: ReactNod
 
   return (
     <div>
-      <ComercialNav tipo={vendedor?.tipo ?? null} ehGestor={ehGestor} />
+      <ComercialNav
+        tipo={vendedor?.tipo ?? null}
+        ehGestor={ehGestor}
+        vendedorId={vendedor?.id ?? null}
+        temAntecipacao={context.grantedModuleIds.includes('antecipacao')}
+      />
       {children}
     </div>
   )

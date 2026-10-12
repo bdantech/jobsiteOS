@@ -119,6 +119,14 @@ export const CRONS: readonly CronCatalogado[] = [
     ],
   },
   {
+    path: '/api/cron/calendario-feriados',
+    nome: 'Feriados nacionais',
+    moduloId: 'antecipacao',
+    descricao:
+      'Uma vez por ano, em 2 de janeiro: busca na BrasilAPI os feriados nacionais do ano corrente e do seguinte e grava em `dias_nao_uteis`. É o calendário que a janela de novidades do funil lê para saber qual foi o último expediente útil — sem ele a janela considera só fins de semana e a tela avisa. Feriados estaduais, municipais e pontos facultativos são cadastro do gestor em Configurações, e o que foi cadastrado à mão não é sobrescrito.',
+    destino: 'POST /jobs/calendario/importar-feriados',
+  },
+  {
     path: '/api/cron/prospeccao-seguidos',
     nome: 'Cedentes seguidos e funil de sacados',
     moduloId: 'antecipacao',

@@ -1,6 +1,13 @@
-import { ESTAGIO_FUNIL_LABELS, type EstagioFunil } from '@jobsiteos/core'
+import {
+  ESTAGIO_FUNIL_LABELS,
+  OPCOES_NOVIDADES,
+  descreverJanela,
+  lerDataHoraDigitada,
+  type EstagioFunil,
+  type OpcaoNovidades,
+} from '@jobsiteos/core'
 import { useRouter } from 'expo-router'
-import { Building2, Handshake, Search, Sparkles } from 'lucide-react-native'
+import { Building2, CheckCheck, Handshake, Search, Sparkles, TriangleAlert } from 'lucide-react-native'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -18,6 +25,7 @@ import {
 } from '@/components/shell/cabecalho-retratil'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FiltroChip, FiltroFaixa } from '@/components/ui/filtros'
 import { EmptyState, ErrorState } from '@/components/ui/states'
 import { Text } from '@/components/ui/text'
 import { useDebouncedValue } from '@/features/empresas'
@@ -25,6 +33,7 @@ import { useSession } from '@/lib/auth'
 import { canOpenOnMobile } from '@/lib/linking'
 
 import { formatarMoeda } from '../format'
+import { useJanelaNovidades, useVisitaAoFunil } from '../novidades'
 import { useFunilQuery, useMinimoOperavelQuery } from '../queries'
 import type { FornecedorFunil, Oportunidade } from '../types'
 import { EstagiosDoFunil, FiltrosFunil } from './filtros-funil'
@@ -46,6 +55,21 @@ export interface FunilNotasProps {
    * entre os funis irmãos e a moldura tem de ser a deles.
    */
   atalhos?: boolean
+  /** Abre já com o filtro de novidades ligado — é como o card do Meu Dia chega aqui. */
+  novidadesInicial?: OpcaoNovidades
+}
+
+/**
+ * Os rótulos das novidades no chip. Mais curtos que os do seletor da web: numa faixa
+ * rolável de 390px, "Desde meu último expediente" e "Últimas 6 horas" lado a lado já
+ * empurram as outras três opções para fora da tela.
+ */
+const NOVIDADES_CHIP: Record<OpcaoNovidades, string> = {
+  expediente: 'Desde o último expediente',
+  seis_horas: '6 horas',
+  hoje: 'Hoje',
+  sete_dias: '7 dias',
+  personalizado: 'Personalizado',
 }
 
 /**
@@ -62,7 +86,7 @@ export interface FunilNotasProps {
  * A ordem visual e a ordem da consulta são a mesma — receita esperada decrescente —
  * porque a primeira coisa que a lista precisa comunicar é "comece por aqui".
  */
-export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasProps) {
+export function FunilNotas({ titulo, vendedorId, atalhos = false, novidadesInicial }: FunilNotasProps) {
   const router = useRouter()
   const { grantedModuleIds } = useSession()
   const { colors } = useTheme()
@@ -85,9 +109,39 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
   // Só o termo é debounced: tocar num chip é uma ação deliberada e única.
   const termoDebounced = useDebouncedValue(termo)
 
+  /*
+   * NOVIDADES (04t) — "o que entrou desde a última vez que eu trabalhei".
+   *
+   * Desligado por padrão; ligado, o primeiro chip é "desde o último expediente", que
+   * na segunda de manhã traz desde sexta às 18h. Tocar no chip ativo desliga, como
+   * faixa e tipagem. Não persiste: um filtro de tempo que sobrevive ao fechar o app é
+   * um funil que amanhece vazio sem ninguém saber por quê.
+   */
+  const [novidades, setNovidades] = useState<OpcaoNovidades | null>(novidadesInicial ?? null)
+  const [novidadeDe, setNovidadeDe] = useState('')
+  const [novidadeAte, setNovidadeAte] = useState('')
+  const intervalo = useMemo(
+    () => ({ de: lerDataHoraDigitada(novidadeDe), ate: lerDataHoraDigitada(novidadeAte) }),
+    [novidadeDe, novidadeAte],
+  )
+  const { janela, agora } = useJanelaNovidades(novidades, intervalo)
+  const novidadeDeIso = janela?.de.toISOString()
+  const novidadeAteIso = janela?.ate?.toISOString()
+
+  // §6: abrir o funil é uma visita. O selo "Novo" compara com a visita ANTERIOR.
+  const { vistoAnterior, marcarTudo } = useVisitaAoFunil()
+
   const filtros = useMemo(
-    () => ({ estagio, faixa, tipagem, termo: termoDebounced || undefined, vendedorId }),
-    [estagio, faixa, tipagem, termoDebounced, vendedorId],
+    () => ({
+      estagio,
+      faixa,
+      tipagem,
+      termo: termoDebounced || undefined,
+      vendedorId,
+      novidadeDe: novidadeDeIso,
+      novidadeAte: novidadeAteIso,
+    }),
+    [estagio, faixa, tipagem, termoDebounced, vendedorId, novidadeDeIso, novidadeAteIso],
   )
 
   const { data: minimoOperavel = 7 } = useMinimoOperavelQuery()
@@ -114,12 +168,13 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
         nota={item}
         fornecedor={item.fornecedor_cnpj ? fornecedores.get(item.fornecedor_cnpj) : undefined}
         minimoOperavel={minimoOperavel}
+        vistoAnterior={vistoAnterior}
       />
     ),
-    [fornecedores, minimoOperavel],
+    [fornecedores, minimoOperavel, vistoAnterior],
   )
 
-  const filtrando = Boolean(termoDebounced || faixa || tipagem)
+  const filtrando = Boolean(termoDebounced || faixa || tipagem || novidades)
 
   // A busca e os filtros ficam FORA da FlatList: dentro de ListHeaderComponent o
   // TextInput remonta a cada re-render e perde o foco, o que faz a digitação comer
@@ -188,6 +243,72 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
         onTipagem={setTipagem}
       />
 
+      {/*
+        NOVIDADES na própria faixa: é outra dimensão — o QUANDO —, e misturada com
+        faixa e tipagem viraria o nono chip de uma fileira que já rola.
+      */}
+      <View className="gap-2">
+        <FiltroFaixa className="items-center gap-2">
+          <Text variant="muted" className="text-xs">
+            Entrou
+          </Text>
+          {OPCOES_NOVIDADES.map((o) => (
+            <FiltroChip
+              key={o}
+              label={NOVIDADES_CHIP[o]}
+              ativo={novidades === o}
+              accessibilityLabel={`Mostrar o que entrou: ${NOVIDADES_CHIP[o]}`}
+              onPress={() => setNovidades(novidades === o ? null : o)}
+            />
+          ))}
+        </FiltroFaixa>
+
+        {novidades === 'personalizado' ? (
+          <View className="flex-row gap-2 px-4">
+            <Input
+              value={novidadeDe}
+              onChangeText={setNovidadeDe}
+              placeholder="De: 10/10/2026 18:00"
+              keyboardType="numbers-and-punctuation"
+              autoCorrect={false}
+              accessibilityLabel="Entrou a partir de, dia, mês, ano e hora"
+              containerClassName="flex-1 gap-0"
+            />
+            <Input
+              value={novidadeAte}
+              onChangeText={setNovidadeAte}
+              placeholder="Até: agora"
+              keyboardType="numbers-and-punctuation"
+              autoCorrect={false}
+              accessibilityLabel="Entrou até, dia, mês, ano e hora. Vazio vale até agora"
+              containerClassName="flex-1 gap-0"
+            />
+          </View>
+        ) : null}
+
+        {/*
+          A JANELA POR EXTENSO. Calculada em silêncio, ninguém confia nela; escrita
+          assim, o originador confere sozinho se a conta bate.
+        */}
+        {novidades ? (
+          <View className="mx-4 gap-1 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+            <Text className="text-xs">
+              {janela
+                ? descreverJanela(janela, agora, isPending ? null : total)
+                : 'Digite a partir de quando, como 10/10/2026 18:00. O fim é opcional.'}
+            </Text>
+            {janela && !janela.feriadosConsiderados ? (
+              <View className="flex-row items-center gap-1.5">
+                <TriangleAlert size={12} color={colors.mutedForeground} />
+                <Text variant="muted" className="flex-1 text-[11px]">
+                  Feriados podem não estar considerados: o calendário deste período não foi importado.
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
       <View className="gap-1.5">
         <Text variant="muted" className="px-4 text-xs tabular-nums">
           {isPending ? '…' : `${total.toLocaleString('pt-BR')} oportunidades`}
@@ -200,6 +321,22 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
           R$ 3,2 mi carregados" — já ocupava metade da largura. Com o terceiro
           atalho, um telefone de 390px espremeria os três em cima do texto.
         */}
+        {/* O controle explícito do selo "Novo" (§6). Só existe quando há uma visita
+            anterior com que comparar. */}
+        {vistoAnterior ? (
+          <View className="flex-row px-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => void marcarTudo().catch(() => undefined)}
+              accessibilityLabel="Marcar tudo como visto: apaga o selo Novo de todos os cards"
+            >
+              <CheckCheck size={16} color={colors.mutedForeground} />
+              <Text className="text-xs">Marcar tudo como visto</Text>
+            </Button>
+          </View>
+        ) : null}
+
         {atalhos ? (
           <ScrollView
             horizontal
@@ -305,7 +442,9 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
               title="Nenhuma nota aqui"
               description={
                 filtrando
-                  ? 'Nada com estes filtros. Tente limpar a faixa ou a tipagem.'
+                  ? novidades
+                    ? 'Nada entrou nesta janela com estes filtros.'
+                    : 'Nada com estes filtros. Tente limpar a faixa ou a tipagem.'
                   : `Nada em ${ESTAGIO_FUNIL_LABELS[estagio as EstagioFunil] ?? estagio}. As oportunidades chegam pelo sync, de 4 em 4 horas.`
               }
               actionLabel={filtrando ? 'Limpar filtros' : undefined}
@@ -315,6 +454,9 @@ export function FunilNotas({ titulo, vendedorId, atalhos = false }: FunilNotasPr
                       setTermo('')
                       setFaixa(undefined)
                       setTipagem(undefined)
+                      setNovidades(null)
+                      setNovidadeDe('')
+                      setNovidadeAte('')
                     }
                   : undefined
               }

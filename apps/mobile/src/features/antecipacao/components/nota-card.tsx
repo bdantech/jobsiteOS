@@ -5,6 +5,9 @@ import {
   STATUS_PRE_AUTORIZACAO_LABELS,
   TIPAGEM_LABELS,
   TIPO_OPORTUNIDADE_LABELS,
+  ehNovoDesdeAVisita,
+  textoDeEntrada,
+  textoDeReentrada,
   urgenciaDe,
   valorLiquidoEstimado,
   type EstagioFunil,
@@ -56,6 +59,8 @@ export interface NotaCardProps {
   nota: Oportunidade
   fornecedor?: FornecedorFunil
   minimoOperavel: number
+  /** O marcador da visita anterior ao funil (04t §6). Sem ele não há selo "Novo". */
+  vistoAnterior?: string | null
 }
 
 function Chip({ children, className, textClassName }: { children: string; className: string; textClassName: string }) {
@@ -102,7 +107,7 @@ function AcaoSwipe({
   )
 }
 
-export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
+export function NotaCard({ nota, fornecedor, minimoOperavel, vistoAnterior }: NotaCardProps) {
   const router = useRouter()
   const rotaDoFornecedor = useRotaDoFornecedor()
   const { colors } = useTheme()
@@ -112,6 +117,15 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
   const [documentoAberto, setDocumentoAberto] = useState(false)
 
   const tipo = (nota.tipo ?? 'nf') as TipoOportunidade
+
+  /*
+   * O CARIMBO DE ENTRADA (04t): quando o item apareceu no funil, que não é a emissão.
+   * Quem VOLTOU ao funil diz o motivo — uma nota de emissão antiga aparecendo como
+   * nova sem explicação parece bug.
+   */
+  const entrada = textoDeEntrada(nota.novidade_em, new Date())
+  const reentrada = textoDeReentrada(nota.reentrou_funil_em, nota.reentrou_funil_motivo)
+  const novo = ehNovoDesdeAVisita(nota.novidade_em, vistoAnterior)
 
   /*
    * O que acende a barra da esquerda: as MESMAS condições que já pintavam uma
@@ -236,6 +250,16 @@ export function NotaCard({ nota, fornecedor, minimoOperavel }: NotaCardProps) {
                 </Text>
               ) : null}
             </View>
+            {entrada ? (
+              <Text numberOfLines={1} className="text-[11.5px] text-muted-foreground">
+                {novo ? (
+                  <Text className="text-[11.5px] font-semibold text-emerald-700 dark:text-emerald-300">
+                    Novo ·{' '}
+                  </Text>
+                ) : null}
+                {reentrada ? `${reentrada} · ${entrada.replace(/^entrou /, '')}` : entrada}
+              </Text>
+            ) : null}
             <View className="flex-row flex-wrap items-center gap-1.5">
               {/*
                 O CRÉDITO DO SACADO vem primeiro entre os chips: ele é o que

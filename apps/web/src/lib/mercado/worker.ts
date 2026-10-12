@@ -617,6 +617,14 @@ export async function dispararSyncFontesDoFunil(): Promise<DispararJobResultado>
 }
 
 /**
+ * Feriados nacionais da BrasilAPI → `dias_nao_uteis` (04t). Anual; o botão de
+ * Configurações não passa por aqui — ele importa direto, para não depender do worker.
+ */
+export async function dispararImportarFeriados(): Promise<DispararJobResultado> {
+  return postar('/jobs/calendario/importar-feriados', {}, 'calendario-importar-feriados')
+}
+
+/**
  * Sync de antecipações + re-matching (04e), sob demanda.
  *
  * No ciclo normal ele roda ENCADEADO ao sync de NFs, e é assim de propósito: o

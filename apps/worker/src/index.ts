@@ -41,6 +41,7 @@ import {
   dispararLiberarDormentes,
   dispararAlertaReclassificacao,
   dispararRotearNotas,
+  dispararImportarFeriados,
   dispararProtestosClientesMensal,
   dispararProtestosEmpresa,
   dispararBaixarDocumento,
@@ -839,6 +840,14 @@ app.post('/jobs/fornecedores/validar-contatos', (_req: Request, res: Response, n
 app.post('/jobs/comercial/rotear-nfs', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(202).json({ job_id: dispararRotearNotas(), status: 'executando' })
+  } catch (erro) {
+    next(erro)
+  }
+})
+
+app.post('/jobs/calendario/importar-feriados', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(202).json({ job_id: dispararImportarFeriados(), status: 'executando' })
   } catch (erro) {
     next(erro)
   }

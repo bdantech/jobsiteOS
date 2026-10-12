@@ -31,6 +31,7 @@ import {
 } from './graficos'
 import { LinkEmAba } from '@/components/shell/link-em-aba'
 import { contarNaoVinculadas } from '@/components/comunicacao/queries'
+import { CardNovidades } from './card-novidades'
 import { LinhaItem, ListaDeItens, SegmentoFiltro, Widget, destinoDoItem } from './widget'
 
 /**
@@ -181,6 +182,15 @@ export function MeuDiaTela({ dia, visiveis }: MeuDiaTelaProps) {
           </select>
         )}
       </div>
+
+      {/*
+        As novidades do funil ABREM o dia do originador (04t §7): é a primeira coisa que
+        ele precisa saber na segunda de manhã, e ela vem até ele em vez de depender de
+        lembrar de filtrar. Só para quem titulariza NF — os outros cargos não têm funil.
+      */}
+      {dia.tipo === 'originador' && (dia.dados_vendedor_id ?? dia.vendedor_id) ? (
+        <CardNovidades vendedorId={(dia.dados_vendedor_id ?? dia.vendedor_id) as string} />
+      ) : null}
 
       {/* ── Indicadores ───────────────────────────────────────────────────── */}
       <div className="grid gap-3">
