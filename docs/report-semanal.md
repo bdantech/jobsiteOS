@@ -317,6 +317,13 @@ avaliou". O lead que entrou na quinta e ninguém trabalhou não foi reprovado po
 caísse em "sem fit", a semana corrente pareceria sempre pior que as fechadas, e alguém
 tomaria decisão de canal em cima disso.
 
+**Agendar reunião confirma o fit** (0298, pedido em 13/10/2026). O lead com reunião
+marcada conta nos dois lugares — em "com fit" e em "reuniões agendadas" —, porque ninguém
+marca reunião com quem não serve. O gatilho de `sdr_leads` preenche `fit = true` quando a
+data da reunião é definida e ninguém tinha avaliado. O veredito explícito não é tocado: quem
+foi dado como "sem fit" continua sem fit mesmo tendo reunião. Vale para o banco inteiro —
+funil, Meu Dia e Aquisição leem a mesma coluna.
+
 **O lead conta na semana em que ENTROU, com o fit que tem hoje.** Entrou na semana 40 e foi
 avaliado na 42: aparece na 40, como "com fit". A pergunta é "do que entrou naquela semana, o
 que se mostrou bom". Consequência: a linha de uma semana fechada **amadurece**, e é por isso
