@@ -317,12 +317,11 @@ avaliou". O lead que entrou na quinta e ninguém trabalhou não foi reprovado po
 caísse em "sem fit", a semana corrente pareceria sempre pior que as fechadas, e alguém
 tomaria decisão de canal em cima disso.
 
-**Agendar reunião confirma o fit** (0298, pedido em 13/10/2026). O lead com reunião
-marcada conta nos dois lugares — em "com fit" e em "reuniões agendadas" —, porque ninguém
-marca reunião com quem não serve. O gatilho de `sdr_leads` preenche `fit = true` quando a
-data da reunião é definida e ninguém tinha avaliado. O veredito explícito não é tocado: quem
-foi dado como "sem fit" continua sem fit mesmo tendo reunião. Vale para o banco inteiro —
-funil, Meu Dia e Aquisição leem a mesma coluna.
+**Agendar reunião não define o fit.** Fit é avaliação de uma pessoa; a matriz e as reuniões
+são duas contagens independentes. Um lead com fit que também teve reunião marcada conta nos
+dois indicadores — em "com fit", na semana em que entrou, e em "agendadas", na semana em que
+a reunião foi marcada. Um lead com reunião e sem avaliação continua "ainda não avaliado".
+(A 0298 chegou a marcar o fit ao agendar, por leitura errada do pedido; a 0299 a desfez.)
 
 **O lead conta na semana em que ENTROU, com o fit que tem hoje.** Entrou na semana 40 e foi
 avaliado na 42: aparece na 40, como "com fit". A pergunta é "do que entrou naquela semana, o
