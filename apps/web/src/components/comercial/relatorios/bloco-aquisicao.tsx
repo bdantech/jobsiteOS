@@ -11,9 +11,9 @@ import {
   ORIGEM_AQUISICAO_LABELS,
   RECORTE_DA_SERIE,
   agregadoDeAquisicao,
-  aquisicaoPorMes,
   carimboDaAquisicao,
   diaEmSaoPaulo,
+  fechadasPorMes,
   matrizDoBloco,
   mesDaSemana,
   semanaDe,
@@ -416,10 +416,11 @@ function HistoricoAquisicao({
                   )
                 }}
               />
-              <div className="grid gap-4 xl:grid-cols-[1fr_auto]">
-                <TabelaSemanas semanas={semanas} onAbrir={onAbrir} />
-                <TabelaMeses semanas={semanas} />
-              </div>
+              {/* Uma embaixo da outra, e não lado a lado: dividindo a largura, a tabela
+                  semanal escondia as colunas de outbound atrás de uma rolagem que ninguém
+                  via — justamente a metade da comparação inbound × outbound. */}
+              <TabelaMeses semanas={semanas} />
+              <TabelaSemanas semanas={semanas} onAbrir={onAbrir} />
             </TabsContent>
           </Tabs>
         )}
@@ -524,21 +525,26 @@ function TabelaSemanas({ semanas, onAbrir }: { semanas: BlocoAquisicao[]; onAbri
   )
 }
 
-/** O agregado mensal: só semanas fechadas, cada uma no mês em que fecha. */
+/**
+ * O agregado mensal, com as MESMAS colunas da tabela semanal: origem × fit, e as duas
+ * contagens de reunião. Só semanas fechadas, cada uma no mês em que fecha.
+ */
 function TabelaMeses({ semanas }: { semanas: BlocoAquisicao[] }) {
-  const meses = aquisicaoPorMes(semanas)
+  const meses = fechadasPorMes(semanas)
   if (meses.length === 0) return null
+  const soma = (lista: BlocoAquisicao[], valor: (s: BlocoAquisicao) => number) =>
+    lista.reduce((t, s) => t + valor(s), 0)
   return (
-    <div className="h-fit overflow-x-auto rounded-md border">
-      <table className="text-xs">
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full text-xs">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="p-2 text-left font-medium">Mês</th>
-            <th className="p-2 text-right font-medium">Leads</th>
-            <th className="p-2 text-right font-medium">Com fit</th>
-            <th className="p-2 text-right font-medium">Sem fit</th>
-            <th className="p-2 text-right font-medium">Agend.</th>
-            <th className="p-2 text-right font-medium">Realiz.</th>
+            <th className="whitespace-nowrap p-2 text-left font-medium">Mês</th>
+            {COLUNAS_SERIE.map((c) => (
+              <th key={c.rotulo} className="whitespace-nowrap p-2 text-right font-medium">{c.rotulo}</th>
+            ))}
+            <th className="whitespace-nowrap p-2 text-right font-medium">Agendadas</th>
+            <th className="whitespace-nowrap p-2 text-right font-medium">Realizadas</th>
           </tr>
         </thead>
         <tbody>
@@ -546,18 +552,27 @@ function TabelaMeses({ semanas }: { semanas: BlocoAquisicao[] }) {
             <tr key={m.mes} className="border-b last:border-0">
               <th className="whitespace-nowrap p-2 text-left font-medium">
                 {mesExtenso(m.mes)}
-                <span className="ml-1 font-normal text-muted-foreground">· {m.semanas} sem.</span>
+                <span className="ml-1 font-normal text-muted-foreground">· {m.semanas.length} sem.</span>
               </th>
-              {([m.total_leads, m.com_fit, m.sem_fit, m.agendadas, m.realizadas]).map((v, i) => (
-                <td key={i} className="p-2 text-right tabular-nums">{v.toLocaleString('pt-BR')}</td>
+              {COLUNAS_SERIE.map((c) => (
+                <td key={c.rotulo} className="p-2 text-right tabular-nums">
+                  {soma(m.semanas, (s) => valorDaCelula(s, c.origem, c.fit)).toLocaleString('pt-BR')}
+                </td>
               ))}
+              <td className="p-2 text-right tabular-nums">
+                {soma(m.semanas, (s) => totalDoBloco(s).agendadas).toLocaleString('pt-BR')}
+              </td>
+              <td className="p-2 text-right tabular-nums">
+                {soma(m.semanas, (s) => totalDoBloco(s).realizadas).toLocaleString('pt-BR')}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="border-t p-2 text-[10px] text-muted-foreground">
         A semana conta no mês em que fecha. A em aberto ({dm(semanaDe(diaEmSaoPaulo(new Date())).inicio)}…)
-        fica fora.
+        fica fora. Fit é dos leads que ENTRARAM no mês; reuniões são as que foram marcadas ou
+        aconteceram nele, de leads de qualquer época.
       </p>
     </div>
   )
