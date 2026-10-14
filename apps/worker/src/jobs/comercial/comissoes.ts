@@ -360,11 +360,32 @@ async function avisarDonoDaVenda(
   })
 }
 
+/**
+ * Só daqui a aprovação empurra o card. De uma reunião que ainda não aconteceu, ou de um
+ * negócio que já passou da proposta, o crédito aprovado é notícia, não movimento.
+ */
+const ESTAGIOS_QUE_A_APROVACAO_AVANCA = new Set(['aguardando_documentacao', 'em_analise_credito'])
+
 export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: string): Promise<number> {
+  /*
+   * A venda é achada pela EMPRESA, e não só pelo vínculo `analise_credito_id`. O vínculo
+   * só nasce quando a análise é pedida de dentro do card; pedida pela ficha, pelo Crédito
+   * ou reaberta depois de uma cancelada, a decisão chegava e o card não sabia — a Luna
+   * ficou em "reunião agendada" com crédito negado. A decisão de crédito é da empresa
+   * (0208), então vale para os negócios abertos dela, e o vínculo é gravado na passagem.
+   */
+  const { data: analise } = await supabaseAdmin
+    .from('analises_credito')
+    .select('empresa_id')
+    .eq('id', analiseId)
+    .maybeSingle()
+  const filtro = analise?.empresa_id
+    ? `analise_credito_id.eq.${analiseId},empresa_id.eq.${analise.empresa_id}`
+    : `analise_credito_id.eq.${analiseId}`
   const { data: vendas } = await supabaseAdmin
     .from('vendas')
     .select('id, empresa_id, estagio, vendedor_id')
-    .eq('analise_credito_id', analiseId)
+    .or(filtro)
     .eq('situacao', 'em_andamento')
   if (!vendas?.length) return 0
 
@@ -409,16 +430,19 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
   for (const v of vendas) {
     // Aprovada move o ESTÁGIO (seguir adiante); negada muda a SITUAÇÃO e deixa o estágio
     // onde está — é ele que diz até onde o negócio chegou antes de morrer.
+    const avanca = aprovada && ESTAGIOS_QUE_A_APROVACAO_AVANCA.has(v.estagio)
+    const agora = new Date().toISOString()
     await supabaseAdmin
       .from('vendas')
       .update(
         aprovada
-          ? { estagio: 'proposta_enviada', atualizada_em: new Date().toISOString() }
+          ? { analise_credito_id: analiseId, atualizada_em: agora, ...(avanca ? { estagio: 'proposta_enviada' } : {}) }
           : {
+              analise_credito_id: analiseId,
               situacao: 'perdido',
               perdido_motivo: motivoId,
-              perdido_em: new Date().toISOString(),
-              atualizada_em: new Date().toISOString(),
+              perdido_em: agora,
+              atualizada_em: agora,
             },
       )
       .eq('id', v.id)
@@ -426,7 +450,9 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
     await emitirEvento(v.empresa_id, aprovada ? EVENTO_TIPOS.VENDA_ESTAGIO_ALTERADO : EVENTO_TIPOS.VENDA_PERDIDA, {
       titulo: aprovada ? 'Crédito aprovado' : 'Venda perdida por crédito negado',
       resumo: aprovada
-        ? 'Limite aprovado pela seguradora — o card avançou para proposta enviada.'
+        ? avanca
+          ? 'Limite aprovado pela seguradora — o card avançou para proposta enviada.'
+          : 'Limite aprovado pela seguradora. O card ficou na etapa em que estava.'
         : 'A seguradora negou o limite; o card foi encerrado com o motivo "Crédito negado".',
       url: `/comercial/vendas/${v.id}`,
       venda_id: v.id,
@@ -437,7 +463,9 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
       v,
       aprovada ? 'Crédito aprovado' : 'Crédito negado',
       aprovada
-        ? 'A seguradora aprovou o limite. O negócio avançou para proposta enviada.'
+        ? avanca
+          ? 'A seguradora aprovou o limite. O negócio avançou para proposta enviada.'
+          : 'A seguradora aprovou o limite. O negócio ficou na etapa em que estava.'
         : 'A seguradora negou o limite. O negócio foi encerrado como perdido.',
     )
   }

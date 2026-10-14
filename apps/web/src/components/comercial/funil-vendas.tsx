@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,6 +37,7 @@ import {
   ChipsDaEmpresa,
   ValorDaEmpresa,
   ehInbound,
+  empresaCombinaBusca,
   scoreDaEmpresa,
   textoDoScore,
 } from './ficha-do-card'
@@ -109,6 +111,7 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
   // Fora do funil = perdido, ou ganho que já operou. Escondidos por padrão: o kanban é
   // a fila de trabalho, e nenhum dos dois pede trabalho.
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
+  const [termo, setTermo] = React.useState('')
 
   const vendedores = useQuery({ queryKey: comercialKeys.vendedores(), queryFn: buscarVendedores })
   // Quem eu posso ABRIR — não é a mesma lista de quem existe. O seletor sai daqui para
@@ -197,7 +200,12 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
   }
 
   const todas = vendas.data ?? []
-  const visiveis = todas.filter((v) => mostrarEncerrados || vendaNoFunil(v))
+  // Quem busca uma construtora quer achá-la, esteja ela no funil ou já encerrada: com
+  // termo, os encerrados entram na procura sem precisar marcar a caixa.
+  const buscando = termo.trim() !== ''
+  const visiveis = todas.filter(
+    (v) => (buscando || mostrarEncerrados || vendaNoFunil(v)) && empresaCombinaBusca(v.empresas, termo),
+  )
   const foraDoFunil = todas.filter((v) => !vendaNoFunil(v)).length
 
   const porEstagio = new Map<string, VendaComEmpresa[]>()
@@ -217,6 +225,13 @@ export function FunilVendas({ ehGestor, temCredito = false }: { ehGestor: boolea
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ"
+                className="h-9 w-56"
+                aria-label="Buscar construtora no funil de vendas"
+              />
               {foraDoFunil > 0 && (
                 <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <input

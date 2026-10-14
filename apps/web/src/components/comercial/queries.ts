@@ -150,7 +150,10 @@ export async function buscarVendedores(): Promise<Tables<'vendedores'>[]> {
 export interface LeadComEmpresa extends Tables<'sdr_leads'> {
   empresas: {
     id: string
+    /** CNPJ e fantasia entram só para a busca do funil achar a construtora. */
+    cnpj: string | null
     razao_social: string | null
+    nome_fantasia: string | null
     uf: string | null
     valor_esperado_mensal: number | null
     faturamento_anual: number | null
@@ -168,7 +171,7 @@ export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa
     // Literal ÚNICO, sem concatenação: um select montado com `+` vira
     // GenericStringError e o erro aparece nas linhas de uso, não aqui.
     .select(
-      '*, empresas(id, razao_social, uf, valor_esperado_mensal, faturamento_anual, tipo, faturamento_origem, score_credito, score_faixa)',
+      '*, empresas(id, cnpj, razao_social, nome_fantasia, uf, valor_esperado_mensal, faturamento_anual, tipo, faturamento_origem, score_credito, score_faixa)',
     )
     // Melhor empresa primeiro dentro do funil: a ordem da lista é a ordem de trabalho.
     .order('distribuido_em', { ascending: false })
@@ -182,7 +185,10 @@ export async function buscarLeads(sdrId?: string | null): Promise<LeadComEmpresa
 export interface VendaComEmpresa extends Tables<'vendas'> {
   empresas: {
     id: string
+    /** CNPJ e fantasia entram só para a busca do funil achar a construtora. */
+    cnpj: string | null
     razao_social: string | null
+    nome_fantasia: string | null
     uf: string | null
     /** construtora / incorporadora / fornecedor / subempreiteiro. */
     tipo: string | null
@@ -224,7 +230,7 @@ export async function buscarVendas(vendedorId?: string | null): Promise<VendaCom
      * aparecendo nas linhas de USO, longe daqui.
      */
     .select(
-      '*, empresas(id, razao_social, uf, tipo, faturamento_anual, faturamento_origem, score_credito, score_faixa, origem), sdr_leads(origem), analises_credito(id, estagio, limite_solicitado, limite_aprovado, moeda, motivo, decidida_em)',
+      '*, empresas(id, cnpj, razao_social, nome_fantasia, uf, tipo, faturamento_anual, faturamento_origem, score_credito, score_faixa, origem), sdr_leads(origem), analises_credito(id, estagio, limite_solicitado, limite_aprovado, moeda, motivo, decidida_em)',
     )
     .order('atualizada_em', { ascending: false })
     .limit(500)

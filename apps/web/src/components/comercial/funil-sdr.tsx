@@ -49,6 +49,7 @@ import {
   AbaFormulario,
   ChipsDaEmpresa,
   ValorDaEmpresa,
+  empresaCombinaBusca,
   scoreDaEmpresa,
   textoDoScore,
 } from './ficha-do-card'
@@ -144,6 +145,7 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
   // Encerrados escondidos por padrão: o kanban é a fila de trabalho, e o que morreu não
   // pede trabalho. O toggle existe porque revisar as mortes é o uso da semana seguinte.
   const [mostrarEncerrados, setMostrarEncerrados] = React.useState(false)
+  const [termo, setTermo] = React.useState('')
   /**
    * Procedência: 'todos' | 'inbound' | 'outbound'.
    *
@@ -359,7 +361,11 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
       procedencia === 'todos' ||
       (procedencia === 'inbound' ? l.origem === 'inbound' : l.origem !== 'inbound'),
   )
-  const visiveis = naProcedencia.filter((l) => mostrarEncerrados || !l.encerrado_em)
+  // Com termo, os encerrados entram na procura: quem busca uma construtora quer achá-la.
+  const buscando = termo.trim() !== ''
+  const visiveis = naProcedencia.filter(
+    (l) => (buscando || mostrarEncerrados || !l.encerrado_em) && empresaCombinaBusca(l.empresas, termo),
+  )
   // Contado dentro da procedência escolhida: "mostrar 3 encerrados" precisa bater
   // com o que aparece ao marcar a caixa.
   const encerrados = naProcedencia.filter((l) => l.encerrado_em).length
@@ -404,6 +410,13 @@ export function FunilSdr({ ehGestor }: { ehGestor: boolean }) {
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ"
+                className="h-9 w-56"
+                aria-label="Buscar construtora no funil de reuniões"
+              />
               <Select
                 value={procedencia}
                 onValueChange={(v) => setProcedencia(v as 'todos' | 'inbound' | 'outbound')}

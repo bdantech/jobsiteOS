@@ -43,6 +43,25 @@ export function ehInbound(v: Pick<VendaComEmpresa, 'empresas' | 'sdr_leads'>): b
   return v.sdr_leads?.origem === 'inbound' || v.empresas?.origem === 'formulario'
 }
 
+/**
+ * A busca dos funis de Reuniões e de Vendas: razão social, fantasia ou CNPJ.
+ *
+ * O CNPJ é comparado só por DÍGITOS, a partir de três — quem cola "16.637.906/0001-51"
+ * de outro sistema acha sem apagar a pontuação. Mesma regra da busca de fornecedores e
+ * do funil de certificados: buscas irmãs que se comportam diferente viram convenções.
+ */
+export function empresaCombinaBusca(
+  e: { cnpj: string | null; razao_social: string | null; nome_fantasia: string | null } | null,
+  termo: string,
+): boolean {
+  const t = termo.trim().toLowerCase()
+  if (!t) return true
+  if (!e) return false
+  const digitos = t.replace(/\D/g, '')
+  if (digitos.length >= 3 && (e.cnpj ?? '').includes(digitos)) return true
+  return [e.razao_social, e.nome_fantasia].some((n) => (n ?? '').toLowerCase().includes(t))
+}
+
 /** Os campos que a tira lê. Tanto `vendas.empresas` quanto `sdr_leads.empresas` os têm. */
 export interface EmpresaDaFicha {
   tipo: string | null
