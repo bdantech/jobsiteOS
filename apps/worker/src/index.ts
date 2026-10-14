@@ -1246,7 +1246,8 @@ const reenviarDocsEmailSchema = z.object({
 
 const decisaoEmVendasSchema = z.object({
   analise_id: z.string().uuid(),
-  decisao: z.enum(['aprovada', 'aprovada_parcial', 'negada']),
+  // `cancelada` só chega pela esteira (moverAnaliseAction): é o Crédito desistindo.
+  decisao: z.enum(['aprovada', 'aprovada_parcial', 'negada', 'cancelada']),
 })
 
 /** Mensal: calibra na carteira, pontua a base e calcula o potencial, NESTA ordem. */

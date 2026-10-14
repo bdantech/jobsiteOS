@@ -337,6 +337,7 @@ async function avisarDonoDaVenda(
   venda: { id: string; vendedor_id: string },
   titulo: string,
   resumo: string,
+  mesmoParaQuemPediu = false,
 ): Promise<void> {
   /*
    * Pelo motor (0262), com push — o insert direto que estava aqui só tocava o sino. A
@@ -344,14 +345,15 @@ async function avisarDonoDaVenda(
    *
    * Quem PEDIU a análise já recebe "a análise que você pediu foi aprovada" pelo
    * evento da decisão; quando o dono da venda é a mesma pessoa, este aviso seria o
-   * segundo para o mesmo fato, e é pulado.
+   * segundo para o mesmo fato, e é pulado. O cancelamento não gera esse evento, e por
+   * isso chega ao dono mesmo quando foi ele quem pediu.
    */
   const [{ data: analise }, usuario] = await Promise.all([
     supabaseAdmin.from('analises_credito').select('solicitada_por').eq('id', analiseId).maybeSingle(),
     usuarioDoVendedor(venda.vendedor_id),
   ])
   // Vendedor de IA não tem usuário, e é um caso normal — não é falha.
-  if (!usuario || usuario === analise?.solicitada_por) return
+  if (!usuario || (!mesmoParaQuemPediu && usuario === analise?.solicitada_por)) return
   await avisar('venda.credito_decidido', {
     titulo,
     resumo,
@@ -366,6 +368,12 @@ async function avisarDonoDaVenda(
  */
 const ESTAGIOS_QUE_A_APROVACAO_AVANCA = new Set(['aguardando_documentacao', 'em_analise_credito'])
 
+/** O que ainda responde pelo crédito da empresa quando uma análise é cancelada. */
+const ESTAGIOS_DE_ANALISE_VIVA = [
+  'rascunho', 'solicitada', 'docs_pendentes', 'docs_recebidos', 'enviada_seguradora', 'em_analise',
+  'aprovada', 'aprovada_parcial',
+]
+
 export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: string): Promise<number> {
   /*
    * A venda é achada pela EMPRESA, e não só pelo vínculo `analise_credito_id`. O vínculo
@@ -376,9 +384,30 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
    */
   const { data: analise } = await supabaseAdmin
     .from('analises_credito')
-    .select('empresa_id')
+    .select('empresa_id, cnpj')
     .eq('id', analiseId)
     .maybeSingle()
+
+  /*
+   * Cancelada PELO CRÉDITO, na esteira, é negativa para o comercial: o negócio não tem
+   * limite e não vai ter. Só vale quando ela era a análise que respondia pela empresa —
+   * cancelar uma duplicata enquanto outra segue aberta, ou aprovada, não mata o negócio.
+   * O cancelamento técnico da seguradora (substituída, expirada) não passa por aqui.
+   */
+  const cancelada = decisao === 'cancelada'
+  if (cancelada && analise?.cnpj) {
+    const { count } = await supabaseAdmin
+      .from('analises_credito')
+      .select('id', { count: 'exact', head: true })
+      .eq('cnpj', analise.cnpj)
+      .neq('id', analiseId)
+      .is('substituida_em', null)
+      .in('estagio', ESTAGIOS_DE_ANALISE_VIVA)
+    if (count) {
+      logger.info({ analiseId, outras: count }, 'Análise cancelada, mas a empresa tem outra viva; card não muda.')
+      return 0
+    }
+  }
   const filtro = analise?.empresa_id
     ? `analise_credito_id.eq.${analiseId},empresa_id.eq.${analise.empresa_id}`
     : `analise_credito_id.eq.${analiseId}`
@@ -407,7 +436,7 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
     return 0
   }
 
-  if (decisao !== 'aprovada' && decisao !== 'negada') return 0
+  if (decisao !== 'aprovada' && decisao !== 'negada' && !cancelada) return 0
 
   const aprovada = decisao === 'aprovada'
   let motivoId: string | null = null
@@ -453,7 +482,9 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
         ? avanca
           ? 'Limite aprovado pela seguradora — o card avançou para proposta enviada.'
           : 'Limite aprovado pela seguradora. O card ficou na etapa em que estava.'
-        : 'A seguradora negou o limite; o card foi encerrado com o motivo "Crédito negado".',
+        : cancelada
+          ? 'O Crédito cancelou a análise; o card foi encerrado com o motivo "Crédito negado".'
+          : 'A seguradora negou o limite; o card foi encerrado com o motivo "Crédito negado".',
       url: `/comercial/vendas/${v.id}`,
       venda_id: v.id,
     })
@@ -466,7 +497,10 @@ export async function aplicarDecisaoCreditoEmVendas(analiseId: string, decisao: 
         ? avanca
           ? 'A seguradora aprovou o limite. O negócio avançou para proposta enviada.'
           : 'A seguradora aprovou o limite. O negócio ficou na etapa em que estava.'
-        : 'A seguradora negou o limite. O negócio foi encerrado como perdido.',
+        : cancelada
+          ? 'O Crédito cancelou a análise. O negócio foi encerrado como perdido.'
+          : 'A seguradora negou o limite. O negócio foi encerrado como perdido.',
+      cancelada,
     )
   }
 

@@ -124,6 +124,12 @@ export async function moverAnaliseAction(
   if (erro) return erro
   try {
     const a = await moverAnalise(supabase, input)
+    // Cancelar na esteira é negativa para o comercial: o card do funil encerra como perdido.
+    // A esteira já mudou mesmo se o worker não responder, e a falha fica no log dele.
+    if (a.estagio === 'cancelada') {
+      await dispararDecisaoEmVendas(a.id, a.estagio)
+      await varrerAgora()
+    }
     revalidatePath('/credito')
     revalidatePath(`/credito/analises/${a.id}`)
     return { ok: true, data: a }
